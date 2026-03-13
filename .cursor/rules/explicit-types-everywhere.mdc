@@ -1,0 +1,57 @@
+---
+description: Every variable, parameter, return type, and property must have an explicit type annotation
+globs: **/*.ts
+alwaysApply: true
+---
+
+# Explicit Types Everywhere
+
+This is a fundamental ground rule. Every piece of TypeScript in this project must be explicitly typed. No exceptions.
+
+## What Must Be Typed
+
+- `const` and `let` declarations
+- Function parameters
+- Function and method return types
+- Class properties and fields
+- Arrow functions (parameters and return)
+- Destructured variables (type the source or annotate)
+- Generic type arguments (never rely on inference for non-obvious types)
+- Array/object literals assigned to variables
+- Callback parameters (including `subscribe`, `map`, `filter`, etc.)
+
+## Examples
+
+```typescript
+// BAD — inferred types
+const name = 'Alice';
+const items = [1, 2, 3];
+let count = 0;
+const getUser = () => this.http.get('/user');
+function add(a, b) { return a + b; }
+arr.map(x => x.id);
+arr.filter(item => item.active);
+
+// GOOD — explicit types
+const name: string = 'Alice';
+const items: number[] = [1, 2, 3];
+let count: number = 0;
+const getUser = (): Observable<User> => this.http.get<User>('/user');
+function add(a: number, b: number): number { return a + b; }
+arr.map((x: Item) => x.id);
+arr.filter((item: Item) => item.active);
+```
+
+## Signals and Angular-Specific
+
+```typescript
+// BAD
+readonly name = signal('');
+readonly count = signal(0);
+readonly items = computed(() => this.list().filter(i => i.active));
+
+// GOOD
+readonly name: WritableSignal<string> = signal<string>('');
+readonly count: WritableSignal<number> = signal<number>(0);
+readonly items: Signal<Item[]> = computed((): Item[] => this.list().filter((i: Item) => i.active));
+```

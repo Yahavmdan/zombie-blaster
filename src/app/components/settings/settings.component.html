@@ -1,0 +1,63 @@
+<button
+  class="settings-toggle"
+  data-testid="game-settings-button-toggle"
+  (click)="toggleSettings()"
+>
+  ⚙
+</button>
+
+@if (isOpen()) {
+  <div class="settings-overlay">
+    <div class="settings-panel">
+      <div class="settings-header">
+        <h2 class="settings-title">KEY BINDINGS</h2>
+        <button
+          class="settings-close"
+          data-testid="game-settings-button-close"
+          (click)="toggleSettings()"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div class="settings-body">
+        @for (row of bindingRows(); track row.action) {
+          <div
+            class="binding-row"
+            [class.binding-row--active]="rebindingAction() === row.action"
+          >
+            <span class="binding-label">{{ row.label }}</span>
+            <div class="binding-keys">
+              @for (key of row.keys; track key) {
+                <span class="key-chip">{{ formatKey(key) }}</span>
+              }
+            </div>
+            <div class="binding-action">
+              @if (rebindingAction() === row.action) {
+                <span class="binding-listening">Press a key…</span>
+              } @else {
+                <button
+                  class="rebind-btn"
+                  [attr.data-testid]="'game-settings-button-rebind-' + row.action"
+                  (click)="startRebind(row.action)"
+                >
+                  Rebind
+                </button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="settings-footer">
+        <button
+          class="reset-btn"
+          data-testid="game-settings-button-reset"
+          (click)="resetDefaults()"
+        >
+          Reset Defaults
+        </button>
+      </div>
+    </div>
+  </div>
+}

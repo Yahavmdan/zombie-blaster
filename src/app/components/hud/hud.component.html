@@ -1,0 +1,62 @@
+<div class="hud-container">
+  <div class="hud-left">
+    <div class="player-info">
+      <span class="player-class-icon">{{ classIcon() }}</span>
+      <div class="player-identity">
+        <span class="player-name">{{ playerData().name }}</span>
+        <span class="player-level">Lv. {{ playerData().level }}</span>
+      </div>
+    </div>
+
+    <div class="bar-group">
+      <div class="bar hp-bar">
+        <div class="bar-fill hp-fill" [style.width.%]="hpPercent()"></div>
+        <span class="bar-label">HP {{ playerData().hp }} / {{ playerData().derived.maxHp }}</span>
+      </div>
+      <div class="bar mp-bar">
+        <div class="bar-fill mp-fill" [style.width.%]="mpPercent()"></div>
+        <span class="bar-label">MP {{ playerData().mp }} / {{ playerData().derived.maxMp }}</span>
+      </div>
+      <div class="bar xp-bar">
+        <div class="bar-fill xp-fill" [style.width.%]="xpPercent()"></div>
+        <span class="bar-label">XP {{ playerData().xp }} / {{ playerData().xpToNext }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="hud-center">
+    <div class="wave-info">
+      <span class="wave-label">WAVE</span>
+      <span class="wave-number">{{ wave() }}</span>
+    </div>
+  </div>
+
+  <div class="hud-right">
+    <div class="score-display">
+      <span class="score-label">SCORE</span>
+      <span class="score-value">{{ score() }}</span>
+    </div>
+    <div class="stats-mini">
+      <span class="stat-mini">ATK {{ playerData().derived.attack }}</span>
+      <span class="stat-mini">DEF {{ playerData().derived.defense }}</span>
+      <span class="stat-mini">CRIT {{ playerData().derived.critRate | number:'1.0-0' }}%</span>
+    </div>
+  </div>
+</div>
+
+<div class="hud-bottom">
+  <div class="skill-slots">
+    @for (slot of skillSlots(); track slot.key) {
+      <div class="skill-slot" [class.skill-slot--locked]="slot.locked">
+        <span class="skill-key">{{ slot.key }}</span>
+        <span class="skill-icon">{{ slot.icon }}</span>
+        <span class="skill-name">{{ slot.name }}</span>
+        @if (slot.locked) {
+          <span class="skill-locked-label">Lv5</span>
+        } @else {
+          <span class="skill-mp-cost">{{ slot.mpCost }} MP</span>
+        }
+      </div>
+    }
+  </div>
+</div>

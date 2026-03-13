@@ -1,0 +1,15 @@
+---
+description: mandatory full workspace rule checklist before and after changes
+alwaysApply: true
+---
+
+# Mandatory Workspace Rule Checklist
+
+- before making any code edit, run a full workspace rule checklist:
+  - always-applied workspace rules
+  - user rules (including CWP)
+  - relevant skills and their requirements
+- if a planned change conflicts with any rule, adjust the plan before editing.
+- after completing edits and tests, re-run the full workspace rule checklist before finalizing.
+- if any violation is found during the post-edit checklist, fix it before reporting completion.
+- include a concise `rules checked` note in the final response for substantial tasks.

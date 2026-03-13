@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0a0a0f;
+  color: #e0e0e0;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+@font-face {
+  font-family: 'Game Title';
+  src: local('Impact');
+}
+
+:root {
+  --color-bg: #0a0a0f;
+  --color-surface: #14141f;
+  --color-surface-light: #1e1e2e;
+  --color-primary: #ff4444;
+  --color-primary-glow: #ff444488;
+  --color-secondary: #44ff88;
+  --color-accent: #ffaa22;
+  --color-xp: #8844ff;
+  --color-hp: #ff2222;
+  --color-mp: #2266ff;
+  --color-text: #e0e0e0;
+  --color-text-dim: #888899;
+}

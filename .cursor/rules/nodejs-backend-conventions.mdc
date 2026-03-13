@@ -1,0 +1,39 @@
+---
+description: Node.js backend conventions for the zombie-blaster game server
+globs: server/**/*.ts,server/**/*.js
+alwaysApply: false
+---
+
+# Node.js Backend Conventions
+
+## General
+- Use TypeScript with strict mode for all backend code.
+- Use `async/await` over raw promises or callbacks.
+- All environment-dependent values come from env vars or config files — no hardcoded secrets.
+- Use structured logging (e.g., `pino` or `winston`) at `info` level minimum; no `console.log` in production code.
+
+## Project Structure
+- Keep game logic (state, physics, combat) separate from transport (WebSocket/HTTP handlers).
+- Use a service layer between routes/handlers and data access.
+- Shared types between client and server go in a `shared/` directory.
+
+## WebSocket / Multiplayer
+- All real-time game communication uses WebSockets (e.g., Socket.IO or ws).
+- Validate every incoming message — never trust client data.
+- Server is authoritative for game state (position, HP, damage, loot).
+- Use rooms/channels for multiplayer sessions (up to 4 players per room).
+
+## Error Handling
+- Wrap async route/handler functions to catch unhandled rejections.
+- Return meaningful error codes and messages to clients.
+- Never expose internal stack traces to clients.
+
+## Testing
+- Use Jest for unit and integration tests.
+- Game logic (damage calc, stat formulas, leveling) must have unit tests.
+- Mock external dependencies (DB, network) in tests.
+
+## Dependencies
+- Keep dependencies minimal and justified.
+- Pin major versions in `package.json`.
+- Prefer well-maintained packages with active communities.

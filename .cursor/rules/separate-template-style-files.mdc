@@ -1,0 +1,27 @@
+---
+description: Enforce separate HTML and CSS files for Angular components
+globs: **/*.component.ts
+alwaysApply: false
+---
+
+# Separate Template and Style Files
+
+- Never use inline `template` or `styles` in `@Component`. Always use `templateUrl` and `styleUrl`.
+- Every component must have a co-located `.component.html` and `.component.css` file.
+- Use `templateUrl: './{name}.component.html'` and `styleUrl: './{name}.component.css'`.
+
+```typescript
+// BAD
+@Component({
+  selector: 'app-example',
+  template: `<div>inline</div>`,
+  styles: `:host { display: block; }`,
+})
+
+// GOOD
+@Component({
+  selector: 'app-example',
+  templateUrl: './example.component.html',
+  styleUrl: './example.component.css',
+})
+```

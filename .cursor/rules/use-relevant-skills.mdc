@@ -1,0 +1,24 @@
+---
+description: Use relevant Cursor skills for tasks
+alwaysApply: true
+---
+
+# Use Relevant Skills
+
+- When a task matches an available skill, read that skill file first and follow it.
+- If a relevant skill exists, do not proceed without reading it.
+- Use the skill's rules even if you already know the topic.
+
+## Examples
+
+Use the skill file before acting:
+
+```
+Task: "Create a new Cursor rule"
+Action: Read `.cursor/skills-cursor/create-rule/SKILL.md`, then follow it.
+```
+
+```
+Task: "Write Angular Jest tests"
+Action: Read `.cursor/skills/ac-angular-jest/SKILL.md`, then follow it.
+```

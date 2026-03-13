@@ -1,0 +1,75 @@
+<div class="select-backdrop">
+  <div class="select-container">
+    <h1 class="select-title">CHOOSE YOUR CLASS</h1>
+
+    <div class="name-input-row">
+      <label for="player-name" class="name-label">Character Name</label>
+      <input
+        id="player-name"
+        [formControl]="nameControl"
+        class="name-input"
+        placeholder="Enter name..."
+        maxlength="16"
+        data-testid="charselect-name-input-name"
+      />
+    </div>
+
+    <div class="class-grid">
+      @for (cls of classList; track cls.id) {
+        <button
+          class="class-card"
+          [class.class-card--selected]="selectedClass() === cls.id"
+          [style.--class-color]="cls.color"
+          (click)="selectClass(cls.id)"
+          [attr.data-testid]="'charselect-class-button-' + cls.id"
+        >
+          <div class="class-icon">{{ cls.icon }}</div>
+          <div class="class-name">{{ cls.name }}</div>
+          <div class="class-desc">{{ cls.description }}</div>
+          <div class="class-stats">
+            <span class="stat">STR {{ cls.baseStats.str }}</span>
+            <span class="stat">DEX {{ cls.baseStats.dex }}</span>
+            <span class="stat">INT {{ cls.baseStats.int }}</span>
+            <span class="stat">LUK {{ cls.baseStats.luk }}</span>
+          </div>
+        </button>
+      }
+    </div>
+
+    @if (selectedClassDef()) {
+      <div class="skill-preview">
+        <h3 class="skill-title">Starting Skills</h3>
+        <div class="skill-list">
+          @for (skill of classSkills(); track skill.id) {
+            <div class="skill-card">
+              <span class="skill-icon">{{ skill.icon }}</span>
+              <div>
+                <div class="skill-name">{{ skill.name }}</div>
+                <div class="skill-desc">{{ skill.description }}</div>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <div class="action-row">
+      <button
+        class="back-btn"
+        data-testid="charselect-nav-button-back"
+        (click)="goBack()"
+      >
+        BACK
+      </button>
+      <button
+        class="start-btn"
+        [class.start-btn--disabled]="!canStart()"
+        [disabled]="!canStart()"
+        data-testid="charselect-nav-button-start"
+        (click)="startGame()"
+      >
+        START GAME
+      </button>
+    </div>
+  </div>
+</div>

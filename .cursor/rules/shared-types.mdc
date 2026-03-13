@@ -1,0 +1,11 @@
+---
+description: Shared types between client and server must live in the shared directory
+alwaysApply: true
+---
+
+# Shared Types
+
+- All TypeScript interfaces and types used by both the Angular client and the Node.js server must live in the `shared/` directory.
+- Never duplicate type definitions across client and server.
+- Shared types include: WebSocket message payloads, character stats, item definitions, skill definitions, game constants.
+- Import shared types using a path alias (e.g., `@shared/`) in both client and server.

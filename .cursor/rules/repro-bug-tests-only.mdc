@@ -1,0 +1,14 @@
+---
+description: Reproduce bugs with tests only; no production code changes until the repro is in place
+alwaysApply: true
+---
+# Reproduce bugs with tests only
+
+- when asked to reproduce a bug (or to "repro first", "repro the issue"), **do not change production code**
+- add or adjust **only tests** that demonstrate the bug (e.g. a test that asserts the desired behaviour and fails on current code)
+- production changes (fixes, refactors, new APIs) come **after** the failing test is in place and agreed
+
+```text
+Repro step: 0 production changes. Only new/updated test(s) that fail and document the bug.
+Fix step:  only after repro is confirmed, implement the fix so the test goes green.
+```

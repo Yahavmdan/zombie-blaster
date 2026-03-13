@@ -1,0 +1,12 @@
+---
+description: No console.log in production code — use a proper logger
+globs: "**/*.ts,**/*.js"
+alwaysApply: false
+---
+
+# No console.log in Production Code
+
+- Do not use `console.log`, `console.warn`, or `console.error` in production code.
+- Use a structured logger (e.g., `pino`, `winston`) for the backend.
+- For the Angular frontend, use a logging service or Angular's built-in error handler.
+- `console.log` is acceptable only in test files and local dev scripts.

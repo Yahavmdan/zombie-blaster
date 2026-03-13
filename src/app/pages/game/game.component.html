@@ -1,0 +1,70 @@
+@if (player(); as p) {
+  <div class="game-wrapper">
+    <app-game-canvas
+      [player]="p"
+      [inputDisabled]="settingsOpen()"
+      (playerUpdated)="onPlayerUpdate($event)"
+      (xpGained)="onXpGained($event)"
+      (scoreUpdated)="onScoreUpdate($event)"
+      (waveUpdated)="onWaveUpdate($event)"
+      (gameOver)="onGameOver()"
+    />
+    <app-hud
+      [playerData]="currentPlayerDisplay()"
+      [wave]="wave()"
+      [score]="score()"
+    />
+    <app-settings
+      (openChanged)="onSettingsOpenChanged($event)"
+    />
+
+    @if (isGameOver()) {
+      <div class="game-over-overlay">
+        <div class="game-over-panel">
+          <h1 class="game-over-title">GAME OVER</h1>
+          <div class="game-over-stats">
+            <div class="go-stat">
+              <span class="go-stat-label">Final Score</span>
+              <span class="go-stat-value go-stat-value--score">{{ score() }}</span>
+            </div>
+            <div class="go-stat">
+              <span class="go-stat-label">Wave Reached</span>
+              <span class="go-stat-value">{{ wave() }}</span>
+            </div>
+            <div class="go-stat">
+              <span class="go-stat-label">Level</span>
+              <span class="go-stat-value">{{ currentPlayerDisplay().level }}</span>
+            </div>
+          </div>
+          <div class="game-over-actions">
+            <button
+              class="go-btn go-btn--primary"
+              data-testid="game-gameover-button-retry"
+              (click)="retry()"
+            >
+              TRY AGAIN
+            </button>
+            <button
+              class="go-btn"
+              data-testid="game-gameover-button-menu"
+              (click)="backToMenu()"
+            >
+              MAIN MENU
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+} @else {
+  <div class="no-player">
+    <p>No character selected.</p>
+    <button
+      class="go-btn go-btn--primary"
+      data-testid="game-nochar-button-select"
+      (click)="backToMenu()"
+    >
+      SELECT CHARACTER
+    </button>
+  </div>
+}

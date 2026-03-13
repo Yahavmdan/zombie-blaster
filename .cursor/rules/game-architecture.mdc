@@ -1,0 +1,39 @@
+---
+description: Game architecture and design rules for the zombie-blaster platformer RPG
+alwaysApply: true
+---
+
+# Zombie Blaster — Game Architecture
+
+## Overview
+Zombie Blaster is a browser-based multiplayer zombie platformer RPG (MapleStory-inspired).
+- Frontend: Angular (UI/menus) + Canvas/WebGL (game rendering)
+- Backend: Node.js (game server, authoritative state, multiplayer)
+- Multiplayer: up to 4 players per session via WebSockets
+
+## Character System
+- 5-6 character classes, each with unique stats, skills, and progression.
+- Stats system inspired by MapleStory: STR, DEX, INT, LUK (or similar) affecting damage, speed, crit, etc.
+- Leveling through grinding zombies; XP curve scales with level.
+- Each class has a skill tree or skill list that unlocks/upgrades with levels.
+
+## Server Authority
+- The server is the source of truth for all game state: positions, HP, damage, drops, XP.
+- Client sends inputs (movement, attack commands); server validates and broadcasts results.
+- Never trust client-computed damage, loot, or position — always verify server-side.
+
+## Separation of Concerns
+- **Angular components**: menus, HUD, inventory, character select, lobby, chat UI.
+- **Game engine / Canvas**: platformer rendering, sprite animation, physics, particle effects.
+- **Node.js server**: game loop, collision detection (authoritative), combat resolution, session management.
+- **Shared types**: interfaces for messages, character stats, items — shared between client and server.
+
+## Naming Conventions
+- Game entities: `Zombie`, `Player`, `Item`, `Skill`, `Map`, `Room`.
+- Services: `GameStateService`, `CombatService`, `LobbyService`, `CharacterService`.
+- Events/messages: `PlayerJoined`, `ZombieSpawned`, `DamageDealt`, `LootDropped`.
+
+## Performance
+- Game loop runs at a fixed tick rate on the server (e.g., 20-60 ticks/sec).
+- Client interpolates between server updates for smooth rendering.
+- Minimize payload size for WebSocket messages (use compact formats).

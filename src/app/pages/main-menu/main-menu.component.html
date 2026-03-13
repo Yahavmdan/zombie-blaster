@@ -1,0 +1,55 @@
+<div class="menu-backdrop">
+  <div class="menu-content">
+    <div class="title-group">
+      <h1 class="game-title">ZOMBIE</h1>
+      <h1 class="game-title game-title--accent">BLASTER</h1>
+      <p class="subtitle">Survive the undead horde</p>
+    </div>
+
+    <div class="menu-buttons">
+      <button
+        class="menu-btn menu-btn--primary"
+        data-testid="menu-main-button-play"
+        (click)="onPlay()"
+      >
+        PLAY
+      </button>
+      <button
+        class="menu-btn"
+        data-testid="menu-main-button-howtoplay"
+        (click)="toggleHelp()"
+      >
+        HOW TO PLAY
+      </button>
+    </div>
+
+    @if (showHelp) {
+      <div class="help-panel">
+        <h3>Controls</h3>
+        <div class="help-grid">
+          <span class="key">A / D</span><span>Move left / right</span>
+          <span class="key">W / SPACE</span><span>Jump</span>
+          <span class="key">J / CLICK</span><span>Attack</span>
+          <span class="key">ESC</span><span>Pause</span>
+        </div>
+        <p class="help-tip">Kill zombies, gain XP, level up. Survive as many waves as you can!</p>
+      </div>
+    }
+
+    <div class="version-tag">v0.1.0 — Single Player</div>
+  </div>
+
+  <div class="floating-zombies">
+    @for (z of floatingZombies; track z.id) {
+      <div
+        class="floating-zombie"
+        [style.left.px]="z.x"
+        [style.top.px]="z.y"
+        [style.animation-delay]="z.delay + 's'"
+        [style.opacity]="z.opacity"
+      >
+        {{ z.emoji }}
+      </div>
+    }
+  </div>
+</div>

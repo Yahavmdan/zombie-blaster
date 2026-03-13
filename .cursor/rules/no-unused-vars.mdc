@@ -1,0 +1,11 @@
+---
+description: Avoid unused variables in all languages
+globs: **/*
+alwaysApply: true
+---
+
+# No Unused Variables
+
+- Do not leave unused variables, imports, or parameters.
+- If a value is declared, it must be used; otherwise remove it.
+- When intentionally unused, remove it instead of keeping dead code.

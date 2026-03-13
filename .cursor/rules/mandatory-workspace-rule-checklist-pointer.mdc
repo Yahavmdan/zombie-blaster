@@ -1,0 +1,9 @@
+---
+description: pointer to mandatory workspace rule checklist
+alwaysApply: true
+---
+
+# Mandatory Workspace Rule Checklist Pointer
+
+- Source of truth rule: `.cursor/rules/mandatory-workspace-rule-checklist.mdc`
+- When working in this workspace, apply that rule before edits and before finalizing.

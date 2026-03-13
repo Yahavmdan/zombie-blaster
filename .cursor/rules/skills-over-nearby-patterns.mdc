@@ -1,0 +1,28 @@
+---
+description: Enforce skill and workspace rules over nearby legacy patterns
+alwaysApply: true
+---
+
+# Skills And Rules Are Hard Gates
+
+- Treat relevant skills and workspace rules as mandatory requirements, not suggestions.
+- If existing nearby code conflicts with a skill/rule, follow the skill/rule.
+- Do not mirror legacy/local patterns that violate active rules.
+
+## Required Workflow
+
+1. Before editing code:
+   - Read all relevant skills and always-applied workspace rules.
+   - Build a short compliance checklist for rule-sensitive items in this task.
+2. During implementation:
+   - Prefer rule-compliant code even when neighboring code differs.
+   - If changing one line would leave adjacent violations in touched code, align adjacent lines too when safe.
+3. Before final response:
+   - Run a compliance pass on edited files.
+   - Explicitly verify no new violations were introduced (for example: forbidden log levels, naming, API conventions, null-safe checks).
+
+## Conflict Resolution
+
+- Rule/skill text wins over local precedent.
+- If two rules appear to conflict, choose the stricter rule and call out the conflict in the response.
+- If scope is ambiguous, ask the user before finalizing.
