@@ -169,7 +169,7 @@ export class DashboardComponent {
   private localService = inject(LocalService, { self: true });
   
   navigateToProfile() {
-    this.router.navigate(['/profile']);
+    void this.router.navigate(['/profile']);
   }
 }
 ```

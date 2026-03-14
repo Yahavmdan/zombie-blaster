@@ -41,6 +41,24 @@
       <span class="stat-mini">DEF {{ playerData().derived.defense }}</span>
       <span class="stat-mini">CRIT {{ playerData().derived.critRate | number:'1.0-0' }}%</span>
     </div>
+    @if (hasStatPoints()) {
+      <button
+        class="sp-indicator"
+        (click)="onOpenStatPanel()"
+        data-testid="hud-sp-button-open"
+      >
+        SP: {{ unallocatedStatPoints() }}
+      </button>
+    }
+    @if (hasSkillPoints()) {
+      <button
+        class="skp-indicator"
+        (click)="onOpenSkillTree()"
+        data-testid="hud-skp-button-open"
+      >
+        SKP: {{ unallocatedSkillPoints() }}
+      </button>
+    }
   </div>
 </div>
 

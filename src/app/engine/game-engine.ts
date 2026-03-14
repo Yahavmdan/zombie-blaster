@@ -5,7 +5,12 @@ import {
   CHARACTER_CLASSES,
   SKILLS,
   SkillDefinition,
+  SkillType,
   ZOMBIE_TYPES,
+  getSkillDamageMultiplier,
+  getSkillMpCost,
+  getSkillCooldown,
+  getSkillRange,
 } from '@shared/index';
 import {
   MpPotionDrop,
@@ -14,17 +19,11 @@ import {
   ZombieType,
 } from '@shared/game-entities';
 import { InputKeys } from '@shared/messages';
+import { Particle, ParticleShape, FadeMode } from './particle-types';
+import { SKILL_ANIMATIONS, SkillAnimation } from './skill-animations';
 
-export interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  color: string;
-  size: number;
-}
+export type { Particle };
+export { ParticleShape, FadeMode };
 
 export interface DamageNumber {
   x: number;
@@ -69,11 +68,11 @@ export class GameEngine {
   private mpPotions: MpPotionDrop[] = [];
   private platforms: Platform[] = [];
   private ropes: Rope[] = [];
-  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false };
+  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false };
   private attackCooldown: number = 0;
   private invincibilityFrames: number = 0;
 
-  private playerSkills: SkillDefinition[] = [];
+  private playerActiveSkills: SkillDefinition[] = [];
   private skillCooldowns: Map<string, number> = new Map();
 
   private wave: number = 1;
@@ -85,13 +84,17 @@ export class GameEngine {
 
   private backgroundStars: BackgroundStar[] = [];
 
-  private controlKeyDisplay: { move: string; jump: string; climb: string; attack: string; skill1Key: string; skill2Key: string } = {
+  private screenShakeFrames: number = 0;
+  private screenShakeIntensity: number = 0;
+  private screenFlashColor: string | null = null;
+  private screenFlashFrames: number = 0;
+
+  private controlKeyDisplay: { move: string; jump: string; climb: string; attack: string; skillKeys: string[] } = {
     move: 'A/D or Arrows  Move',
     jump: 'W/Up or Space  Jump',
     climb: 'W/S on rope    Climb',
     attack: 'J or Click     Attack',
-    skill1Key: 'K',
-    skill2Key: 'L',
+    skillKeys: ['1', '2', '3', '4', '5', '6'],
   };
 
   onPlayerUpdate: ((player: CharacterState) => void) | null = null;
@@ -148,7 +151,13 @@ export class GameEngine {
     this.mpPotions = [];
     this.wave = 1;
     this.zombiesKilledThisWave = 0;
-    this.playerSkills = SKILLS.filter((s: SkillDefinition) => s.classId === player.classId && s.unlockLevel <= player.level);
+    this.playerActiveSkills = SKILLS.filter(
+      (s: SkillDefinition) =>
+        s.classId === player.classId &&
+        s.type === SkillType.Active &&
+        (player.skillLevels[s.id] ?? 0) > 0,
+    ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
+     .slice(0, 6);
     this.skillCooldowns.clear();
     this.startWave();
     this.lastTimestamp = performance.now();
@@ -166,7 +175,7 @@ export class GameEngine {
     this.keys = keys;
   }
 
-  setControlKeyDisplay(display: { move: string; jump: string; climb: string; attack: string; skill1Key: string; skill2Key: string }): void {
+  setControlKeyDisplay(display: { move: string; jump: string; climb: string; attack: string; skillKeys: string[] }): void {
     this.controlKeyDisplay = display;
   }
 
@@ -218,6 +227,10 @@ export class GameEngine {
 
     if (this.keys.skill1) this.tryPerformSkill(0);
     if (this.keys.skill2) this.tryPerformSkill(1);
+    if (this.keys.skill3) this.tryPerformSkill(2);
+    if (this.keys.skill4) this.tryPerformSkill(3);
+    if (this.keys.skill5) this.tryPerformSkill(4);
+    if (this.keys.skill6) this.tryPerformSkill(5);
 
     if (this.player.x < 0) this.player.x = 0;
     if (this.player.x + GAME_CONSTANTS.PLAYER_WIDTH > GAME_CONSTANTS.CANVAS_WIDTH) {
@@ -362,8 +375,8 @@ export class GameEngine {
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
       if (this.rectsOverlap(attackX, this.player.y, attackRange, GAME_CONSTANTS.PLAYER_HEIGHT, z.x, z.y, zDef.width, zDef.height)) {
         const isCrit: boolean = Math.random() * 100 < this.player.derived.critRate;
-        let damage: number = this.player.derived.attack + Math.floor(Math.random() * 5);
-        if (isCrit) damage = Math.floor(damage * this.player.derived.critDamage / 100);
+        let damage: number = Math.max(1, this.player.derived.attack + Math.floor(Math.random() * 5));
+        if (isCrit) damage = Math.max(1, Math.floor(damage * this.player.derived.critDamage / 100));
 
         z.hp -= damage;
         this.applyZombieKnockback(z);
@@ -389,27 +402,36 @@ export class GameEngine {
 
   private tryPerformSkill(slotIndex: number): void {
     if (!this.player) return;
-    const skill: SkillDefinition | undefined = this.playerSkills[slotIndex];
+    const skill: SkillDefinition | undefined = this.playerActiveSkills[slotIndex];
     if (!skill) return;
+
+    const skillLevel: number = this.player.skillLevels[skill.id] ?? 0;
+    if (skillLevel <= 0) return;
 
     const remaining: number = this.skillCooldowns.get(skill.id) ?? 0;
     if (remaining > 0) return;
-    if (this.player.mp < skill.mpCost) return;
 
-    this.player.mp -= skill.mpCost;
-    this.skillCooldowns.set(skill.id, Math.floor(skill.cooldown / this.fixedDt));
+    const mpCost: number = getSkillMpCost(skill, skillLevel);
+    const cooldownMs: number = getSkillCooldown(skill, skillLevel);
+    const damageMultiplier: number = getSkillDamageMultiplier(skill, skillLevel);
+    const range: number = getSkillRange(skill, skillLevel);
 
-    const isHeal: boolean = skill.damage < 0;
+    if (this.player.mp < mpCost) return;
+
+    this.player.mp -= mpCost;
+    this.skillCooldowns.set(skill.id, Math.floor(cooldownMs / this.fixedDt));
+
+    const playerCX: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const playerCY: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+
+    this.triggerSkillAnimation(skill.animationKey, playerCX, playerCY, this.player.facing, skillLevel);
+
+    const isHeal: boolean = damageMultiplier < 0;
     if (isHeal) {
-      const healAmount: number = Math.floor(Math.abs(skill.damage) * this.player.derived.attack);
+      const healAmount: number = Math.floor(Math.abs(damageMultiplier) * this.player.derived.attack);
       this.player.hp = Math.min(this.player.hp + healAmount, this.player.derived.maxHp);
-      this.spawnHitParticles(
-        this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
-        this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
-        '#44ff44',
-      );
       this.damageNumbers.push({
-        x: this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+        x: playerCX,
         y: this.player.y - 10,
         value: healAmount,
         isCrit: false,
@@ -425,23 +447,22 @@ export class GameEngine {
       if (this.player) this.player.isAttacking = false;
     }, GAME_CONSTANTS.PLAYER_SKILL_ANIM_MS);
 
-    const skillRange: number = skill.range;
     const attackX: number = this.player.facing === Direction.Right
       ? this.player.x + GAME_CONSTANTS.PLAYER_WIDTH
-      : this.player.x - skillRange;
-    const attackW: number = skillRange;
-    const attackH: number = skill.range > 100 ? GAME_CONSTANTS.PLAYER_HEIGHT * 2 : GAME_CONSTANTS.PLAYER_HEIGHT;
-    const attackY: number = skill.range > 100 ? this.player.y - GAME_CONSTANTS.PLAYER_HEIGHT / 2 : this.player.y;
+      : this.player.x - range;
+    const attackW: number = range;
+    const attackH: number = range > 100 ? GAME_CONSTANTS.PLAYER_HEIGHT * 2 : GAME_CONSTANTS.PLAYER_HEIGHT;
+    const attackY: number = range > 100 ? this.player.y - GAME_CONSTANTS.PLAYER_HEIGHT / 2 : this.player.y;
 
-    const skillColor: string = CHARACTER_CLASSES[this.player.classId].color;
+    const skillColor: string = skill.color;
 
     for (const z of this.zombies) {
       if (z.isDead) continue;
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
       if (this.rectsOverlap(attackX, attackY, attackW, attackH, z.x, z.y, zDef.width, zDef.height)) {
         const isCrit: boolean = Math.random() * 100 < this.player.derived.critRate;
-        let damage: number = Math.floor(this.player.derived.attack * skill.damage) + Math.floor(Math.random() * 5);
-        if (isCrit) damage = Math.floor(damage * this.player.derived.critDamage / 100);
+        let damage: number = Math.max(1, Math.floor(this.player.derived.attack * damageMultiplier) + Math.floor(Math.random() * 5));
+        if (isCrit) damage = Math.max(1, Math.floor(damage * this.player.derived.critDamage / 100));
 
         z.hp -= damage;
         this.applyZombieKnockback(z);
@@ -474,10 +495,14 @@ export class GameEngine {
 
     if (this.player) {
       const available: SkillDefinition[] = SKILLS.filter(
-        (s: SkillDefinition) => s.classId === this.player!.classId && s.unlockLevel <= this.player!.level,
-      );
-      if (available.length !== this.playerSkills.length) {
-        this.playerSkills = available;
+        (s: SkillDefinition) =>
+          s.classId === this.player!.classId &&
+          s.type === SkillType.Active &&
+          (this.player!.skillLevels[s.id] ?? 0) > 0,
+      ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
+       .slice(0, 6);
+      if (available.length !== this.playerActiveSkills.length) {
+        this.playerActiveSkills = available;
       }
     }
   }
@@ -492,9 +517,15 @@ export class GameEngine {
       if (z.knockbackFrames > 0) {
         z.knockbackFrames--;
       } else {
-        const dx: number = this.player.x - z.x;
-        z.velocityX = dx > 0 ? zDef.speed : -zDef.speed;
+        this.updateZombieAI(z, zDef);
       }
+
+      if (z.jumpCooldown > 0) z.jumpCooldown--;
+      if (z.attackCooldown > 0) z.attackCooldown--;
+
+      z.facing = this.player.x > z.x ? 1 : -1;
+
+      this.updateZombieAttack(z, zDef);
 
       z.velocityY += GAME_CONSTANTS.GRAVITY;
       if (z.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
@@ -526,38 +557,121 @@ export class GameEngine {
         z.x, z.y, zDef.width, zDef.height,
       )) {
         const baseHit: number = zDef.baseDamageMin + Math.floor(Math.random() * (zDef.baseDamageMax - zDef.baseDamageMin + 1));
-        const rawDamage: number = Math.max(1, baseHit - this.player.derived.defense);
-        this.player.hp -= rawDamage;
-        this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
-
-        const knockDir: number = this.player.x > z.x ? 1 : -1;
-        this.player.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
-        this.player.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
-        this.player.isGrounded = false;
-        if (this.player.isClimbing) {
-          this.player.isClimbing = false;
-        }
-
-        this.spawnHitParticles(this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, '#ffffff');
-        this.damageNumbers.push({
-          x: this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
-          y: this.player.y - 10,
-          value: rawDamage,
-          isCrit: false,
-          life: GAME_CONSTANTS.DAMAGE_NUMBER_LIFE_TICKS,
-          color: '#ff4444',
-        });
-
-        if (this.player.hp <= 0) {
-          this.player.hp = 0;
-          this.player.isDead = true;
-          this.onPlayerUpdate?.(this.player);
-          this.onGameOver?.();
-          return;
-        }
-        this.onPlayerUpdate?.(this.player);
+        const contactDamage: number = Math.max(1, Math.floor((baseHit - this.player.derived.defense) * GAME_CONSTANTS.ZOMBIE_CONTACT_DAMAGE_MULT));
+        this.applyZombieDamageToPlayer(contactDamage, z);
       }
     }
+  }
+
+  private updateZombieAttack(z: ZombieState, zDef: ZombieDefinition): void {
+    if (!this.player) return;
+
+    if (z.attackAnimTimer > 0) {
+      z.attackAnimTimer--;
+
+      const hitTick: number = GAME_CONSTANTS.ZOMBIE_ATTACK_ANIM_TICKS - GAME_CONSTANTS.ZOMBIE_ATTACK_HIT_TICK;
+      if (z.attackAnimTimer === hitTick && !z.attackHasHit) {
+        z.attackHasHit = true;
+        if (this.invincibilityFrames <= 0 && this.zombieSwingHitsPlayer(z, zDef)) {
+          const baseHit: number = zDef.baseDamageMin + Math.floor(Math.random() * (zDef.baseDamageMax - zDef.baseDamageMin + 1));
+          const rawDamage: number = Math.max(1, baseHit - this.player.derived.defense);
+          this.applyZombieDamageToPlayer(rawDamage, z);
+        }
+      }
+      return;
+    }
+
+    if (z.attackCooldown > 0 || z.knockbackFrames > 0) return;
+
+    const zCenterX: number = z.x + zDef.width / 2;
+    const zCenterY: number = z.y + zDef.height / 2;
+    const pCenterX: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const pCenterY: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+    const distX: number = Math.abs(pCenterX - zCenterX);
+    const distY: number = Math.abs(pCenterY - zCenterY);
+
+    if (distX < zDef.width / 2 + GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE + GAME_CONSTANTS.PLAYER_WIDTH / 2
+        && distY < zDef.height) {
+      z.attackAnimTimer = GAME_CONSTANTS.ZOMBIE_ATTACK_ANIM_TICKS;
+      z.attackHasHit = false;
+      z.attackCooldown = GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN +
+        Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX - GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN));
+    }
+  }
+
+  private zombieSwingHitsPlayer(z: ZombieState, zDef: ZombieDefinition): boolean {
+    if (!this.player) return false;
+
+    const swingX: number = z.facing > 0
+      ? z.x + zDef.width
+      : z.x - GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE;
+    const swingY: number = z.y;
+    const swingW: number = GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE;
+    const swingH: number = zDef.height;
+
+    return this.rectsOverlap(
+      swingX, swingY, swingW, swingH,
+      this.player.x, this.player.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT,
+    );
+  }
+
+  private applyZombieDamageToPlayer(damage: number, z: ZombieState): void {
+    if (!this.player || this.invincibilityFrames > 0) return;
+
+    this.player.hp -= damage;
+    this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
+
+    const knockDir: number = this.player.x > z.x ? 1 : -1;
+    this.player.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
+    this.player.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
+    this.player.isGrounded = false;
+    if (this.player.isClimbing) {
+      this.player.isClimbing = false;
+    }
+
+    this.spawnHitParticles(this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, '#ffffff');
+    this.damageNumbers.push({
+      x: this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+      y: this.player.y - 10,
+      value: damage,
+      isCrit: false,
+      life: GAME_CONSTANTS.DAMAGE_NUMBER_LIFE_TICKS,
+      color: '#ff4444',
+    });
+
+    if (this.player.hp <= 0) {
+      this.player.hp = 0;
+      this.player.isDead = true;
+      this.onPlayerUpdate?.(this.player);
+      this.onGameOver?.();
+      return;
+    }
+    this.onPlayerUpdate?.(this.player);
+  }
+
+  private updateZombieAI(z: ZombieState, zDef: ZombieDefinition): void {
+    if (!this.player) return;
+
+    const dx: number = this.player.x - z.x;
+    const dy: number = this.player.y - z.y;
+    const playerIsAbove: boolean = dy < -zDef.height;
+
+    z.velocityX = dx > 0 ? zDef.speed : -zDef.speed;
+
+    if (!z.isGrounded || z.jumpCooldown > 0) return;
+
+    if (playerIsAbove && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_PLATFORM_CHASE_CHANCE) {
+      this.zombieJump(z);
+    } else if (Math.abs(dx) < zDef.width * 2 && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_CHANCE_PER_TICK) {
+      this.zombieJump(z);
+    }
+  }
+
+  private zombieJump(z: ZombieState): void {
+    z.velocityY = GAME_CONSTANTS.ZOMBIE_JUMP_FORCE;
+    z.isGrounded = false;
+    z.jumpCooldown = GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MIN +
+      Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MAX - GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MIN));
   }
 
   private updateSpawning(): void {
@@ -607,6 +721,11 @@ export class GameEngine {
       isDead: false,
       target: null,
       knockbackFrames: 0,
+      jumpCooldown: GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MAX,
+      attackCooldown: GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX,
+      attackAnimTimer: 0,
+      attackHasHit: false,
+      facing: spawnRight ? -1 : 1,
     };
 
     this.zombies.push(zombie);
@@ -637,7 +756,9 @@ export class GameEngine {
   private handleZombieDeath(z: ZombieState, zDef: ZombieDefinition): void {
     z.isDead = true;
     this.zombiesKilledThisWave++;
-    const xpReward: number = ZOMBIE_TYPES[z.type].xpReward;
+    const baseXp: number = ZOMBIE_TYPES[z.type].xpReward;
+    const waveBonus: number = 1 + (this.wave - 1) * 0.1;
+    const xpReward: number = Math.floor(baseXp * waveBonus);
     this.onXpGained?.(xpReward);
     this.onScoreUpdate?.(xpReward * 10);
     this.spawnDeathParticles(z.x + zDef.width / 2, z.y + zDef.height / 2, zDef.color);
@@ -729,21 +850,32 @@ export class GameEngine {
   syncProgression(player: CharacterState): void {
     if (!this.player) return;
     const leveled: boolean = player.level > this.player.level;
+    this.player.classId = player.classId;
     this.player.level = player.level;
     this.player.xp = player.xp;
     this.player.xpToNext = player.xpToNext;
     this.player.stats = { ...player.stats };
     this.player.derived = { ...player.derived };
+    this.player.allocatedStats = { ...player.allocatedStats };
+    this.player.unallocatedStatPoints = player.unallocatedStatPoints;
+    this.player.unallocatedSkillPoints = player.unallocatedSkillPoints;
+    this.player.skillLevels = { ...player.skillLevels };
     if (leveled) {
       this.player.hp = player.hp;
       this.player.mp = player.mp;
+      this.spawnLevelUpEffect();
     }
-    this.playerSkills = SKILLS.filter(
-      (s: SkillDefinition) => s.classId === this.player!.classId && s.unlockLevel <= this.player!.level,
-    );
+    this.playerActiveSkills = SKILLS.filter(
+      (s: SkillDefinition) =>
+        s.classId === this.player!.classId &&
+        s.type === SkillType.Active &&
+        (this.player!.skillLevels[s.id] ?? 0) > 0,
+    ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
+     .slice(0, 6);
   }
 
   private spawnHitParticles(x: number, y: number, color: string): void {
+    if (this.particles.length >= GAME_CONSTANTS.MAX_PARTICLES) return;
     for (let i: number = 0; i < GAME_CONSTANTS.HIT_PARTICLE_COUNT; i++) {
       this.particles.push({
         x, y,
@@ -753,11 +885,17 @@ export class GameEngine {
         maxLife: GAME_CONSTANTS.HIT_PARTICLE_LIFE,
         color,
         size: Math.random() * 3 + 1,
+        shape: ParticleShape.Square,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Linear,
+        scaleOverLife: false,
       });
     }
   }
 
   private spawnDeathParticles(x: number, y: number, color: string): void {
+    if (this.particles.length >= GAME_CONSTANTS.MAX_PARTICLES) return;
     for (let i: number = 0; i < GAME_CONSTANTS.DEATH_PARTICLE_COUNT; i++) {
       this.particles.push({
         x, y,
@@ -767,8 +905,76 @@ export class GameEngine {
         maxLife: GAME_CONSTANTS.DEATH_PARTICLE_LIFE,
         color,
         size: Math.random() * 4 + 2,
+        shape: ParticleShape.Circle,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Linear,
+        scaleOverLife: true,
       });
     }
+  }
+
+  private addParticle(p: Particle): void {
+    if (this.particles.length < GAME_CONSTANTS.MAX_PARTICLES) {
+      this.particles.push(p);
+    }
+  }
+
+  spawnSkillParticles(particles: Particle[]): void {
+    for (const p of particles) {
+      this.addParticle(p);
+    }
+  }
+
+  triggerScreenShake(frames: number, intensity: number): void {
+    this.screenShakeFrames = frames;
+    this.screenShakeIntensity = intensity;
+  }
+
+  triggerScreenFlash(color: string, frames: number): void {
+    this.screenFlashColor = color;
+    this.screenFlashFrames = frames;
+  }
+
+  private triggerSkillAnimation(animationKey: string, x: number, y: number, facing: Direction, level: number): void {
+    const anim: SkillAnimation | undefined = SKILL_ANIMATIONS[animationKey];
+    if (!anim) return;
+
+    const particles: Particle[] = anim.spawnParticles(x, y, facing, level);
+    this.spawnSkillParticles(particles);
+
+    if (anim.screenShake > 0) {
+      this.triggerScreenShake(anim.screenShake, anim.screenShakeIntensity);
+    }
+    if (anim.flashColor && anim.flashFrames > 0) {
+      this.triggerScreenFlash(anim.flashColor, anim.flashFrames);
+    }
+  }
+
+  spawnLevelUpEffect(): void {
+    if (!this.player) return;
+    const cx: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const cy: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+    const count: number = 20;
+    for (let i: number = 0; i < count; i++) {
+      const angle: number = (i / count) * Math.PI * 2;
+      const speed: number = 3 + Math.random() * 4;
+      this.addParticle({
+        x: cx, y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 2,
+        life: 40 + Math.floor(Math.random() * 20),
+        maxLife: 60,
+        color: Math.random() > 0.5 ? '#ffcc44' : '#ffffff',
+        size: Math.random() * 4 + 2,
+        shape: ParticleShape.Star,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.2,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: true,
+      });
+    }
+    this.triggerScreenFlash('#ffcc44', 8);
   }
 
   private updateParticles(): void {
@@ -776,6 +982,7 @@ export class GameEngine {
       p.x += p.vx;
       p.y += p.vy;
       p.vy += GAME_CONSTANTS.PARTICLE_GRAVITY;
+      p.rotation += p.rotationSpeed;
       p.life--;
     }
     this.particles = this.particles.filter((p: Particle) => p.life > 0);
@@ -802,6 +1009,15 @@ export class GameEngine {
     const ctx: CanvasRenderingContext2D = this.ctx;
     ctx.clearRect(0, 0, GAME_CONSTANTS.CANVAS_WIDTH, GAME_CONSTANTS.CANVAS_HEIGHT);
 
+    ctx.save();
+
+    if (this.screenShakeFrames > 0) {
+      const shakeX: number = (Math.random() - 0.5) * this.screenShakeIntensity;
+      const shakeY: number = (Math.random() - 0.5) * this.screenShakeIntensity;
+      ctx.translate(shakeX, shakeY);
+      this.screenShakeFrames--;
+    }
+
     this.renderBackground(ctx);
     this.renderRopes(ctx);
     this.renderPlatforms(ctx);
@@ -812,6 +1028,16 @@ export class GameEngine {
     this.renderDamageNumbers(ctx);
     this.renderWaveInfo(ctx);
     this.renderControls(ctx);
+
+    ctx.restore();
+
+    if (this.screenFlashFrames > 0 && this.screenFlashColor) {
+      ctx.globalAlpha = this.screenFlashFrames / 10;
+      ctx.fillStyle = this.screenFlashColor;
+      ctx.fillRect(0, 0, GAME_CONSTANTS.CANVAS_WIDTH, GAME_CONSTANTS.CANVAS_HEIGHT);
+      ctx.globalAlpha = 1;
+      this.screenFlashFrames--;
+    }
   }
 
   private renderBackground(ctx: CanvasRenderingContext2D): void {
@@ -899,9 +1125,6 @@ export class GameEngine {
       if (z.isDead) continue;
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
 
-      ctx.fillStyle = zDef.color;
-      ctx.fillRect(z.x, z.y, zDef.width, zDef.height);
-
       ctx.fillStyle = '#ff0000';
       ctx.fillRect(z.x, z.y, zDef.width, zDef.height);
       ctx.fillStyle = zDef.color;
@@ -915,6 +1138,8 @@ export class GameEngine {
         ctx.fillRect(z.x + zDef.width / 2 + 2 + lookDir * 2, eyeY, 4, 4);
       }
 
+      this.renderZombieArm(ctx, z, zDef);
+
       const hpPercent: number = z.hp / z.maxHp;
       const barWidth: number = zDef.width;
       ctx.fillStyle = '#330000';
@@ -924,13 +1149,122 @@ export class GameEngine {
     }
   }
 
+  private renderZombieArm(ctx: CanvasRenderingContext2D, z: ZombieState, zDef: ZombieDefinition): void {
+    const armY: number = z.y + zDef.height * 0.35;
+    const armThickness: number = Math.max(4, zDef.width * 0.18);
+    const restLength: number = zDef.width * 0.3;
+    const fullSwingLength: number = GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE;
+
+    if (z.attackAnimTimer > 0) {
+      const progress: number = 1 - z.attackAnimTimer / GAME_CONSTANTS.ZOMBIE_ATTACK_ANIM_TICKS;
+      const swingCurve: number = progress < 0.5
+        ? progress * 2
+        : 2 - progress * 2;
+      const armLength: number = restLength + (fullSwingLength - restLength) * swingCurve;
+      const armX: number = z.facing > 0 ? z.x + zDef.width : z.x;
+      const directedLength: number = armLength * z.facing;
+
+      ctx.fillStyle = zDef.color;
+      ctx.fillRect(
+        z.facing > 0 ? armX : armX - armLength,
+        armY,
+        armLength,
+        armThickness,
+      );
+
+      const fistSize: number = armThickness * 1.6;
+      ctx.fillStyle = '#aa3333';
+      ctx.fillRect(
+        armX + directedLength - (z.facing > 0 ? fistSize : 0),
+        armY - (fistSize - armThickness) / 2,
+        fistSize,
+        fistSize,
+      );
+    } else {
+      const armX: number = z.facing > 0 ? z.x + zDef.width : z.x - restLength;
+      ctx.fillStyle = zDef.color;
+      ctx.globalAlpha = 0.8;
+      ctx.fillRect(armX, armY, restLength, armThickness);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   private renderParticles(ctx: CanvasRenderingContext2D): void {
     for (const p of this.particles) {
-      ctx.globalAlpha = p.life / p.maxLife;
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+      this.renderParticle(ctx, p);
     }
     ctx.globalAlpha = 1;
+  }
+
+  private getParticleAlpha(p: Particle): number {
+    const ratio: number = p.life / p.maxLife;
+    switch (p.fadeMode) {
+      case FadeMode.Quick:
+        return ratio * ratio;
+      case FadeMode.Late:
+        return ratio < 0.3 ? ratio / 0.3 : 1;
+      default:
+        return ratio;
+    }
+  }
+
+  private renderParticle(ctx: CanvasRenderingContext2D, p: Particle): void {
+    const alpha: number = this.getParticleAlpha(p);
+    const scale: number = p.scaleOverLife ? p.life / p.maxLife : 1;
+    const size: number = p.size * scale;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rotation);
+
+    switch (p.shape) {
+      case ParticleShape.Circle:
+        ctx.beginPath();
+        ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case ParticleShape.Star:
+        this.drawStar(ctx, size);
+        break;
+      case ParticleShape.Line:
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = p.color;
+        ctx.beginPath();
+        ctx.moveTo(-size / 2, 0);
+        ctx.lineTo(size / 2, 0);
+        ctx.stroke();
+        break;
+      case ParticleShape.Ring:
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
+        ctx.stroke();
+        break;
+      default:
+        ctx.fillRect(-size / 2, -size / 2, size, size);
+    }
+
+    ctx.restore();
+  }
+
+  private drawStar(ctx: CanvasRenderingContext2D, size: number): void {
+    const spikes: number = 5;
+    const outerR: number = size / 2;
+    const innerR: number = outerR * 0.4;
+    ctx.beginPath();
+    for (let i: number = 0; i < spikes * 2; i++) {
+      const r: number = i % 2 === 0 ? outerR : innerR;
+      const angle: number = (i * Math.PI) / spikes - Math.PI / 2;
+      const px: number = Math.cos(angle) * r;
+      const py: number = Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
   }
 
   private renderPotions(ctx: CanvasRenderingContext2D): void {
@@ -1011,21 +1345,23 @@ export class GameEngine {
   }
 
   private renderControls(ctx: CanvasRenderingContext2D): void {
-    ctx.globalAlpha = 0.6;
-    ctx.fillStyle = '#000000';
+    const skillLineCount: number = Math.max(this.playerActiveSkills.length, 1);
+    const baseLines: number = 5;
+    const lineH: number = 16;
     const boxW: number = 230;
-    const boxH: number = 135;
+    const boxH: number = (baseLines + skillLineCount) * lineH + 20;
     const boxX: number = GAME_CONSTANTS.CANVAS_WIDTH - boxW - 10;
     const boxY: number = GAME_CONSTANTS.CANVAS_HEIGHT - boxH - 10;
+
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = '#000000';
     ctx.fillRect(boxX, boxY, boxW, boxH);
     ctx.globalAlpha = 1;
 
-    ctx.fillStyle = '#cccccc';
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'left';
     const x: number = boxX + 10;
     let y: number = boxY + 18;
-    const lineH: number = 16;
 
     ctx.fillStyle = '#ffcc44';
     ctx.fillText('HOW TO PLAY', x, y);
@@ -1041,14 +1377,17 @@ export class GameEngine {
     ctx.fillText(this.controlKeyDisplay.attack, x, y);
     y += lineH;
 
-    const skill1: SkillDefinition | undefined = this.playerSkills[0];
-    const skill2: SkillDefinition | undefined = this.playerSkills[1];
-    const s1Name: string = skill1 ? skill1.name : 'Locked';
-    const s2Name: string = skill2 ? skill2.name : 'Locked';
+    for (let i: number = 0; i < this.playerActiveSkills.length; i++) {
+      const skill: SkillDefinition = this.playerActiveSkills[i];
+      const slotKey: string = this.controlKeyDisplay.skillKeys[i] ?? `${i + 1}`;
+      ctx.fillStyle = '#44ccff';
+      ctx.fillText(`${slotKey}  ${skill.name}`, x, y);
+      y += lineH;
+    }
 
-    ctx.fillStyle = '#44ccff';
-    ctx.fillText(`${this.controlKeyDisplay.skill1Key}  Skill 1: ${s1Name}`, x, y);
-    y += lineH;
-    ctx.fillText(`${this.controlKeyDisplay.skill2Key}  Skill 2: ${s2Name}`, x, y);
+    if (this.playerActiveSkills.length === 0) {
+      ctx.fillStyle = '#666688';
+      ctx.fillText('No skills yet - invest skill points!', x, y);
+    }
   }
 }

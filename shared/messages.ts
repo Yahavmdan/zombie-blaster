@@ -38,6 +38,12 @@ export interface InputKeys {
   attack: boolean;
   skill1: boolean;
   skill2: boolean;
+  skill3: boolean;
+  skill4: boolean;
+  skill5: boolean;
+  skill6: boolean;
+  openStats: boolean;
+  openSkills: boolean;
 }
 
 export interface GameStateUpdatePayload {

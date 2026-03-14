@@ -13,7 +13,7 @@ import {
   inject,
   effect,
 } from '@angular/core';
-import { CharacterState, KeyBindings } from '@shared/index';
+import { CharacterClass, CharacterState, KeyBindings } from '@shared/index';
 import { GameAction } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { InputKeys } from '@shared/messages';
@@ -39,11 +39,14 @@ export class GameCanvasComponent implements OnDestroy {
   readonly scoreUpdated: OutputEmitterRef<number> = output<number>();
   readonly waveUpdated: OutputEmitterRef<{ wave: number; remaining: number }> = output<{ wave: number; remaining: number }>();
   readonly gameOver: OutputEmitterRef<void> = output<void>();
+  readonly openStatsRequested: OutputEmitterRef<void> = output<void>();
+  readonly openSkillsRequested: OutputEmitterRef<void> = output<void>();
 
   readonly canvasRef: Signal<ElementRef<HTMLCanvasElement>> = viewChild.required<ElementRef<HTMLCanvasElement>>('gameCanvas');
 
   private engine: GameEngine | null = null;
-  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false };
+  private currentClassId: CharacterClass | null = null;
+  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false };
   private readonly boundKeyDown: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyDown(e);
   private readonly boundKeyUp: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyUp(e);
   private readonly boundMouseDown: () => void = (): void => this.onMouseDown();
@@ -59,6 +62,14 @@ export class GameCanvasComponent implements OnDestroy {
     effect((): void => {
       const bindings: KeyBindings = this.keyBindingsService.bindings();
       this.syncControlLabels(bindings);
+    });
+
+    effect((): void => {
+      const p: CharacterState = this.player();
+      if (!this.engine || this.currentClassId === null) return;
+      if (p.classId !== this.currentClassId) {
+        this.restartEngine(p);
+      }
     });
   }
 
@@ -76,15 +87,25 @@ export class GameCanvasComponent implements OnDestroy {
 
   private initEngine(): void {
     const canvas: HTMLCanvasElement = this.canvasRef().nativeElement;
+    const p: CharacterState = this.player();
     this.engine = new GameEngine(canvas);
+    this.bindEngineCallbacks();
+    this.currentClassId = p.classId;
+    this.engine.start({ ...p });
+  }
 
-    this.engine.onPlayerUpdate = (p: CharacterState) => this.playerUpdated.emit(p);
-    this.engine.onXpGained = (amount: number) => this.xpGained.emit(amount);
-    this.engine.onScoreUpdate = (delta: number) => this.scoreUpdated.emit(delta);
-    this.engine.onWaveUpdate = (wave: number, remaining: number) => this.waveUpdated.emit({ wave, remaining });
-    this.engine.onGameOver = () => this.gameOver.emit();
+  private restartEngine(p: CharacterState): void {
+    this.engine!.stop();
+    this.currentClassId = p.classId;
+    this.engine!.start({ ...p });
+  }
 
-    this.engine.start({ ...this.player() });
+  private bindEngineCallbacks(): void {
+    this.engine!.onPlayerUpdate = (p: CharacterState): void => this.playerUpdated.emit(p);
+    this.engine!.onXpGained = (amount: number): void => this.xpGained.emit(amount);
+    this.engine!.onScoreUpdate = (delta: number): void => this.scoreUpdated.emit(delta);
+    this.engine!.onWaveUpdate = (wave: number, remaining: number): void => this.waveUpdated.emit({ wave, remaining });
+    this.engine!.onGameOver = (): void => this.gameOver.emit();
   }
 
   private bindInput(): void {
@@ -99,6 +120,15 @@ export class GameCanvasComponent implements OnDestroy {
 
     const action: GameAction | null = this.keyBindingsService.getActionForKey(e.key);
     if (!action) return;
+
+    if (action === 'openStats') {
+      this.openStatsRequested.emit();
+      return;
+    }
+    if (action === 'openSkills') {
+      this.openSkillsRequested.emit();
+      return;
+    }
 
     this.keys[action] = true;
 
@@ -136,13 +166,21 @@ export class GameCanvasComponent implements OnDestroy {
 
     const fmt = (keys: string[]): string => keys.map((k: string) => formatKeyName(k)).join('/');
 
+    const skillKeys: string[] = [
+      formatKeyName(bindings.skill1[0] ?? '1'),
+      formatKeyName(bindings.skill2[0] ?? '2'),
+      formatKeyName(bindings.skill3[0] ?? '3'),
+      formatKeyName(bindings.skill4[0] ?? '4'),
+      formatKeyName(bindings.skill5[0] ?? '5'),
+      formatKeyName(bindings.skill6[0] ?? '6'),
+    ];
+
     this.engine.setControlKeyDisplay({
       move: `${fmt(bindings.left)}/${fmt(bindings.right)}  Move`,
       jump: `${fmt(bindings.up)}/${fmt(bindings.jump)}  Jump`,
       climb: `${fmt(bindings.up)}/${fmt(bindings.down)} on rope  Climb`,
       attack: `${fmt(bindings.attack)} or Click  Attack`,
-      skill1Key: formatKeyName(bindings.skill1[0] ?? 'k'),
-      skill2Key: formatKeyName(bindings.skill2[0] ?? 'l'),
+      skillKeys,
     });
   }
 }

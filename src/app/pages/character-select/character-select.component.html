@@ -37,6 +37,14 @@
     </div>
 
     @if (selectedClassDef()) {
+      @if (statFocus(); as focus) {
+        <div class="stat-focus-banner">
+          <span class="stat-focus-label">Primary: <strong>{{ focus.primary }}</strong></span>
+          <span class="stat-focus-divider">|</span>
+          <span class="stat-focus-label">Secondary: <strong>{{ focus.secondary }}</strong></span>
+        </div>
+        <p class="stat-focus-tip">{{ focus.tip }}</p>
+      }
       <div class="skill-preview">
         <h3 class="skill-title">Starting Skills</h3>
         <div class="skill-list">

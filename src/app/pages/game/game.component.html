@@ -2,21 +2,51 @@
   <div class="game-wrapper">
     <app-game-canvas
       [player]="p"
-      [inputDisabled]="settingsOpen()"
+      [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen()"
       (playerUpdated)="onPlayerUpdate($event)"
       (xpGained)="onXpGained($event)"
       (scoreUpdated)="onScoreUpdate($event)"
       (waveUpdated)="onWaveUpdate($event)"
       (gameOver)="onGameOver()"
+      (openStatsRequested)="onStatPanelRequested()"
+      (openSkillsRequested)="onSkillTreeRequested()"
     />
     <app-hud
       [playerData]="currentPlayerDisplay()"
       [wave]="wave()"
       [score]="score()"
+      (statPanelRequested)="onStatPanelRequested()"
+      (skillTreeRequested)="onSkillTreeRequested()"
     />
     <app-settings
       (openChanged)="onSettingsOpenChanged($event)"
     />
+
+    @if (statPanelOpen()) {
+      <app-stat-allocation
+        [player]="currentPlayerDisplay()"
+        (statAllocated)="onStatAllocated($event)"
+        (autoAllocateRequested)="onAutoAllocateStats($event)"
+        (closed)="onStatPanelClosed()"
+      />
+    }
+
+    @if (skillPanelOpen()) {
+      <app-skill-tree
+        [player]="currentPlayerDisplay()"
+        [skills]="availableSkills()"
+        (skillAllocated)="onSkillAllocated($event)"
+        (closed)="onSkillPanelClosed()"
+      />
+    }
+
+    @if (levelUpToast(); as toast) {
+      <div class="level-up-toast" data-testid="game-levelup-toast">
+        <span class="toast-title">LEVEL UP!</span>
+        <span class="toast-levels">Lv.{{ toast.oldLevel }} → Lv.{{ toast.newLevel }}</span>
+        <span class="toast-rewards">+5 Stat Points, +3 Skill Points</span>
+      </div>
+    }
 
     @if (isGameOver()) {
       <div class="game-over-overlay">

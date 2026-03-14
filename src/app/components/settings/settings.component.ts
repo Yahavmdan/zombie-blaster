@@ -46,6 +46,12 @@ export class SettingsComponent implements OnDestroy {
     attack: 'Attack',
     skill1: 'Skill 1',
     skill2: 'Skill 2',
+    skill3: 'Skill 3',
+    skill4: 'Skill 4',
+    skill5: 'Skill 5',
+    skill6: 'Skill 6',
+    openStats: 'Open Stats',
+    openSkills: 'Open Skills',
   };
 
   readonly bindingRows: Signal<BindingRow[]> = computed((): BindingRow[] => {

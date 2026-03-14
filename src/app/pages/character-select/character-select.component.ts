@@ -5,6 +5,8 @@ import {
   CharacterClass,
   CharacterClassDefinition,
   CHARACTER_CLASSES,
+  CLASS_STAT_WEIGHTS,
+  ClassStatWeights,
   SKILLS,
   SkillDefinition,
 } from '@shared/index';
@@ -38,7 +40,25 @@ export class CharacterSelectComponent {
   readonly classSkills: Signal<SkillDefinition[]> = computed((): SkillDefinition[] => {
     const id: CharacterClass | null = this.selectedClass();
     if (!id) return [];
-    return SKILLS.filter((s: SkillDefinition) => s.classId === id && s.unlockLevel <= 1);
+    return SKILLS.filter((s: SkillDefinition) => s.classId === id && s.requiredCharacterLevel <= 1);
+  });
+
+  readonly statFocus: Signal<{ primary: string; secondary: string; tip: string } | null> = computed((): { primary: string; secondary: string; tip: string } | null => {
+    const id: CharacterClass | null = this.selectedClass();
+    if (!id) return null;
+    const w: ClassStatWeights = CLASS_STAT_WEIGHTS[id];
+    const tips: Record<CharacterClass, string> = {
+      [CharacterClass.Warrior]: 'Put your points in Strength to hit harder!',
+      [CharacterClass.Ranger]: 'Stack Dexterity for precise, deadly shots!',
+      [CharacterClass.Mage]: 'Intelligence fuels your devastating spells!',
+      [CharacterClass.Assassin]: 'Luck means more crits and bigger burst damage!',
+      [CharacterClass.Priest]: 'Intelligence boosts both healing and holy damage!',
+    };
+    return {
+      primary: w.primaryStat.toUpperCase(),
+      secondary: w.secondaryStat.toUpperCase(),
+      tip: tips[id],
+    };
   });
 
   readonly canStart: Signal<boolean> = computed((): boolean => {
@@ -55,7 +75,7 @@ export class CharacterSelectComponent {
   }
 
   goBack(): void {
-    this.router.navigate(['/']);
+    void this.router.navigate(['/']);
   }
 
   startGame(): void {
@@ -63,6 +83,6 @@ export class CharacterSelectComponent {
     if (!classId || !this.nameControl.valid) return;
 
     this.gameState.createPlayer(this.nameControl.value, classId);
-    this.router.navigate(['/game']);
+    void this.router.navigate(['/game']);
   }
 }

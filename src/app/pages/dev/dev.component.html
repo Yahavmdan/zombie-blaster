@@ -1,1 +1,24 @@
+<div class="dev-controls">
+  <div class="dev-class-selector">
+    @for (cls of classList; track cls.id) {
+      <button
+        class="dev-class-btn"
+        [class.selected]="selectedClass() === cls.id"
+        [style.--cls-color]="cls.color"
+        [attr.data-testid]="'dev-class-btn-' + cls.id"
+        (click)="selectClass(cls.id)"
+      >
+        <span class="dev-class-icon">{{ cls.icon }}</span>
+        <span class="dev-class-name">{{ cls.name }}</span>
+      </button>
+    }
+  </div>
+  <button
+    class="dev-btn"
+    data-testid="dev-level-btn-increase"
+    (click)="levelUp()"
+  >
+    Level Up ({{ playerLevel() }})
+  </button>
+</div>
 <app-game />

@@ -1,6 +1,6 @@
-import { Component, ChangeDetectionStrategy, InputSignal, Signal, input, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, InputSignal, OutputEmitterRef, Signal, input, output, computed } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition } from '@shared/index';
+import { CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost } from '@shared/index';
 
 export interface SkillSlot {
   key: string;
@@ -25,6 +25,9 @@ export class HudComponent {
   readonly wave: InputSignal<number> = input.required<number>();
   readonly score: InputSignal<number> = input.required<number>();
 
+  readonly statPanelRequested: OutputEmitterRef<void> = output<void>();
+  readonly skillTreeRequested: OutputEmitterRef<void> = output<void>();
+
   readonly classIcon: Signal<string> = computed((): string => {
     return CHARACTER_CLASSES[this.playerData().classId].icon;
   });
@@ -44,18 +47,49 @@ export class HudComponent {
     return (p.xp / p.xpToNext) * 100;
   });
 
+  readonly hasStatPoints: Signal<boolean> = computed((): boolean => {
+    return this.playerData().unallocatedStatPoints > 0;
+  });
+
+  readonly unallocatedStatPoints: Signal<number> = computed((): number => {
+    return this.playerData().unallocatedStatPoints;
+  });
+
+  readonly hasSkillPoints: Signal<boolean> = computed((): boolean => {
+    return this.playerData().unallocatedSkillPoints > 0;
+  });
+
+  readonly unallocatedSkillPoints: Signal<number> = computed((): number => {
+    return this.playerData().unallocatedSkillPoints;
+  });
+
   readonly skillSlots: Signal<SkillSlot[]> = computed((): SkillSlot[] => {
     const p: CharacterState = this.playerData();
-    const classSkills: SkillDefinition[] = SKILLS.filter(
-      (s: SkillDefinition) => s.classId === p.classId,
-    );
-    const keys: string[] = ['K', 'L'];
-    return classSkills.map((skill: SkillDefinition, idx: number): SkillSlot => ({
-      key: keys[idx] ?? '?',
-      name: skill.name,
-      icon: skill.icon,
-      mpCost: skill.mpCost,
-      locked: p.level < skill.unlockLevel,
-    }));
+    const activeSkills: SkillDefinition[] = SKILLS.filter(
+      (s: SkillDefinition) =>
+        s.classId === p.classId &&
+        s.type === SkillType.Active &&
+        (p.skillLevels[s.id] ?? 0) > 0,
+    ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
+     .slice(0, 6);
+    const keys: string[] = ['1', '2', '3', '4', '5', '6'];
+    return activeSkills.map((skill: SkillDefinition, idx: number): SkillSlot => {
+      const level: number = p.skillLevels[skill.id] ?? 0;
+      return {
+        key: keys[idx] ?? '?',
+        name: `${skill.name} Lv.${level}`,
+        icon: skill.icon,
+        mpCost: getSkillMpCost(skill, level),
+        locked: false,
+      };
+    });
   });
+
+  onOpenStatPanel(): void {
+    this.statPanelRequested.emit();
+  }
+
+  onOpenSkillTree(): void {
+    this.skillTreeRequested.emit();
+  }
 }

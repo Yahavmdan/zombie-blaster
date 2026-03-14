@@ -223,3 +223,37 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+.stat-focus-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 204, 68, 0.08);
+  border: 1px solid rgba(255, 204, 68, 0.2);
+  border-radius: 6px;
+}
+
+.stat-focus-label {
+  font-size: 0.85rem;
+  color: #ccccdd;
+}
+
+.stat-focus-label strong {
+  color: #ffcc44;
+  font-weight: 700;
+}
+
+.stat-focus-divider {
+  color: #444466;
+  font-size: 0.85rem;
+}
+
+.stat-focus-tip {
+  text-align: center;
+  font-size: 0.8rem;
+  color: #aaaacc;
+  font-style: italic;
+  margin: 0;
+}

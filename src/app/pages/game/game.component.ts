@@ -1,15 +1,22 @@
-import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inject, OnInit, viewChild } from '@angular/core';
+import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inject, OnInit, viewChild, effect } from '@angular/core';
 import { Router } from '@angular/router';
-import { CharacterState } from '@shared/index';
+import { CharacterState, CharacterStats, SkillDefinition } from '@shared/index';
 import { GameStateService } from '../../services/game-state.service';
 import { GameCanvasComponent } from '../../components/game-canvas/game-canvas.component';
 import { HudComponent } from '../../components/hud/hud.component';
 import { SettingsComponent } from '../../components/settings/settings.component';
+import { StatAllocationComponent } from '../../components/stat-allocation/stat-allocation.component';
+import { SkillTreeComponent } from '../../components/skill-tree/skill-tree.component';
+
+export interface LevelUpToast {
+  oldLevel: number;
+  newLevel: number;
+}
 
 @Component({
   selector: 'app-game',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GameCanvasComponent, HudComponent, SettingsComponent],
+  imports: [GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent],
   host: {
     class: 'game-page',
   },
@@ -26,7 +33,20 @@ export class GameComponent implements OnInit {
   readonly score: WritableSignal<number> = signal<number>(0);
   readonly isGameOver: WritableSignal<boolean> = signal<boolean>(false);
   readonly settingsOpen: WritableSignal<boolean> = signal<boolean>(false);
+  readonly statPanelOpen: WritableSignal<boolean> = signal<boolean>(false);
+  readonly skillPanelOpen: WritableSignal<boolean> = signal<boolean>(false);
   readonly currentPlayerDisplay: WritableSignal<CharacterState> = signal<CharacterState>(null!);
+  readonly levelUpToast: WritableSignal<LevelUpToast | null> = signal<LevelUpToast | null>(null);
+  readonly availableSkills: Signal<SkillDefinition[]> = this.gameState.availableSkills;
+
+  constructor() {
+    effect((): void => {
+      const p: CharacterState | null = this.gameState.player();
+      if (p) {
+        this.currentPlayerDisplay.set({ ...p });
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.syncPlayerDisplay();
@@ -42,6 +62,10 @@ export class GameComponent implements OnInit {
         xpToNext: current.xpToNext,
         stats: current.stats,
         derived: current.derived,
+        allocatedStats: current.allocatedStats,
+        unallocatedStatPoints: current.unallocatedStatPoints,
+        unallocatedSkillPoints: current.unallocatedSkillPoints,
+        skillLevels: current.skillLevels,
       };
       this.gameState.player.set(merged);
       this.currentPlayerDisplay.set(merged);
@@ -52,9 +76,14 @@ export class GameComponent implements OnInit {
   }
 
   onXpGained(amount: number): void {
+    const before: CharacterState | null = this.gameState.player();
+    const prevLevel: number = before?.level ?? 1;
     this.gameState.addXp(amount);
     const updated: CharacterState | null = this.gameState.player();
     if (updated) {
+      if (updated.level > prevLevel) {
+        this.showLevelUpToast(prevLevel, updated.level);
+      }
       this.gameCanvas()?.syncProgression(updated);
       this.currentPlayerDisplay.set({ ...updated });
     }
@@ -80,11 +109,61 @@ export class GameComponent implements OnInit {
     this.gameState.gameOver.set(true);
   }
 
+  onStatPanelRequested(): void {
+    this.statPanelOpen.set(true);
+  }
+
+  onStatAllocated(stat: keyof CharacterStats): void {
+    this.gameState.allocateStatPoint(stat);
+    const updated: CharacterState | null = this.gameState.player();
+    if (updated) {
+      this.gameCanvas()?.syncProgression(updated);
+      this.currentPlayerDisplay.set({ ...updated });
+    }
+  }
+
+  onAutoAllocateStats(stat: keyof CharacterStats): void {
+    const p: CharacterState | null = this.gameState.player();
+    if (!p) return;
+    const count: number = p.unallocatedStatPoints;
+    for (let i: number = 0; i < count; i++) {
+      this.gameState.allocateStatPoint(stat);
+    }
+    const updated: CharacterState | null = this.gameState.player();
+    if (updated) {
+      this.gameCanvas()?.syncProgression(updated);
+      this.currentPlayerDisplay.set({ ...updated });
+    }
+  }
+
+  onStatPanelClosed(): void {
+    this.statPanelOpen.set(false);
+  }
+
+  onSkillTreeRequested(): void {
+    this.skillPanelOpen.set(true);
+  }
+
+  onSkillAllocated(skillId: string): void {
+    this.gameState.allocateSkillPoint(skillId);
+    const updated: CharacterState | null = this.gameState.player();
+    if (updated) {
+      this.gameCanvas()?.syncProgression(updated);
+      this.currentPlayerDisplay.set({ ...updated });
+    }
+  }
+
+  onSkillPanelClosed(): void {
+    this.skillPanelOpen.set(false);
+  }
+
   retry(): void {
     const p: CharacterState | null = this.gameState.player();
     if (!p) return;
     this.gameState.createPlayer(p.name, p.classId);
     this.isGameOver.set(false);
+    this.statPanelOpen.set(false);
+    this.skillPanelOpen.set(false);
     this.wave.set(1);
     this.score.set(0);
     this.syncPlayerDisplay();
@@ -92,7 +171,7 @@ export class GameComponent implements OnInit {
 
   backToMenu(): void {
     this.gameState.reset();
-    this.router.navigate(['/']);
+    void this.router.navigate(['/']);
   }
 
   private syncPlayerDisplay(): void {
@@ -100,5 +179,12 @@ export class GameComponent implements OnInit {
     if (p) {
       this.currentPlayerDisplay.set({ ...p });
     }
+  }
+
+  private showLevelUpToast(oldLevel: number, newLevel: number): void {
+    this.levelUpToast.set({ oldLevel, newLevel });
+    setTimeout((): void => {
+      this.levelUpToast.set(null);
+    }, 3000);
   }
 }

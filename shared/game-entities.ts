@@ -32,6 +32,11 @@ export interface ZombieState {
   isDead: boolean;
   target: string | null;
   knockbackFrames: number;
+  jumpCooldown: number;
+  attackCooldown: number;
+  attackAnimTimer: number;
+  attackHasHit: boolean;
+  facing: number;
 }
 
 export interface MpPotionDrop {

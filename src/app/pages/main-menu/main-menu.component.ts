@@ -41,7 +41,7 @@ export class MainMenuComponent {
   constructor(private readonly router: Router) {}
 
   onPlay(): void {
-    this.router.navigate(['/character-select']);
+    void this.router.navigate(['/character-select']);
   }
 
   toggleHelp(): void {

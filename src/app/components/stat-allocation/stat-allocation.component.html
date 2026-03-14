@@ -1,0 +1,84 @@
+<div class="overlay" (click)="onClose()" data-testid="stat-allocation-overlay-close"></div>
+<div class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">ALLOCATE STAT POINTS</h2>
+    <span class="points-remaining" data-testid="stat-allocation-label-points">
+      Points remaining: {{ player().unallocatedStatPoints }}
+    </span>
+  </div>
+
+  <div class="stat-rows">
+    @for (row of statRows(); track row.key) {
+      <div
+        class="stat-row"
+        [class.stat-row--primary]="row.isPrimary"
+        [class.stat-row--secondary]="row.isSecondary"
+        [attr.data-stat]="row.key"
+      >
+        <div class="stat-header">
+          <span class="stat-icon">{{ row.icon }}</span>
+          <span class="stat-label">{{ row.label }}</span>
+          <span class="stat-value">{{ row.currentValue }}</span>
+          <span class="stat-breakdown">(base {{ row.baseValue }} + {{ row.allocatedValue }})</span>
+          @if (row.isPrimary) {
+            <span class="stat-badge stat-badge--primary">PRIMARY</span>
+          }
+          @if (row.isSecondary) {
+            <span class="stat-badge stat-badge--secondary">SECONDARY</span>
+          }
+        </div>
+
+        <div class="stat-preview">
+          @if (row.previewDelta.attack !== 0) {
+            <span class="preview-delta preview-delta--positive">ATK +{{ row.previewDelta.attack }}</span>
+          }
+          @if (row.previewDelta.defense !== 0) {
+            <span class="preview-delta preview-delta--positive">DEF +{{ row.previewDelta.defense }}</span>
+          }
+          @if (row.previewDelta.maxHp !== 0) {
+            <span class="preview-delta preview-delta--positive">HP +{{ row.previewDelta.maxHp }}</span>
+          }
+          @if (row.previewDelta.maxMp !== 0) {
+            <span class="preview-delta preview-delta--positive">MP +{{ row.previewDelta.maxMp }}</span>
+          }
+          @if (row.previewDelta.speed !== 0) {
+            <span class="preview-delta preview-delta--positive">SPD +{{ row.previewDelta.speed }}</span>
+          }
+          @if (row.previewDelta.critRate !== 0) {
+            <span class="preview-delta preview-delta--positive">CRIT +{{ row.previewDelta.critRate }}%</span>
+          }
+          @if (row.previewDelta.critDamage !== 0) {
+            <span class="preview-delta preview-delta--positive">CDMG +{{ row.previewDelta.critDamage }}</span>
+          }
+        </div>
+
+        <button
+          class="allocate-btn"
+          [disabled]="!hasPoints()"
+          (click)="onAllocate(row.key)"
+          [attr.data-testid]="'stat-allocation-button-add-' + row.key"
+        >
+          +
+        </button>
+      </div>
+    }
+  </div>
+
+  @if (hasPoints()) {
+    <button
+      class="auto-allocate-btn"
+      (click)="onAutoAllocate()"
+      data-testid="stat-allocation-button-auto"
+    >
+      AUTO-ALLOCATE → {{ primaryStatLabel() }}
+    </button>
+  }
+
+  <button
+    class="close-btn"
+    (click)="onClose()"
+    data-testid="stat-allocation-button-close"
+  >
+    CLOSE
+  </button>
+</div>

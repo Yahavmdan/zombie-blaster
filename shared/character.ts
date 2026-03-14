@@ -28,7 +28,6 @@ export interface CharacterClassDefinition {
   name: string;
   description: string;
   baseStats: CharacterStats;
-  growthPerLevel: CharacterStats;
   color: string;
   icon: string;
 }
@@ -53,6 +52,10 @@ export interface CharacterState {
   isAttacking: boolean;
   isClimbing: boolean;
   isDead: boolean;
+  unallocatedStatPoints: number;
+  unallocatedSkillPoints: number;
+  allocatedStats: CharacterStats;
+  skillLevels: Record<string, number>;
 }
 
 export enum Direction {
