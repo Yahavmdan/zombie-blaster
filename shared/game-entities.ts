@@ -17,6 +17,8 @@ export interface ZombieDefinition {
   color: string;
   width: number;
   height: number;
+  attackAnimTicks: number;
+  attackHitTick: number;
 }
 
 export interface ZombieState {

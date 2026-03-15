@@ -739,7 +739,7 @@ export class GameEngine {
     if (z.attackAnimTimer > 0) {
       z.attackAnimTimer--;
 
-      const hitTick: number = GAME_CONSTANTS.ZOMBIE_ATTACK_ANIM_TICKS - GAME_CONSTANTS.ZOMBIE_ATTACK_HIT_TICK;
+      const hitTick: number = zDef.attackAnimTicks - zDef.attackHitTick;
       if (z.attackAnimTimer === hitTick && !z.attackHasHit) {
         z.attackHasHit = true;
         if (this.invincibilityFrames <= 0 && this.zombieSwingHitsPlayer(z, zDef)) {
@@ -762,7 +762,7 @@ export class GameEngine {
 
     if (distX < zDef.width / 2 + GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE + GAME_CONSTANTS.PLAYER_WIDTH / 2
         && distY < zDef.height) {
-      z.attackAnimTimer = GAME_CONSTANTS.ZOMBIE_ATTACK_ANIM_TICKS;
+      z.attackAnimTimer = zDef.attackAnimTicks;
       z.attackHasHit = false;
       z.attackCooldown = GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN +
         Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX - GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN));
@@ -1526,10 +1526,9 @@ export class GameEngine {
       }
 
       const hpPercent: number = z.hp / z.maxHp;
-      const spriteSize: number = z.type === ZombieType.Boss ? 192 : 128;
-      const barWidth: number = Math.max(zDef.width, spriteSize * 0.5);
+      const barWidth: number = Math.max(zDef.width, 40);
       const barX: number = z.x + zDef.width / 2 - barWidth / 2;
-      const barY: number = z.y + zDef.height - spriteSize - 8;
+      const barY: number = z.y - 45;
       ctx.fillStyle = '#330000';
       ctx.fillRect(barX, barY, barWidth, 5);
       ctx.fillStyle = hpPercent > 0.5 ? '#44aa44' : hpPercent > 0.25 ? '#aaaa44' : '#aa4444';

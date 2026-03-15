@@ -93,7 +93,7 @@ export class GameStateService {
     this.zombiesRemaining.set(0);
   }
 
-  calculateDerived(baseStats: CharacterStats, allocatedStats: CharacterStats, classId: CharacterClass): CharacterDerived {
+  calculateDerived(baseStats: CharacterStats, allocatedStats: CharacterStats, classId: CharacterClass, level: number = 1): CharacterDerived {
     const w: ClassStatWeights = CLASS_STAT_WEIGHTS[classId];
     const totalStats: CharacterStats = this.getTotalStats(baseStats, allocatedStats);
 
@@ -102,7 +102,7 @@ export class GameStateService {
 
     return {
       maxHp: GAME_CONSTANTS.PLAYER_BASE_HP + totalStats.str * w.hpPerStr,
-      maxMp: GAME_CONSTANTS.PLAYER_BASE_MP + totalStats.int * w.mpPerInt,
+      maxMp: GAME_CONSTANTS.PLAYER_BASE_MP + totalStats.int * w.mpPerInt + (level - 1) * GAME_CONSTANTS.PLAYER_MP_PER_LEVEL,
       attack: Math.floor(primaryValue * w.attackFromPrimary + secondaryValue * w.attackFromSecondary),
       defense: Math.floor(totalStats.str * w.defenseFromStr + totalStats.dex * w.defenseFromDex),
       speed: GAME_CONSTANTS.PLAYER_MOVE_SPEED + totalStats.dex * GAME_CONSTANTS.PLAYER_SPEED_PER_DEX,
@@ -125,8 +125,9 @@ export class GameStateService {
     allocatedStats: CharacterStats,
     classId: CharacterClass,
     activeBuffs: ActiveBuff[],
+    level: number = 1,
   ): CharacterDerived {
-    const derived: CharacterDerived = this.calculateDerived(baseStats, allocatedStats, classId);
+    const derived: CharacterDerived = this.calculateDerived(baseStats, allocatedStats, classId, level);
 
     for (const buff of activeBuffs) {
       if (buff.remainingMs <= 0) continue;
@@ -162,7 +163,7 @@ export class GameStateService {
       }
 
       const baseSt: CharacterStats = CHARACTER_CLASSES[p.classId].baseStats;
-      const derived: CharacterDerived = this.calculateDerivedWithBuffs(baseSt, p.allocatedStats, p.classId, p.activeBuffs);
+      const derived: CharacterDerived = this.calculateDerivedWithBuffs(baseSt, p.allocatedStats, p.classId, p.activeBuffs, level);
 
       return {
         ...p,
@@ -188,7 +189,7 @@ export class GameStateService {
       };
 
       const baseSt: CharacterStats = CHARACTER_CLASSES[p.classId].baseStats;
-      const derived: CharacterDerived = this.calculateDerivedWithBuffs(baseSt, newAllocated, p.classId, p.activeBuffs);
+      const derived: CharacterDerived = this.calculateDerivedWithBuffs(baseSt, newAllocated, p.classId, p.activeBuffs, p.level);
       const totalStats: CharacterStats = this.getTotalStats(baseSt, newAllocated);
 
       return {
@@ -230,6 +231,7 @@ export class GameStateService {
         p.allocatedStats,
         p.classId,
         p.activeBuffs,
+        p.level,
       );
 
       return {
@@ -256,6 +258,7 @@ export class GameStateService {
         p.allocatedStats,
         p.classId,
         p.activeBuffs,
+        p.level,
       );
       return { ...p, skillLevels: newSkillLevels, derived };
     });
