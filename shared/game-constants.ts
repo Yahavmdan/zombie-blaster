@@ -37,7 +37,7 @@ export const GAME_CONSTANTS = {
   PLAYER_JUMP_FORCE: -10,
   PLAYER_MOVE_SPEED: 5,
   PLAYER_FRICTION: .9,
-  PLAYER_AIR_CONTROL: 0.7,
+  PLAYER_AIR_DRAG: 0.98,
   PLAYER_MIN_VELOCITY: 1,
 
   // ─── Player Combat ─────────────────────────────
@@ -51,7 +51,7 @@ export const GAME_CONSTANTS = {
 
   // ─── Knockback ──────────────────────────────────
   KNOCKBACK_FORCE_ZOMBIE: 8,
-  KNOCKBACK_FORCE_PLAYER: 15,
+  KNOCKBACK_FORCE_PLAYER: 6,
   KNOCKBACK_UP_FORCE: -5,
   KNOCKBACK_ZOMBIE_FRAMES: 10,
 
@@ -107,11 +107,11 @@ export const GAME_CONSTANTS = {
 
   // ─── Ropes ──────────────────────────────────────
   ROPE_CLIMB_SPEED: 5,
-  ROPE_WIDTH: 6,
-  ROPE_GRAB_RANGE: 20,
+  ROPE_WIDTH: 20,
+  ROPE_GRAB_RANGE: 24,
 
   // ─── Particles ──────────────────────────────────
-  MAX_PARTICLES: 200,
+  MAX_PARTICLES: 400,
   PARTICLE_LIFETIME_MS: 600,
   HIT_PARTICLE_COUNT: 6,
   HIT_PARTICLE_VELOCITY: 6,

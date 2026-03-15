@@ -26,6 +26,7 @@ import { InputKeys } from '@shared/messages';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { SKILL_ANIMATIONS, SkillAnimation } from './skill-animations';
 import { SpriteAnimator, PlayerAnimState } from './sprite-animator';
+import { ZombieSpriteAnimator, ZombieAnimState } from './zombie-sprite-animator';
 import { MapRenderer } from './map-renderer';
 import { SpriteEffectSystem } from './sprite-effect-system';
 
@@ -104,6 +105,7 @@ export class GameEngine {
   private screenFlashFrames: number = 0;
 
   private readonly spriteAnimator: SpriteAnimator = new SpriteAnimator();
+  private readonly zombieSpriteAnimator: ZombieSpriteAnimator = new ZombieSpriteAnimator();
   private readonly mapRenderer: MapRenderer = new MapRenderer();
   private readonly spriteEffectSystem: SpriteEffectSystem = new SpriteEffectSystem();
   private readonly SPRITE_RENDER_SIZE: number = 96;
@@ -136,6 +138,7 @@ export class GameEngine {
     this.initRopes();
     this.initStars();
     this.spriteAnimator.load();
+    this.zombieSpriteAnimator.load();
     this.mapRenderer.load();
     this.spriteEffectSystem.load();
   }
@@ -338,17 +341,13 @@ export class GameEngine {
         if (Math.abs(this.player.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) this.player.velocityX = 0;
       }
     } else {
-      const airSpeed: number = speed * GAME_CONSTANTS.PLAYER_AIR_CONTROL;
       if (this.keys.left) {
-        this.player.velocityX = -airSpeed;
         this.player.facing = Direction.Left;
       } else if (this.keys.right) {
-        this.player.velocityX = airSpeed;
         this.player.facing = Direction.Right;
-      } else {
-        this.player.velocityX *= GAME_CONSTANTS.PLAYER_FRICTION;
-        if (Math.abs(this.player.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) this.player.velocityX = 0;
       }
+      this.player.velocityX *= GAME_CONSTANTS.PLAYER_AIR_DRAG;
+      if (Math.abs(this.player.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) this.player.velocityX = 0;
     }
 
     const jumpPressed: boolean = this.keys.up || this.keys.jump;
@@ -500,9 +499,8 @@ export class GameEngine {
     const playerCX: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
     const playerCY: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
 
-    this.triggerSkillAnimation(skill.animationKey, playerCX, playerCY, this.player.facing, skillLevel);
-
     if (skill.type === SkillType.Buff) {
+      this.triggerSkillAnimation(skill.animationKey, playerCX, playerCY, this.player.facing, skillLevel);
       this.activateBuff(skill, skillLevel);
       this.onPlayerUpdate?.(this.player);
       return;
@@ -513,6 +511,7 @@ export class GameEngine {
 
     const isHeal: boolean = damageMultiplier < 0;
     if (isHeal) {
+      this.triggerSkillAnimation(skill.animationKey, playerCX, playerCY, this.player.facing, skillLevel);
       const healAmount: number = Math.floor(Math.abs(damageMultiplier) * this.player.derived.attack);
       this.player.hp = Math.min(this.player.hp + healAmount, this.player.derived.maxHp);
       this.spawnDamageNumber(playerCX, this.player.y - 10, healAmount, false, '#44ff44');
@@ -528,6 +527,10 @@ export class GameEngine {
     const attackX: number = this.player.facing === Direction.Right
       ? this.player.x + GAME_CONSTANTS.PLAYER_WIDTH
       : this.player.x - range;
+
+    const attackCenterX: number = attackX + range / 2;
+    const attackCenterY: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+    this.triggerSkillAnimation(skill.animationKey, attackCenterX, attackCenterY, this.player.facing, skillLevel);
     const attackW: number = range;
     const attackH: number = range > 100 ? GAME_CONSTANTS.PLAYER_HEIGHT * 2 : GAME_CONSTANTS.PLAYER_HEIGHT;
     const attackY: number = range > 100 ? this.player.y - GAME_CONSTANTS.PLAYER_HEIGHT / 2 : this.player.y;
@@ -665,6 +668,10 @@ export class GameEngine {
       if (z.attackCooldown > 0) z.attackCooldown--;
 
       z.facing = this.player.x > z.x ? 1 : -1;
+
+      this.updateZombieAnimState(z);
+      const spriteKey: string = this.zombieSpriteAnimator.getSpriteKey(z.type);
+      this.zombieSpriteAnimator.tick(z.id, spriteKey);
 
       this.updateZombieAttack(z, zDef);
 
@@ -809,6 +816,30 @@ export class GameEngine {
     }
   }
 
+  private updateZombieAnimState(z: ZombieState): void {
+    if (z.isDead) {
+      this.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Dead);
+      return;
+    }
+
+    if (z.attackAnimTimer > 0) {
+      this.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Attack);
+      return;
+    }
+
+    if (z.knockbackFrames > 0) {
+      this.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Hurt);
+      return;
+    }
+
+    if (Math.abs(z.velocityX) > 0.1) {
+      this.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Walk);
+      return;
+    }
+
+    this.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Idle);
+  }
+
   private zombieJump(z: ZombieState): void {
     z.velocityY = GAME_CONSTANTS.ZOMBIE_JUMP_FORCE;
     z.isGrounded = false;
@@ -900,6 +931,8 @@ export class GameEngine {
   private handleZombieDeath(z: ZombieState, zDef: ZombieDefinition): void {
     z.isDead = true;
     this.zombiesKilledThisWave++;
+    this.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Dead);
+    this.zombieSpriteAnimator.removeInstance(z.id);
     const baseXp: number = ZOMBIE_TYPES[z.type].xpReward;
     const waveBonus: number = 1 + (this.wave - 1) * 0.1;
     const xpReward: number = Math.floor(baseXp * waveBonus);
@@ -1394,67 +1427,47 @@ export class GameEngine {
       if (z.isDead) continue;
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
 
-      ctx.fillStyle = '#ff0000';
-      ctx.fillRect(z.x, z.y, zDef.width, zDef.height);
-      ctx.fillStyle = zDef.color;
-      ctx.fillRect(z.x + 1, z.y + 1, zDef.width - 2, zDef.height - 2);
+      if (this.zombieSpriteAnimator.isLoaded()) {
+        const spriteKey: string = this.zombieSpriteAnimator.getSpriteKey(z.type);
+        const spriteSize: number = z.type === ZombieType.Boss ? 200 : 140;
+        const offsetX: number = (zDef.width - spriteSize) / 2;
+        const offsetY: number = zDef.height - spriteSize;
+        const drawX: number = z.x + offsetX;
+        const drawY: number = z.y + offsetY;
+        const flipX: boolean = z.facing < 0;
 
-      const eyeY: number = z.y + 8;
-      ctx.fillStyle = '#ff2222';
-      if (this.player) {
-        const lookDir: number = this.player.x > z.x ? 1 : -1;
-        ctx.fillRect(z.x + zDef.width / 2 - 6 + lookDir * 2, eyeY, 4, 4);
-        ctx.fillRect(z.x + zDef.width / 2 + 2 + lookDir * 2, eyeY, 4, 4);
+        this.zombieSpriteAnimator.draw(ctx, z.id, spriteKey, drawX, drawY, spriteSize, spriteSize, flipX);
+      } else {
+        this.renderZombieFallback(ctx, z, zDef);
       }
 
-      this.renderZombieArm(ctx, z, zDef);
-
       const hpPercent: number = z.hp / z.maxHp;
-      const barWidth: number = zDef.width;
+      const spriteSize: number = z.type === ZombieType.Boss ? 192 : 128;
+      const barWidth: number = Math.max(zDef.width, spriteSize * 0.5);
+      const barX: number = z.x + zDef.width / 2 - barWidth / 2;
+      const barY: number = z.y + zDef.height - spriteSize - 8;
       ctx.fillStyle = '#330000';
-      ctx.fillRect(z.x, z.y - 6, barWidth, 4);
+      ctx.fillRect(barX, barY, barWidth, 5);
       ctx.fillStyle = hpPercent > 0.5 ? '#44aa44' : hpPercent > 0.25 ? '#aaaa44' : '#aa4444';
-      ctx.fillRect(z.x, z.y - 6, barWidth * hpPercent, 4);
+      ctx.fillRect(barX, barY, barWidth * hpPercent, 5);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barWidth, 5);
     }
   }
 
-  private renderZombieArm(ctx: CanvasRenderingContext2D, z: ZombieState, zDef: ZombieDefinition): void {
-    const armY: number = z.y + zDef.height * 0.35;
-    const armThickness: number = Math.max(4, zDef.width * 0.18);
-    const restLength: number = zDef.width * 0.3;
-    const fullSwingLength: number = GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE;
+  private renderZombieFallback(ctx: CanvasRenderingContext2D, z: ZombieState, zDef: ZombieDefinition): void {
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(z.x, z.y, zDef.width, zDef.height);
+    ctx.fillStyle = zDef.color;
+    ctx.fillRect(z.x + 1, z.y + 1, zDef.width - 2, zDef.height - 2);
 
-    if (z.attackAnimTimer > 0) {
-      const progress: number = 1 - z.attackAnimTimer / GAME_CONSTANTS.ZOMBIE_ATTACK_ANIM_TICKS;
-      const swingCurve: number = progress < 0.5
-        ? progress * 2
-        : 2 - progress * 2;
-      const armLength: number = restLength + (fullSwingLength - restLength) * swingCurve;
-      const armX: number = z.facing > 0 ? z.x + zDef.width : z.x;
-      const directedLength: number = armLength * z.facing;
-
-      ctx.fillStyle = zDef.color;
-      ctx.fillRect(
-        z.facing > 0 ? armX : armX - armLength,
-        armY,
-        armLength,
-        armThickness,
-      );
-
-      const fistSize: number = armThickness * 1.6;
-      ctx.fillStyle = '#aa3333';
-      ctx.fillRect(
-        armX + directedLength - (z.facing > 0 ? fistSize : 0),
-        armY - (fistSize - armThickness) / 2,
-        fistSize,
-        fistSize,
-      );
-    } else {
-      const armX: number = z.facing > 0 ? z.x + zDef.width : z.x - restLength;
-      ctx.fillStyle = zDef.color;
-      ctx.globalAlpha = 0.8;
-      ctx.fillRect(armX, armY, restLength, armThickness);
-      ctx.globalAlpha = 1;
+    const eyeY: number = z.y + 8;
+    ctx.fillStyle = '#ff2222';
+    if (this.player) {
+      const lookDir: number = this.player.x > z.x ? 1 : -1;
+      ctx.fillRect(z.x + zDef.width / 2 - 6 + lookDir * 2, eyeY, 4, 4);
+      ctx.fillRect(z.x + zDef.width / 2 + 2 + lookDir * 2, eyeY, 4, 4);
     }
   }
 
@@ -1633,21 +1646,26 @@ export class GameEngine {
       const ropeW: number = GAME_CONSTANTS.ROPE_WIDTH;
       const ropeX: number = rope.x - ropeW / 2;
       const ropeH: number = rope.bottomY - rope.topY;
+      const railWidth: number = 4;
 
-      ctx.fillStyle = '#8B6914';
-      ctx.fillRect(ropeX, rope.topY, ropeW, ropeH);
+      ctx.fillStyle = '#6B4F0A';
+      ctx.fillRect(ropeX, rope.topY, railWidth, ropeH);
+      ctx.fillRect(ropeX + ropeW - railWidth, rope.topY, railWidth, ropeH);
 
-      ctx.fillStyle = '#A07828';
-      const knotSpacing: number = 24;
-      const knotCount: number = Math.floor(ropeH / knotSpacing);
-      for (let i: number = 0; i <= knotCount; i++) {
-        const knotY: number = rope.topY + i * knotSpacing;
-        ctx.fillRect(ropeX - 2, knotY, ropeW + 4, 4);
-      }
-
-      ctx.strokeStyle = '#6B4F0A';
+      ctx.strokeStyle = '#503A08';
       ctx.lineWidth = 1;
-      ctx.strokeRect(ropeX, rope.topY, ropeW, ropeH);
+      ctx.strokeRect(ropeX, rope.topY, railWidth, ropeH);
+      ctx.strokeRect(ropeX + ropeW - railWidth, rope.topY, railWidth, ropeH);
+
+      const rungSpacing: number = 20;
+      const rungCount: number = Math.floor(ropeH / rungSpacing);
+      for (let i: number = 0; i <= rungCount; i++) {
+        const rungY: number = rope.topY + i * rungSpacing;
+        ctx.fillStyle = '#A07828';
+        ctx.fillRect(ropeX + railWidth, rungY, ropeW - railWidth * 2, 4);
+        ctx.fillStyle = '#C09030';
+        ctx.fillRect(ropeX + railWidth, rungY, ropeW - railWidth * 2, 2);
+      }
     }
   }
 }

@@ -30,18 +30,18 @@ function facingSign(facing: Direction): number {
 function arcSlashParticles(x: number, y: number, facing: Direction, level: number, color: string, count: number): Particle[] {
   const dir: number = facingSign(facing);
   const particles: Particle[] = [];
-  const baseCount: number = count + Math.floor(level / 4);
+  const baseCount: number = (count + Math.floor(level / 4)) * 2;
   for (let i: number = 0; i < baseCount; i++) {
     const angle: number = ((i / baseCount) * Math.PI) - Math.PI / 2;
-    const speed: number = 4 + Math.random() * 3;
+    const speed: number = 6 + Math.random() * 5;
     particles.push(makeParticle({
       x: x + dir * 10, y,
       vx: Math.cos(angle) * speed * dir,
       vy: Math.sin(angle) * speed,
-      life: 20 + Math.floor(level / 2),
-      maxLife: 25,
+      life: 30 + Math.floor(level / 2),
+      maxLife: 35,
       color,
-      size: 3 + Math.random() * 2,
+      size: 5 + Math.random() * 4,
       shape: ParticleShape.Line,
       rotation: angle,
       rotationSpeed: 0,
@@ -54,21 +54,21 @@ function arcSlashParticles(x: number, y: number, facing: Direction, level: numbe
 
 function radialBurstParticles(x: number, y: number, level: number, color: string, count: number, shape: ParticleShape): Particle[] {
   const particles: Particle[] = [];
-  const total: number = count + Math.floor(level / 3);
+  const total: number = (count + Math.floor(level / 3)) * 2;
   for (let i: number = 0; i < total; i++) {
     const angle: number = (i / total) * Math.PI * 2;
-    const speed: number = 3 + Math.random() * 4;
+    const speed: number = 5 + Math.random() * 6;
     particles.push(makeParticle({
       x, y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
-      life: 25 + Math.floor(level / 2),
-      maxLife: 30,
+      life: 35 + Math.floor(level / 2),
+      maxLife: 40,
       color,
-      size: 3 + Math.random() * 3,
+      size: 5 + Math.random() * 5,
       shape,
       rotation: Math.random() * Math.PI * 2,
-      rotationSpeed: (Math.random() - 0.5) * 0.15,
+      rotationSpeed: (Math.random() - 0.5) * 0.2,
       fadeMode: FadeMode.Linear,
       scaleOverLife: true,
     }));
@@ -79,17 +79,17 @@ function radialBurstParticles(x: number, y: number, level: number, color: string
 function projectileTrailParticles(x: number, y: number, facing: Direction, level: number, color: string, count: number): Particle[] {
   const dir: number = facingSign(facing);
   const particles: Particle[] = [];
-  const total: number = count + Math.floor(level / 5);
+  const total: number = (count + Math.floor(level / 5)) * 2;
   for (let i: number = 0; i < total; i++) {
-    const offset: number = i * dir * 12;
+    const offset: number = i * dir * 10;
     particles.push(makeParticle({
-      x: x + offset, y: y + (Math.random() - 0.5) * 8,
-      vx: dir * (1 + Math.random()),
-      vy: (Math.random() - 0.5) * 1.5,
-      life: 15 + Math.floor(Math.random() * 10),
-      maxLife: 25,
+      x: x + offset, y: y + (Math.random() - 0.5) * 14,
+      vx: dir * (2 + Math.random() * 2),
+      vy: (Math.random() - 0.5) * 2.5,
+      life: 22 + Math.floor(Math.random() * 12),
+      maxLife: 34,
       color,
-      size: 2 + Math.random() * 2,
+      size: 4 + Math.random() * 3,
       shape: ParticleShape.Circle,
       rotation: 0, rotationSpeed: 0,
       fadeMode: FadeMode.Quick,
@@ -101,20 +101,20 @@ function projectileTrailParticles(x: number, y: number, facing: Direction, level
 
 function shockwaveRingParticles(x: number, y: number, level: number, color: string): Particle[] {
   const particles: Particle[] = [];
-  const ringCount: number = 2 + Math.floor(level / 8);
+  const ringCount: number = 3 + Math.floor(level / 6);
   for (let r: number = 0; r < ringCount; r++) {
-    const count: number = 10 + Math.floor(level / 2);
+    const count: number = 14 + Math.floor(level / 2);
     for (let i: number = 0; i < count; i++) {
       const angle: number = (i / count) * Math.PI * 2;
-      const speed: number = 2 + r * 2 + Math.random() * 2;
+      const speed: number = 3 + r * 3 + Math.random() * 3;
       particles.push(makeParticle({
         x, y,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed * 0.3 - 1,
-        life: 20 + r * 5,
-        maxLife: 30,
+        vy: Math.sin(angle) * speed * 0.3 - 1.5,
+        life: 30 + r * 6,
+        maxLife: 40,
         color,
-        size: 2 + Math.random() * 2,
+        size: 4 + Math.random() * 4,
         shape: ParticleShape.Ring,
         rotation: 0, rotationSpeed: 0,
         fadeMode: FadeMode.Late,
