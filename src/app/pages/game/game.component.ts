@@ -201,6 +201,20 @@ export class GameComponent implements OnInit {
   }
 
 
+  setWave(wave: number): void {
+    this.wave.set(wave);
+    this.gameState.wave.set(wave);
+    this.gameCanvas()?.setWave(wave);
+  }
+
+  syncCanvasProgression(): void {
+    const updated: CharacterState | null = this.gameState.player();
+    if (updated) {
+      this.gameCanvas()?.syncProgression(updated);
+      this.currentPlayerDisplay.set({ ...updated });
+    }
+  }
+
   retry(): void {
     const p: CharacterState | null = this.gameState.player();
     if (!p) return;

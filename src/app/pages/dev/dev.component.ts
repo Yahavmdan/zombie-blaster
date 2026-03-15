@@ -1,4 +1,5 @@
-import { Component, ChangeDetectionStrategy, inject, OnInit, Signal, WritableSignal, signal, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, OnInit, Signal, WritableSignal, signal, computed, viewChild } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { CharacterClass, CharacterClassDefinition, CharacterState, CHARACTER_CLASSES } from '@shared/index';
 import { GameStateService } from '../../services/game-state.service';
 import { GameComponent } from '../game/game.component';
@@ -6,7 +7,7 @@ import { GameComponent } from '../game/game.component';
 @Component({
   selector: 'app-dev',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GameComponent],
+  imports: [GameComponent, FormsModule],
   host: {
     class: 'dev-page',
   },
@@ -15,8 +16,10 @@ import { GameComponent } from '../game/game.component';
 })
 export class DevComponent implements OnInit {
   private readonly gameState: GameStateService = inject(GameStateService);
+  private readonly gameComponent: Signal<GameComponent | undefined> = viewChild(GameComponent);
 
   readonly selectedClass: WritableSignal<CharacterClass> = signal<CharacterClass>(CharacterClass.Warrior);
+  readonly waveInput: WritableSignal<number> = signal<number>(1);
 
   readonly classList: CharacterClassDefinition[] = Object.values(CHARACTER_CLASSES);
 
@@ -38,5 +41,15 @@ export class DevComponent implements OnInit {
     const p: CharacterState | null = this.gameState.player();
     if (!p) return;
     this.gameState.addXp(p.xpToNext);
+  }
+
+  maxAllSkills(): void {
+    this.gameState.maxAllSkills();
+    this.gameComponent()?.syncCanvasProgression();
+  }
+
+  setWave(): void {
+    const wave: number = Math.max(1, this.waveInput());
+    this.gameComponent()?.setWave(wave);
   }
 }

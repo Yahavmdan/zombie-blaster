@@ -77,3 +77,54 @@
 .dev-btn:active {
   background: #eab308;
 }
+
+.dev-btn--skills {
+  background: #a78bfa;
+  border-color: #7c3aed;
+  color: #fff;
+}
+
+.dev-btn--skills:hover {
+  background: #c4b5fd;
+}
+
+.dev-btn--skills:active {
+  background: #8b5cf6;
+}
+
+.dev-btn--wave {
+  background: #38bdf8;
+  border-color: #0284c7;
+  color: #fff;
+}
+
+.dev-btn--wave:hover {
+  background: #7dd3fc;
+}
+
+.dev-btn--wave:active {
+  background: #0ea5e9;
+}
+
+.dev-wave-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dev-wave-input {
+  width: 60px;
+  padding: 5px 8px;
+  background: rgba(30, 30, 30, 0.9);
+  color: #fff;
+  border: 2px solid #555;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.dev-wave-input:focus {
+  outline: none;
+  border-color: #38bdf8;
+}

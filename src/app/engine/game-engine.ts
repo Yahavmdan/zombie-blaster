@@ -44,6 +44,15 @@ export interface DamageNumber {
   scale: number;
 }
 
+export interface DropNotification {
+  type: DropType;
+  label: string;
+  color: string;
+  icon: string;
+  life: number;
+  maxLife: number;
+}
+
 export interface Platform {
   x: number;
   y: number;
@@ -75,6 +84,8 @@ export class GameEngine {
   private zombies: ZombieState[] = [];
   private particles: Particle[] = [];
   private damageNumbers: DamageNumber[] = [];
+  private dropNotifications: DropNotification[] = [];
+  private readonly DROP_NOTIFICATION_LIFE_TICKS: number = 250;
   private worldDrops: WorldDrop[] = [];
   private platforms: Platform[] = [];
   private ropes: Rope[] = [];
@@ -178,6 +189,7 @@ export class GameEngine {
     this.zombies = [];
     this.particles = [];
     this.damageNumbers = [];
+    this.dropNotifications = [];
     this.worldDrops = [];
     this.wave = 1;
     this.zombiesKilledThisWave = 0;
@@ -199,6 +211,15 @@ export class GameEngine {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = 0;
     }
+  }
+
+  setWave(wave: number): void {
+    for (const z of this.zombies) {
+      z.isDead = true;
+    }
+    this.zombies = [];
+    this.wave = wave;
+    this.startWave();
   }
 
   setKeys(keys: InputKeys): void {
@@ -239,6 +260,7 @@ export class GameEngine {
     this.updatePotionUse();
     this.updateParticles();
     this.updateDamageNumbers();
+    this.updateDropNotifications();
     this.updateSkillCooldowns();
     this.spriteEffectSystem.tick();
     this.updateActiveBuffs();
@@ -283,9 +305,10 @@ export class GameEngine {
     if (!this.player) return null;
     const playerCenterX: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
     const playerCenterY: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+    const playerBottom: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT;
     for (const rope of this.ropes) {
       const withinX: boolean = Math.abs(playerCenterX - rope.x) < GAME_CONSTANTS.ROPE_GRAB_RANGE;
-      const withinY: boolean = playerCenterY >= rope.topY && playerCenterY <= rope.bottomY;
+      const withinY: boolean = playerBottom >= rope.topY && playerCenterY <= rope.bottomY;
       if (withinX && withinY) return rope;
     }
     return null;
@@ -585,7 +608,6 @@ export class GameEngine {
     }
 
     const playerCX: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
-    this.spawnDamageNumber(playerCX, this.player.y - 10, 0, false, skill.color);
     this.spawnBuffActivationParticles(playerCX, this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, skill.color);
   }
 
@@ -1034,17 +1056,17 @@ export class GameEngine {
       this.player.inventory.gold += drop.value;
       this.onGoldPickup?.(drop.value);
       this.spawnHitParticles(cx, cy, '#ffcc44');
-      this.spawnDamageNumber(cx, drop.y - 10, drop.value, false, '#ffcc44');
+      this.addDropNotification(DropType.Gold, `+${drop.value}G`, '#ffcc44', '💰');
     } else if (drop.type === DropType.HpPotion) {
       this.player.inventory.hpPotions++;
       this.onPotionPickup?.(DropType.HpPotion);
       this.spawnHitParticles(cx, cy, '#ff4488');
-      this.spawnDamageNumber(cx, drop.y - 10, 1, false, '#ff4488');
+      this.addDropNotification(DropType.HpPotion, '+1 HP Potion', '#ff4488', '❤️');
     } else if (drop.type === DropType.MpPotion) {
       this.player.inventory.mpPotions++;
       this.onPotionPickup?.(DropType.MpPotion);
       this.spawnHitParticles(cx, cy, '#4488ff');
-      this.spawnDamageNumber(cx, drop.y - 10, 1, false, '#4488ff');
+      this.addDropNotification(DropType.MpPotion, '+1 MP Potion', '#4488ff', '💧');
     }
 
     this.onPlayerUpdate?.(this.player);
@@ -1266,6 +1288,67 @@ export class GameEngine {
     this.damageNumbers = this.damageNumbers.filter((d: DamageNumber) => d.life > 0);
   }
 
+  private addDropNotification(type: DropType, label: string, color: string, icon: string): void {
+    this.dropNotifications.push({
+      type,
+      label,
+      color,
+      icon,
+      life: this.DROP_NOTIFICATION_LIFE_TICKS,
+      maxLife: this.DROP_NOTIFICATION_LIFE_TICKS,
+    });
+  }
+
+  private updateDropNotifications(): void {
+    for (const n of this.dropNotifications) {
+      n.life--;
+    }
+    this.dropNotifications = this.dropNotifications.filter((n: DropNotification) => n.life > 0);
+  }
+
+  private renderDropNotifications(ctx: CanvasRenderingContext2D): void {
+    if (this.dropNotifications.length === 0) return;
+
+    const rowHeight: number = 28;
+    const padding: number = 8;
+    const marginRight: number = 12;
+    const marginBottom: number = 12;
+    const baseX: number = GAME_CONSTANTS.CANVAS_WIDTH - marginRight;
+    const baseY: number = GAME_CONSTANTS.CANVAS_HEIGHT - marginBottom;
+
+    ctx.save();
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    for (let i: number = 0; i < this.dropNotifications.length; i++) {
+      const n: DropNotification = this.dropNotifications[i];
+      const progress: number = n.life / n.maxLife;
+      const fadeIn: number = Math.min(1, (n.maxLife - n.life) / 8);
+      const fadeOut: number = progress < 0.2 ? progress / 0.2 : 1;
+      const alpha: number = fadeIn * fadeOut;
+
+      const rowIdx: number = this.dropNotifications.length - 1 - i;
+      const y: number = baseY - rowIdx * rowHeight - rowHeight / 2;
+
+      ctx.globalAlpha = alpha * 0.55;
+      const textWidth: number = 140;
+      const boxX: number = baseX - textWidth - padding * 2;
+      const boxY: number = y - rowHeight / 2;
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, textWidth + padding * 2, rowHeight, 4);
+      ctx.fill();
+
+      ctx.globalAlpha = alpha;
+      ctx.font = 'bold 13px "Segoe UI", sans-serif';
+      ctx.fillStyle = n.color;
+      ctx.fillText(`${n.icon} ${n.label}`, baseX - padding, y);
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
   private rectsOverlap(
     x1: number, y1: number, w1: number, h1: number,
     x2: number, y2: number, w2: number, h2: number,
@@ -1332,6 +1415,7 @@ export class GameEngine {
     this.renderParticles(ctx);
     this.spriteEffectSystem.render(ctx);
     this.renderDamageNumbers(ctx);
+    this.renderDropNotifications(ctx);
     this.renderWaveInfo(ctx);
 
     ctx.restore();

@@ -84,6 +84,10 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.syncProgression(player);
   }
 
+  setWave(wave: number): void {
+    this.engine?.setWave(wave);
+  }
+
   ngOnDestroy(): void {
     this.engine?.stop();
     window.removeEventListener('keydown', this.boundKeyDown);

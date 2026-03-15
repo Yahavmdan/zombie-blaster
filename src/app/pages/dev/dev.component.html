@@ -20,5 +20,29 @@
   >
     Level Up ({{ playerLevel() }})
   </button>
+  <button
+    class="dev-btn dev-btn--skills"
+    data-testid="dev-skills-btn-max"
+    (click)="maxAllSkills()"
+  >
+    Max All Skills
+  </button>
+  <div class="dev-wave-control">
+    <input
+      class="dev-wave-input"
+      type="number"
+      min="1"
+      data-testid="dev-wave-input"
+      [ngModel]="waveInput()"
+      (ngModelChange)="waveInput.set($event)"
+    />
+    <button
+      class="dev-btn dev-btn--wave"
+      data-testid="dev-wave-btn-set"
+      (click)="setWave()"
+    >
+      Set Wave
+    </button>
+  </div>
 </div>
 <app-game />

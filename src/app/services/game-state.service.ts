@@ -241,6 +241,26 @@ export class GameStateService {
     });
   }
 
+  maxAllSkills(): void {
+    this.player.update((p: CharacterState | null): CharacterState | null => {
+      if (!p) return p;
+      const classSkills: SkillDefinition[] = SKILLS.filter(
+        (s: SkillDefinition) => s.classId === p.classId,
+      );
+      const newSkillLevels: Record<string, number> = { ...p.skillLevels };
+      for (const skill of classSkills) {
+        newSkillLevels[skill.id] = GAME_CONSTANTS.MAX_SKILL_LEVEL;
+      }
+      const derived: CharacterDerived = this.calculateDerivedWithBuffs(
+        CHARACTER_CLASSES[p.classId].baseStats,
+        p.allocatedStats,
+        p.classId,
+        p.activeBuffs,
+      );
+      return { ...p, skillLevels: newSkillLevels, derived };
+    });
+  }
+
   getPlayerUsableSkills(p: CharacterState): SkillDefinition[] {
     return SKILLS.filter(
       (s: SkillDefinition) =>
