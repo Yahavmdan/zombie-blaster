@@ -7,6 +7,7 @@ export interface SkillAnimation {
   screenShakeIntensity: number;
   flashColor: string | null;
   flashFrames: number;
+  spriteEffect: string | null;
 }
 
 function makeParticle(overrides: Partial<Particle> & { x: number; y: number; color: string }): Particle {
@@ -135,11 +136,13 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] =>
       arcSlashParticles(x, y, facing, level, '#ff4444', 7),
     screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: 'weaponhit',
   },
   'warrior-slash-blast': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
       radialBurstParticles(x, y, level, '#ff6644', 12, ParticleShape.Line),
     screenShake: 3, screenShakeIntensity: 3, flashColor: null, flashFrames: 0,
+    spriteEffect: 'firespin',
   },
   'warrior-war-leap': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
@@ -161,23 +164,27 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 4, screenShakeIntensity: 4, flashColor: null, flashFrames: 0,
+    spriteEffect: 'brightfire',
   },
   'warrior-rage': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
       radialBurstParticles(x, y, level, '#ff2222', 10, ParticleShape.Circle),
     screenShake: 0, screenShakeIntensity: 0, flashColor: '#ff220033', flashFrames: 6,
+    spriteEffect: 'vortex',
   },
   'warrior-ground-smash': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
       shockwaveRingParticles(x, y, level, '#aa6633'),
     screenShake: 8, screenShakeIntensity: 6, flashColor: null, flashFrames: 0,
+    spriteEffect: 'sunburn',
   },
   'warrior-armor-crash': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] =>
       arcSlashParticles(x, y, facing, level, '#996644', 6),
     screenShake: 3, screenShakeIntensity: 3, flashColor: null, flashFrames: 0,
+    spriteEffect: 'weaponhit',
   },
-  'warrior-valhalla': {
+  'warrior-brandish': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] => {
       const particles: Particle[] = radialBurstParticles(x, y, level, '#ffaa00', 20, ParticleShape.Star);
       const rayCount: number = 8;
@@ -197,6 +204,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 12, screenShakeIntensity: 8, flashColor: '#ffffff', flashFrames: 8,
+    spriteEffect: 'flamelash',
   },
 
   // ═══ RANGER ═══
@@ -204,6 +212,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] =>
       projectileTrailParticles(x, y, facing, level, '#44cc44', 6),
     screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: 'phantom',
   },
   'ranger-double-shot': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
@@ -212,6 +221,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return [...top, ...bottom];
     },
     screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: 'phantom',
   },
   'ranger-arrow-bomb': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
@@ -222,6 +232,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return [...trail, ...explosion];
     },
     screenShake: 5, screenShakeIntensity: 4, flashColor: '#ff4400', flashFrames: 4,
+    spriteEffect: 'brightfire',
   },
   'ranger-arrow-rain': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] => {
@@ -243,6 +254,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 3, screenShakeIntensity: 2, flashColor: null, flashFrames: 0,
+    spriteEffect: 'bluefire',
   },
   'ranger-strafe': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
@@ -264,6 +276,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: 'phantom',
   },
   'ranger-hurricane': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
@@ -299,6 +312,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 10, screenShakeIntensity: 5, flashColor: '#22ff44', flashFrames: 5,
+    spriteEffect: 'felspell',
   },
 
   // ═══ MAGE ═══
@@ -309,8 +323,9 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return trail;
     },
     screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: 'magicspell',
   },
-  'mage-fireball': {
+  'mage-fire-arrow': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
       const dir: number = facingSign(facing);
       const impactX: number = x + dir * 60;
@@ -334,8 +349,9 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return [...trail, ...explosion, ...embers];
     },
     screenShake: 4, screenShakeIntensity: 3, flashColor: '#ff4400', flashFrames: 4,
+    spriteEffect: 'fire',
   },
-  'mage-ice-beam': {
+  'mage-cold-beam': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
       const dir: number = facingSign(facing);
       const particles: Particle[] = [];
@@ -356,13 +372,15 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 0, screenShakeIntensity: 0, flashColor: '#88ccff', flashFrames: 3,
+    spriteEffect: 'freezing',
   },
   'mage-teleport': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
       radialBurstParticles(x, y, level, '#cc88ff', 8, ParticleShape.Circle),
     screenShake: 0, screenShakeIntensity: 0, flashColor: '#cc88ff', flashFrames: 3,
+    spriteEffect: 'casting',
   },
-  'mage-chain-lightning': {
+  'mage-thunder-bolt': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
       const dir: number = facingSign(facing);
       const particles: Particle[] = [];
@@ -398,6 +416,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 3, screenShakeIntensity: 3, flashColor: '#ffff44', flashFrames: 3,
+    spriteEffect: 'weaponhit',
   },
   'mage-meteor-shower': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] => {
@@ -435,6 +454,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 15, screenShakeIntensity: 10, flashColor: '#ff4400', flashFrames: 8,
+    spriteEffect: 'sunburn',
   },
   'mage-infinity': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] => {
@@ -459,6 +479,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 0, screenShakeIntensity: 0, flashColor: '#aa44ff', flashFrames: 6,
+    spriteEffect: 'magic8',
   },
 
   // ═══ ASSASSIN ═══
@@ -485,8 +506,9 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: 'phantom',
   },
-  'assassin-shadow-strike': {
+  'assassin-disorder': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
       const dir: number = facingSign(facing);
       const particles: Particle[] = [];
@@ -518,6 +540,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 2, screenShakeIntensity: 3, flashColor: null, flashFrames: 0,
+    spriteEffect: 'midnight',
   },
   'assassin-dark-sight': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] => {
@@ -540,6 +563,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 0, screenShakeIntensity: 0, flashColor: '#220022', flashFrames: 4,
+    spriteEffect: 'midnight',
   },
   'assassin-haste': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
@@ -561,6 +585,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: 'protectioncircle',
   },
   'assassin-savage-blow': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
@@ -595,6 +620,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 4, screenShakeIntensity: 3, flashColor: null, flashFrames: 0,
+    spriteEffect: 'magickahit',
   },
   'assassin-shadow-partner': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
@@ -617,6 +643,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 0, screenShakeIntensity: 0, flashColor: '#440066', flashFrames: 4,
+    spriteEffect: 'midnight',
   },
   'assassin-assassinate': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
@@ -646,6 +673,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return [...particles, ...burst];
     },
     screenShake: 12, screenShakeIntensity: 8, flashColor: '#440044', flashFrames: 6,
+    spriteEffect: 'vortex',
   },
 
   // ═══ PRIEST ═══
@@ -653,6 +681,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] =>
       projectileTrailParticles(x, y, facing, level, '#ffcc44', 6),
     screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: 'brightfire',
   },
   'priest-heal': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] => {
@@ -674,6 +703,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 0, screenShakeIntensity: 0, flashColor: '#44ff88', flashFrames: 4,
+    spriteEffect: 'magicbubbles',
   },
   'priest-holy-symbol': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] => {
@@ -697,6 +727,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 0, screenShakeIntensity: 0, flashColor: '#ffdd66', flashFrames: 3,
+    spriteEffect: 'sunburn',
   },
   'priest-shining-ray': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
@@ -720,11 +751,13 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return particles;
     },
     screenShake: 2, screenShakeIntensity: 2, flashColor: '#ffffaa', flashFrames: 3,
+    spriteEffect: 'nebula',
   },
   'priest-dispel': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
       radialBurstParticles(x, y, level, '#eedd88', 10, ParticleShape.Ring),
     screenShake: 2, screenShakeIntensity: 2, flashColor: '#ffffff', flashFrames: 3,
+    spriteEffect: 'protectioncircle',
   },
   'priest-genesis': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] => {
@@ -749,5 +782,6 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
       return [...particles, ...burst];
     },
     screenShake: 15, screenShakeIntensity: 10, flashColor: '#ffffff', flashFrames: 10,
+    spriteEffect: 'nebula',
   },
 };

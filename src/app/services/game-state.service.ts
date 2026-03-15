@@ -1,5 +1,6 @@
 import { Injectable, Signal, WritableSignal, signal, computed } from '@angular/core';
 import {
+  ActiveBuff,
   CharacterClass,
   CharacterClassDefinition,
   CharacterState,
@@ -10,12 +11,12 @@ import {
   ClassStatWeights,
   Direction,
   GAME_CONSTANTS,
+  SHOP_ITEMS,
   SKILLS,
   SkillDefinition,
   SkillType,
-  getPassiveBonusValue,
 } from '@shared/index';
-import { ZombieState } from '@shared/game-entities';
+import { DropType, PlayerInventory, ShopItemDefinition, ZombieState } from '@shared/game-entities';
 
 @Injectable({ providedIn: 'root' })
 export class GameStateService {
@@ -80,6 +81,8 @@ export class GameStateService {
       unallocatedSkillPoints: 0,
       allocatedStats,
       skillLevels: {},
+      activeBuffs: [],
+      inventory: { hpPotions: 3, mpPotions: 3, gold: 0 },
     };
 
     this.player.set(character);
@@ -117,29 +120,22 @@ export class GameStateService {
     };
   }
 
-  calculateDerivedWithPassives(
+  calculateDerivedWithBuffs(
     baseStats: CharacterStats,
     allocatedStats: CharacterStats,
     classId: CharacterClass,
-    skillLevels: Record<string, number>,
+    activeBuffs: ActiveBuff[],
   ): CharacterDerived {
     const derived: CharacterDerived = this.calculateDerived(baseStats, allocatedStats, classId);
 
-    const classPassives: SkillDefinition[] = SKILLS.filter(
-      (s: SkillDefinition) => s.classId === classId && s.type === SkillType.Passive,
-    );
+    for (const buff of activeBuffs) {
+      if (buff.remainingMs <= 0) continue;
 
-    for (const skill of classPassives) {
-      const level: number = skillLevels[skill.id] ?? 0;
-      if (level <= 0 || !skill.passiveBonus) continue;
-
-      const bonusValue: number = getPassiveBonusValue(skill, level);
-      const target: string = skill.passiveBonus.stat;
-
+      const target: string = buff.stat;
       if (target === 'allDamagePercent') {
-        derived.attack = Math.floor(derived.attack * (1 + bonusValue / 100));
+        derived.attack = Math.floor(derived.attack * (1 + buff.value / 100));
       } else if (target in derived) {
-        (derived as unknown as Record<string, number>)[target] += bonusValue;
+        (derived as unknown as Record<string, number>)[target] += buff.value;
       }
     }
 
@@ -166,7 +162,7 @@ export class GameStateService {
       }
 
       const baseSt: CharacterStats = CHARACTER_CLASSES[p.classId].baseStats;
-      const derived: CharacterDerived = this.calculateDerivedWithPassives(baseSt, p.allocatedStats, p.classId, p.skillLevels);
+      const derived: CharacterDerived = this.calculateDerivedWithBuffs(baseSt, p.allocatedStats, p.classId, p.activeBuffs);
 
       return {
         ...p,
@@ -192,7 +188,7 @@ export class GameStateService {
       };
 
       const baseSt: CharacterStats = CHARACTER_CLASSES[p.classId].baseStats;
-      const derived: CharacterDerived = this.calculateDerivedWithPassives(baseSt, newAllocated, p.classId, p.skillLevels);
+      const derived: CharacterDerived = this.calculateDerivedWithBuffs(baseSt, newAllocated, p.classId, p.activeBuffs);
       const totalStats: CharacterStats = this.getTotalStats(baseSt, newAllocated);
 
       return {
@@ -229,11 +225,11 @@ export class GameStateService {
         [skillId]: currentLevel + 1,
       };
 
-      const derived: CharacterDerived = this.calculateDerivedWithPassives(
+      const derived: CharacterDerived = this.calculateDerivedWithBuffs(
         CHARACTER_CLASSES[p.classId].baseStats,
         p.allocatedStats,
         p.classId,
-        newSkillLevels,
+        p.activeBuffs,
       );
 
       return {
@@ -245,13 +241,86 @@ export class GameStateService {
     });
   }
 
-  getPlayerActiveSkills(p: CharacterState): SkillDefinition[] {
+  getPlayerUsableSkills(p: CharacterState): SkillDefinition[] {
     return SKILLS.filter(
       (s: SkillDefinition) =>
         s.classId === p.classId &&
-        s.type === SkillType.Active &&
+        (s.type === SkillType.Active || s.type === SkillType.Buff) &&
         (p.skillLevels[s.id] ?? 0) > 0,
     ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel);
+  }
+
+  addGold(amount: number): void {
+    this.player.update((p: CharacterState | null): CharacterState | null => {
+      if (!p) return p;
+      return {
+        ...p,
+        inventory: { ...p.inventory, gold: p.inventory.gold + amount },
+      };
+    });
+  }
+
+  addPotion(type: DropType): void {
+    this.player.update((p: CharacterState | null): CharacterState | null => {
+      if (!p) return p;
+      const inv: PlayerInventory = { ...p.inventory };
+      if (type === DropType.HpPotion) inv.hpPotions++;
+      else if (type === DropType.MpPotion) inv.mpPotions++;
+      return { ...p, inventory: inv };
+    });
+  }
+
+  useHpPotion(): boolean {
+    const p: CharacterState | null = this.player();
+    if (!p || p.inventory.hpPotions <= 0) return false;
+    if (p.hp >= p.derived.maxHp) return false;
+
+    this.player.update((c: CharacterState | null): CharacterState | null => {
+      if (!c) return c;
+      const healed: number = Math.min(GAME_CONSTANTS.HP_POTION_RESTORE, c.derived.maxHp - c.hp);
+      return {
+        ...c,
+        hp: c.hp + healed,
+        inventory: { ...c.inventory, hpPotions: c.inventory.hpPotions - 1 },
+      };
+    });
+    return true;
+  }
+
+  useMpPotion(): boolean {
+    const p: CharacterState | null = this.player();
+    if (!p || p.inventory.mpPotions <= 0) return false;
+    if (p.mp >= p.derived.maxMp) return false;
+
+    this.player.update((c: CharacterState | null): CharacterState | null => {
+      if (!c) return c;
+      const restored: number = Math.min(GAME_CONSTANTS.MP_POTION_RESTORE, c.derived.maxMp - c.mp);
+      return {
+        ...c,
+        mp: c.mp + restored,
+        inventory: { ...c.inventory, mpPotions: c.inventory.mpPotions - 1 },
+      };
+    });
+    return true;
+  }
+
+  buyShopItem(itemId: string): boolean {
+    const p: CharacterState | null = this.player();
+    if (!p) return false;
+
+    const item: ShopItemDefinition | undefined = SHOP_ITEMS.find(
+      (i: ShopItemDefinition) => i.id === itemId,
+    );
+    if (!item || p.inventory.gold < item.price) return false;
+
+    this.player.update((c: CharacterState | null): CharacterState | null => {
+      if (!c) return c;
+      const inv: PlayerInventory = { ...c.inventory, gold: c.inventory.gold - item.price };
+      if (item.type === DropType.HpPotion) inv.hpPotions++;
+      else if (item.type === DropType.MpPotion) inv.mpPotions++;
+      return { ...c, inventory: inv };
+    });
+    return true;
   }
 
   reset(): void {

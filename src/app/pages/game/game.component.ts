@@ -7,6 +7,7 @@ import { HudComponent } from '../../components/hud/hud.component';
 import { SettingsComponent } from '../../components/settings/settings.component';
 import { StatAllocationComponent } from '../../components/stat-allocation/stat-allocation.component';
 import { SkillTreeComponent } from '../../components/skill-tree/skill-tree.component';
+import { ShopComponent } from '../../components/shop/shop.component';
 
 export interface LevelUpToast {
   oldLevel: number;
@@ -16,7 +17,7 @@ export interface LevelUpToast {
 @Component({
   selector: 'app-game',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent],
+  imports: [GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, ShopComponent],
   host: {
     class: 'game-page',
   },
@@ -35,6 +36,7 @@ export class GameComponent implements OnInit {
   readonly settingsOpen: WritableSignal<boolean> = signal<boolean>(false);
   readonly statPanelOpen: WritableSignal<boolean> = signal<boolean>(false);
   readonly skillPanelOpen: WritableSignal<boolean> = signal<boolean>(false);
+  readonly shopOpen: WritableSignal<boolean> = signal<boolean>(false);
   readonly currentPlayerDisplay: WritableSignal<CharacterState> = signal<CharacterState>(null!);
   readonly levelUpToast: WritableSignal<LevelUpToast | null> = signal<LevelUpToast | null>(null);
   readonly availableSkills: Signal<SkillDefinition[]> = this.gameState.availableSkills;
@@ -44,6 +46,13 @@ export class GameComponent implements OnInit {
       const p: CharacterState | null = this.gameState.player();
       if (p) {
         this.currentPlayerDisplay.set({ ...p });
+      }
+    });
+    effect((): void => {
+      const canvas: GameCanvasComponent | undefined = this.gameCanvas();
+      if (canvas) {
+        canvas.useHpPotionHandler = (): boolean => this.gameState.useHpPotion();
+        canvas.useMpPotionHandler = (): boolean => this.gameState.useMpPotion();
       }
     });
   }
@@ -157,6 +166,41 @@ export class GameComponent implements OnInit {
     this.skillPanelOpen.set(false);
   }
 
+  onShopRequested(): void {
+    this.shopOpen.set(true);
+  }
+
+  onShopItemPurchased(itemId: string): void {
+    const success: boolean = this.gameState.buyShopItem(itemId);
+    if (success) {
+      const updated: CharacterState | null = this.gameState.player();
+      if (updated) {
+        this.gameCanvas()?.syncProgression(updated);
+        this.currentPlayerDisplay.set({ ...updated });
+      }
+    }
+  }
+
+  onShopClosed(): void {
+    this.shopOpen.set(false);
+  }
+
+  onGoldPickup(amount: number): void {
+    this.gameState.addGold(amount);
+    const updated: CharacterState | null = this.gameState.player();
+    if (updated) {
+      this.currentPlayerDisplay.set({ ...updated });
+    }
+  }
+
+  onPotionPickup(): void {
+    const updated: CharacterState | null = this.gameState.player();
+    if (updated) {
+      this.currentPlayerDisplay.set({ ...updated });
+    }
+  }
+
+
   retry(): void {
     const p: CharacterState | null = this.gameState.player();
     if (!p) return;
@@ -164,6 +208,7 @@ export class GameComponent implements OnInit {
     this.isGameOver.set(false);
     this.statPanelOpen.set(false);
     this.skillPanelOpen.set(false);
+    this.shopOpen.set(false);
     this.wave.set(1);
     this.score.set(0);
     this.syncPlayerDisplay();

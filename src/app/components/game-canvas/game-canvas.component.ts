@@ -14,6 +14,7 @@ import {
   effect,
 } from '@angular/core';
 import { CharacterClass, CharacterState, KeyBindings } from '@shared/index';
+import { DropType } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { InputKeys } from '@shared/messages';
@@ -41,12 +42,18 @@ export class GameCanvasComponent implements OnDestroy {
   readonly gameOver: OutputEmitterRef<void> = output<void>();
   readonly openStatsRequested: OutputEmitterRef<void> = output<void>();
   readonly openSkillsRequested: OutputEmitterRef<void> = output<void>();
+  readonly openShopRequested: OutputEmitterRef<void> = output<void>();
+  readonly goldPickedUp: OutputEmitterRef<number> = output<number>();
+  readonly potionPickedUp: OutputEmitterRef<DropType> = output<DropType>();
+
+  useHpPotionHandler: (() => boolean) | null = null;
+  useMpPotionHandler: (() => boolean) | null = null;
 
   readonly canvasRef: Signal<ElementRef<HTMLCanvasElement>> = viewChild.required<ElementRef<HTMLCanvasElement>>('gameCanvas');
 
   private engine: GameEngine | null = null;
   private currentClassId: CharacterClass | null = null;
-  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false };
+  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false };
   private readonly boundKeyDown: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyDown(e);
   private readonly boundKeyUp: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyUp(e);
   private readonly boundMouseDown: () => void = (): void => this.onMouseDown();
@@ -106,6 +113,11 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine!.onScoreUpdate = (delta: number): void => this.scoreUpdated.emit(delta);
     this.engine!.onWaveUpdate = (wave: number, remaining: number): void => this.waveUpdated.emit({ wave, remaining });
     this.engine!.onGameOver = (): void => this.gameOver.emit();
+    this.engine!.onGoldPickup = (amount: number): void => this.goldPickedUp.emit(amount);
+    this.engine!.onPotionPickup = (type: DropType): void => this.potionPickedUp.emit(type);
+    this.engine!.onOpenShop = (): void => this.openShopRequested.emit();
+    this.engine!.onUseHpPotion = (): boolean => this.useHpPotionHandler?.() ?? false;
+    this.engine!.onUseMpPotion = (): boolean => this.useMpPotionHandler?.() ?? false;
   }
 
   private bindInput(): void {
@@ -127,6 +139,10 @@ export class GameCanvasComponent implements OnDestroy {
     }
     if (action === 'openSkills') {
       this.openSkillsRequested.emit();
+      return;
+    }
+    if (action === 'openShop') {
+      this.openShopRequested.emit();
       return;
     }
 

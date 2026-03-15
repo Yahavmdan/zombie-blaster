@@ -116,11 +116,11 @@ export class StatAllocationComponent {
       [stat]: player.allocatedStats[stat] + 1,
     };
     const currentDerived: CharacterDerived = player.derived;
-    const previewDerived: CharacterDerived = this.gameState.calculateDerivedWithPassives(
+    const previewDerived: CharacterDerived = this.gameState.calculateDerivedWithBuffs(
       CHARACTER_CLASSES[player.classId].baseStats,
       previewAllocated,
       player.classId,
-      player.skillLevels,
+      player.activeBuffs,
     );
 
     return {

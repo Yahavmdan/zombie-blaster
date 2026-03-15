@@ -20,7 +20,8 @@ import {
   getSkillMpCost,
   getSkillCooldown,
   getSkillRange,
-  getPassiveBonusValue,
+  getBuffEffectValue,
+  getBuffDurationMs,
 } from '@shared/index';
 
 export interface SkillTreeNode {
@@ -78,12 +79,12 @@ export class SkillTreeComponent {
     const firstActive: SkillDefinition | undefined = sorted.find(
       (s: SkillDefinition) => s.type === SkillType.Active,
     );
-    const firstPassive: SkillDefinition | undefined = sorted.find(
-      (s: SkillDefinition) => s.type === SkillType.Passive,
+    const firstBuff: SkillDefinition | undefined = sorted.find(
+      (s: SkillDefinition) => s.type === SkillType.Buff,
     );
     const recommendedIds: Set<string> = new Set<string>();
     if (firstActive) recommendedIds.add(firstActive.id);
-    if (firstPassive) recommendedIds.add(firstPassive.id);
+    if (firstBuff) recommendedIds.add(firstBuff.id);
 
     return sorted.map((skill: SkillDefinition): SkillTreeNode => {
       const currentLevel: number = p.skillLevels[skill.id] ?? 0;
@@ -110,8 +111,8 @@ export class SkillTreeComponent {
     return this.skillNodes().filter((n: SkillTreeNode) => n.skill.type === SkillType.Active);
   });
 
-  readonly passiveNodes: Signal<SkillTreeNode[]> = computed((): SkillTreeNode[] => {
-    return this.skillNodes().filter((n: SkillTreeNode) => n.skill.type === SkillType.Passive);
+  readonly buffNodes: Signal<SkillTreeNode[]> = computed((): SkillTreeNode[] => {
+    return this.skillNodes().filter((n: SkillTreeNode) => n.skill.type === SkillType.Buff);
   });
 
   onInvest(skillId: string): void {
@@ -133,8 +134,8 @@ export class SkillTreeComponent {
   private describeEffect(skill: SkillDefinition, level: number): string {
     if (level <= 0) return 'Not learned';
 
-    if (skill.type === SkillType.Passive) {
-      return this.describePassiveEffect(skill, level);
+    if (skill.type === SkillType.Buff) {
+      return this.describeBuffEffect(skill, level);
     }
 
     return this.describeActiveEffect(skill, level);
@@ -154,11 +155,13 @@ export class SkillTreeComponent {
     return `Lv.${level}: ${parts.join(', ')}`;
   }
 
-  private describePassiveEffect(skill: SkillDefinition, level: number): string {
-    if (!skill.passiveBonus) return `Lv.${level}`;
-    const value: number = getPassiveBonusValue(skill, level);
-    const statLabel: string = this.getStatLabel(skill.passiveBonus.stat);
-    return `Lv.${level}: +${value.toFixed(1)} ${statLabel}`;
+  private describeBuffEffect(skill: SkillDefinition, level: number): string {
+    if (!skill.buffEffect) return `Lv.${level}`;
+    const value: number = getBuffEffectValue(skill, level);
+    const durationMs: number = getBuffDurationMs(skill, level);
+    const durationSec: number = Math.floor(durationMs / 1000);
+    const statLabel: string = this.getStatLabel(skill.buffEffect.stat);
+    return `Lv.${level}: +${value.toFixed(1)} ${statLabel} for ${durationSec}s`;
   }
 
   private getStatLabel(stat: string): string {

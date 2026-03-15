@@ -20,7 +20,12 @@ export function getSkillRange(skill: SkillDefinition, level: number): number {
   return skill.scaling.baseRange + skill.scaling.rangePerLevel * (level - 1);
 }
 
-export function getPassiveBonusValue(skill: SkillDefinition, level: number): number {
-  if (level <= 0 || !skill.passiveBonus) return 0;
-  return skill.passiveBonus.baseValue + skill.passiveBonus.valuePerLevel * (level - 1);
+export function getBuffEffectValue(skill: SkillDefinition, level: number): number {
+  if (level <= 0 || !skill.buffEffect) return 0;
+  return skill.buffEffect.baseValue + skill.buffEffect.valuePerLevel * (level - 1);
+}
+
+export function getBuffDurationMs(skill: SkillDefinition, level: number): number {
+  if (level <= 0 || !skill.buffDuration) return 0;
+  return skill.buffDuration.baseDurationMs + skill.buffDuration.durationPerLevelMs * (level - 1);
 }

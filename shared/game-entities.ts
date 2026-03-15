@@ -37,14 +37,38 @@ export interface ZombieState {
   attackAnimTimer: number;
   attackHasHit: boolean;
   facing: number;
+  orbitOffset: number;
 }
 
-export interface MpPotionDrop {
+export enum DropType {
+  HpPotion = 'hp-potion',
+  MpPotion = 'mp-potion',
+  Gold = 'gold',
+}
+
+export interface WorldDrop {
   id: string;
+  type: DropType;
   x: number;
   y: number;
   velocityY: number;
-  restoreAmount: number;
+  value: number;
   lifetime: number;
   isGrounded: boolean;
+}
+
+export interface PlayerInventory {
+  hpPotions: number;
+  mpPotions: number;
+  gold: number;
+}
+
+export interface ShopItemDefinition {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  price: number;
+  type: DropType;
+  value: number;
 }

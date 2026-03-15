@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, InputSignal, OutputEmitterRef, Signal, input, output, computed } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost } from '@shared/index';
+import { ActiveBuff, CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost } from '@shared/index';
 
 export interface SkillSlot {
   key: string;
@@ -8,6 +8,15 @@ export interface SkillSlot {
   icon: string;
   mpCost: number;
   locked: boolean;
+  isBuff: boolean;
+}
+
+export interface ActiveBuffDisplay {
+  skillName: string;
+  icon: string;
+  color: string;
+  remainingPercent: number;
+  remainingSec: number;
 }
 
 @Component({
@@ -27,6 +36,7 @@ export class HudComponent {
 
   readonly statPanelRequested: OutputEmitterRef<void> = output<void>();
   readonly skillTreeRequested: OutputEmitterRef<void> = output<void>();
+  readonly shopRequested: OutputEmitterRef<void> = output<void>();
 
   readonly classIcon: Signal<string> = computed((): string => {
     return CHARACTER_CLASSES[this.playerData().classId].icon;
@@ -65,15 +75,15 @@ export class HudComponent {
 
   readonly skillSlots: Signal<SkillSlot[]> = computed((): SkillSlot[] => {
     const p: CharacterState = this.playerData();
-    const activeSkills: SkillDefinition[] = SKILLS.filter(
+    const usableSkills: SkillDefinition[] = SKILLS.filter(
       (s: SkillDefinition) =>
         s.classId === p.classId &&
-        s.type === SkillType.Active &&
+        (s.type === SkillType.Active || s.type === SkillType.Buff) &&
         (p.skillLevels[s.id] ?? 0) > 0,
     ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
      .slice(0, 6);
     const keys: string[] = ['1', '2', '3', '4', '5', '6'];
-    return activeSkills.map((skill: SkillDefinition, idx: number): SkillSlot => {
+    return usableSkills.map((skill: SkillDefinition, idx: number): SkillSlot => {
       const level: number = p.skillLevels[skill.id] ?? 0;
       return {
         key: keys[idx] ?? '?',
@@ -81,9 +91,28 @@ export class HudComponent {
         icon: skill.icon,
         mpCost: getSkillMpCost(skill, level),
         locked: false,
+        isBuff: skill.type === SkillType.Buff,
       };
     });
   });
+
+  readonly activeBuffs: Signal<ActiveBuffDisplay[]> = computed((): ActiveBuffDisplay[] => {
+    const p: CharacterState = this.playerData();
+    return p.activeBuffs.map((buff: ActiveBuff): ActiveBuffDisplay => {
+      const skill: SkillDefinition | undefined = SKILLS.find((s: SkillDefinition) => s.id === buff.skillId);
+      return {
+        skillName: skill?.name ?? 'Buff',
+        icon: skill?.icon ?? '✨',
+        color: skill?.color ?? '#ffffff',
+        remainingPercent: (buff.remainingMs / buff.totalDurationMs) * 100,
+        remainingSec: Math.ceil(buff.remainingMs / 1000),
+      };
+    });
+  });
+
+  readonly hpPotions: Signal<number> = computed((): number => this.playerData().inventory.hpPotions);
+  readonly mpPotions: Signal<number> = computed((): number => this.playerData().inventory.mpPotions);
+  readonly gold: Signal<number> = computed((): number => this.playerData().inventory.gold);
 
   onOpenStatPanel(): void {
     this.statPanelRequested.emit();
@@ -91,5 +120,9 @@ export class HudComponent {
 
   onOpenSkillTree(): void {
     this.skillTreeRequested.emit();
+  }
+
+  onOpenShop(): void {
+    this.shopRequested.emit();
   }
 }

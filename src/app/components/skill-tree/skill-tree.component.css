@@ -111,7 +111,7 @@
   color: #44aaff;
 }
 
-.section-title--passive {
+.section-title--buff {
   color: #44cc66;
 }
 
@@ -134,7 +134,7 @@
   background: rgba(30, 30, 48, 0.85);
 }
 
-.skill-card--passive:hover {
+.skill-card--buff:hover {
   border-color: #44cc6688;
 }
 
@@ -151,7 +151,7 @@
   border-left: 3px solid #44aaff;
 }
 
-.skill-card--passive.skill-card--invested {
+.skill-card--buff.skill-card--invested {
   border-left-color: #44cc66;
 }
 
@@ -209,7 +209,7 @@
   transition: width 0.3s ease;
 }
 
-.skill-progress-fill--passive {
+.skill-progress-fill--buff {
   background: #44cc66;
 }
 
@@ -248,7 +248,7 @@
   justify-content: center;
 }
 
-.skill-card--passive .invest-btn {
+.skill-card--buff .invest-btn {
   border-color: #44cc66;
   color: #44cc66;
   background: rgba(68, 204, 102, 0.08);
@@ -259,7 +259,7 @@
   box-shadow: 0 0 10px rgba(68, 170, 255, 0.3);
 }
 
-.skill-card--passive .invest-btn:hover:not(:disabled) {
+.skill-card--buff .invest-btn:hover:not(:disabled) {
   background: rgba(68, 204, 102, 0.2);
   box-shadow: 0 0 10px rgba(68, 204, 102, 0.3);
 }
@@ -322,7 +322,7 @@
   border: 1px solid rgba(68, 170, 255, 0.3);
 }
 
-.tooltip-type--passive {
+.tooltip-type--buff {
   color: #44cc66;
   background: rgba(68, 204, 102, 0.12);
   border: 1px solid rgba(68, 204, 102, 0.3);

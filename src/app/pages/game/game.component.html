@@ -2,7 +2,7 @@
   <div class="game-wrapper">
     <app-game-canvas
       [player]="p"
-      [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen()"
+      [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen() || shopOpen()"
       (playerUpdated)="onPlayerUpdate($event)"
       (xpGained)="onXpGained($event)"
       (scoreUpdated)="onScoreUpdate($event)"
@@ -10,6 +10,9 @@
       (gameOver)="onGameOver()"
       (openStatsRequested)="onStatPanelRequested()"
       (openSkillsRequested)="onSkillTreeRequested()"
+      (openShopRequested)="onShopRequested()"
+      (goldPickedUp)="onGoldPickup($event)"
+      (potionPickedUp)="onPotionPickup()"
     />
     <app-hud
       [playerData]="currentPlayerDisplay()"
@@ -17,6 +20,7 @@
       [score]="score()"
       (statPanelRequested)="onStatPanelRequested()"
       (skillTreeRequested)="onSkillTreeRequested()"
+      (shopRequested)="onShopRequested()"
     />
     <app-settings
       (openChanged)="onSettingsOpenChanged($event)"
@@ -37,6 +41,14 @@
         [skills]="availableSkills()"
         (skillAllocated)="onSkillAllocated($event)"
         (closed)="onSkillPanelClosed()"
+      />
+    }
+
+    @if (shopOpen()) {
+      <app-shop
+        [player]="currentPlayerDisplay()"
+        (itemPurchased)="onShopItemPurchased($event)"
+        (closed)="onShopClosed()"
       />
     }
 

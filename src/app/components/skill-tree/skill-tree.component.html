@@ -94,15 +94,15 @@
     </div>
 
     <div class="skill-section">
-      <h3 class="section-title section-title--passive">PASSIVE SKILLS</h3>
+      <h3 class="section-title section-title--buff">BUFF SKILLS</h3>
       <div class="skill-list">
-        @for (node of passiveNodes(); track node.skill.id) {
+        @for (node of buffNodes(); track node.skill.id) {
           <div
             class="skill-card"
             [class.skill-card--locked]="!node.isUnlocked"
             [class.skill-card--maxed]="node.isMaxed"
             [class.skill-card--invested]="node.currentLevel > 0"
-            [class.skill-card--passive]="true"
+            [class.skill-card--buff]="true"
             (mouseenter)="onHover(node.skill.id)"
             (mouseleave)="onHoverOut()"
             [attr.data-testid]="'skill-tree-card-' + node.skill.id"
@@ -125,7 +125,7 @@
                 </div>
                 <div class="skill-progress-bar">
                   <div
-                    class="skill-progress-fill skill-progress-fill--passive"
+                    class="skill-progress-fill skill-progress-fill--buff"
                     [class.skill-progress-fill--maxed]="node.isMaxed"
                     [style.width.%]="node.progressPercent"
                   ></div>
@@ -150,7 +150,7 @@
               <div class="skill-tooltip">
                 <div class="tooltip-header">
                   <span class="tooltip-name">{{ node.skill.icon }} {{ node.skill.name }}</span>
-                  <span class="tooltip-type tooltip-type--passive">PASSIVE</span>
+                  <span class="tooltip-type tooltip-type--buff">BUFF</span>
                 </div>
                 <p class="tooltip-desc">{{ node.skill.description }}</p>
                 <div class="tooltip-req">Required Level: {{ node.skill.requiredCharacterLevel }}</div>

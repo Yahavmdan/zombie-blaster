@@ -2,7 +2,7 @@ import { CharacterClass, CharacterDerived } from './character';
 
 export enum SkillType {
   Active = 'active',
-  Passive = 'passive',
+  Buff = 'buff',
 }
 
 export interface SkillScaling {
@@ -16,10 +16,15 @@ export interface SkillScaling {
   rangePerLevel: number;
 }
 
-export interface PassiveBonus {
+export interface BuffEffect {
   stat: keyof CharacterDerived | 'allDamagePercent';
   baseValue: number;
   valuePerLevel: number;
+}
+
+export interface BuffDuration {
+  baseDurationMs: number;
+  durationPerLevelMs: number;
 }
 
 export interface SkillDefinition {
@@ -33,7 +38,8 @@ export interface SkillDefinition {
   icon: string;
   color: string;
   scaling: SkillScaling;
-  passiveBonus: PassiveBonus | null;
+  buffEffect: BuffEffect | null;
+  buffDuration: BuffDuration | null;
   hitCount: number;
   aoeRadius: number;
   animationKey: string;

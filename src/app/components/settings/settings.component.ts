@@ -52,6 +52,9 @@ export class SettingsComponent implements OnDestroy {
     skill6: 'Skill 6',
     openStats: 'Open Stats',
     openSkills: 'Open Skills',
+    useHpPotion: 'Use HP Potion',
+    useMpPotion: 'Use MP Potion',
+    openShop: 'Open Shop',
   };
 
   readonly bindingRows: Signal<BindingRow[]> = computed((): BindingRow[] => {

@@ -1,0 +1,44 @@
+<div class="shop-overlay" (click)="onClose()">
+  <div class="shop-panel" (click)="$event.stopPropagation()">
+    <div class="shop-header">
+      <h2 class="shop-title">🏪 SHOP</h2>
+      <div class="shop-gold">💰 {{ gold() }}G</div>
+      <button
+        class="shop-close"
+        (click)="onClose()"
+        data-testid="shop-panel-button-close"
+      >✕</button>
+    </div>
+
+    <div class="shop-inventory">
+      <span class="shop-inv-label">Inventory:</span>
+      <span class="shop-inv-item">❤️ {{ hpPotions() }}</span>
+      <span class="shop-inv-item">💧 {{ mpPotions() }}</span>
+    </div>
+
+    <div class="shop-items">
+      @for (row of rows(); track row.item.id) {
+        <div class="shop-item" [class.shop-item--disabled]="!row.canAfford">
+          <span class="shop-item-icon">{{ row.item.icon }}</span>
+          <div class="shop-item-info">
+            <span class="shop-item-name">{{ row.item.name }}</span>
+            <span class="shop-item-desc">{{ row.item.description }}</span>
+          </div>
+          <div class="shop-item-action">
+            <span class="shop-item-price">{{ row.item.price }}G</span>
+            <button
+              class="shop-buy-btn"
+              [disabled]="!row.canAfford"
+              (click)="onBuy(row.item.id)"
+              [attr.data-testid]="'shop-item-button-buy-' + row.item.id"
+            >BUY</button>
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="shop-hint">
+      Press <span class="shop-hint-key">B</span> or click outside to close
+    </div>
+  </div>
+</div>

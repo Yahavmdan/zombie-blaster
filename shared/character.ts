@@ -1,3 +1,5 @@
+import { PlayerInventory } from './game-entities';
+
 export enum CharacterClass {
   Warrior = 'warrior',
   Ranger = 'ranger',
@@ -32,6 +34,14 @@ export interface CharacterClassDefinition {
   icon: string;
 }
 
+export interface ActiveBuff {
+  skillId: string;
+  remainingMs: number;
+  totalDurationMs: number;
+  stat: keyof CharacterDerived | 'allDamagePercent';
+  value: number;
+}
+
 export interface CharacterState {
   id: string;
   name: string;
@@ -56,6 +66,8 @@ export interface CharacterState {
   unallocatedSkillPoints: number;
   allocatedStats: CharacterStats;
   skillLevels: Record<string, number>;
+  activeBuffs: ActiveBuff[];
+  inventory: PlayerInventory;
 }
 
 export enum Direction {

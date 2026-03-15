@@ -44,6 +44,9 @@ export interface InputKeys {
   skill6: boolean;
   openStats: boolean;
   openSkills: boolean;
+  useHpPotion: boolean;
+  useMpPotion: boolean;
+  openShop: boolean;
 }
 
 export interface GameStateUpdatePayload {

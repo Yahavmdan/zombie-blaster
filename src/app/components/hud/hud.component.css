@@ -161,9 +161,59 @@
   left: 0;
   right: 0;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
   padding: 0.5rem;
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
+}
+
+.inventory-bar {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.inv-item {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.2rem 0.5rem;
+  background: rgba(42, 42, 68, 0.8);
+  border: 1px solid rgba(100, 100, 160, 0.5);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  color: #ccccdd;
+  pointer-events: auto;
+}
+
+.inv-item--shop {
+  cursor: pointer;
+  border-color: #ffcc44;
+  transition: all 0.2s;
+}
+
+.inv-item--shop:hover {
+  background: rgba(255, 204, 68, 0.2);
+  box-shadow: 0 0 8px rgba(255, 204, 68, 0.3);
+}
+
+.inv-key {
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: #ffcc44;
+  background: rgba(255, 204, 68, 0.15);
+  padding: 0 0.2rem;
+  border-radius: 2px;
+}
+
+.inv-icon {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.inv-count {
+  font-weight: 700;
+  color: #ffffff;
 }
 
 .skill-slots {
@@ -218,6 +268,60 @@
   font-size: 0.55rem;
   color: #aa4444;
   font-weight: 600;
+}
+
+.skill-slot--buff {
+  border-color: rgba(136, 255, 136, 0.5);
+}
+
+.skill-buff-label {
+  font-size: 0.55rem;
+  color: #88ff88;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.active-buffs {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.2rem;
+}
+
+.buff-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.15rem 0.4rem;
+  background: rgba(42, 42, 68, 0.8);
+  border: 1px solid rgba(136, 255, 136, 0.4);
+  border-radius: 4px;
+}
+
+.buff-icon {
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.buff-timer-bar {
+  width: 30px;
+  height: 4px;
+  background: #1a1a2a;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.buff-timer-fill {
+  height: 100%;
+  transition: width 1s linear;
+  border-radius: 2px;
+}
+
+.buff-timer-text {
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: #88ff88;
+  min-width: 20px;
+  text-align: right;
 }
 
 .sp-indicator {

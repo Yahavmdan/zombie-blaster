@@ -1,4 +1,5 @@
 import {
+  ActiveBuff,
   CharacterState,
   Direction,
   GAME_CONSTANTS,
@@ -11,9 +12,12 @@ import {
   getSkillMpCost,
   getSkillCooldown,
   getSkillRange,
+  getBuffEffectValue,
+  getBuffDurationMs,
 } from '@shared/index';
 import {
-  MpPotionDrop,
+  DropType,
+  WorldDrop,
   ZombieDefinition,
   ZombieState,
   ZombieType,
@@ -21,6 +25,9 @@ import {
 import { InputKeys } from '@shared/messages';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { SKILL_ANIMATIONS, SkillAnimation } from './skill-animations';
+import { SpriteAnimator, PlayerAnimState } from './sprite-animator';
+import { MapRenderer } from './map-renderer';
+import { SpriteEffectSystem } from './sprite-effect-system';
 
 export type { Particle };
 export { ParticleShape, FadeMode };
@@ -32,6 +39,8 @@ export interface DamageNumber {
   isCrit: boolean;
   life: number;
   color: string;
+  vx: number;
+  scale: number;
 }
 
 export interface Platform {
@@ -65,14 +74,19 @@ export class GameEngine {
   private zombies: ZombieState[] = [];
   private particles: Particle[] = [];
   private damageNumbers: DamageNumber[] = [];
-  private mpPotions: MpPotionDrop[] = [];
+  private worldDrops: WorldDrop[] = [];
   private platforms: Platform[] = [];
   private ropes: Rope[] = [];
-  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false };
+  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false };
   private attackCooldown: number = 0;
+  private attackAnimTicks: number = 0;
+  private attackHitPending: boolean = false;
+  private attackHitDelay: number = 0;
   private invincibilityFrames: number = 0;
+  private potionCooldown: number = 0;
+  private jumpHeld: boolean = false;
 
-  private playerActiveSkills: SkillDefinition[] = [];
+  private playerUsableSkills: SkillDefinition[] = [];
   private skillCooldowns: Map<string, number> = new Map();
 
   private wave: number = 1;
@@ -89,6 +103,11 @@ export class GameEngine {
   private screenFlashColor: string | null = null;
   private screenFlashFrames: number = 0;
 
+  private readonly spriteAnimator: SpriteAnimator = new SpriteAnimator();
+  private readonly mapRenderer: MapRenderer = new MapRenderer();
+  private readonly spriteEffectSystem: SpriteEffectSystem = new SpriteEffectSystem();
+  private readonly SPRITE_RENDER_SIZE: number = 96;
+
   private controlKeyDisplay: { move: string; jump: string; climb: string; attack: string; skillKeys: string[] } = {
     move: 'A/D or Arrows  Move',
     jump: 'W/Up or Space  Jump',
@@ -103,6 +122,11 @@ export class GameEngine {
   onXpGained: ((amount: number) => void) | null = null;
   onScoreUpdate: ((delta: number) => void) | null = null;
   onGameOver: (() => void) | null = null;
+  onGoldPickup: ((amount: number) => void) | null = null;
+  onPotionPickup: ((type: DropType) => void) | null = null;
+  onUseHpPotion: (() => boolean) | null = null;
+  onUseMpPotion: (() => boolean) | null = null;
+  onOpenShop: (() => void) | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -111,6 +135,9 @@ export class GameEngine {
     this.initPlatforms();
     this.initRopes();
     this.initStars();
+    this.spriteAnimator.load();
+    this.mapRenderer.load();
+    this.spriteEffectSystem.load();
   }
 
   private initPlatforms(): void {
@@ -148,13 +175,13 @@ export class GameEngine {
     this.zombies = [];
     this.particles = [];
     this.damageNumbers = [];
-    this.mpPotions = [];
+    this.worldDrops = [];
     this.wave = 1;
     this.zombiesKilledThisWave = 0;
-    this.playerActiveSkills = SKILLS.filter(
+    this.playerUsableSkills = SKILLS.filter(
       (s: SkillDefinition) =>
         s.classId === player.classId &&
-        s.type === SkillType.Active &&
+        (s.type === SkillType.Active || s.type === SkillType.Buff) &&
         (player.skillLevels[s.id] ?? 0) > 0,
     ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
      .slice(0, 6);
@@ -194,15 +221,24 @@ export class GameEngine {
   }
 
   private update(): void {
-    if (!this.player || this.player.isDead) return;
+    if (!this.player) return;
 
+    this.updatePlayerAnimState();
+    this.spriteAnimator.tick();
+
+    if (this.player.isDead) return;
+
+    this.updateAttackTiming();
     this.updatePlayer();
     this.updateZombies();
     this.updateSpawning();
-    this.updatePotions();
+    this.updateDrops();
+    this.updatePotionUse();
     this.updateParticles();
     this.updateDamageNumbers();
     this.updateSkillCooldowns();
+    this.spriteEffectSystem.tick();
+    this.updateActiveBuffs();
     this.checkWaveCompletion();
 
     if (this.invincibilityFrames > 0) this.invincibilityFrames--;
@@ -284,31 +320,43 @@ export class GameEngine {
       this.player.isClimbing = false;
       this.player.velocityY = GAME_CONSTANTS.PLAYER_JUMP_FORCE;
     }
-
-    if (this.keys.left || this.keys.right) {
-      this.player.isClimbing = false;
-    }
   }
 
   private updateMovement(activeRope: Rope | null): void {
     if (!this.player) return;
 
     const speed: number = this.player.derived.speed;
-    if (this.keys.left) {
-      this.player.velocityX = -speed;
-      this.player.facing = Direction.Left;
-    } else if (this.keys.right) {
-      this.player.velocityX = speed;
-      this.player.facing = Direction.Right;
+    if (this.player.isGrounded) {
+      if (this.keys.left) {
+        this.player.velocityX = -speed;
+        this.player.facing = Direction.Left;
+      } else if (this.keys.right) {
+        this.player.velocityX = speed;
+        this.player.facing = Direction.Right;
+      } else {
+        this.player.velocityX *= GAME_CONSTANTS.PLAYER_FRICTION;
+        if (Math.abs(this.player.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) this.player.velocityX = 0;
+      }
     } else {
-      this.player.velocityX *= GAME_CONSTANTS.PLAYER_FRICTION;
-      if (Math.abs(this.player.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) this.player.velocityX = 0;
+      const airSpeed: number = speed * GAME_CONSTANTS.PLAYER_AIR_CONTROL;
+      if (this.keys.left) {
+        this.player.velocityX = -airSpeed;
+        this.player.facing = Direction.Left;
+      } else if (this.keys.right) {
+        this.player.velocityX = airSpeed;
+        this.player.facing = Direction.Right;
+      } else {
+        this.player.velocityX *= GAME_CONSTANTS.PLAYER_FRICTION;
+        if (Math.abs(this.player.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) this.player.velocityX = 0;
+      }
     }
 
-    if ((this.keys.up || this.keys.jump) && this.player.isGrounded) {
+    const jumpPressed: boolean = this.keys.up || this.keys.jump;
+    if (jumpPressed && !this.jumpHeld && this.player.isGrounded) {
       this.player.velocityY = GAME_CONSTANTS.PLAYER_JUMP_FORCE;
       this.player.isGrounded = false;
     }
+    this.jumpHeld = jumpPressed;
 
     if (this.keys.up && activeRope && !this.player.isGrounded) {
       this.player.isClimbing = true;
@@ -357,42 +405,72 @@ export class GameEngine {
     );
   }
 
+  private updateAttackTiming(): void {
+    if (!this.player) return;
+
+    if (this.attackHitPending) {
+      this.attackHitDelay--;
+      if (this.attackHitDelay <= 0) {
+        this.attackHitPending = false;
+        this.resolveAttackHit();
+      }
+    }
+
+    if (this.attackAnimTicks > 0) {
+      this.attackAnimTicks--;
+      if (this.attackAnimTicks <= 0) {
+        this.player.isAttacking = false;
+      }
+    }
+  }
+
   private performAttack(): void {
     if (!this.player) return;
 
     this.player.isAttacking = true;
-    setTimeout(() => {
-      if (this.player) this.player.isAttacking = false;
-    }, GAME_CONSTANTS.PLAYER_ATTACK_ANIM_MS);
+    this.attackAnimTicks = Math.ceil(GAME_CONSTANTS.PLAYER_ATTACK_ANIM_MS / this.fixedDt);
+    this.attackHitDelay = Math.ceil(GAME_CONSTANTS.PLAYER_ATTACK_HIT_DELAY_MS / this.fixedDt);
+    this.attackHitPending = true;
+    this.spriteAnimator.restart();
+  }
+
+  private resolveAttackHit(): void {
+    if (!this.player || this.player.isDead) return;
 
     const attackRange: number = GAME_CONSTANTS.PLAYER_BASE_ATTACK_RANGE;
     const attackX: number = this.player.facing === Direction.Right
       ? this.player.x + GAME_CONSTANTS.PLAYER_WIDTH
       : this.player.x - attackRange;
 
+    const playerCx: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    let closest: ZombieState | null = null;
+    let closestDist: number = Infinity;
+
     for (const z of this.zombies) {
       if (z.isDead) continue;
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
       if (this.rectsOverlap(attackX, this.player.y, attackRange, GAME_CONSTANTS.PLAYER_HEIGHT, z.x, z.y, zDef.width, zDef.height)) {
-        const isCrit: boolean = Math.random() * 100 < this.player.derived.critRate;
-        let damage: number = Math.max(1, this.player.derived.attack + Math.floor(Math.random() * 5));
-        if (isCrit) damage = Math.max(1, Math.floor(damage * this.player.derived.critDamage / 100));
-
-        z.hp -= damage;
-        this.applyZombieKnockback(z);
-        this.spawnHitParticles(z.x + zDef.width / 2, z.y + zDef.height / 2, '#ff4444');
-        this.damageNumbers.push({
-          x: z.x + zDef.width / 2,
-          y: z.y - 10,
-          value: damage,
-          isCrit,
-          life: GAME_CONSTANTS.DAMAGE_NUMBER_LIFE_TICKS,
-          color: isCrit ? '#ffaa00' : '#ffffff',
-        });
-
-        if (z.hp <= 0) {
-          this.handleZombieDeath(z, zDef);
+        const dist: number = Math.abs((z.x + zDef.width / 2) - playerCx);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closest = z;
         }
+      }
+    }
+
+    if (closest) {
+      const zDef: ZombieDefinition = ZOMBIE_TYPES[closest.type];
+      const isCrit: boolean = Math.random() * 100 < this.player.derived.critRate;
+      let damage: number = Math.max(1, this.player.derived.attack + Math.floor(Math.random() * 5));
+      if (isCrit) damage = Math.max(1, Math.floor(damage * this.player.derived.critDamage / 100));
+
+      closest.hp -= damage;
+      this.applyZombieKnockback(closest);
+      this.spawnHitParticles(closest.x + zDef.width / 2, closest.y + zDef.height / 2, '#ff4444');
+      this.spawnDamageNumber(closest.x + zDef.width / 2, closest.y - 10, damage, isCrit, isCrit ? '#ffaa00' : '#ffffff');
+
+      if (closest.hp <= 0) {
+        this.handleZombieDeath(closest, zDef);
       }
     }
 
@@ -402,7 +480,7 @@ export class GameEngine {
 
   private tryPerformSkill(slotIndex: number): void {
     if (!this.player) return;
-    const skill: SkillDefinition | undefined = this.playerActiveSkills[slotIndex];
+    const skill: SkillDefinition | undefined = this.playerUsableSkills[slotIndex];
     if (!skill) return;
 
     const skillLevel: number = this.player.skillLevels[skill.id] ?? 0;
@@ -413,8 +491,6 @@ export class GameEngine {
 
     const mpCost: number = getSkillMpCost(skill, skillLevel);
     const cooldownMs: number = getSkillCooldown(skill, skillLevel);
-    const damageMultiplier: number = getSkillDamageMultiplier(skill, skillLevel);
-    const range: number = getSkillRange(skill, skillLevel);
 
     if (this.player.mp < mpCost) return;
 
@@ -426,18 +502,20 @@ export class GameEngine {
 
     this.triggerSkillAnimation(skill.animationKey, playerCX, playerCY, this.player.facing, skillLevel);
 
+    if (skill.type === SkillType.Buff) {
+      this.activateBuff(skill, skillLevel);
+      this.onPlayerUpdate?.(this.player);
+      return;
+    }
+
+    const damageMultiplier: number = getSkillDamageMultiplier(skill, skillLevel);
+    const range: number = getSkillRange(skill, skillLevel);
+
     const isHeal: boolean = damageMultiplier < 0;
     if (isHeal) {
       const healAmount: number = Math.floor(Math.abs(damageMultiplier) * this.player.derived.attack);
       this.player.hp = Math.min(this.player.hp + healAmount, this.player.derived.maxHp);
-      this.damageNumbers.push({
-        x: playerCX,
-        y: this.player.y - 10,
-        value: healAmount,
-        isCrit: false,
-        life: GAME_CONSTANTS.DAMAGE_NUMBER_LIFE_TICKS,
-        color: '#44ff44',
-      });
+      this.spawnDamageNumber(playerCX, this.player.y - 10, healAmount, false, '#44ff44');
       this.onPlayerUpdate?.(this.player);
       return;
     }
@@ -467,14 +545,7 @@ export class GameEngine {
         z.hp -= damage;
         this.applyZombieKnockback(z);
         this.spawnHitParticles(z.x + zDef.width / 2, z.y + zDef.height / 2, skillColor);
-        this.damageNumbers.push({
-          x: z.x + zDef.width / 2,
-          y: z.y - 10,
-          value: damage,
-          isCrit,
-          life: GAME_CONSTANTS.DAMAGE_NUMBER_LIFE_TICKS,
-          color: isCrit ? '#ffaa00' : skillColor,
-        });
+        this.spawnDamageNumber(z.x + zDef.width / 2, z.y - 10, damage, isCrit, isCrit ? '#ffaa00' : skillColor);
 
         if (z.hp <= 0) {
           this.handleZombieDeath(z, zDef);
@@ -484,6 +555,76 @@ export class GameEngine {
 
     this.zombies = this.zombies.filter((z: ZombieState) => !z.isDead || z.hp > -100);
     this.onZombiesUpdate?.(this.zombies);
+  }
+
+  private activateBuff(skill: SkillDefinition, level: number): void {
+    if (!this.player || !skill.buffEffect || !skill.buffDuration) return;
+
+    const durationMs: number = getBuffDurationMs(skill, level);
+    const effectValue: number = getBuffEffectValue(skill, level);
+
+    const existingIdx: number = this.player.activeBuffs.findIndex(
+      (b: ActiveBuff) => b.skillId === skill.id,
+    );
+
+    const newBuff: ActiveBuff = {
+      skillId: skill.id,
+      remainingMs: durationMs,
+      totalDurationMs: durationMs,
+      stat: skill.buffEffect.stat,
+      value: effectValue,
+    };
+
+    if (existingIdx >= 0) {
+      this.player.activeBuffs[existingIdx] = newBuff;
+    } else {
+      this.player.activeBuffs.push(newBuff);
+    }
+
+    const playerCX: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    this.spawnDamageNumber(playerCX, this.player.y - 10, 0, false, skill.color);
+    this.spawnBuffActivationParticles(playerCX, this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, skill.color);
+  }
+
+  private spawnBuffActivationParticles(x: number, y: number, color: string): void {
+    if (this.particles.length >= GAME_CONSTANTS.MAX_PARTICLES) return;
+    const count: number = 10;
+    for (let i: number = 0; i < count; i++) {
+      const angle: number = (i / count) * Math.PI * 2;
+      const speed: number = 2 + Math.random() * 2;
+      this.addParticle({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 1.5,
+        life: 30 + Math.floor(Math.random() * 15),
+        maxLife: 45,
+        color,
+        size: Math.random() * 3 + 1.5,
+        shape: ParticleShape.Star,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.15,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: true,
+      });
+    }
+  }
+
+  private updateActiveBuffs(): void {
+    if (!this.player) return;
+
+    const beforeCount: number = this.player.activeBuffs.length;
+
+    for (const buff of this.player.activeBuffs) {
+      buff.remainingMs -= this.fixedDt;
+    }
+
+    this.player.activeBuffs = this.player.activeBuffs.filter(
+      (b: ActiveBuff) => b.remainingMs > 0,
+    );
+
+    if (this.player.activeBuffs.length !== beforeCount) {
+      this.onPlayerUpdate?.(this.player);
+    }
   }
 
   private updateSkillCooldowns(): void {
@@ -497,12 +638,12 @@ export class GameEngine {
       const available: SkillDefinition[] = SKILLS.filter(
         (s: SkillDefinition) =>
           s.classId === this.player!.classId &&
-          s.type === SkillType.Active &&
+          (s.type === SkillType.Active || s.type === SkillType.Buff) &&
           (this.player!.skillLevels[s.id] ?? 0) > 0,
       ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
        .slice(0, 6);
-      if (available.length !== this.playerActiveSkills.length) {
-        this.playerActiveSkills = available;
+      if (available.length !== this.playerUsableSkills.length) {
+        this.playerUsableSkills = available;
       }
     }
   }
@@ -630,14 +771,7 @@ export class GameEngine {
     }
 
     this.spawnHitParticles(this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, '#ffffff');
-    this.damageNumbers.push({
-      x: this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
-      y: this.player.y - 10,
-      value: damage,
-      isCrit: false,
-      life: GAME_CONSTANTS.DAMAGE_NUMBER_LIFE_TICKS,
-      color: '#ff4444',
-    });
+    this.spawnDamageNumber(this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, this.player.y - 10, damage, false, '#ff4444');
 
     if (this.player.hp <= 0) {
       this.player.hp = 0;
@@ -652,17 +786,25 @@ export class GameEngine {
   private updateZombieAI(z: ZombieState, zDef: ZombieDefinition): void {
     if (!this.player) return;
 
-    const dx: number = this.player.x - z.x;
+    const targetX: number = this.player.x + z.orbitOffset;
+    const dxToTarget: number = targetX - z.x;
     const dy: number = this.player.y - z.y;
     const playerIsAbove: boolean = dy < -zDef.height;
+    const distToPlayer: number = Math.abs(this.player.x - z.x);
 
-    z.velocityX = dx > 0 ? zDef.speed : -zDef.speed;
+    if (Math.abs(dxToTarget) < GAME_CONSTANTS.ZOMBIE_ORBIT_ARRIVE_THRESHOLD) {
+      const side: number = z.orbitOffset > 0 ? -1 : 1;
+      z.orbitOffset = side * (GAME_CONSTANTS.ZOMBIE_ORBIT_MIN +
+        Math.random() * (GAME_CONSTANTS.ZOMBIE_ORBIT_MAX - GAME_CONSTANTS.ZOMBIE_ORBIT_MIN));
+    }
+
+    z.velocityX = dxToTarget > 0 ? zDef.speed : -zDef.speed;
 
     if (!z.isGrounded || z.jumpCooldown > 0) return;
 
     if (playerIsAbove && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_PLATFORM_CHASE_CHANCE) {
       this.zombieJump(z);
-    } else if (Math.abs(dx) < zDef.width * 2 && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_CHANCE_PER_TICK) {
+    } else if (distToPlayer < GAME_CONSTANTS.ZOMBIE_ORBIT_MAX * 2 && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_CHANCE_PER_TICK) {
       this.zombieJump(z);
     }
   }
@@ -726,6 +868,8 @@ export class GameEngine {
       attackAnimTimer: 0,
       attackHasHit: false,
       facing: spawnRight ? -1 : 1,
+      orbitOffset: (Math.random() > 0.5 ? 1 : -1) *
+        (GAME_CONSTANTS.ZOMBIE_ORBIT_MIN + Math.random() * (GAME_CONSTANTS.ZOMBIE_ORBIT_MAX - GAME_CONSTANTS.ZOMBIE_ORBIT_MIN)),
     };
 
     this.zombies.push(zombie);
@@ -763,17 +907,38 @@ export class GameEngine {
     this.onScoreUpdate?.(xpReward * 10);
     this.spawnDeathParticles(z.x + zDef.width / 2, z.y + zDef.height / 2, zDef.color);
 
-    if (Math.random() < GAME_CONSTANTS.MP_POTION_DROP_CHANCE) {
-      this.mpPotions.push({
-        id: crypto.randomUUID(),
-        x: z.x + zDef.width / 2 - GAME_CONSTANTS.MP_POTION_SIZE / 2,
-        y: z.y + zDef.height / 2 - GAME_CONSTANTS.MP_POTION_SIZE / 2,
-        velocityY: GAME_CONSTANTS.MP_POTION_POP_FORCE,
-        restoreAmount: GAME_CONSTANTS.MP_POTION_RESTORE_AMOUNT,
-        lifetime: GAME_CONSTANTS.MP_POTION_LIFETIME,
-        isGrounded: false,
-      });
+    this.rollDrops(z.x + zDef.width / 2, z.y + zDef.height / 2);
+  }
+
+  private rollDrops(cx: number, cy: number): void {
+    const dropX: number = cx - GAME_CONSTANTS.DROP_SIZE / 2;
+    const dropY: number = cy - GAME_CONSTANTS.DROP_SIZE / 2;
+
+    if (Math.random() < GAME_CONSTANTS.DROP_HP_POTION_CHANCE) {
+      this.spawnDrop(DropType.HpPotion, dropX, dropY, GAME_CONSTANTS.HP_POTION_RESTORE);
     }
+    if (Math.random() < GAME_CONSTANTS.DROP_MP_POTION_CHANCE) {
+      this.spawnDrop(DropType.MpPotion, dropX + 10, dropY, GAME_CONSTANTS.MP_POTION_RESTORE);
+    }
+    if (Math.random() < GAME_CONSTANTS.DROP_GOLD_CHANCE) {
+      const goldAmount: number = GAME_CONSTANTS.DROP_GOLD_MIN +
+        Math.floor(Math.random() * (GAME_CONSTANTS.DROP_GOLD_MAX - GAME_CONSTANTS.DROP_GOLD_MIN)) +
+        this.wave * GAME_CONSTANTS.DROP_GOLD_WAVE_BONUS;
+      this.spawnDrop(DropType.Gold, dropX - 10, dropY, goldAmount);
+    }
+  }
+
+  private spawnDrop(type: DropType, x: number, y: number, value: number): void {
+    this.worldDrops.push({
+      id: crypto.randomUUID(),
+      type,
+      x,
+      y,
+      velocityY: GAME_CONSTANTS.DROP_POP_FORCE,
+      value,
+      lifetime: GAME_CONSTANTS.DROP_LIFETIME,
+      isGrounded: false,
+    });
   }
 
   private applyZombieKnockback(z: ZombieState): void {
@@ -785,66 +950,117 @@ export class GameEngine {
     z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES;
   }
 
-  private updatePotions(): void {
+  private updateDrops(): void {
     if (!this.player) return;
+    const size: number = GAME_CONSTANTS.DROP_SIZE;
 
-    for (const potion of this.mpPotions) {
-      if (!potion.isGrounded) {
-        potion.velocityY += GAME_CONSTANTS.GRAVITY;
-        if (potion.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
-          potion.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
+    for (const drop of this.worldDrops) {
+      if (!drop.isGrounded) {
+        drop.velocityY += GAME_CONSTANTS.GRAVITY;
+        if (drop.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
+          drop.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
         }
-        potion.y += potion.velocityY;
+        drop.y += drop.velocityY;
 
         for (const plat of this.platforms) {
-          const potionBottom: number = potion.y + GAME_CONSTANTS.MP_POTION_SIZE;
-          const prevBottom: number = potionBottom - potion.velocityY;
+          const dropBottom: number = drop.y + size;
+          const prevBottom: number = dropBottom - drop.velocityY;
           if (
-            potion.x + GAME_CONSTANTS.MP_POTION_SIZE > plat.x &&
-            potion.x < plat.x + plat.width &&
-            potionBottom >= plat.y &&
+            drop.x + size > plat.x &&
+            drop.x < plat.x + plat.width &&
+            dropBottom >= plat.y &&
             prevBottom <= plat.y + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
-            potion.velocityY >= 0
+            drop.velocityY >= 0
           ) {
-            potion.y = plat.y - GAME_CONSTANTS.MP_POTION_SIZE;
-            potion.velocityY = 0;
-            potion.isGrounded = true;
+            drop.y = plat.y - size;
+            drop.velocityY = 0;
+            drop.isGrounded = true;
           }
         }
       }
 
-      potion.lifetime--;
+      drop.lifetime--;
 
       if (this.rectsOverlap(
         this.player.x, this.player.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT,
-        potion.x, potion.y, GAME_CONSTANTS.MP_POTION_SIZE, GAME_CONSTANTS.MP_POTION_SIZE,
+        drop.x, drop.y, size, size,
       )) {
-        const restoreAmount: number = Math.min(
-          potion.restoreAmount,
-          this.player.derived.maxMp - this.player.mp,
-        );
-        if (restoreAmount > 0) {
-          this.player.mp += restoreAmount;
-          this.damageNumbers.push({
-            x: this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
-            y: this.player.y - 10,
-            value: restoreAmount,
-            isCrit: false,
-            life: GAME_CONSTANTS.DAMAGE_NUMBER_LIFE_TICKS,
-            color: '#4488ff',
-          });
-          this.spawnHitParticles(
-            potion.x + GAME_CONSTANTS.MP_POTION_SIZE / 2,
-            potion.y + GAME_CONSTANTS.MP_POTION_SIZE / 2,
-            '#4488ff',
-          );
-          this.onPlayerUpdate?.(this.player);
-        }
-        potion.lifetime = 0;
+        this.collectDrop(drop);
       }
     }
 
-    this.mpPotions = this.mpPotions.filter((p: MpPotionDrop) => p.lifetime > 0);
+    this.worldDrops = this.worldDrops.filter((d: WorldDrop) => d.lifetime > 0);
+  }
+
+  private collectDrop(drop: WorldDrop): void {
+    if (!this.player) return;
+    const cx: number = drop.x + GAME_CONSTANTS.DROP_SIZE / 2;
+    const cy: number = drop.y + GAME_CONSTANTS.DROP_SIZE / 2;
+
+    if (drop.type === DropType.Gold) {
+      this.player.inventory.gold += drop.value;
+      this.onGoldPickup?.(drop.value);
+      this.spawnHitParticles(cx, cy, '#ffcc44');
+      this.spawnDamageNumber(cx, drop.y - 10, drop.value, false, '#ffcc44');
+    } else if (drop.type === DropType.HpPotion) {
+      this.player.inventory.hpPotions++;
+      this.onPotionPickup?.(DropType.HpPotion);
+      this.spawnHitParticles(cx, cy, '#ff4488');
+      this.spawnDamageNumber(cx, drop.y - 10, 1, false, '#ff4488');
+    } else if (drop.type === DropType.MpPotion) {
+      this.player.inventory.mpPotions++;
+      this.onPotionPickup?.(DropType.MpPotion);
+      this.spawnHitParticles(cx, cy, '#4488ff');
+      this.spawnDamageNumber(cx, drop.y - 10, 1, false, '#4488ff');
+    }
+
+    this.onPlayerUpdate?.(this.player);
+    drop.lifetime = 0;
+  }
+
+  private updatePotionUse(): void {
+    if (!this.player) return;
+    if (this.potionCooldown > 0) {
+      this.potionCooldown--;
+      return;
+    }
+
+    if (this.keys.useHpPotion) {
+      const used: boolean = this.onUseHpPotion?.() ?? false;
+      if (used) {
+        this.player.hp = Math.min(this.player.hp + GAME_CONSTANTS.HP_POTION_RESTORE, this.player.derived.maxHp);
+        this.player.inventory.hpPotions = Math.max(0, this.player.inventory.hpPotions - 1);
+        this.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
+        this.spawnHitParticles(
+          this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+          this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+          '#ff4488',
+        );
+        this.spawnDamageNumber(this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, this.player.y - 10, GAME_CONSTANTS.HP_POTION_RESTORE, false, '#44ff44');
+        this.onPlayerUpdate?.(this.player);
+      }
+    }
+
+    if (this.keys.useMpPotion) {
+      const used: boolean = this.onUseMpPotion?.() ?? false;
+      if (used) {
+        this.player.mp = Math.min(this.player.mp + GAME_CONSTANTS.MP_POTION_RESTORE, this.player.derived.maxMp);
+        this.player.inventory.mpPotions = Math.max(0, this.player.inventory.mpPotions - 1);
+        this.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
+        this.spawnHitParticles(
+          this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+          this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+          '#4488ff',
+        );
+        this.spawnDamageNumber(this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, this.player.y - 10, GAME_CONSTANTS.MP_POTION_RESTORE, false, '#4488ff');
+        this.onPlayerUpdate?.(this.player);
+      }
+    }
+
+    if (this.keys.openShop) {
+      this.onOpenShop?.();
+      this.keys.openShop = false;
+    }
   }
 
   syncProgression(player: CharacterState): void {
@@ -860,15 +1076,17 @@ export class GameEngine {
     this.player.unallocatedStatPoints = player.unallocatedStatPoints;
     this.player.unallocatedSkillPoints = player.unallocatedSkillPoints;
     this.player.skillLevels = { ...player.skillLevels };
+    this.player.activeBuffs = [...player.activeBuffs];
+    this.player.inventory = { ...player.inventory };
     if (leveled) {
       this.player.hp = player.hp;
       this.player.mp = player.mp;
       this.spawnLevelUpEffect();
     }
-    this.playerActiveSkills = SKILLS.filter(
+    this.playerUsableSkills = SKILLS.filter(
       (s: SkillDefinition) =>
         s.classId === this.player!.classId &&
-        s.type === SkillType.Active &&
+        (s.type === SkillType.Active || s.type === SkillType.Buff) &&
         (this.player!.skillLevels[s.id] ?? 0) > 0,
     ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
      .slice(0, 6);
@@ -949,6 +1167,10 @@ export class GameEngine {
     if (anim.flashColor && anim.flashFrames > 0) {
       this.triggerScreenFlash(anim.flashColor, anim.flashFrames);
     }
+    if (anim.spriteEffect && this.spriteEffectSystem.isLoaded()) {
+      const flipX: boolean = facing === Direction.Left;
+      this.spriteEffectSystem.spawn(anim.spriteEffect, x, y, flipX);
+    }
   }
 
   spawnLevelUpEffect(): void {
@@ -988,9 +1210,24 @@ export class GameEngine {
     this.particles = this.particles.filter((p: Particle) => p.life > 0);
   }
 
+  private spawnDamageNumber(x: number, y: number, value: number, isCrit: boolean, color: string): void {
+    this.damageNumbers.push({
+      x: x + (Math.random() - 0.5) * 16,
+      y,
+      value,
+      isCrit,
+      life: GAME_CONSTANTS.DAMAGE_NUMBER_LIFE_TICKS,
+      color,
+      vx: (Math.random() - 0.5) * 1.5,
+      scale: isCrit ? 1.6 : 1.2,
+    });
+  }
+
   private updateDamageNumbers(): void {
     for (const d of this.damageNumbers) {
-      d.y -= 1;
+      d.y -= 1.2;
+      d.x += d.vx;
+      d.scale = Math.max(1, d.scale - 0.02);
       d.life--;
     }
     this.damageNumbers = this.damageNumbers.filter((d: DamageNumber) => d.life > 0);
@@ -1001,6 +1238,37 @@ export class GameEngine {
     x2: number, y2: number, w2: number, h2: number,
   ): boolean {
     return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
+  }
+
+  private updatePlayerAnimState(): void {
+    if (!this.player) return;
+
+    if (this.player.isDead) {
+      this.spriteAnimator.setState(PlayerAnimState.Death);
+      return;
+    }
+
+    if (this.player.isAttacking) {
+      this.spriteAnimator.setState(PlayerAnimState.Attack);
+      return;
+    }
+
+    if (this.player.isClimbing) {
+      this.spriteAnimator.setState(PlayerAnimState.Climb);
+      return;
+    }
+
+    if (!this.player.isGrounded) {
+      this.spriteAnimator.setState(PlayerAnimState.Jump);
+      return;
+    }
+
+    if (Math.abs(this.player.velocityX) > GAME_CONSTANTS.PLAYER_MIN_VELOCITY) {
+      this.spriteAnimator.setState(PlayerAnimState.Run);
+      return;
+    }
+
+    this.spriteAnimator.setState(PlayerAnimState.Idle);
   }
 
   // --- RENDERING ---
@@ -1018,16 +1286,20 @@ export class GameEngine {
       this.screenShakeFrames--;
     }
 
-    this.renderBackground(ctx);
-    this.renderRopes(ctx);
-    this.renderPlatforms(ctx);
+    if (this.mapRenderer.isLoaded()) {
+      this.mapRenderer.render(ctx);
+    } else {
+      this.renderBackground(ctx);
+      this.renderRopes(ctx);
+      this.renderPlatforms(ctx);
+    }
     this.renderZombies(ctx);
-    this.renderPotions(ctx);
+    this.renderDrops(ctx);
     this.renderPlayer(ctx);
     this.renderParticles(ctx);
+    this.spriteEffectSystem.render(ctx);
     this.renderDamageNumbers(ctx);
     this.renderWaveInfo(ctx);
-    this.renderControls(ctx);
 
     ctx.restore();
 
@@ -1090,26 +1362,23 @@ export class GameEngine {
 
     const p: CharacterState = this.player;
     const classColor: string = CHARACTER_CLASSES[p.classId].color;
+    const spriteSize: number = this.SPRITE_RENDER_SIZE;
+    const offsetX: number = (GAME_CONSTANTS.PLAYER_WIDTH - spriteSize) / 2;
+    const offsetY: number = GAME_CONSTANTS.PLAYER_HEIGHT - spriteSize;
+    const drawX: number = p.x + offsetX;
+    const drawY: number = p.y + offsetY;
+    const flipX: boolean = p.facing === Direction.Left;
 
-    ctx.save();
-    ctx.translate(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2);
-    if (p.facing === Direction.Left) ctx.scale(-1, 1);
-
-    ctx.fillStyle = classColor;
-    ctx.fillRect(-GAME_CONSTANTS.PLAYER_WIDTH / 2, -GAME_CONSTANTS.PLAYER_HEIGHT / 2, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(4, -GAME_CONSTANTS.PLAYER_HEIGHT / 2 + 10, 6, 6);
-    ctx.fillRect(12, -GAME_CONSTANTS.PLAYER_HEIGHT / 2 + 10, 6, 6);
-
-    if (p.isAttacking) {
-      ctx.fillStyle = '#ffffff';
-      ctx.globalAlpha = 0.7;
-      ctx.fillRect(GAME_CONSTANTS.PLAYER_WIDTH / 2, -4, 30, 8);
-      ctx.globalAlpha = 1;
+    if (this.spriteAnimator.isLoaded()) {
+      this.spriteAnimator.draw(ctx, drawX, drawY, spriteSize, spriteSize, flipX);
+    } else {
+      ctx.save();
+      ctx.translate(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2);
+      if (flipX) ctx.scale(-1, 1);
+      ctx.fillStyle = classColor;
+      ctx.fillRect(-GAME_CONSTANTS.PLAYER_WIDTH / 2, -GAME_CONSTANTS.PLAYER_HEIGHT / 2, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT);
+      ctx.restore();
     }
-
-    ctx.restore();
 
     ctx.fillStyle = classColor;
     ctx.font = 'bold 11px sans-serif';
@@ -1267,25 +1536,32 @@ export class GameEngine {
     ctx.fill();
   }
 
-  private renderPotions(ctx: CanvasRenderingContext2D): void {
-    for (const potion of this.mpPotions) {
-      const size: number = GAME_CONSTANTS.MP_POTION_SIZE;
-      const cx: number = potion.x + size / 2;
-      const cy: number = potion.y + size / 2;
-      const pulse: number = 1 + Math.sin(potion.lifetime * 0.1) * 0.15;
+  private renderDrops(ctx: CanvasRenderingContext2D): void {
+    for (const drop of this.worldDrops) {
+      const size: number = GAME_CONSTANTS.DROP_SIZE;
+      const cx: number = drop.x + size / 2;
+      const cy: number = drop.y + size / 2;
+      const pulse: number = 1 + Math.sin(drop.lifetime * 0.1) * 0.15;
       const r: number = (size / 2) * pulse;
 
+      const colors: Record<DropType, { main: string; highlight: string; label: string }> = {
+        [DropType.HpPotion]: { main: '#ff4488', highlight: '#ff88aa', label: 'HP' },
+        [DropType.MpPotion]: { main: '#4488ff', highlight: '#88ccff', label: 'MP' },
+        [DropType.Gold]: { main: '#ffcc44', highlight: '#ffee88', label: `${drop.value}G` },
+      };
+      const c: { main: string; highlight: string; label: string } = colors[drop.type];
+
       ctx.save();
-      ctx.shadowColor = '#4488ff';
+      ctx.shadowColor = c.main;
       ctx.shadowBlur = 12;
 
-      ctx.fillStyle = '#4488ff';
+      ctx.fillStyle = c.main;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.shadowBlur = 0;
-      ctx.fillStyle = '#88ccff';
+      ctx.fillStyle = c.highlight;
       ctx.beginPath();
       ctx.arc(cx - r * 0.2, cy - r * 0.25, r * 0.35, 0, Math.PI * 2);
       ctx.fill();
@@ -1293,20 +1569,51 @@ export class GameEngine {
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 8px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('MP', cx, cy + size + 6);
+      ctx.fillText(c.label, cx, cy + size + 6);
       ctx.restore();
     }
   }
 
   private renderDamageNumbers(ctx: CanvasRenderingContext2D): void {
     for (const d of this.damageNumbers) {
-      ctx.globalAlpha = d.life / GAME_CONSTANTS.DAMAGE_NUMBER_LIFE_TICKS;
-      ctx.font = d.isCrit ? 'bold 18px sans-serif' : 'bold 14px sans-serif';
-      ctx.fillStyle = d.color;
+      const progress: number = d.life / GAME_CONSTANTS.DAMAGE_NUMBER_LIFE_TICKS;
+      ctx.globalAlpha = Math.min(1, progress * 1.5);
+
+      const baseSize: number = d.isCrit ? 26 : 20;
+      const fontSize: number = Math.round(baseSize * d.scale);
+      ctx.font = `bold ${fontSize}px 'Segoe UI', Impact, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(`${d.value}`, d.x, d.y);
+      ctx.textBaseline = 'middle';
+
+      const text: string = `${d.value}`;
+
+      ctx.save();
+      if (d.isCrit) {
+        ctx.shadowColor = d.color;
+        ctx.shadowBlur = 12;
+      } else {
+        ctx.shadowColor = 'rgba(0,0,0,0.6)';
+        ctx.shadowBlur = 4;
+      }
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#000000';
+      ctx.lineJoin = 'round';
+      ctx.strokeText(text, d.x, d.y);
+
+      ctx.fillStyle = d.color;
+      ctx.fillText(text, d.x, d.y);
+
+      if (d.isCrit) {
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = Math.min(1, progress * 1.5) * 0.4;
+        ctx.fillText(text, d.x, d.y);
+      }
+
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
+    ctx.textBaseline = 'alphabetic';
   }
 
   private renderWaveInfo(ctx: CanvasRenderingContext2D): void {
@@ -1341,53 +1648,6 @@ export class GameEngine {
       ctx.strokeStyle = '#6B4F0A';
       ctx.lineWidth = 1;
       ctx.strokeRect(ropeX, rope.topY, ropeW, ropeH);
-    }
-  }
-
-  private renderControls(ctx: CanvasRenderingContext2D): void {
-    const skillLineCount: number = Math.max(this.playerActiveSkills.length, 1);
-    const baseLines: number = 5;
-    const lineH: number = 16;
-    const boxW: number = 230;
-    const boxH: number = (baseLines + skillLineCount) * lineH + 20;
-    const boxX: number = GAME_CONSTANTS.CANVAS_WIDTH - boxW - 10;
-    const boxY: number = GAME_CONSTANTS.CANVAS_HEIGHT - boxH - 10;
-
-    ctx.globalAlpha = 0.6;
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(boxX, boxY, boxW, boxH);
-    ctx.globalAlpha = 1;
-
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'left';
-    const x: number = boxX + 10;
-    let y: number = boxY + 18;
-
-    ctx.fillStyle = '#ffcc44';
-    ctx.fillText('HOW TO PLAY', x, y);
-    y += lineH + 2;
-
-    ctx.fillStyle = '#aaaacc';
-    ctx.fillText(this.controlKeyDisplay.move, x, y);
-    y += lineH;
-    ctx.fillText(this.controlKeyDisplay.jump, x, y);
-    y += lineH;
-    ctx.fillText(this.controlKeyDisplay.climb, x, y);
-    y += lineH;
-    ctx.fillText(this.controlKeyDisplay.attack, x, y);
-    y += lineH;
-
-    for (let i: number = 0; i < this.playerActiveSkills.length; i++) {
-      const skill: SkillDefinition = this.playerActiveSkills[i];
-      const slotKey: string = this.controlKeyDisplay.skillKeys[i] ?? `${i + 1}`;
-      ctx.fillStyle = '#44ccff';
-      ctx.fillText(`${slotKey}  ${skill.name}`, x, y);
-      y += lineH;
-    }
-
-    if (this.playerActiveSkills.length === 0) {
-      ctx.fillStyle = '#666688';
-      ctx.fillText('No skills yet - invest skill points!', x, y);
     }
   }
 }
