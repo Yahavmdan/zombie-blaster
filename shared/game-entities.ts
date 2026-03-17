@@ -10,11 +10,20 @@ export enum ZombieType {
 export interface ZombieDefinition {
   type: ZombieType;
   name: string;
-  baseHp: number;
-  baseDamageMin: number;
-  baseDamageMax: number;
-  speed: number;
-  xpReward: number;
+  hpMin: number;
+  hpMax: number;
+  damageMinLow: number;
+  damageMinHigh: number;
+  damageMaxLow: number;
+  damageMaxHigh: number;
+  speedMin: number;
+  speedMax: number;
+  knockbackMin: number;
+  knockbackMax: number;
+  hesitationMin: number;
+  hesitationMax: number;
+  xpRewardMin: number;
+  xpRewardMax: number;
   width: number;
   height: number;
   attackAnimTicks: number;
@@ -41,6 +50,11 @@ export interface ZombieState {
   attackHesitation: number;
   hesitationRange: number;
   facing: number;
+  instanceSpeed: number;
+  instanceDamageMin: number;
+  instanceDamageMax: number;
+  instanceKnockbackForce: number;
+  instanceXpReward: number;
   orbitOffset: number;
   platformDropTimer: number;
   spawnTimer: number;

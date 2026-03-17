@@ -34,8 +34,16 @@ Work through these one at a time in separate sessions.
 - Verify the HUD component displays the correct inventory count and the correct key binding for HP/MP potions.
 
 ## 8. Rework Dragon Boss behavior and attacks
-- **Flying pattern:** Dragon should fly horizontally in one direction above the ground (not hover in place). It should patrol/strafe across the map at a fixed altitude.
-- **Ground-only attacks:** Dragon projectiles should travel in a straight line downward to hit the ground, not track the player directly.
-- **Use both attack sprites:** Currently only one attack sprite sheet is used. Integrate the second attack sprite (`AttackEffect1` / `AttackEffect2`) so the dragon alternates or uses both attack visuals.
+- **Flying pattern:** Dragon should fly horizontally in one direction above the ground (not hover in place) but make it a little bit above ground.
+- **Ground-only attacks:** use the attack.png sprites from Special-sprites/attack.png make sure dragon is same size in both flying and attacking states.
+- dragon should not 'wake up' from death sprite like other zombies it should just fade in in flying mode
 
 ## 9. Player defense is too much, zombies needs to make much more damage
+
+## 10. Make all zombie types vary in all stats so it will be randomly range in speed/damge/knockback force/ hp/ hesitate etc etc but ofcurse keep the logic behind zombies class so if a walker is stronger than spiter make walker hp like 30-40 and spitter 10-20 and each zombie that spawns will be randomly render in this range, (these are only examples do not actually use these numbers)
+
+## 11. Take the attack-effect-1.png and make it on any zombie or boss when it gets hit by the player its like a mark that the player has hit it
+
+## 12. Make zombies tackle each other and also wont go over each other in z-index so they will be pushed by each other and it will look more real
+
+## 13. Make zombies bodies stay on the ground and pile and player could walk on them and climb
