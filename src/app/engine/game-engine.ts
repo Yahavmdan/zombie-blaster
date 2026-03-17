@@ -761,6 +761,7 @@ export class GameEngine {
 
     for (const z of this.zombies) {
       if (z.isDead) continue;
+      if (z.type === ZombieType.Boss || z.type === ZombieType.DragonBoss) continue;
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
       const zCX: number = z.x + zDef.width / 2;
       const zCY: number = z.y + zDef.height / 2;
