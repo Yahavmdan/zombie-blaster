@@ -587,9 +587,8 @@ export class GameEngine {
 
     for (const z of this.zombies) {
       if (z.isDead || z.spawnTimer > 0) continue;
-      const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
-      if (this.rectsOverlap(attackX, this.player.y, attackRange, GAME_CONSTANTS.PLAYER_HEIGHT, z.x, z.y, zDef.width, zDef.height)) {
-        const dist: number = Math.abs((z.x + zDef.width / 2) - playerCx);
+      if (this.rectsOverlap(attackX, this.player.y, attackRange, GAME_CONSTANTS.PLAYER_HEIGHT, z.x, z.y, z.instanceWidth, z.instanceHeight)) {
+        const dist: number = Math.abs((z.x + z.instanceWidth / 2) - playerCx);
         if (dist < closestDist) {
           closestDist = dist;
           closest = z;
@@ -598,19 +597,18 @@ export class GameEngine {
     }
 
     if (closest) {
-      const zDef: ZombieDefinition = ZOMBIE_TYPES[closest.type];
       const isCrit: boolean = Math.random() * 100 < this.player.derived.critRate;
       let damage: number = Math.max(1, this.player.derived.attack + Math.floor(Math.random() * 5));
       if (isCrit) damage = Math.max(1, Math.floor(damage * this.player.derived.critDamage / 100));
 
       closest.hp -= damage;
       this.applyZombieKnockback(closest);
-      this.spawnHitParticles(closest.x + zDef.width / 2, closest.y + zDef.height / 2, '#ff4444');
-      this.spawnDamageNumber(closest.x + zDef.width / 2, closest.y - 10, damage, isCrit, isCrit ? '#ffaa00' : '#ffffff');
-      this.spawnHitMark(closest.x + zDef.width / 2, closest.y + zDef.height / 2);
+      this.spawnHitParticles(closest.x + closest.instanceWidth / 2, closest.y + closest.instanceHeight / 2, '#ff4444');
+      this.spawnDamageNumber(closest.x + closest.instanceWidth / 2, closest.y - 10, damage, isCrit, isCrit ? '#ffaa00' : '#ffffff');
+      this.spawnHitMark(closest.x + closest.instanceWidth / 2, closest.y + closest.instanceHeight / 2);
 
       if (closest.hp <= 0) {
-        this.handleZombieDeath(closest, zDef);
+        this.handleZombieDeath(closest);
       }
     }
 
@@ -710,9 +708,8 @@ export class GameEngine {
 
       for (const z of this.zombies) {
         if (z.isDead || z.spawnTimer > 0) continue;
-        const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
-        if (this.rectsOverlap(attackX, attackY, attackW, attackH, z.x, z.y, zDef.width, zDef.height)) {
-          const dist: number = Math.abs((z.x + zDef.width / 2) - playerCx);
+        if (this.rectsOverlap(attackX, attackY, attackW, attackH, z.x, z.y, z.instanceWidth, z.instanceHeight)) {
+          const dist: number = Math.abs((z.x + z.instanceWidth / 2) - playerCx);
           if (dist < closestDist) {
             closestDist = dist;
             closest = z;
@@ -729,8 +726,7 @@ export class GameEngine {
       for (const z of this.zombies) {
         if (z.isDead || z.spawnTimer > 0) continue;
         if (hitCount >= targetCap) break;
-        const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
-        if (this.rectsOverlap(attackX, attackY, attackW, attackH, z.x, z.y, zDef.width, zDef.height)) {
+        if (this.rectsOverlap(attackX, attackY, attackW, attackH, z.x, z.y, z.instanceWidth, z.instanceHeight)) {
           this.applySkillDamageToZombie(z, damageMultiplier, skillColor);
           hitCount++;
         }
@@ -748,19 +744,18 @@ export class GameEngine {
 
   private applySkillDamageToZombie(z: ZombieState, damageMultiplier: number, skillColor: string): void {
     if (!this.player) return;
-    const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
     const isCrit: boolean = Math.random() * 100 < this.player.derived.critRate;
     let damage: number = Math.max(1, Math.floor(this.player.derived.attack * damageMultiplier) + Math.floor(Math.random() * 5));
     if (isCrit) damage = Math.max(1, Math.floor(damage * this.player.derived.critDamage / 100));
 
     z.hp -= damage;
     this.applyZombieKnockback(z);
-    this.spawnHitParticles(z.x + zDef.width / 2, z.y + zDef.height / 2, skillColor);
-    this.spawnDamageNumber(z.x + zDef.width / 2, z.y - 10, damage, isCrit, isCrit ? '#ffaa00' : skillColor);
-    this.spawnHitMark(z.x + zDef.width / 2, z.y + zDef.height / 2);
+    this.spawnHitParticles(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, skillColor);
+    this.spawnDamageNumber(z.x + z.instanceWidth / 2, z.y - 10, damage, isCrit, isCrit ? '#ffaa00' : skillColor);
+    this.spawnHitMark(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);
 
     if (z.hp <= 0) {
-      this.handleZombieDeath(z, zDef);
+      this.handleZombieDeath(z);
     }
   }
 
@@ -778,20 +773,19 @@ export class GameEngine {
     for (const z of this.zombies) {
       if (z.isDead || z.spawnTimer > 0) continue;
       if (z.type === ZombieType.Boss || z.type === ZombieType.DragonBoss) continue;
-      const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
-      const zCX: number = z.x + zDef.width / 2;
-      const zCY: number = z.y + zDef.height / 2;
+      const zCX: number = z.x + z.instanceWidth / 2;
+      const zCY: number = z.y + z.instanceHeight / 2;
       const dist: number = Math.sqrt((zCX - playerCX) ** 2 + (zCY - playerCY) ** 2);
 
       if (dist <= pullRange) {
         const offsetX: number = (Math.random() - 0.5) * spreadHalf * 2;
         z.x = this.player.x + offsetX;
-        z.y = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT - zDef.height;
+        z.y = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT - z.instanceHeight;
         z.velocityX = 0;
         z.velocityY = 0;
         z.knockbackFrames = 0;
 
-        this.spawnHitParticles(z.x + zDef.width / 2, z.y + zDef.height / 2, skill.color);
+        this.spawnHitParticles(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, skill.color);
         pulledCount++;
       }
     }
@@ -827,10 +821,9 @@ export class GameEngine {
     for (const z of this.zombies) {
       if (z.isDead || z.spawnTimer > 0) continue;
       if (hitCount >= maxTargets) break;
-      const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
       if (this.rectsOverlap(
         corridorLeft, corridorTop, corridorRight - corridorLeft, corridorHeight,
-        z.x, z.y, zDef.width, zDef.height,
+        z.x, z.y, z.instanceWidth, z.instanceHeight,
       )) {
         hitZombies.push(z);
         hitCount++;
@@ -849,7 +842,6 @@ export class GameEngine {
     }, GAME_CONSTANTS.PLAYER_SKILL_ANIM_MS);
 
     for (const z of hitZombies) {
-      const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
       const isCrit: boolean = Math.random() * 100 < this.player.derived.critRate;
       let damage: number = Math.max(1, Math.floor(this.player.derived.attack * damageMultiplier) + Math.floor(Math.random() * 5));
       if (isCrit) damage = Math.max(1, Math.floor(damage * this.player.derived.critDamage / 100));
@@ -860,12 +852,12 @@ export class GameEngine {
       z.isGrounded = false;
       z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES * 2;
 
-      this.spawnHitParticles(z.x + zDef.width / 2, z.y + zDef.height / 2, skill.color);
-      this.spawnDamageNumber(z.x + zDef.width / 2, z.y - 10, damage, isCrit, isCrit ? '#ffaa00' : skill.color);
-      this.spawnHitMark(z.x + zDef.width / 2, z.y + zDef.height / 2);
+      this.spawnHitParticles(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, skill.color);
+      this.spawnDamageNumber(z.x + z.instanceWidth / 2, z.y - 10, damage, isCrit, isCrit ? '#ffaa00' : skill.color);
+      this.spawnHitMark(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);
 
       if (z.hp <= 0) {
-        this.handleZombieDeath(z, zDef);
+        this.handleZombieDeath(z);
       }
     }
 
@@ -1054,7 +1046,7 @@ export class GameEngine {
       this.updateZombieAttack(z, zDef);
 
       if (z.type === ZombieType.DragonBoss) {
-        const targetY: number = GAME_CONSTANTS.GROUND_Y - zDef.height - GAME_CONSTANTS.DRAGON_HOVER_Y_OFFSET;
+        const targetY: number = GAME_CONSTANTS.GROUND_Y - z.instanceHeight - GAME_CONSTANTS.DRAGON_HOVER_Y_OFFSET;
         z.velocityY += (targetY - z.y) * 0.04;
         z.velocityY *= 0.85;
         z.x += z.velocityX;
@@ -1071,16 +1063,16 @@ export class GameEngine {
         z.isGrounded = false;
         for (const plat of this.platforms) {
           if (z.platformDropTimer > 0 && plat.y !== GAME_CONSTANTS.GROUND_Y) continue;
-          const zBottom: number = z.y + zDef.height;
+          const zBottom: number = z.y + z.instanceHeight;
           const prevZBottom: number = zBottom - z.velocityY;
           if (
-            z.x + zDef.width > plat.x &&
+            z.x + z.instanceWidth > plat.x &&
             z.x < plat.x + plat.width &&
             zBottom >= plat.y &&
             prevZBottom <= plat.y + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
             z.velocityY >= 0
           ) {
-            z.y = plat.y - zDef.height;
+            z.y = plat.y - z.instanceHeight;
             z.velocityY = 0;
             z.isGrounded = true;
           }
@@ -1088,7 +1080,7 @@ export class GameEngine {
       }
 
       const minX: number = 0;
-      const maxX: number = GAME_CONSTANTS.CANVAS_WIDTH - zDef.width;
+      const maxX: number = GAME_CONSTANTS.CANVAS_WIDTH - z.instanceWidth;
       if (z.x < minX) {
         z.x = minX;
         z.velocityX = 0;
@@ -1099,7 +1091,7 @@ export class GameEngine {
 
       if (z.type !== ZombieType.DragonBoss && this.invincibilityFrames <= 0 && this.rectsOverlap(
         this.player.x, this.player.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT,
-        z.x, z.y, zDef.width, zDef.height,
+        z.x, z.y, z.instanceWidth, z.instanceHeight,
       )) {
         const baseHit: number = z.instanceDamageMin + Math.floor(Math.random() * (z.instanceDamageMax - z.instanceDamageMin + 1));
         const contactDamage: number = Math.max(1, Math.floor((baseHit - this.player.derived.defense) * GAME_CONSTANTS.ZOMBIE_CONTACT_DAMAGE_MULT));
@@ -1120,8 +1112,8 @@ export class GameEngine {
       if (z.attackAnimTimer === hitTick && !z.attackHasHit) {
         z.attackHasHit = true;
         if (z.type === ZombieType.DragonBoss) {
-          this.spawnDragonProjectile(z, zDef);
-        } else if (this.invincibilityFrames <= 0 && this.zombieSwingHitsPlayer(z, zDef)) {
+          this.spawnDragonProjectile(z);
+        } else if (this.invincibilityFrames <= 0 && this.zombieSwingHitsPlayer(z)) {
           const baseHit: number = z.instanceDamageMin + Math.floor(Math.random() * (z.instanceDamageMax - z.instanceDamageMin + 1));
           const rawDamage: number = Math.max(1, baseHit - this.player.derived.defense);
           this.applyZombieDamageToPlayer(rawDamage, z);
@@ -1132,8 +1124,8 @@ export class GameEngine {
 
     if (z.attackCooldown > 0 || z.knockbackFrames > 0) return;
 
-    const zCenterX: number = z.x + zDef.width / 2;
-    const zCenterY: number = z.y + zDef.height / 2;
+    const zCenterX: number = z.x + z.instanceWidth / 2;
+    const zCenterY: number = z.y + z.instanceHeight / 2;
     const pCenterX: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
     const pCenterY: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
     const distX: number = Math.abs(pCenterX - zCenterX);
@@ -1142,8 +1134,8 @@ export class GameEngine {
     const isDragon: boolean = z.type === ZombieType.DragonBoss;
     const attackRange: number = isDragon
       ? GAME_CONSTANTS.DRAGON_ATTACK_RANGE
-      : zDef.width / 2 + GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE + GAME_CONSTANTS.PLAYER_WIDTH / 2;
-    const heightCheck: number = isDragon ? GAME_CONSTANTS.DRAGON_ATTACK_RANGE : zDef.height;
+      : z.instanceWidth / 2 + GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const heightCheck: number = isDragon ? GAME_CONSTANTS.DRAGON_ATTACK_RANGE : z.instanceHeight;
 
     if (distX < attackRange && distY < heightCheck) {
       if (!isDragon && z.attackHesitation > 0) return;
@@ -1159,15 +1151,15 @@ export class GameEngine {
     }
   }
 
-  private zombieSwingHitsPlayer(z: ZombieState, zDef: ZombieDefinition): boolean {
+  private zombieSwingHitsPlayer(z: ZombieState): boolean {
     if (!this.player) return false;
 
     const swingX: number = z.facing > 0
-      ? z.x + zDef.width
+      ? z.x + z.instanceWidth
       : z.x - GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE;
     const swingY: number = z.y;
     const swingW: number = GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE;
-    const swingH: number = zDef.height;
+    const swingH: number = z.instanceHeight;
 
     return this.rectsOverlap(
       swingX, swingY, swingW, swingH,
@@ -1210,7 +1202,7 @@ export class GameEngine {
     this.onPlayerUpdate?.(this.player);
   }
 
-  private updateDragonAI(z: ZombieState, zDef: ZombieDefinition): void {
+  private updateDragonAI(z: ZombieState): void {
     if (!this.player) return;
 
     const dx: number = this.player.x - z.x;
@@ -1231,19 +1223,19 @@ export class GameEngine {
     }
 
     if (z.x < 20) z.velocityX = Math.max(z.velocityX, z.instanceSpeed);
-    if (z.x + zDef.width > GAME_CONSTANTS.CANVAS_WIDTH - 20) z.velocityX = Math.min(z.velocityX, -z.instanceSpeed);
+    if (z.x + z.instanceWidth > GAME_CONSTANTS.CANVAS_WIDTH - 20) z.velocityX = Math.min(z.velocityX, -z.instanceSpeed);
   }
 
   private updateZombieAI(z: ZombieState, zDef: ZombieDefinition): void {
     if (!this.player) return;
 
     if (z.type === ZombieType.DragonBoss) {
-      this.updateDragonAI(z, zDef);
+      this.updateDragonAI(z);
       return;
     }
 
     const detectionRadius: number = GAME_CONSTANTS.CANVAS_WIDTH * GAME_CONSTANTS.ZOMBIE_DETECTION_RANGE;
-    const distToPlayerX: number = Math.abs((z.x + zDef.width / 2) - (this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2));
+    const distToPlayerX: number = Math.abs((z.x + z.instanceWidth / 2) - (this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2));
     if (distToPlayerX > detectionRadius) {
       this.updateZombieIdleWander(z, zDef);
       return;
@@ -1253,14 +1245,14 @@ export class GameEngine {
 
     if (z.attackCooldown <= 0 && z.attackAnimTimer <= 0 && z.attackHesitation > 0) {
       const effectiveRange: number = GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE + z.hesitationRange;
-      const zCx: number = z.x + zDef.width / 2;
+      const zCx: number = z.x + z.instanceWidth / 2;
       const pCx: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
       const pCy: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
-      const zCy: number = z.y + zDef.height / 2;
+      const zCy: number = z.y + z.instanceHeight / 2;
       const dx: number = Math.abs(pCx - zCx);
       const dy: number = Math.abs(pCy - zCy);
-      const inRange: boolean = dx < zDef.width / 2 + effectiveRange + GAME_CONSTANTS.PLAYER_WIDTH / 2
-        && dy < zDef.height;
+      const inRange: boolean = dx < z.instanceWidth / 2 + effectiveRange + GAME_CONSTANTS.PLAYER_WIDTH / 2
+        && dy < z.instanceHeight;
       if (inRange) {
         z.velocityX = 0;
         z.attackHesitation--;
@@ -1271,7 +1263,7 @@ export class GameEngine {
     const targetX: number = this.player.x + z.orbitOffset;
     const dxToTarget: number = targetX - z.x;
     const dy: number = this.player.y - z.y;
-    const playerIsAbove: boolean = dy < -zDef.height;
+    const playerIsAbove: boolean = dy < -z.instanceHeight;
     const distToPlayer: number = Math.abs(this.player.x - z.x);
 
     if (Math.abs(dxToTarget) < GAME_CONSTANTS.ZOMBIE_ORBIT_ARRIVE_THRESHOLD) {
@@ -1284,9 +1276,9 @@ export class GameEngine {
 
     if (!z.isGrounded || z.jumpCooldown > 0) return;
 
-    const playerIsBelow: boolean = dy > zDef.height;
+    const playerIsBelow: boolean = dy > z.instanceHeight;
 
-    if (playerIsBelow && z.y + zDef.height < GAME_CONSTANTS.GROUND_Y && Math.random() < GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_CHANCE) {
+    if (playerIsBelow && z.y + z.instanceHeight < GAME_CONSTANTS.GROUND_Y && Math.random() < GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_CHANCE) {
       z.platformDropTimer = GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_TICKS;
       z.y += GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE + 1;
       z.isGrounded = false;
@@ -1318,7 +1310,7 @@ export class GameEngine {
     if (z.x < margin) {
       z.facing = 1;
       z.velocityX = z.instanceSpeed * GAME_CONSTANTS.ZOMBIE_IDLE_WANDER_SPEED_MULT;
-    } else if (z.x + zDef.width > GAME_CONSTANTS.CANVAS_WIDTH - margin) {
+    } else if (z.x + z.instanceWidth > GAME_CONSTANTS.CANVAS_WIDTH - margin) {
       z.facing = -1;
       z.velocityX = -z.instanceSpeed * GAME_CONSTANTS.ZOMBIE_IDLE_WANDER_SPEED_MULT;
     }
@@ -1363,11 +1355,11 @@ export class GameEngine {
       Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MAX - GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MIN));
   }
 
-  private spawnDragonProjectile(z: ZombieState, zDef: ZombieDefinition): void {
+  private spawnDragonProjectile(z: ZombieState): void {
     if (!this.player) return;
 
-    const startX: number = z.x + zDef.width / 2;
-    const startY: number = z.y + zDef.height / 2;
+    const startX: number = z.x + z.instanceWidth / 2;
+    const startY: number = z.y + z.instanceHeight / 2;
     const targetX: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
     const targetY: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
     const dx: number = targetX - startX;
@@ -1533,12 +1525,14 @@ export class GameEngine {
     const rolledKnockback: number = zDef.knockbackMin + Math.random() * (zDef.knockbackMax - zDef.knockbackMin);
     const rolledHesitation: number = Math.floor(zDef.hesitationMin + Math.random() * (zDef.hesitationMax - zDef.hesitationMin));
     const rolledXp: number = Math.floor(zDef.xpRewardMin + Math.random() * (zDef.xpRewardMax - zDef.xpRewardMin));
+    const rolledWidth: number = Math.floor(zDef.widthMin + Math.random() * (zDef.widthMax - zDef.widthMin));
+    const rolledHeight: number = Math.floor(zDef.heightMin + Math.random() * (zDef.heightMax - zDef.heightMin));
 
     const plat: Platform = this.platforms[Math.floor(Math.random() * this.platforms.length)];
     const platMinX: number = Math.max(0, plat.x);
-    const platMaxX: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - zDef.width, plat.x + plat.width - zDef.width);
+    const platMaxX: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - rolledWidth, plat.x + plat.width - rolledWidth);
     const x: number = platMinX + Math.floor(Math.random() * (platMaxX - platMinX + 1));
-    const y: number = plat.y - zDef.height;
+    const y: number = plat.y - rolledHeight;
     const facing: number = this.player ? (this.player.x > x ? 1 : -1) : (Math.random() > 0.5 ? 1 : -1);
 
     const zombie: ZombieState = {
@@ -1567,6 +1561,8 @@ export class GameEngine {
       instanceDamageMax: rolledDamageMax,
       instanceKnockbackForce: rolledKnockback,
       instanceXpReward: rolledXp,
+      instanceWidth: rolledWidth,
+      instanceHeight: rolledHeight,
       orbitOffset: (Math.random() > 0.5 ? 1 : -1) *
         (GAME_CONSTANTS.ZOMBIE_ORBIT_MIN + Math.random() * (GAME_CONSTANTS.ZOMBIE_ORBIT_MAX - GAME_CONSTANTS.ZOMBIE_ORBIT_MIN)),
       platformDropTimer: 0,
@@ -1603,7 +1599,7 @@ export class GameEngine {
     this.onWaveUpdate?.(this.wave, this.zombiesToSpawnThisWave);
   }
 
-  private handleZombieDeath(z: ZombieState, zDef: ZombieDefinition): void {
+  private handleZombieDeath(z: ZombieState): void {
     z.isDead = true;
     this.zombiesKilledThisWave++;
 
@@ -1617,8 +1613,8 @@ export class GameEngine {
       type: z.type,
       x: z.x,
       y: z.y,
-      width: zDef.width,
-      height: zDef.height,
+      width: z.instanceWidth,
+      height: z.instanceHeight,
       spriteKey: this.zombieSpriteAnimator.getSpriteKey(z.type),
       facing: z.facing,
       velocityY: grounded ? 0 : z.velocityY,
@@ -1632,7 +1628,7 @@ export class GameEngine {
     this.onXpGained?.(xpReward);
     this.onScoreUpdate?.(xpReward * 10);
 
-    this.rollDrops(z.x + zDef.width / 2, z.y + zDef.height / 2);
+    this.rollDrops(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);
   }
 
   private updateZombieCorpses(): void {
@@ -1720,26 +1716,24 @@ export class GameEngine {
 
     for (let i: number = 0; i < count; i++) {
       const a: ZombieState = alive[i];
-      const aDef: ZombieDefinition = ZOMBIE_TYPES[a.type];
-      const aBottom: number = a.y + aDef.height;
+      const aBottom: number = a.y + a.instanceHeight;
 
       for (let j: number = i + 1; j < count; j++) {
         const b: ZombieState = alive[j];
-        const bDef: ZombieDefinition = ZOMBIE_TYPES[b.type];
-        const bBottom: number = b.y + bDef.height;
+        const bBottom: number = b.y + b.instanceHeight;
 
         if (Math.abs(aBottom - bBottom) > GAME_CONSTANTS.ZOMBIE_COLLISION_Y_TOLERANCE) continue;
 
-        const xOverlap: number = Math.min(a.x + aDef.width, b.x + bDef.width) - Math.max(a.x, b.x);
+        const xOverlap: number = Math.min(a.x + a.instanceWidth, b.x + b.instanceWidth) - Math.max(a.x, b.x);
         if (xOverlap <= 0) continue;
 
-        const aCx: number = a.x + aDef.width / 2;
-        const bCx: number = b.x + bDef.width / 2;
+        const aCx: number = a.x + a.instanceWidth / 2;
+        const bCx: number = b.x + b.instanceWidth / 2;
         const pushDir: number = aCx < bCx ? -1 : (aCx > bCx ? 1 : (Math.random() > 0.5 ? 1 : -1));
         const pushAmount: number = xOverlap * GAME_CONSTANTS.ZOMBIE_COLLISION_PUSH_STRENGTH;
 
-        const aArea: number = aDef.width * aDef.height;
-        const bArea: number = bDef.width * bDef.height;
+        const aArea: number = a.instanceWidth * a.instanceHeight;
+        const bArea: number = b.instanceWidth * b.instanceHeight;
         const totalArea: number = aArea + bArea;
         const aRatio: number = bArea / totalArea;
         const bRatio: number = aArea / totalArea;
@@ -1747,8 +1741,8 @@ export class GameEngine {
         a.x += pushDir * pushAmount * aRatio;
         b.x -= pushDir * pushAmount * bRatio;
 
-        const aMaxX: number = GAME_CONSTANTS.CANVAS_WIDTH - aDef.width;
-        const bMaxX: number = GAME_CONSTANTS.CANVAS_WIDTH - bDef.width;
+        const aMaxX: number = GAME_CONSTANTS.CANVAS_WIDTH - a.instanceWidth;
+        const bMaxX: number = GAME_CONSTANTS.CANVAS_WIDTH - b.instanceWidth;
         a.x = Math.max(0, Math.min(aMaxX, a.x));
         b.x = Math.max(0, Math.min(bMaxX, b.x));
       }
@@ -2253,14 +2247,10 @@ export class GameEngine {
     const sorted: ZombieState[] = this.zombies
       .filter((z: ZombieState) => !z.isDead)
       .sort((a: ZombieState, b: ZombieState) => {
-        const aDef: ZombieDefinition = ZOMBIE_TYPES[a.type];
-        const bDef: ZombieDefinition = ZOMBIE_TYPES[b.type];
-        return (a.y + aDef.height) - (b.y + bDef.height);
+        return (a.y + a.instanceHeight) - (b.y + b.instanceHeight);
       });
 
     for (const z of sorted) {
-      const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
-
       const isSpawning: boolean = z.spawnTimer > 0;
       if (isSpawning) {
         const progress: number = 1 - z.spawnTimer / GAME_CONSTANTS.ZOMBIE_SPAWN_ANIM_TICKS;
@@ -2270,17 +2260,21 @@ export class GameEngine {
 
       if (this.zombieSpriteAnimator.isLoaded()) {
         const spriteKey: string = this.zombieSpriteAnimator.getSpriteKey(z.type);
-        const renderW: number = z.type === ZombieType.DragonBoss ? 260 : z.type === ZombieType.Boss ? 200 : 140;
+        const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
+        const baseRenderSize: number = z.type === ZombieType.DragonBoss ? 260 : z.type === ZombieType.Boss ? 200 : 140;
+        const baseH: number = (zDef.heightMin + zDef.heightMax) / 2;
+        const scale: number = z.instanceHeight / baseH;
+        const renderW: number = Math.round(baseRenderSize * scale);
         const renderH: number = renderW;
-        const offsetX: number = (zDef.width - renderW) / 2;
-        const offsetY: number = zDef.height - renderH;
+        const offsetX: number = (z.instanceWidth - renderW) / 2;
+        const offsetY: number = z.instanceHeight - renderH;
         const drawX: number = z.x + offsetX;
         const drawY: number = z.y + offsetY;
         const flipX: boolean = z.type === ZombieType.DragonBoss ? z.facing > 0 : z.facing < 0;
 
         this.zombieSpriteAnimator.draw(ctx, z.id, spriteKey, drawX, drawY, renderW, renderH, flipX);
       } else {
-        this.renderZombieFallback(ctx, z, zDef);
+        this.renderZombieFallback(ctx, z);
       }
 
       if (isSpawning) {
@@ -2290,8 +2284,8 @@ export class GameEngine {
 
       const isDragon: boolean = z.type === ZombieType.DragonBoss;
       const hpPercent: number = z.hp / z.maxHp;
-      const barWidth: number = isDragon ? 120 : Math.max(zDef.width, 40);
-      const barX: number = z.x + zDef.width / 2 - barWidth / 2;
+      const barWidth: number = isDragon ? 120 : Math.max(z.instanceWidth, 40);
+      const barX: number = z.x + z.instanceWidth / 2 - barWidth / 2;
       const barY: number = z.y - (isDragon ? 55 : 45);
       ctx.fillStyle = '#330000';
       ctx.fillRect(barX, barY, barWidth, isDragon ? 7 : 5);
@@ -2305,7 +2299,8 @@ export class GameEngine {
         ctx.fillStyle = '#88ccff';
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(zDef.name, z.x + zDef.width / 2, barY - 4);
+        const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
+        ctx.fillText(zDef.name, z.x + z.instanceWidth / 2, barY - 4);
       }
     }
   }
@@ -2317,7 +2312,11 @@ export class GameEngine {
       const progress: number = corpse.fadeTimer / corpse.maxFadeTimer;
       const alpha: number = Math.min(1, progress * 2);
 
-      const renderW: number = corpse.type === ZombieType.DragonBoss ? 260 : corpse.type === ZombieType.Boss ? 200 : 140;
+      const corpseDef: ZombieDefinition = ZOMBIE_TYPES[corpse.type];
+      const baseRenderSize: number = corpse.type === ZombieType.DragonBoss ? 260 : corpse.type === ZombieType.Boss ? 200 : 140;
+      const baseH: number = (corpseDef.heightMin + corpseDef.heightMax) / 2;
+      const scale: number = corpse.height / baseH;
+      const renderW: number = Math.round(baseRenderSize * scale);
       const renderH: number = renderW;
       const offsetX: number = (corpse.width - renderW) / 2;
       const offsetY: number = corpse.height - renderH;
@@ -2335,17 +2334,17 @@ export class GameEngine {
     }
   }
 
-  private renderZombieFallback(ctx: CanvasRenderingContext2D, z: ZombieState, zDef: ZombieDefinition): void {
+  private renderZombieFallback(ctx: CanvasRenderingContext2D, z: ZombieState): void {
     ctx.fillStyle = '#ff0000';
-    ctx.fillRect(z.x, z.y, zDef.width, zDef.height);
-    ctx.fillRect(z.x + 1, z.y + 1, zDef.width - 2, zDef.height - 2);
+    ctx.fillRect(z.x, z.y, z.instanceWidth, z.instanceHeight);
+    ctx.fillRect(z.x + 1, z.y + 1, z.instanceWidth - 2, z.instanceHeight - 2);
 
     const eyeY: number = z.y + 8;
     ctx.fillStyle = '#ff2222';
     if (this.player) {
       const lookDir: number = this.player.x > z.x ? 1 : -1;
-      ctx.fillRect(z.x + zDef.width / 2 - 6 + lookDir * 2, eyeY, 4, 4);
-      ctx.fillRect(z.x + zDef.width / 2 + 2 + lookDir * 2, eyeY, 4, 4);
+      ctx.fillRect(z.x + z.instanceWidth / 2 - 6 + lookDir * 2, eyeY, 4, 4);
+      ctx.fillRect(z.x + z.instanceWidth / 2 + 2 + lookDir * 2, eyeY, 4, 4);
     }
   }
 

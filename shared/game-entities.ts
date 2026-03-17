@@ -24,8 +24,10 @@ export interface ZombieDefinition {
   hesitationMax: number;
   xpRewardMin: number;
   xpRewardMax: number;
-  width: number;
-  height: number;
+  widthMin: number;
+  widthMax: number;
+  heightMin: number;
+  heightMax: number;
   attackAnimTicks: number;
   attackHitTick: number;
 }
@@ -55,6 +57,8 @@ export interface ZombieState {
   instanceDamageMax: number;
   instanceKnockbackForce: number;
   instanceXpReward: number;
+  instanceWidth: number;
+  instanceHeight: number;
   orbitOffset: number;
   platformDropTimer: number;
   spawnTimer: number;
