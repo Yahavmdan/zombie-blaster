@@ -82,6 +82,12 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.setWave(wave);
   }
 
+  setGodMode(enabled: boolean): void {
+    if (this.engine) {
+      this.engine.godMode = enabled;
+    }
+  }
+
   ngOnDestroy(): void {
     this.engine?.stop();
     window.removeEventListener('keydown', this.boundKeyDown);

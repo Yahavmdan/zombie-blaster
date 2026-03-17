@@ -197,6 +197,7 @@ export class GameEngine {
   onUseHpPotion: (() => boolean) | null = null;
   onUseMpPotion: (() => boolean) | null = null;
   onOpenShop: (() => void) | null = null;
+  godMode: boolean = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -1034,15 +1035,17 @@ export class GameEngine {
 
       if (z.knockbackFrames > 0) {
         z.knockbackFrames--;
+      } else if (z.reactionDelay > 0) {
+        z.reactionDelay--;
       } else {
         this.updateZombieAI(z, zDef);
+        z.reactionDelay = GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS +
+          Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MAX_TICKS - GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS));
       }
 
       if (z.jumpCooldown > 0) z.jumpCooldown--;
       if (z.attackCooldown > 0) z.attackCooldown--;
       if (z.platformDropTimer > 0) z.platformDropTimer--;
-
-      z.facing = this.player.x > z.x ? 1 : -1;
 
       this.updateZombieAnimState(z);
       const spriteKey: string = this.zombieSpriteAnimator.getSpriteKey(z.type);
@@ -1103,6 +1106,8 @@ export class GameEngine {
         this.applyZombieDamageToPlayer(contactDamage, z);
       }
     }
+
+    this.resolveZombieCollisions();
   }
 
   private updateZombieAttack(z: ZombieState, zDef: ZombieDefinition): void {
@@ -1172,6 +1177,7 @@ export class GameEngine {
 
   private applyZombieDamageToPlayer(damage: number, z: ZombieState): void {
     if (!this.player || this.invincibilityFrames > 0) return;
+    if (this.godMode) return;
 
     this.player.hp -= damage;
     this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
@@ -1236,6 +1242,15 @@ export class GameEngine {
       return;
     }
 
+    const detectionRadius: number = GAME_CONSTANTS.CANVAS_WIDTH * GAME_CONSTANTS.ZOMBIE_DETECTION_RANGE;
+    const distToPlayerX: number = Math.abs((z.x + zDef.width / 2) - (this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2));
+    if (distToPlayerX > detectionRadius) {
+      this.updateZombieIdleWander(z, zDef);
+      return;
+    }
+
+    z.facing = this.player.x > z.x ? 1 : -1;
+
     if (z.attackCooldown <= 0 && z.attackAnimTimer <= 0 && z.attackHesitation > 0) {
       const effectiveRange: number = GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE + z.hesitationRange;
       const zCx: number = z.x + zDef.width / 2;
@@ -1279,6 +1294,41 @@ export class GameEngine {
       this.zombieJump(z);
     } else if (distToPlayer < GAME_CONSTANTS.ZOMBIE_ORBIT_MAX * 2 && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_CHANCE_PER_TICK) {
       this.zombieJump(z);
+    }
+  }
+
+  private updateZombieIdleWander(z: ZombieState, zDef: ZombieDefinition): void {
+    const isStanding: boolean = Math.abs(z.velocityX) < 0.01;
+
+    if (isStanding) {
+      if (Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_DIRECTION_CHANGE_CHANCE) {
+        z.facing = Math.random() > 0.5 ? 1 : -1;
+        z.velocityX = z.facing * z.instanceSpeed * GAME_CONSTANTS.ZOMBIE_IDLE_WANDER_SPEED_MULT;
+      }
+    } else {
+      if (Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_STOP_CHANCE) {
+        z.velocityX = 0;
+      } else if (Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_DIRECTION_CHANGE_CHANCE) {
+        z.facing = z.facing > 0 ? -1 : 1;
+        z.velocityX = z.facing * z.instanceSpeed * GAME_CONSTANTS.ZOMBIE_IDLE_WANDER_SPEED_MULT;
+      }
+    }
+
+    const margin: number = 20;
+    if (z.x < margin) {
+      z.facing = 1;
+      z.velocityX = z.instanceSpeed * GAME_CONSTANTS.ZOMBIE_IDLE_WANDER_SPEED_MULT;
+    } else if (z.x + zDef.width > GAME_CONSTANTS.CANVAS_WIDTH - margin) {
+      z.facing = -1;
+      z.velocityX = -z.instanceSpeed * GAME_CONSTANTS.ZOMBIE_IDLE_WANDER_SPEED_MULT;
+    }
+
+    if (z.attackAnimTimer <= 0 && z.attackCooldown <= 0 && Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_ATTACK_CHANCE) {
+      z.attackAnimTimer = zDef.attackAnimTicks;
+      z.attackHasHit = true;
+      z.attackCooldown = GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN +
+        Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX - GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN));
+      z.velocityX = 0;
     }
   }
 
@@ -1355,7 +1405,7 @@ export class GameEngine {
         p.frame = (p.frame + 1) % this.DRAGON_PROJ_FRAMES;
       }
 
-      if (this.invincibilityFrames <= 0 && this.rectsOverlap(
+      if (!this.godMode && this.invincibilityFrames <= 0 && this.rectsOverlap(
         this.player.x, this.player.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT,
         p.x - 20, p.y - 20, 40, 40,
       )) {
@@ -1474,11 +1524,12 @@ export class GameEngine {
 
     const zDef: ZombieDefinition = ZOMBIE_TYPES[type];
     const hpScale: number = 1 + (this.wave - 1) * GAME_CONSTANTS.ZOMBIE_HP_SCALE_PER_WAVE;
+    const damageScale: number = 1 + (this.wave - 1) * GAME_CONSTANTS.ZOMBIE_DAMAGE_SCALE_PER_WAVE;
 
     const rolledHp: number = Math.floor((zDef.hpMin + Math.random() * (zDef.hpMax - zDef.hpMin)) * hpScale);
     const rolledSpeed: number = zDef.speedMin + Math.random() * (zDef.speedMax - zDef.speedMin);
-    const rolledDamageMin: number = Math.floor(zDef.damageMinLow + Math.random() * (zDef.damageMinHigh - zDef.damageMinLow));
-    const rolledDamageMax: number = Math.floor(zDef.damageMaxLow + Math.random() * (zDef.damageMaxHigh - zDef.damageMaxLow));
+    const rolledDamageMin: number = Math.floor((zDef.damageMinLow + Math.random() * (zDef.damageMinHigh - zDef.damageMinLow)) * damageScale);
+    const rolledDamageMax: number = Math.floor((zDef.damageMaxLow + Math.random() * (zDef.damageMaxHigh - zDef.damageMaxLow)) * damageScale);
     const rolledKnockback: number = zDef.knockbackMin + Math.random() * (zDef.knockbackMax - zDef.knockbackMin);
     const rolledHesitation: number = Math.floor(zDef.hesitationMin + Math.random() * (zDef.hesitationMax - zDef.hesitationMin));
     const rolledXp: number = Math.floor(zDef.xpRewardMin + Math.random() * (zDef.xpRewardMax - zDef.xpRewardMin));
@@ -1520,6 +1571,8 @@ export class GameEngine {
         (GAME_CONSTANTS.ZOMBIE_ORBIT_MIN + Math.random() * (GAME_CONSTANTS.ZOMBIE_ORBIT_MAX - GAME_CONSTANTS.ZOMBIE_ORBIT_MIN)),
       platformDropTimer: 0,
       spawnTimer: 0,
+      reactionDelay: GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS +
+        Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MAX_TICKS - GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS)),
     };
 
     const spriteKey: string = this.zombieSpriteAnimator.getSpriteKey(type);
@@ -1657,6 +1710,49 @@ export class GameEngine {
       lifetime: GAME_CONSTANTS.DROP_LIFETIME,
       isGrounded: false,
     });
+  }
+
+  private resolveZombieCollisions(): void {
+    const alive: ZombieState[] = this.zombies.filter(
+      (z: ZombieState) => !z.isDead && z.spawnTimer <= 0 && z.type !== ZombieType.DragonBoss,
+    );
+    const count: number = alive.length;
+
+    for (let i: number = 0; i < count; i++) {
+      const a: ZombieState = alive[i];
+      const aDef: ZombieDefinition = ZOMBIE_TYPES[a.type];
+      const aBottom: number = a.y + aDef.height;
+
+      for (let j: number = i + 1; j < count; j++) {
+        const b: ZombieState = alive[j];
+        const bDef: ZombieDefinition = ZOMBIE_TYPES[b.type];
+        const bBottom: number = b.y + bDef.height;
+
+        if (Math.abs(aBottom - bBottom) > GAME_CONSTANTS.ZOMBIE_COLLISION_Y_TOLERANCE) continue;
+
+        const xOverlap: number = Math.min(a.x + aDef.width, b.x + bDef.width) - Math.max(a.x, b.x);
+        if (xOverlap <= 0) continue;
+
+        const aCx: number = a.x + aDef.width / 2;
+        const bCx: number = b.x + bDef.width / 2;
+        const pushDir: number = aCx < bCx ? -1 : (aCx > bCx ? 1 : (Math.random() > 0.5 ? 1 : -1));
+        const pushAmount: number = xOverlap * GAME_CONSTANTS.ZOMBIE_COLLISION_PUSH_STRENGTH;
+
+        const aArea: number = aDef.width * aDef.height;
+        const bArea: number = bDef.width * bDef.height;
+        const totalArea: number = aArea + bArea;
+        const aRatio: number = bArea / totalArea;
+        const bRatio: number = aArea / totalArea;
+
+        a.x += pushDir * pushAmount * aRatio;
+        b.x -= pushDir * pushAmount * bRatio;
+
+        const aMaxX: number = GAME_CONSTANTS.CANVAS_WIDTH - aDef.width;
+        const bMaxX: number = GAME_CONSTANTS.CANVAS_WIDTH - bDef.width;
+        a.x = Math.max(0, Math.min(aMaxX, a.x));
+        b.x = Math.max(0, Math.min(bMaxX, b.x));
+      }
+    }
   }
 
   private applyZombieKnockback(z: ZombieState): void {
@@ -2154,8 +2250,15 @@ export class GameEngine {
   private renderZombies(ctx: CanvasRenderingContext2D): void {
     this.renderZombieCorpses(ctx);
 
-    for (const z of this.zombies) {
-      if (z.isDead) continue;
+    const sorted: ZombieState[] = this.zombies
+      .filter((z: ZombieState) => !z.isDead)
+      .sort((a: ZombieState, b: ZombieState) => {
+        const aDef: ZombieDefinition = ZOMBIE_TYPES[a.type];
+        const bDef: ZombieDefinition = ZOMBIE_TYPES[b.type];
+        return (a.y + aDef.height) - (b.y + bDef.height);
+      });
+
+    for (const z of sorted) {
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
 
       const isSpawning: boolean = z.spawnTimer > 0;

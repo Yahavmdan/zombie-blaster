@@ -157,15 +157,27 @@
 
 .hud-bottom {
   position: absolute;
-  bottom: 0;
+  bottom: -3px;
   left: 0;
   right: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.5rem;
-  background: linear-gradient(0deg, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
+  padding: 0.4rem 0.75rem;
+  pointer-events: none;
+}
+
+.action-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.bar-divider {
+  width: 1px;
+  background: rgba(150, 150, 200, 0.3);
+  margin: 2px 0.25rem;
 }
 
 .inventory-bar {
@@ -284,7 +296,6 @@
 .active-buffs {
   display: flex;
   gap: 0.3rem;
-  margin-top: 0.2rem;
 }
 
 .buff-indicator {
@@ -322,6 +333,36 @@
   color: #88ff88;
   min-width: 20px;
   text-align: right;
+}
+
+.god-mode-toggle {
+  pointer-events: auto;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #888899;
+  background: rgba(60, 60, 80, 0.6);
+  border: 1px solid rgba(100, 100, 130, 0.5);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  align-self: flex-end;
+}
+
+.god-mode-toggle:hover {
+  background: rgba(80, 80, 110, 0.7);
+}
+
+.god-mode-toggle--active {
+  color: #44ffaa;
+  border-color: #44ffaa;
+  background: rgba(68, 255, 170, 0.15);
+  box-shadow: 0 0 8px rgba(68, 255, 170, 0.3);
+}
+
+.god-mode-toggle--active:hover {
+  background: rgba(68, 255, 170, 0.25);
 }
 
 .sp-indicator {

@@ -1,4 +1,4 @@
-import { Injectable, Signal, WritableSignal, signal, computed } from '@angular/core';
+import { Injectable, Signal, WritableSignal, signal, computed, isDevMode } from '@angular/core';
 import {
   ActiveBuff,
   CharacterClass,
@@ -27,6 +27,7 @@ export class GameStateService {
   readonly score: WritableSignal<number> = signal<number>(0);
   readonly gameOver: WritableSignal<boolean> = signal<boolean>(false);
   readonly isPaused: WritableSignal<boolean> = signal<boolean>(false);
+  readonly godMode: WritableSignal<boolean> = signal<boolean>(false);
 
   readonly isAlive: Signal<boolean> = computed((): boolean => {
     const p: CharacterState | null = this.player();
@@ -82,7 +83,7 @@ export class GameStateService {
       allocatedStats,
       skillLevels: {},
       activeBuffs: [],
-      inventory: { hpPotions: 3, mpPotions: 3, gold: 0 },
+      inventory: { hpPotions: 3, mpPotions: 3, gold: isDevMode() ? 1_000_000 : 0 },
     };
 
     this.player.set(character);

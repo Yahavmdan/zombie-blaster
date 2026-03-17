@@ -55,6 +55,13 @@ export class GameComponent implements OnInit {
         canvas.useMpPotionHandler = (): boolean => this.gameState.useMpPotion();
       }
     });
+    effect((): void => {
+      const enabled: boolean = this.gameState.godMode();
+      const canvas: GameCanvasComponent | undefined = this.gameCanvas();
+      if (canvas) {
+        canvas.setGodMode(enabled);
+      }
+    });
   }
 
   ngOnInit(): void {

@@ -41,6 +41,16 @@
       <span class="stat-mini">DEF {{ playerData().derived.defense }}</span>
       <span class="stat-mini">CRIT {{ playerData().derived.critRate | number:'1.0-0' }}%</span>
     </div>
+    @if (isDevMode) {
+      <button
+        class="god-mode-toggle"
+        [class.god-mode-toggle--active]="godMode()"
+        (click)="onToggleGodMode()"
+        data-testid="hud-godmode-button-toggle"
+      >
+        {{ godMode() ? 'GOD ON' : 'GOD OFF' }}
+      </button>
+    }
     @if (hasStatPoints()) {
       <button
         class="sp-indicator"
@@ -63,53 +73,6 @@
 </div>
 
 <div class="hud-bottom">
-  <div class="inventory-bar">
-    <div class="inv-item inv-item--hp" data-testid="hud-inv-hp">
-      <span class="inv-key">7</span>
-      <span class="inv-icon">❤️</span>
-      <span class="inv-count">{{ hpPotions() }}</span>
-    </div>
-    <div class="inv-item inv-item--mp" data-testid="hud-inv-mp">
-      <span class="inv-key">8</span>
-      <span class="inv-icon">💧</span>
-      <span class="inv-count">{{ mpPotions() }}</span>
-    </div>
-    <div class="inv-item inv-item--gold" data-testid="hud-inv-gold">
-      <span class="inv-icon">💰</span>
-      <span class="inv-count">{{ gold() }}G</span>
-    </div>
-    <button
-      class="inv-item inv-item--shop"
-      data-testid="hud-inv-button-shop"
-      (click)="onOpenShop()"
-    >
-      <span class="inv-key">B</span>
-      <span class="inv-icon">🏪</span>
-      <span class="inv-count">Shop</span>
-    </button>
-  </div>
-  <div class="skill-slots">
-    @for (slot of skillSlots(); track slot.key) {
-      <div
-        class="skill-slot"
-        [class.skill-slot--locked]="slot.locked"
-        [class.skill-slot--buff]="slot.isBuff"
-      >
-        <span class="skill-key">{{ slot.key }}</span>
-        <span class="skill-icon">{{ slot.icon }}</span>
-        <span class="skill-name">{{ slot.name }}</span>
-        @if (slot.locked) {
-          <span class="skill-locked-label">Lv5</span>
-        } @else if (slot.isBuff) {
-          <span class="skill-buff-label">BUFF</span>
-        } @else if (slot.hpCost > 0) {
-          <span class="skill-mp-cost">{{ slot.hpCost }}HP {{ slot.mpCost }}MP</span>
-        } @else {
-          <span class="skill-mp-cost">{{ slot.mpCost }} MP</span>
-        }
-      </div>
-    }
-  </div>
   @if (activeBuffs().length > 0) {
     <div class="active-buffs">
       @for (buff of activeBuffs(); track buff.skillName) {
@@ -123,4 +86,44 @@
       }
     </div>
   }
+  <div class="action-bar">
+    <div class="skill-slots">
+      @for (slot of skillSlots(); track slot.key) {
+        <div
+          class="skill-slot"
+          [class.skill-slot--locked]="slot.locked"
+          [class.skill-slot--buff]="slot.isBuff"
+        >
+          <span class="skill-key">{{ slot.key }}</span>
+          <span class="skill-icon">{{ slot.icon }}</span>
+        </div>
+      }
+    </div>
+    <div class="bar-divider"></div>
+    <div class="inventory-bar">
+      <div class="inv-item inv-item--hp" data-testid="hud-inv-hp">
+        <span class="inv-key">{{ hpPotionKey() }}</span>
+        <span class="inv-icon">❤️</span>
+        <span class="inv-count">{{ hpPotions() }}</span>
+      </div>
+      <div class="inv-item inv-item--mp" data-testid="hud-inv-mp">
+        <span class="inv-key">{{ mpPotionKey() }}</span>
+        <span class="inv-icon">💧</span>
+        <span class="inv-count">{{ mpPotions() }}</span>
+      </div>
+      <div class="inv-item inv-item--gold" data-testid="hud-inv-gold">
+        <span class="inv-icon">💰</span>
+        <span class="inv-count">{{ gold() }}G</span>
+      </div>
+      <button
+        class="inv-item inv-item--shop"
+        data-testid="hud-inv-button-shop"
+        (click)="onOpenShop()"
+      >
+        <span class="inv-key">{{ shopKey() }}</span>
+        <span class="inv-icon">🏪</span>
+        <span class="inv-count">Shop</span>
+      </button>
+    </div>
+  </div>
 </div>

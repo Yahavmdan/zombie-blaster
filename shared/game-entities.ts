@@ -58,6 +58,7 @@ export interface ZombieState {
   orbitOffset: number;
   platformDropTimer: number;
   spawnTimer: number;
+  reactionDelay: number;
 }
 
 export enum DropType {

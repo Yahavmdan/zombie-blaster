@@ -1,6 +1,8 @@
-import { Component, ChangeDetectionStrategy, InputSignal, OutputEmitterRef, Signal, input, output, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, InputSignal, OutputEmitterRef, Signal, WritableSignal, input, output, computed, inject, isDevMode } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { ActiveBuff, CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost, getSkillHpCost } from '@shared/index';
+import { ActiveBuff, CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost, getSkillHpCost, KeyBindings, GameAction } from '@shared/index';
+import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
+import { GameStateService } from '../../services/game-state.service';
 
 export interface SkillSlot {
   key: string;
@@ -31,6 +33,12 @@ export interface ActiveBuffDisplay {
   styleUrl: './hud.component.css',
 })
 export class HudComponent {
+  private readonly keyBindingsService: KeyBindingsService = inject(KeyBindingsService);
+  private readonly gameState: GameStateService = inject(GameStateService);
+
+  readonly isDevMode: boolean = isDevMode();
+  readonly godMode: WritableSignal<boolean> = this.gameState.godMode;
+
   readonly playerData: InputSignal<CharacterState> = input.required<CharacterState>();
   readonly wave: InputSignal<number> = input.required<number>();
   readonly score: InputSignal<number> = input.required<number>();
@@ -41,6 +49,18 @@ export class HudComponent {
 
   readonly classIcon: Signal<string> = computed((): string => {
     return CHARACTER_CLASSES[this.playerData().classId].icon;
+  });
+
+  readonly hpPotionKey: Signal<string> = computed((): string => {
+    return this.formatFirstKey('useHpPotion');
+  });
+
+  readonly mpPotionKey: Signal<string> = computed((): string => {
+    return this.formatFirstKey('useMpPotion');
+  });
+
+  readonly shopKey: Signal<string> = computed((): string => {
+    return this.formatFirstKey('openShop');
   });
 
   readonly hpPercent: Signal<number> = computed((): number => {
@@ -76,6 +96,8 @@ export class HudComponent {
 
   readonly skillSlots: Signal<SkillSlot[]> = computed((): SkillSlot[] => {
     const p: CharacterState = this.playerData();
+    const bindings: KeyBindings = this.keyBindingsService.bindings();
+    const skillActions: GameAction[] = ['skill1', 'skill2', 'skill3', 'skill4', 'skill5', 'skill6'];
     const usableSkills: SkillDefinition[] = SKILLS.filter(
       (s: SkillDefinition) =>
         s.classId === p.classId &&
@@ -83,11 +105,13 @@ export class HudComponent {
         (p.skillLevels[s.id] ?? 0) > 0,
     ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
      .slice(0, 6);
-    const keys: string[] = ['1', '2', '3', '4', '5', '6'];
     return usableSkills.map((skill: SkillDefinition, idx: number): SkillSlot => {
       const level: number = p.skillLevels[skill.id] ?? 0;
+      const action: GameAction = skillActions[idx];
+      const boundKeys: string[] = bindings[action] ?? [];
+      const displayKey: string = boundKeys.length > 0 ? formatKeyName(boundKeys[0]) : '?';
       return {
-        key: keys[idx] ?? '?',
+        key: displayKey,
         name: `${skill.name} Lv.${level}`,
         icon: skill.icon,
         mpCost: getSkillMpCost(skill, level),
@@ -126,5 +150,14 @@ export class HudComponent {
 
   onOpenShop(): void {
     this.shopRequested.emit();
+  }
+
+  onToggleGodMode(): void {
+    this.gameState.godMode.update((v: boolean) => !v);
+  }
+
+  private formatFirstKey(action: GameAction): string {
+    const keys: string[] = this.keyBindingsService.bindings()[action] ?? [];
+    return keys.length > 0 ? formatKeyName(keys[0]) : '?';
   }
 }
