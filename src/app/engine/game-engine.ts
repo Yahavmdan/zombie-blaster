@@ -572,7 +572,7 @@ export class GameEngine {
     let closestDist: number = Infinity;
 
     for (const z of this.zombies) {
-      if (z.isDead) continue;
+      if (z.isDead || z.spawnTimer > 0) continue;
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
       if (this.rectsOverlap(attackX, this.player.y, attackRange, GAME_CONSTANTS.PLAYER_HEIGHT, z.x, z.y, zDef.width, zDef.height)) {
         const dist: number = Math.abs((z.x + zDef.width / 2) - playerCx);
@@ -694,7 +694,7 @@ export class GameEngine {
       let closestDist: number = Infinity;
 
       for (const z of this.zombies) {
-        if (z.isDead) continue;
+        if (z.isDead || z.spawnTimer > 0) continue;
         const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
         if (this.rectsOverlap(attackX, attackY, attackW, attackH, z.x, z.y, zDef.width, zDef.height)) {
           const dist: number = Math.abs((z.x + zDef.width / 2) - playerCx);
@@ -712,7 +712,7 @@ export class GameEngine {
       let hitCount: number = 0;
       const targetCap: number = skill.maxTargets > 0 ? skill.maxTargets : Infinity;
       for (const z of this.zombies) {
-        if (z.isDead) continue;
+        if (z.isDead || z.spawnTimer > 0) continue;
         if (hitCount >= targetCap) break;
         const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
         if (this.rectsOverlap(attackX, attackY, attackW, attackH, z.x, z.y, zDef.width, zDef.height)) {
@@ -760,7 +760,7 @@ export class GameEngine {
     let pulledCount: number = 0;
 
     for (const z of this.zombies) {
-      if (z.isDead) continue;
+      if (z.isDead || z.spawnTimer > 0) continue;
       if (z.type === ZombieType.Boss || z.type === ZombieType.DragonBoss) continue;
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
       const zCX: number = z.x + zDef.width / 2;
@@ -809,7 +809,7 @@ export class GameEngine {
     const hitZombies: ZombieState[] = [];
 
     for (const z of this.zombies) {
-      if (z.isDead) continue;
+      if (z.isDead || z.spawnTimer > 0) continue;
       if (hitCount >= maxTargets) break;
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
       if (this.rectsOverlap(
@@ -1007,6 +1007,16 @@ export class GameEngine {
       if (z.isDead) continue;
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
 
+      if (z.spawnTimer > 0) {
+        z.spawnTimer--;
+        const spriteKey: string = this.zombieSpriteAnimator.getSpriteKey(z.type);
+        this.zombieSpriteAnimator.tick(z.id, spriteKey);
+        if (z.spawnTimer <= 0) {
+          this.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Idle);
+        }
+        continue;
+      }
+
       if (z.knockbackFrames > 0) {
         z.knockbackFrames--;
       } else {
@@ -1057,6 +1067,16 @@ export class GameEngine {
             z.isGrounded = true;
           }
         }
+      }
+
+      const minX: number = 0;
+      const maxX: number = GAME_CONSTANTS.CANVAS_WIDTH - zDef.width;
+      if (z.x < minX) {
+        z.x = minX;
+        z.velocityX = 0;
+      } else if (z.x > maxX) {
+        z.x = maxX;
+        z.velocityX = 0;
       }
 
       if (z.type !== ZombieType.DragonBoss && this.invincibilityFrames <= 0 && this.rectsOverlap(
@@ -1391,9 +1411,6 @@ export class GameEngine {
   }
 
   private spawnZombie(): void {
-    const spawnRight: boolean = Math.random() > 0.5;
-    const x: number = spawnRight ? GAME_CONSTANTS.CANVAS_WIDTH - 10 : -20;
-
     let type: ZombieType = ZombieType.Walker;
     const roll: number = Math.random();
     if (this.wave >= GAME_CONSTANTS.ZOMBIE_TANK_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_TANK_ROLL_THRESHOLD) type = ZombieType.Tank;
@@ -1408,13 +1425,20 @@ export class GameEngine {
     const zDef: ZombieDefinition = ZOMBIE_TYPES[type];
     const hpScale: number = 1 + (this.wave - 1) * GAME_CONSTANTS.ZOMBIE_HP_SCALE_PER_WAVE;
 
+    const plat: Platform = this.platforms[Math.floor(Math.random() * this.platforms.length)];
+    const platMinX: number = Math.max(0, plat.x);
+    const platMaxX: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - zDef.width, plat.x + plat.width - zDef.width);
+    const x: number = platMinX + Math.floor(Math.random() * (platMaxX - platMinX + 1));
+    const y: number = plat.y - zDef.height;
+    const facing: number = this.player ? (this.player.x > x ? 1 : -1) : (Math.random() > 0.5 ? 1 : -1);
+
     const zombie: ZombieState = {
       id: crypto.randomUUID(),
       type,
       hp: Math.floor(zDef.baseHp * hpScale),
       maxHp: Math.floor(zDef.baseHp * hpScale),
       x,
-      y: GAME_CONSTANTS.GROUND_Y - zDef.height,
+      y,
       velocityX: 0,
       velocityY: 0,
       isGrounded: true,
@@ -1429,13 +1453,17 @@ export class GameEngine {
         Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_ATTACK_HESITATION_MAX - GAME_CONSTANTS.ZOMBIE_ATTACK_HESITATION_MIN)),
       hesitationRange: GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MIN +
         Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MAX - GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MIN)),
-      facing: spawnRight ? -1 : 1,
+      facing,
       orbitOffset: (Math.random() > 0.5 ? 1 : -1) *
         (GAME_CONSTANTS.ZOMBIE_ORBIT_MIN + Math.random() * (GAME_CONSTANTS.ZOMBIE_ORBIT_MAX - GAME_CONSTANTS.ZOMBIE_ORBIT_MIN)),
       platformDropTimer: 0,
+      spawnTimer: 0,
     };
 
+    const spriteKey: string = this.zombieSpriteAnimator.getSpriteKey(type);
+    zombie.spawnTimer = GAME_CONSTANTS.ZOMBIE_SPAWN_ANIM_TICKS;
     this.zombies.push(zombie);
+    this.zombieSpriteAnimator.setStateReversed(zombie.id, ZombieAnimState.Dead, spriteKey, GAME_CONSTANTS.ZOMBIE_SPAWN_ANIM_TICKS);
     this.onZombiesUpdate?.(this.zombies);
   }
 
@@ -2068,6 +2096,13 @@ export class GameEngine {
       if (z.isDead) continue;
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
 
+      const isSpawning: boolean = z.spawnTimer > 0;
+      if (isSpawning) {
+        const progress: number = 1 - z.spawnTimer / GAME_CONSTANTS.ZOMBIE_SPAWN_ANIM_TICKS;
+        ctx.save();
+        ctx.globalAlpha = progress;
+      }
+
       if (this.zombieSpriteAnimator.isLoaded()) {
         const spriteKey: string = this.zombieSpriteAnimator.getSpriteKey(z.type);
         const renderW: number = z.type === ZombieType.DragonBoss ? 260 : z.type === ZombieType.Boss ? 200 : 140;
@@ -2081,6 +2116,11 @@ export class GameEngine {
         this.zombieSpriteAnimator.draw(ctx, z.id, spriteKey, drawX, drawY, renderW, renderH, flipX);
       } else {
         this.renderZombieFallback(ctx, z, zDef);
+      }
+
+      if (isSpawning) {
+        ctx.restore();
+        continue;
       }
 
       const isDragon: boolean = z.type === ZombieType.DragonBoss;

@@ -124,6 +124,9 @@ export const GAME_CONSTANTS = {
   ZOMBIE_PLATFORM_DROP_TICKS: 10,
   ZOMBIE_PLATFORM_DROP_CHANCE: 0.03,
 
+  // ─── Zombie Spawn Animation ────────────────────
+  ZOMBIE_SPAWN_ANIM_TICKS: 50,
+
   // ─── Zombie Corpse Fade ─────────────────────────
   ZOMBIE_CORPSE_LINGER_TICKS: 120,
 

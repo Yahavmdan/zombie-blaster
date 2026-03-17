@@ -19,6 +19,7 @@ Work through these one at a time in separate sessions.
 ## 4. Prevent enemies from leaving map bounds
 - Zombies can walk or get knocked off the edges of the canvas.
 - Clamp zombie `x` position within `[0, CANVAS_WIDTH - zDef.width]` each tick in `updateZombies()`.
+- Spawn zombies randomly in the entire map (on floor or platform) and do not spawn them out of bounds
 
 ## 5. Fix UI overlapping the floor
 - HUD elements render on top of the floor/platforms area.
@@ -36,3 +37,5 @@ Work through these one at a time in separate sessions.
 - **Flying pattern:** Dragon should fly horizontally in one direction above the ground (not hover in place). It should patrol/strafe across the map at a fixed altitude.
 - **Ground-only attacks:** Dragon projectiles should travel in a straight line downward to hit the ground, not track the player directly.
 - **Use both attack sprites:** Currently only one attack sprite sheet is used. Integrate the second attack sprite (`AttackEffect1` / `AttackEffect2`) so the dragon alternates or uses both attack visuals.
+
+## 9. Player defense is too much, zombies needs to make much more damage

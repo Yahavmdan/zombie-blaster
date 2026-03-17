@@ -83,6 +83,8 @@ interface ZombieAnimInstance {
   state: ZombieAnimState;
   currentFrame: number;
   tickCounter: number;
+  reverse: boolean;
+  frameDurationOverride: number;
 }
 
 export class ZombieSpriteAnimator {
@@ -140,15 +142,44 @@ export class ZombieSpriteAnimator {
   setState(zombieId: string, state: ZombieAnimState): void {
     const instance: ZombieAnimInstance | undefined = this.instances.get(zombieId);
     if (instance) {
-      if (instance.state === state) return;
+      if (instance.state === state && !instance.reverse) return;
       instance.state = state;
       instance.currentFrame = 0;
       instance.tickCounter = 0;
+      instance.reverse = false;
+      instance.frameDurationOverride = 0;
     } else {
       this.instances.set(zombieId, {
         state,
         currentFrame: 0,
         tickCounter: 0,
+        reverse: false,
+        frameDurationOverride: 0,
+      });
+    }
+  }
+
+  setStateReversed(zombieId: string, state: ZombieAnimState, spriteKey: string, totalTicks: number): void {
+    const animMap: Map<ZombieAnimState, ZombieSpriteAnimation> | undefined = this.spriteCache.get(spriteKey);
+    const anim: ZombieSpriteAnimation | undefined = animMap?.get(state);
+    const lastFrame: number = anim ? anim.frameCount - 1 : 0;
+    const frameCount: number = anim ? anim.frameCount : 1;
+    const perFrameTicks: number = Math.max(1, Math.floor(totalTicks / frameCount));
+
+    const instance: ZombieAnimInstance | undefined = this.instances.get(zombieId);
+    if (instance) {
+      instance.state = state;
+      instance.currentFrame = lastFrame;
+      instance.tickCounter = 0;
+      instance.reverse = true;
+      instance.frameDurationOverride = perFrameTicks;
+    } else {
+      this.instances.set(zombieId, {
+        state,
+        currentFrame: lastFrame,
+        tickCounter: 0,
+        reverse: true,
+        frameDurationOverride: perFrameTicks,
       });
     }
   }
@@ -163,13 +194,22 @@ export class ZombieSpriteAnimator {
     const anim: ZombieSpriteAnimation | undefined = animMap.get(instance.state);
     if (!anim) return;
 
+    const effectiveDuration: number = instance.frameDurationOverride > 0
+      ? instance.frameDurationOverride
+      : anim.frameDurationTicks;
     instance.tickCounter++;
-    if (instance.tickCounter >= anim.frameDurationTicks) {
+    if (instance.tickCounter >= effectiveDuration) {
       instance.tickCounter = 0;
-      if (instance.currentFrame < anim.frameCount - 1) {
-        instance.currentFrame++;
-      } else if (anim.loop) {
-        instance.currentFrame = 0;
+      if (instance.reverse) {
+        if (instance.currentFrame > 0) {
+          instance.currentFrame--;
+        }
+      } else {
+        if (instance.currentFrame < anim.frameCount - 1) {
+          instance.currentFrame++;
+        } else if (anim.loop) {
+          instance.currentFrame = 0;
+        }
       }
     }
   }
