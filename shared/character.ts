@@ -38,7 +38,7 @@ export interface ActiveBuff {
   skillId: string;
   remainingMs: number;
   totalDurationMs: number;
-  stat: keyof CharacterDerived | 'allDamagePercent';
+  stat: keyof CharacterDerived | 'allDamagePercent' | 'knockbackResist' | 'maxHpMaxMpPercent';
   value: number;
 }
 

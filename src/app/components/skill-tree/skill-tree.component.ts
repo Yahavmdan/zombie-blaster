@@ -4,11 +4,9 @@ import {
   InputSignal,
   OutputEmitterRef,
   Signal,
-  WritableSignal,
   input,
   output,
   computed,
-  signal,
 } from '@angular/core';
 import { UpperCasePipe } from '@angular/common';
 import {
@@ -18,10 +16,13 @@ import {
   CHARACTER_CLASSES,
   getSkillDamageMultiplier,
   getSkillMpCost,
+  getSkillHpCost,
   getSkillCooldown,
   getSkillRange,
+  getSkillStunDurationMs,
   getBuffEffectValue,
   getBuffDurationMs,
+  getPassiveEffectValue,
 } from '@shared/index';
 
 export interface SkillTreeNode {
@@ -54,8 +55,6 @@ export class SkillTreeComponent {
   readonly skillAllocated: OutputEmitterRef<string> = output<string>();
   readonly closed: OutputEmitterRef<void> = output<void>();
 
-  readonly hoveredSkillId: WritableSignal<string | null> = signal<string | null>(null);
-
   readonly className: Signal<string> = computed((): string => {
     return CHARACTER_CLASSES[this.player().classId].name;
   });
@@ -82,15 +81,21 @@ export class SkillTreeComponent {
     const firstBuff: SkillDefinition | undefined = sorted.find(
       (s: SkillDefinition) => s.type === SkillType.Buff,
     );
+    const firstPassive: SkillDefinition | undefined = sorted.find(
+      (s: SkillDefinition) => s.type === SkillType.Passive,
+    );
     const recommendedIds: Set<string> = new Set<string>();
     if (firstActive) recommendedIds.add(firstActive.id);
     if (firstBuff) recommendedIds.add(firstBuff.id);
+    if (firstPassive) recommendedIds.add(firstPassive.id);
 
     return sorted.map((skill: SkillDefinition): SkillTreeNode => {
       const currentLevel: number = p.skillLevels[skill.id] ?? 0;
       const isUnlocked: boolean = p.level >= skill.requiredCharacterLevel;
       const isMaxed: boolean = currentLevel >= skill.maxLevel;
-      const canInvest: boolean = points > 0 && isUnlocked && !isMaxed;
+      const prereqMet: boolean = !skill.prerequisite ||
+        (p.skillLevels[skill.prerequisite.skillId] ?? 0) >= skill.prerequisite.level;
+      const canInvest: boolean = points > 0 && isUnlocked && !isMaxed && prereqMet;
 
       return {
         skill,
@@ -115,20 +120,16 @@ export class SkillTreeComponent {
     return this.skillNodes().filter((n: SkillTreeNode) => n.skill.type === SkillType.Buff);
   });
 
+  readonly passiveNodes: Signal<SkillTreeNode[]> = computed((): SkillTreeNode[] => {
+    return this.skillNodes().filter((n: SkillTreeNode) => n.skill.type === SkillType.Passive);
+  });
+
   onInvest(skillId: string): void {
     this.skillAllocated.emit(skillId);
   }
 
   onClose(): void {
     this.closed.emit();
-  }
-
-  onHover(skillId: string): void {
-    this.hoveredSkillId.set(skillId);
-  }
-
-  onHoverOut(): void {
-    this.hoveredSkillId.set(null);
   }
 
   private describeEffect(skill: SkillDefinition, level: number): string {
@@ -138,19 +139,38 @@ export class SkillTreeComponent {
       return this.describeBuffEffect(skill, level);
     }
 
+    if (skill.type === SkillType.Passive) {
+      return this.describePassiveEffect(skill, level);
+    }
+
     return this.describeActiveEffect(skill, level);
   }
 
   private describeActiveEffect(skill: SkillDefinition, level: number): string {
-    const dmg: number = getSkillDamageMultiplier(skill, level);
     const mp: number = getSkillMpCost(skill, level);
+    const hp: number = getSkillHpCost(skill, level);
     const cd: number = getSkillCooldown(skill, level);
     const range: number = getSkillRange(skill, level);
     const cdSec: string = (cd / 1000).toFixed(1);
 
-    const parts: string[] = [`${dmg.toFixed(2)}x dmg`, `${mp} MP`, `${cdSec}s CD`];
-    if (range > 0) {
-      parts.push(`range ${range}`);
+    if (skill.mechanic === 'pull') {
+      const parts: string[] = [`${mp} MP`, `${cdSec}s CD`, `Range ${range}%`];
+      return `Lv.${level}: ${parts.join(', ')}`;
+    }
+
+    const dmg: number = getSkillDamageMultiplier(skill, level);
+    const dmgPct: number = Math.round(dmg * 100);
+    const parts: string[] = [`${dmgPct}% dmg`, `${mp} MP`];
+    if (hp > 0) {
+      const hpLabel: string = skill.hpCostIsPercent ? `${hp}% HP` : `${hp} HP`;
+      parts.push(hpLabel);
+    }
+    parts.push(`${cdSec}s CD`);
+    if (range > 0) parts.push(`range ${range}%`);
+    const stunMs: number = getSkillStunDurationMs(skill, level);
+    if (stunMs > 0) {
+      const stunSec: string = (stunMs / 1000).toFixed(0);
+      parts.push(`stun ${stunSec}s`);
     }
     return `Lv.${level}: ${parts.join(', ')}`;
   }
@@ -160,8 +180,26 @@ export class SkillTreeComponent {
     const value: number = getBuffEffectValue(skill, level);
     const durationMs: number = getBuffDurationMs(skill, level);
     const durationSec: number = Math.floor(durationMs / 1000);
+    const mp: number = getSkillMpCost(skill, level);
     const statLabel: string = this.getStatLabel(skill.buffEffect.stat);
+
+    if (skill.buffEffect.stat === 'knockbackResist') {
+      return `Lv.${level}: ${mp} MP, ${Math.round(value)}% ${statLabel} for ${durationSec}s`;
+    }
+
+    if (skill.buffEffect.stat === 'maxHpMaxMpPercent') {
+      return `Lv.${level}: ${mp} MP, +${Math.round(value)}% ${statLabel} for ${durationSec}s`;
+    }
+
     return `Lv.${level}: +${value.toFixed(1)} ${statLabel} for ${durationSec}s`;
+  }
+
+  private describePassiveEffect(skill: SkillDefinition, level: number): string {
+    if (!skill.passiveEffect) return `Lv.${level}`;
+    const value: number = getPassiveEffectValue(skill, level);
+    const typeLabel: string = skill.passiveEffect.type === 'hpRecovery' ? 'HP' : 'MP';
+    const intervalSec: number = Math.floor(skill.passiveEffect.intervalMs / 1000);
+    return `Lv.${level}: +${value} ${typeLabel} every ${intervalSec}s`;
   }
 
   private getStatLabel(stat: string): string {
@@ -174,6 +212,8 @@ export class SkillTreeComponent {
       critRate: 'Crit Rate',
       critDamage: 'Crit DMG',
       allDamagePercent: '% All DMG',
+      knockbackResist: 'KB Resist',
+      maxHpMaxMpPercent: 'Max HP & MP',
     };
     return labels[stat] ?? stat;
   }

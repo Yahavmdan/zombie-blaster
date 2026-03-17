@@ -1,12 +1,13 @@
 import { Component, ChangeDetectionStrategy, InputSignal, OutputEmitterRef, Signal, input, output, computed } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { ActiveBuff, CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost } from '@shared/index';
+import { ActiveBuff, CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost, getSkillHpCost } from '@shared/index';
 
 export interface SkillSlot {
   key: string;
   name: string;
   icon: string;
   mpCost: number;
+  hpCost: number;
   locked: boolean;
   isBuff: boolean;
 }
@@ -90,6 +91,7 @@ export class HudComponent {
         name: `${skill.name} Lv.${level}`,
         icon: skill.icon,
         mpCost: getSkillMpCost(skill, level),
+        hpCost: getSkillHpCost(skill, level),
         locked: false,
         isBuff: skill.type === SkillType.Buff,
       };

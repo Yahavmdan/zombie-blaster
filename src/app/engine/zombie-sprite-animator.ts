@@ -13,6 +13,7 @@ interface ZombieSpriteAnimation {
   frameCount: number;
   frameWidth: number;
   frameHeight: number;
+  srcY: number;
   frameDurationTicks: number;
   loop: boolean;
 }
@@ -22,6 +23,9 @@ interface ZombieSpriteConfig {
   frameCount: number;
   frameDurationTicks: number;
   loop: boolean;
+  frameWidth?: number;
+  frameHeight?: number;
+  srcY?: number;
 }
 
 type ZombieAnimConfigs = Record<ZombieAnimState, ZombieSpriteConfig>;
@@ -34,6 +38,7 @@ const ZOMBIE_SPRITE_KEY_MAP: Record<ZombieType, string> = {
   [ZombieType.Spitter]: 'zombie_3',
   [ZombieType.Tank]: 'zombie_4',
   [ZombieType.Boss]: 'zombie_3',
+  [ZombieType.DragonBoss]: 'dragon_boss',
 };
 
 const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
@@ -64,6 +69,13 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Attack]: { src: 'sprites/zombies/zombie_4/Attack.png', frameCount: 10, frameDurationTicks: 3, loop: false },
     [ZombieAnimState.Dead]: { src: 'sprites/zombies/zombie_4/Dead.png', frameCount: 5, frameDurationTicks: 8, loop: false },
     [ZombieAnimState.Hurt]: { src: 'sprites/zombies/zombie_4/Hurt.png', frameCount: 4, frameDurationTicks: 6, loop: false },
+  },
+  dragon_boss: {
+    [ZombieAnimState.Idle]: { src: 'sprites/zombies/dragon_boss/Flying.png', frameCount: 6, frameDurationTicks: 8, loop: true, frameWidth: 172, frameHeight: 159 },
+    [ZombieAnimState.Walk]: { src: 'sprites/zombies/dragon_boss/Flying.png', frameCount: 6, frameDurationTicks: 6, loop: true, frameWidth: 172, frameHeight: 159 },
+    [ZombieAnimState.Attack]: { src: 'sprites/zombies/dragon_boss/SpiralAttack.png', frameCount: 6, frameDurationTicks: 6, loop: false, frameWidth: 218, frameHeight: 169 },
+    [ZombieAnimState.Dead]: { src: 'sprites/zombies/dragon_boss/Dead.png', frameCount: 5, frameDurationTicks: 10, loop: false, frameWidth: 172, frameHeight: 177 },
+    [ZombieAnimState.Hurt]: { src: 'sprites/zombies/dragon_boss/Hurt.png', frameCount: 1, frameDurationTicks: 8, loop: false, frameWidth: 170, frameHeight: 168 },
   },
 };
 
@@ -102,8 +114,9 @@ export class ZombieSpriteAnimator {
           animMap.set(state, {
             image: img,
             frameCount: config.frameCount,
-            frameWidth: ZOMBIE_FRAME_SIZE,
-            frameHeight: ZOMBIE_FRAME_SIZE,
+            frameWidth: config.frameWidth ?? ZOMBIE_FRAME_SIZE,
+            frameHeight: config.frameHeight ?? ZOMBIE_FRAME_SIZE,
+            srcY: config.srcY ?? 0,
             frameDurationTicks: config.frameDurationTicks,
             loop: config.loop,
           });
@@ -181,6 +194,7 @@ export class ZombieSpriteAnimator {
     if (!anim) return;
 
     const srcX: number = instance.currentFrame * anim.frameWidth;
+    const srcY: number = anim.srcY;
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
@@ -190,13 +204,13 @@ export class ZombieSpriteAnimator {
       ctx.scale(-1, 1);
       ctx.drawImage(
         anim.image,
-        srcX, 0, anim.frameWidth, anim.frameHeight,
+        srcX, srcY, anim.frameWidth, anim.frameHeight,
         0, 0, renderWidth, renderHeight,
       );
     } else {
       ctx.drawImage(
         anim.image,
-        srcX, 0, anim.frameWidth, anim.frameHeight,
+        srcX, srcY, anim.frameWidth, anim.frameHeight,
         x, y, renderWidth, renderHeight,
       );
     }
@@ -206,10 +220,5 @@ export class ZombieSpriteAnimator {
 
   removeInstance(zombieId: string): void {
     this.instances.delete(zombieId);
-  }
-
-  getState(zombieId: string): ZombieAnimState | null {
-    const instance: ZombieAnimInstance | undefined = this.instances.get(zombieId);
-    return instance ? instance.state : null;
   }
 }

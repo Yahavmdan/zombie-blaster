@@ -4,6 +4,7 @@ export enum ZombieType {
   Tank = 'tank',
   Spitter = 'spitter',
   Boss = 'boss',
+  DragonBoss = 'dragon-boss',
 }
 
 export interface ZombieDefinition {
@@ -14,7 +15,6 @@ export interface ZombieDefinition {
   baseDamageMax: number;
   speed: number;
   xpReward: number;
-  color: string;
   width: number;
   height: number;
   attackAnimTicks: number;
@@ -38,6 +38,8 @@ export interface ZombieState {
   attackCooldown: number;
   attackAnimTimer: number;
   attackHasHit: boolean;
+  attackHesitation: number;
+  hesitationRange: number;
   facing: number;
   orbitOffset: number;
 }

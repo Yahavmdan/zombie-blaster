@@ -13,12 +13,12 @@ import {
   inject,
   effect,
 } from '@angular/core';
-import { CharacterClass, CharacterState, KeyBindings } from '@shared/index';
+import { CharacterClass, CharacterState } from '@shared/index';
 import { DropType } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { InputKeys } from '@shared/messages';
-import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
+import { KeyBindingsService } from '../../services/key-bindings.service';
 
 @Component({
   selector: 'app-game-canvas',
@@ -60,15 +60,9 @@ export class GameCanvasComponent implements OnDestroy {
   private readonly boundMouseUp: () => void = (): void => this.onMouseUp();
 
   constructor() {
-    afterNextRender(() => {
+    afterNextRender((): void => {
       this.initEngine();
       this.bindInput();
-      this.syncControlLabels(this.keyBindingsService.bindings());
-    });
-
-    effect((): void => {
-      const bindings: KeyBindings = this.keyBindingsService.bindings();
-      this.syncControlLabels(bindings);
     });
 
     effect((): void => {
@@ -179,28 +173,5 @@ export class GameCanvasComponent implements OnDestroy {
     if (this.inputDisabled()) return;
     this.keys.attack = false;
     this.engine?.setKeys({ ...this.keys });
-  }
-
-  private syncControlLabels(bindings: KeyBindings): void {
-    if (!this.engine) return;
-
-    const fmt = (keys: string[]): string => keys.map((k: string) => formatKeyName(k)).join('/');
-
-    const skillKeys: string[] = [
-      formatKeyName(bindings.skill1[0] ?? '1'),
-      formatKeyName(bindings.skill2[0] ?? '2'),
-      formatKeyName(bindings.skill3[0] ?? '3'),
-      formatKeyName(bindings.skill4[0] ?? '4'),
-      formatKeyName(bindings.skill5[0] ?? '5'),
-      formatKeyName(bindings.skill6[0] ?? '6'),
-    ];
-
-    this.engine.setControlKeyDisplay({
-      move: `${fmt(bindings.left)}/${fmt(bindings.right)}  Move`,
-      jump: `${fmt(bindings.up)}/${fmt(bindings.jump)}  Jump`,
-      climb: `${fmt(bindings.up)}/${fmt(bindings.down)} on rope  Climb`,
-      attack: `${fmt(bindings.attack)} or Click  Attack`,
-      skillKeys,
-    });
   }
 }

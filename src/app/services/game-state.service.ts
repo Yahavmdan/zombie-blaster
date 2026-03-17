@@ -101,7 +101,7 @@ export class GameStateService {
     const secondaryValue: number = totalStats[w.secondaryStat];
 
     return {
-      maxHp: GAME_CONSTANTS.PLAYER_BASE_HP + totalStats.str * w.hpPerStr,
+      maxHp: GAME_CONSTANTS.PLAYER_BASE_HP + totalStats.str * w.hpPerStr + (level - 1) * GAME_CONSTANTS.PLAYER_HP_PER_LEVEL,
       maxMp: GAME_CONSTANTS.PLAYER_BASE_MP + totalStats.int * w.mpPerInt + (level - 1) * GAME_CONSTANTS.PLAYER_MP_PER_LEVEL,
       attack: Math.floor(primaryValue * w.attackFromPrimary + secondaryValue * w.attackFromSecondary),
       defense: Math.floor(totalStats.str * w.defenseFromStr + totalStats.dex * w.defenseFromDex),
@@ -135,6 +135,9 @@ export class GameStateService {
       const target: string = buff.stat;
       if (target === 'allDamagePercent') {
         derived.attack = Math.floor(derived.attack * (1 + buff.value / 100));
+      } else if (target === 'maxHpMaxMpPercent') {
+        derived.maxHp = Math.floor(derived.maxHp * (1 + buff.value / 100));
+        derived.maxMp = Math.floor(derived.maxMp * (1 + buff.value / 100));
       } else if (target in derived) {
         (derived as unknown as Record<string, number>)[target] += buff.value;
       }
@@ -218,8 +221,13 @@ export class GameStateService {
       if (!skillDef) return p;
 
       const currentLevel: number = p.skillLevels[skillId] ?? 0;
-      if (currentLevel >= GAME_CONSTANTS.MAX_SKILL_LEVEL) return p;
+      if (currentLevel >= skillDef.maxLevel) return p;
       if (p.level < skillDef.requiredCharacterLevel) return p;
+
+      if (skillDef.prerequisite) {
+        const prereqLevel: number = p.skillLevels[skillDef.prerequisite.skillId] ?? 0;
+        if (prereqLevel < skillDef.prerequisite.level) return p;
+      }
 
       const newSkillLevels: Record<string, number> = {
         ...p.skillLevels,
@@ -251,7 +259,7 @@ export class GameStateService {
       );
       const newSkillLevels: Record<string, number> = { ...p.skillLevels };
       for (const skill of classSkills) {
-        newSkillLevels[skill.id] = GAME_CONSTANTS.MAX_SKILL_LEVEL;
+        newSkillLevels[skill.id] = skill.maxLevel;
       }
       const derived: CharacterDerived = this.calculateDerivedWithBuffs(
         CHARACTER_CLASSES[p.classId].baseStats,

@@ -112,10 +112,6 @@ export class SpriteAnimator {
     this.tickCounter = 0;
   }
 
-  getState(): PlayerAnimState {
-    return this.currentState;
-  }
-
   tick(): void {
     const anim: SpriteAnimation | undefined = this.animations.get(this.currentState);
     if (!anim) return;

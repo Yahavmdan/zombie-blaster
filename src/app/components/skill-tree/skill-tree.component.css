@@ -115,6 +115,10 @@
   color: #44cc66;
 }
 
+.section-title--passive {
+  color: #44cc44;
+}
+
 .skill-list {
   display: flex;
   flex-direction: column;
@@ -138,6 +142,10 @@
   border-color: #44cc6688;
 }
 
+.skill-card--passive:hover {
+  border-color: #44cc4488;
+}
+
 .skill-card--locked {
   opacity: 0.45;
 }
@@ -153,6 +161,10 @@
 
 .skill-card--buff.skill-card--invested {
   border-left-color: #44cc66;
+}
+
+.skill-card--passive.skill-card--invested {
+  border-left-color: #44cc44;
 }
 
 .skill-card-main {
@@ -213,6 +225,10 @@
   background: #44cc66;
 }
 
+.skill-progress-fill--passive {
+  background: #44cc44;
+}
+
 .skill-progress-fill--maxed {
   background: linear-gradient(90deg, #ffaa22, #ffdd44) !important;
 }
@@ -254,6 +270,12 @@
   background: rgba(68, 204, 102, 0.08);
 }
 
+.skill-card--passive .invest-btn {
+  border-color: #44cc44;
+  color: #44cc44;
+  background: rgba(68, 204, 68, 0.08);
+}
+
 .invest-btn:hover:not(:disabled) {
   background: rgba(68, 170, 255, 0.2);
   box-shadow: 0 0 10px rgba(68, 170, 255, 0.3);
@@ -262,6 +284,11 @@
 .skill-card--buff .invest-btn:hover:not(:disabled) {
   background: rgba(68, 204, 102, 0.2);
   box-shadow: 0 0 10px rgba(68, 204, 102, 0.3);
+}
+
+.skill-card--passive .invest-btn:hover:not(:disabled) {
+  background: rgba(68, 204, 68, 0.2);
+  box-shadow: 0 0 10px rgba(68, 204, 68, 0.3);
 }
 
 .invest-btn:disabled {
@@ -275,25 +302,76 @@
 
 .skill-tooltip {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 50%;
   top: 100%;
-  z-index: 10;
-  margin-top: 2px;
-  padding: 0.6rem 0.75rem;
-  background: #0e0e1a;
-  border: 1px solid #44aaff66;
-  border-radius: 6px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  transform: translateX(-50%) translateY(-4px);
+  z-index: 20;
+  margin-top: 8px;
+  padding: 0.65rem 0.8rem;
+  background: rgba(14, 14, 30, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(68, 170, 255, 0.35);
+  border-radius: 8px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    0 0 20px rgba(68, 170, 255, 0.08);
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  animation: tooltip-in 0.12s ease-out;
+  width: max-content;
+  min-width: 240px;
+  max-width: 340px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    visibility 0.2s;
 }
 
-@keyframes tooltip-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+.skill-tooltip::after {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: rgba(14, 14, 30, 0.88);
+  border-left: 1px solid rgba(68, 170, 255, 0.35);
+  border-top: 1px solid rgba(68, 170, 255, 0.35);
+}
+
+.skill-card:hover .skill-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.skill-card--buff .skill-tooltip {
+  border-color: rgba(68, 204, 102, 0.35);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    0 0 20px rgba(68, 204, 102, 0.08);
+}
+
+.skill-card--buff .skill-tooltip::after {
+  border-left-color: rgba(68, 204, 102, 0.35);
+  border-top-color: rgba(68, 204, 102, 0.35);
+}
+
+.skill-card--passive .skill-tooltip {
+  border-color: rgba(68, 204, 68, 0.35);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    0 0 20px rgba(68, 204, 68, 0.08);
+}
+
+.skill-card--passive .skill-tooltip::after {
+  border-left-color: rgba(68, 204, 68, 0.35);
+  border-top-color: rgba(68, 204, 68, 0.35);
 }
 
 .tooltip-header {
@@ -326,6 +404,12 @@
   color: #44cc66;
   background: rgba(68, 204, 102, 0.12);
   border: 1px solid rgba(68, 204, 102, 0.3);
+}
+
+.tooltip-type--passive {
+  color: #44cc44;
+  background: rgba(68, 204, 68, 0.12);
+  border: 1px solid rgba(68, 204, 68, 0.3);
 }
 
 .tooltip-desc {

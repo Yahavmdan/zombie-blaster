@@ -102,6 +102,8 @@
           <span class="skill-locked-label">Lv5</span>
         } @else if (slot.isBuff) {
           <span class="skill-buff-label">BUFF</span>
+        } @else if (slot.hpCost > 0) {
+          <span class="skill-mp-cost">{{ slot.hpCost }}HP {{ slot.mpCost }}MP</span>
         } @else {
           <span class="skill-mp-cost">{{ slot.mpCost }} MP</span>
         }

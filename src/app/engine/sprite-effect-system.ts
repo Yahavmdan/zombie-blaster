@@ -149,8 +149,4 @@ export class SpriteEffectSystem {
     ctx.globalAlpha = 1;
     ctx.restore();
   }
-
-  getActiveCount(): number {
-    return this.activeEffects.length;
-  }
 }

@@ -211,7 +211,7 @@ export class MapRenderer {
     ctx: CanvasRenderingContext2D, plat: PlatformRect,
   ): void {
     const cols: number = Math.max(1, Math.ceil(plat.width / TILE_SIZE));
-    const tileY: number = plat.y - (TILE_SIZE - plat.height);
+    const tileY: number = plat.y;
 
     for (let col: number = 0; col < cols; col++) {
       const x: number = plat.x + col * TILE_SIZE;

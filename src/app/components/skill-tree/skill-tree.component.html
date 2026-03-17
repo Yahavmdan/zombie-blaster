@@ -20,8 +20,6 @@
             [class.skill-card--locked]="!node.isUnlocked"
             [class.skill-card--maxed]="node.isMaxed"
             [class.skill-card--invested]="node.currentLevel > 0"
-            (mouseenter)="onHover(node.skill.id)"
-            (mouseleave)="onHoverOut()"
             [attr.data-testid]="'skill-tree-card-' + node.skill.id"
           >
             <div class="skill-card-main">
@@ -64,30 +62,34 @@
               </button>
             </div>
 
-            @if (hoveredSkillId() === node.skill.id) {
-              <div class="skill-tooltip">
-                <div class="tooltip-header">
-                  <span class="tooltip-name">{{ node.skill.icon }} {{ node.skill.name }}</span>
-                  <span class="tooltip-type tooltip-type--active">ACTIVE</span>
-                </div>
-                <p class="tooltip-desc">{{ node.skill.description }}</p>
-                <div class="tooltip-req">Required Level: {{ node.skill.requiredCharacterLevel }}</div>
-                @if (node.currentLevel > 0) {
-                  <div class="tooltip-effect tooltip-effect--current">Current: {{ node.currentEffect }}</div>
-                }
-                @if (!node.isMaxed) {
-                  <div class="tooltip-effect tooltip-effect--next">Next: {{ node.nextEffect }}</div>
-                } @else {
-                  <div class="tooltip-effect tooltip-effect--maxed">MAX LEVEL</div>
-                }
-                @if (node.skill.hitCount > 1) {
-                  <div class="tooltip-extra">Hits: {{ node.skill.hitCount }}</div>
-                }
-                @if (node.skill.aoeRadius > 0) {
-                  <div class="tooltip-extra">AoE Radius: {{ node.skill.aoeRadius }}</div>
-                }
+            <div class="skill-tooltip">
+              <div class="tooltip-header">
+                <span class="tooltip-name">{{ node.skill.icon }} {{ node.skill.name }}</span>
+                <span class="tooltip-type tooltip-type--active">ACTIVE</span>
               </div>
-            }
+              <p class="tooltip-desc">{{ node.skill.description }}</p>
+              <div class="tooltip-req">Required Level: {{ node.skill.requiredCharacterLevel }}</div>
+              @if (node.currentLevel > 0) {
+                <div class="tooltip-effect tooltip-effect--current">Current: {{ node.currentEffect }}</div>
+              }
+              @if (!node.isMaxed) {
+                <div class="tooltip-effect tooltip-effect--next">Next: {{ node.nextEffect }}</div>
+              } @else {
+                <div class="tooltip-effect tooltip-effect--maxed">MAX LEVEL</div>
+              }
+              @if (node.skill.hitCount > 1) {
+                <div class="tooltip-extra">Hits: {{ node.skill.hitCount }}</div>
+              }
+              @if (node.skill.aoeRadius > 0) {
+                <div class="tooltip-extra">AoE Radius: {{ node.skill.aoeRadius }}</div>
+              }
+              @if (node.skill.maxTargets > 0) {
+                <div class="tooltip-extra">Max Targets: {{ node.skill.maxTargets }}</div>
+              }
+              @if (node.skill.minHpPercent > 0) {
+                <div class="tooltip-extra">Requires &gt;{{ node.skill.minHpPercent }}% HP</div>
+              }
+            </div>
           </div>
         }
       </div>
@@ -103,8 +105,6 @@
             [class.skill-card--maxed]="node.isMaxed"
             [class.skill-card--invested]="node.currentLevel > 0"
             [class.skill-card--buff]="true"
-            (mouseenter)="onHover(node.skill.id)"
-            (mouseleave)="onHoverOut()"
             [attr.data-testid]="'skill-tree-card-' + node.skill.id"
           >
             <div class="skill-card-main">
@@ -146,11 +146,82 @@
               </button>
             </div>
 
-            @if (hoveredSkillId() === node.skill.id) {
+            <div class="skill-tooltip">
+              <div class="tooltip-header">
+                <span class="tooltip-name">{{ node.skill.icon }} {{ node.skill.name }}</span>
+                <span class="tooltip-type tooltip-type--buff">BUFF</span>
+              </div>
+              <p class="tooltip-desc">{{ node.skill.description }}</p>
+              <div class="tooltip-req">Required Level: {{ node.skill.requiredCharacterLevel }}</div>
+              @if (node.currentLevel > 0) {
+                <div class="tooltip-effect tooltip-effect--current">Current: {{ node.currentEffect }}</div>
+              }
+              @if (!node.isMaxed) {
+                <div class="tooltip-effect tooltip-effect--next">Next: {{ node.nextEffect }}</div>
+              } @else {
+                <div class="tooltip-effect tooltip-effect--maxed">MAX LEVEL</div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+    @if (passiveNodes().length > 0) {
+      <div class="skill-section">
+        <h3 class="section-title section-title--passive">PASSIVE SKILLS</h3>
+        <div class="skill-list">
+          @for (node of passiveNodes(); track node.skill.id) {
+            <div
+              class="skill-card"
+              [class.skill-card--locked]="!node.isUnlocked"
+              [class.skill-card--maxed]="node.isMaxed"
+              [class.skill-card--invested]="node.currentLevel > 0"
+              [class.skill-card--passive]="true"
+              [attr.data-testid]="'skill-tree-card-' + node.skill.id"
+            >
+              <div class="skill-card-main">
+                <span class="skill-card-icon" [style.color]="node.skill.color">
+                  @if (!node.isUnlocked) {
+                    🔒
+                  } @else {
+                    {{ node.skill.icon }}
+                  }
+                </span>
+                <div class="skill-card-info">
+                  <div class="skill-card-name-row">
+                    <span class="skill-card-name">{{ node.skill.name }}</span>
+                    @if (node.isRecommended) {
+                      <span class="skill-badge-recommended">★ REC</span>
+                    }
+                    <span class="skill-card-level">{{ node.currentLevel }}/{{ node.maxLevel }}</span>
+                  </div>
+                  <div class="skill-progress-bar">
+                    <div
+                      class="skill-progress-fill skill-progress-fill--passive"
+                      [class.skill-progress-fill--maxed]="node.isMaxed"
+                      [style.width.%]="node.progressPercent"
+                    ></div>
+                  </div>
+                  @if (!node.isUnlocked) {
+                    <span class="skill-card-locked-label">Requires Lv.{{ node.skill.requiredCharacterLevel }}</span>
+                  } @else {
+                    <span class="skill-card-effect">{{ node.currentEffect }}</span>
+                  }
+                </div>
+                <button
+                  class="invest-btn"
+                  [disabled]="!node.canInvest"
+                  (click)="onInvest(node.skill.id)"
+                  [attr.data-testid]="'skill-tree-button-invest-' + node.skill.id"
+                >
+                  +
+                </button>
+              </div>
+
               <div class="skill-tooltip">
                 <div class="tooltip-header">
                   <span class="tooltip-name">{{ node.skill.icon }} {{ node.skill.name }}</span>
-                  <span class="tooltip-type tooltip-type--buff">BUFF</span>
+                  <span class="tooltip-type tooltip-type--passive">PASSIVE</span>
                 </div>
                 <p class="tooltip-desc">{{ node.skill.description }}</p>
                 <div class="tooltip-req">Required Level: {{ node.skill.requiredCharacterLevel }}</div>
@@ -163,11 +234,11 @@
                   <div class="tooltip-effect tooltip-effect--maxed">MAX LEVEL</div>
                 }
               </div>
-            }
-          </div>
-        }
+            </div>
+          }
+        </div>
       </div>
-    </div>
+    }
   </div>
 
   <button
