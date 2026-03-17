@@ -42,6 +42,7 @@ export interface ZombieState {
   hesitationRange: number;
   facing: number;
   orbitOffset: number;
+  platformDropTimer: number;
 }
 
 export enum DropType {

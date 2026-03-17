@@ -1014,6 +1014,7 @@ export class GameEngine {
 
       if (z.jumpCooldown > 0) z.jumpCooldown--;
       if (z.attackCooldown > 0) z.attackCooldown--;
+      if (z.platformDropTimer > 0) z.platformDropTimer--;
 
       z.facing = this.player.x > z.x ? 1 : -1;
 
@@ -1040,6 +1041,7 @@ export class GameEngine {
 
         z.isGrounded = false;
         for (const plat of this.platforms) {
+          if (z.platformDropTimer > 0 && plat.y !== GAME_CONSTANTS.GROUND_Y) continue;
           const zBottom: number = z.y + zDef.height;
           const prevZBottom: number = zBottom - z.velocityY;
           if (
@@ -1232,7 +1234,13 @@ export class GameEngine {
 
     if (!z.isGrounded || z.jumpCooldown > 0) return;
 
-    if (playerIsAbove && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_PLATFORM_CHASE_CHANCE) {
+    const playerIsBelow: boolean = dy > zDef.height;
+
+    if (playerIsBelow && z.y + zDef.height < GAME_CONSTANTS.GROUND_Y && Math.random() < GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_CHANCE) {
+      z.platformDropTimer = GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_TICKS;
+      z.y += GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE + 1;
+      z.isGrounded = false;
+    } else if (playerIsAbove && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_PLATFORM_CHASE_CHANCE) {
       this.zombieJump(z);
     } else if (distToPlayer < GAME_CONSTANTS.ZOMBIE_ORBIT_MAX * 2 && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_CHANCE_PER_TICK) {
       this.zombieJump(z);
@@ -1423,6 +1431,7 @@ export class GameEngine {
       facing: spawnRight ? -1 : 1,
       orbitOffset: (Math.random() > 0.5 ? 1 : -1) *
         (GAME_CONSTANTS.ZOMBIE_ORBIT_MIN + Math.random() * (GAME_CONSTANTS.ZOMBIE_ORBIT_MAX - GAME_CONSTANTS.ZOMBIE_ORBIT_MIN)),
+      platformDropTimer: 0,
     };
 
     this.zombies.push(zombie);
