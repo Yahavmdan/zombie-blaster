@@ -64,8 +64,11 @@ export interface ZombieCorpse {
   height: number;
   spriteKey: string;
   facing: number;
+  velocityX: number;
   velocityY: number;
   isGrounded: boolean;
+  frozen: boolean;
+  landProcessed: boolean;
   fadeTimer: number;
   maxFadeTimer: number;
 }

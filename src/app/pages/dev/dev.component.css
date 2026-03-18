@@ -92,6 +92,20 @@
   background: #8b5cf6;
 }
 
+.dev-btn--maxout {
+  background: #f43f5e;
+  border-color: #be123c;
+  color: #fff;
+}
+
+.dev-btn--maxout:hover {
+  background: #fb7185;
+}
+
+.dev-btn--maxout:active {
+  background: #e11d48;
+}
+
 .dev-btn--wave {
   background: #38bdf8;
   border-color: #0284c7;

@@ -125,20 +125,20 @@ export class CombatSystem {
     const hpCostRaw: number = getSkillHpCost(skill, skillLevel);
     const cooldownMs: number = getSkillCooldown(skill, skillLevel);
 
-    if (skill.minHpPercent > 0) {
-      const hpPercent: number = (p.hp / p.derived.maxHp) * 100;
-      if (hpPercent <= skill.minHpPercent) return;
-    }
-
     const hpCost: number = skill.hpCostIsPercent
       ? Math.floor(p.derived.maxHp * (hpCostRaw / 100))
       : hpCostRaw;
 
-    if (p.mp < mpCost) return;
-    if (hpCost > 0 && p.hp <= hpCost) return;
-
-    p.mp -= mpCost;
-    if (hpCost > 0) p.hp -= hpCost;
+    if (!this.e.godMode) {
+      if (skill.minHpPercent > 0) {
+        const hpPercent: number = (p.hp / p.derived.maxHp) * 100;
+        if (hpPercent <= skill.minHpPercent) return;
+      }
+      if (p.mp < mpCost) return;
+      if (hpCost > 0 && p.hp <= hpCost) return;
+      p.mp -= mpCost;
+      if (hpCost > 0) p.hp -= hpCost;
+    }
     this.e.skillCooldowns.set(skill.id, Math.floor(cooldownMs / this.e.fixedDt));
 
     const playerCX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
@@ -540,6 +540,7 @@ export class CombatSystem {
     this.e.zombieSpriteAnimator.setState(z.id, initialAnim);
 
     const lingerTicks: number = GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS;
+    const scatter: number = (Math.random() - 0.5) * GAME_CONSTANTS.ZOMBIE_CORPSE_DEATH_SCATTER * 2;
     const corpse: ZombieCorpse = {
       id: z.id,
       type: z.type,
@@ -549,8 +550,11 @@ export class CombatSystem {
       height: z.instanceHeight,
       spriteKey: this.e.zombieSpriteAnimator.getSpriteKey(z.type),
       facing: z.facing,
+      velocityX: scatter + (grounded ? 0 : z.velocityX),
       velocityY: grounded ? 0 : z.velocityY,
       isGrounded: grounded,
+      frozen: false,
+      landProcessed: false,
       fadeTimer: lingerTicks,
       maxFadeTimer: lingerTicks,
     };

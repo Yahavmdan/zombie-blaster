@@ -234,6 +234,29 @@ export class RenderSystem {
         drawX, drawY, renderW, renderH, flipX,
       );
       ctx.restore();
+
+      if (corpse.isGrounded) {
+        this.renderCorpseFlies(ctx, corpse);
+      }
+    }
+  }
+
+  private renderCorpseFlies(ctx: CanvasRenderingContext2D, corpse: ZombieCorpse): void {
+    const cx: number = corpse.x + corpse.width / 2;
+    const cy: number = corpse.y + corpse.height * 0.4;
+    const t: number = performance.now() / 1000;
+    const seed: number = corpse.id.charCodeAt(0) + corpse.id.charCodeAt(1) * 7;
+    const flyCount: number = 2 + (seed % 2);
+
+    ctx.fillStyle = '#000000';
+    for (let i: number = 0; i < flyCount; i++) {
+      const p: number = seed * 0.7 + i * 2.1;
+      const s1: number = 2.3 + i * 0.6;
+      const s2: number = 3.1 + i * 0.9;
+      const r: number = 8 + i * 3;
+      const fx: number = cx + Math.cos(t * s1 + p) * r + Math.sin(t * s2 * 1.7 + p * 3) * r * 0.5;
+      const fy: number = cy + Math.sin(t * s2 + p) * r * 0.6 + Math.cos(t * s1 * 1.4 + p * 2) * r * 0.4;
+      ctx.fillRect(Math.round(fx), Math.round(fy), 1, 1);
     }
   }
 

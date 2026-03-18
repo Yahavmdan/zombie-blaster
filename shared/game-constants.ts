@@ -143,12 +143,24 @@ export const GAME_CONSTANTS = {
   // ─── Zombie-to-Zombie Collision ────────────────
   ZOMBIE_COLLISION_PUSH_STRENGTH: 0.45,
   ZOMBIE_COLLISION_Y_TOLERANCE: 20,
+  ZOMBIE_CROWD_OVERLAP_LIMIT: 5,
+  ZOMBIE_CROWD_PUSH_STRENGTH: 0.08,
+
+  // ─── Zombie-on-Zombie Climbing ───────────────
+  ZOMBIE_CLIMB_SNAP_TOLERANCE: 10,
+  ZOMBIE_CLIMB_WIDTH_RATIO: 0.7,
 
   // ─── Zombie Spawn Animation ────────────────────
   ZOMBIE_SPAWN_ANIM_TICKS: 50,
 
   // ─── Zombie Corpse Fade ─────────────────────────
-  ZOMBIE_CORPSE_LINGER_TICKS: 120,
+  ZOMBIE_CORPSE_LINGER_TICKS: 1500,
+  ZOMBIE_CORPSE_PLATFORM_HEIGHT: 12,
+  ZOMBIE_CORPSE_SNAP_TOLERANCE: 16,
+  ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO: 0.55,
+  ZOMBIE_CORPSE_SLIDE_OFFSET: 8,
+  ZOMBIE_CORPSE_DEATH_SCATTER: 2,
+  ZOMBIE_CORPSE_DIVERSE_CHANCE: 0.45,
 
   // ─── Ropes ──────────────────────────────────────
   ROPE_CLIMB_SPEED: 5,

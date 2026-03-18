@@ -71,6 +71,16 @@ export class PhysicsSystem {
         p.isGrounded = true;
       }
     }
+
+    const stunnedCorpseSurface: number | null = this.findHighestCorpseSurface(
+      p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, p.velocityY,
+    );
+    if (stunnedCorpseSurface !== null) {
+      p.y = stunnedCorpseSurface - GAME_CONSTANTS.PLAYER_HEIGHT;
+      p.velocityY = 0;
+      p.isGrounded = true;
+    }
+
     this.clampPlayerX(p);
   }
 
@@ -209,5 +219,43 @@ export class PhysicsSystem {
         p.isGrounded = true;
       }
     }
+
+    const movementCorpseSurface: number | null = this.findHighestCorpseSurface(
+      p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, p.velocityY,
+    );
+    if (movementCorpseSurface !== null) {
+      p.y = movementCorpseSurface - GAME_CONSTANTS.PLAYER_HEIGHT;
+      p.velocityY = 0;
+      p.isGrounded = true;
+    }
+  }
+
+  private findHighestCorpseSurface(
+    entityX: number, entityY: number, entityWidth: number, entityHeight: number, velocityY: number,
+  ): number | null {
+    let best: number | null = null;
+    const bottom: number = entityY + entityHeight;
+    const prevBottom: number = bottom - velocityY;
+
+    const widthRatio: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
+    for (const corpse of this.e.zombieCorpses) {
+      if (!corpse.isGrounded) continue;
+      if (this.e.platformDropTimer > 0) continue;
+      const effectiveX: number = corpse.x + corpse.width * (1 - widthRatio) / 2;
+      const effectiveW: number = corpse.width * widthRatio;
+      const surfaceY: number = corpse.y + corpse.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+      if (
+        entityX + entityWidth > effectiveX &&
+        entityX < effectiveX + effectiveW &&
+        bottom >= surfaceY &&
+        prevBottom <= surfaceY + GAME_CONSTANTS.ZOMBIE_CORPSE_SNAP_TOLERANCE &&
+        velocityY >= 0
+      ) {
+        if (best === null || surfaceY < best) {
+          best = surfaceY;
+        }
+      }
+    }
+    return best;
   }
 }

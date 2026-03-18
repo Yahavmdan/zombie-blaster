@@ -273,6 +273,57 @@ export class GameStateService {
     });
   }
 
+  maxOutPlayer(): void {
+    this.player.update((p: CharacterState | null): CharacterState | null => {
+      if (!p) return p;
+
+      const targetLevel: number = 50;
+      const totalStatPoints: number = (targetLevel - 1) * GAME_CONSTANTS.STAT_POINTS_PER_LEVEL;
+      const perStat: number = Math.floor(totalStatPoints / 4);
+      const remainder: number = totalStatPoints - perStat * 4;
+      const w: ClassStatWeights = CLASS_STAT_WEIGHTS[p.classId];
+
+      const allocatedStats: CharacterStats = {
+        str: perStat + (w.primaryStat === 'str' ? remainder : 0),
+        dex: perStat + (w.primaryStat === 'dex' ? remainder : 0),
+        int: perStat + (w.primaryStat === 'int' ? remainder : 0),
+        luk: perStat + (w.primaryStat === 'luk' ? remainder : 0),
+      };
+
+      const baseSt: CharacterStats = CHARACTER_CLASSES[p.classId].baseStats;
+      const totalStats: CharacterStats = this.getTotalStats(baseSt, allocatedStats);
+      const derived: CharacterDerived = this.calculateDerivedWithBuffs(baseSt, allocatedStats, p.classId, p.activeBuffs, targetLevel);
+
+      const classSkills: SkillDefinition[] = SKILLS.filter(
+        (s: SkillDefinition) => s.classId === p.classId,
+      );
+      const newSkillLevels: Record<string, number> = {};
+      for (const skill of classSkills) {
+        newSkillLevels[skill.id] = skill.maxLevel;
+      }
+
+      const xpToNext: number = Math.floor(GAME_CONSTANTS.XP_BASE * Math.pow(GAME_CONSTANTS.XP_GROWTH, targetLevel - 1));
+
+      return {
+        ...p,
+        level: targetLevel,
+        xp: 0,
+        xpToNext,
+        allocatedStats,
+        stats: totalStats,
+        derived,
+        hp: derived.maxHp,
+        mp: derived.maxMp,
+        unallocatedStatPoints: 0,
+        unallocatedSkillPoints: 0,
+        skillLevels: newSkillLevels,
+        inventory: { ...p.inventory, gold: 1_000_000 },
+      };
+    });
+
+    this.godMode.set(true);
+  }
+
   getPlayerUsableSkills(p: CharacterState): SkillDefinition[] {
     return SKILLS.filter(
       (s: SkillDefinition) =>

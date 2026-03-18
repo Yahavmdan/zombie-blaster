@@ -96,6 +96,60 @@ export class ZombieSystem {
             z.isGrounded = true;
           }
         }
+
+        let bestCorpseSurface: number | null = null;
+        const zBot: number = z.y + z.instanceHeight;
+        const zPrevBot: number = zBot - z.velocityY;
+        const wRatio: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
+        for (const corpse of this.e.zombieCorpses) {
+          if (!corpse.isGrounded) continue;
+          const cEffX: number = corpse.x + corpse.width * (1 - wRatio) / 2;
+          const cEffW: number = corpse.width * wRatio;
+          const surfaceY: number = corpse.y + corpse.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+          if (
+            z.x + z.instanceWidth > cEffX &&
+            z.x < cEffX + cEffW &&
+            zBot >= surfaceY &&
+            zPrevBot <= surfaceY + GAME_CONSTANTS.ZOMBIE_CORPSE_SNAP_TOLERANCE &&
+            z.velocityY >= 0
+          ) {
+            if (bestCorpseSurface === null || surfaceY < bestCorpseSurface) {
+              bestCorpseSurface = surfaceY;
+            }
+          }
+        }
+        if (bestCorpseSurface !== null) {
+          z.y = bestCorpseSurface - z.instanceHeight;
+          z.velocityY = 0;
+          z.isGrounded = true;
+        }
+
+        let bestZombieSurface: number | null = null;
+        const climbRatio: number = GAME_CONSTANTS.ZOMBIE_CLIMB_WIDTH_RATIO;
+        for (const other of this.e.zombies) {
+          if (other === z || other.isDead || other.spawnTimer > 0) continue;
+          if (other.type === ZombieType.DragonBoss) continue;
+          if (!other.isGrounded) continue;
+          const oEffX: number = other.x + other.instanceWidth * (1 - climbRatio) / 2;
+          const oEffW: number = other.instanceWidth * climbRatio;
+          const surfaceY: number = other.y;
+          if (
+            z.x + z.instanceWidth > oEffX &&
+            z.x < oEffX + oEffW &&
+            zBot >= surfaceY &&
+            zPrevBot <= surfaceY + GAME_CONSTANTS.ZOMBIE_CLIMB_SNAP_TOLERANCE &&
+            z.velocityY >= 0
+          ) {
+            if (bestZombieSurface === null || surfaceY < bestZombieSurface) {
+              bestZombieSurface = surfaceY;
+            }
+          }
+        }
+        if (bestZombieSurface !== null) {
+          z.y = bestZombieSurface - z.instanceHeight;
+          z.velocityY = 0;
+          z.isGrounded = true;
+        }
       }
 
       const minX: number = 0;
@@ -412,6 +466,24 @@ export class ZombieSystem {
     );
     const count: number = alive.length;
 
+    const overlapCounts: number[] = new Array<number>(count).fill(0);
+    for (let i: number = 0; i < count; i++) {
+      const a: ZombieState = alive[i];
+      const aBottom: number = a.y + a.instanceHeight;
+      for (let j: number = i + 1; j < count; j++) {
+        const b: ZombieState = alive[j];
+        const bBottom: number = b.y + b.instanceHeight;
+        if (Math.abs(aBottom - bBottom) > GAME_CONSTANTS.ZOMBIE_COLLISION_Y_TOLERANCE) continue;
+        const xOverlap: number = Math.min(a.x + a.instanceWidth, b.x + b.instanceWidth) - Math.max(a.x, b.x);
+        if (xOverlap > 0) {
+          overlapCounts[i]++;
+          overlapCounts[j]++;
+        }
+      }
+    }
+
+    const crowdLimit: number = GAME_CONSTANTS.ZOMBIE_CROWD_OVERLAP_LIMIT;
+
     for (let i: number = 0; i < count; i++) {
       const a: ZombieState = alive[i];
       const aBottom: number = a.y + a.instanceHeight;
@@ -425,10 +497,15 @@ export class ZombieSystem {
         const xOverlap: number = Math.min(a.x + a.instanceWidth, b.x + b.instanceWidth) - Math.max(a.x, b.x);
         if (xOverlap <= 0) continue;
 
+        const maxOverlap: number = Math.max(overlapCounts[i], overlapCounts[j]);
+        if (maxOverlap <= crowdLimit) continue;
+
+        const strength: number = GAME_CONSTANTS.ZOMBIE_CROWD_PUSH_STRENGTH;
+
         const aCx: number = a.x + a.instanceWidth / 2;
         const bCx: number = b.x + b.instanceWidth / 2;
         const pushDir: number = aCx < bCx ? -1 : (aCx > bCx ? 1 : (Math.random() > 0.5 ? 1 : -1));
-        const pushAmount: number = xOverlap * GAME_CONSTANTS.ZOMBIE_COLLISION_PUSH_STRENGTH;
+        const pushAmount: number = xOverlap * strength;
 
         const aArea: number = a.instanceWidth * a.instanceHeight;
         const bArea: number = b.instanceWidth * b.instanceHeight;
@@ -567,11 +644,19 @@ export class ZombieSystem {
   updateZombieCorpses(): void {
     for (const corpse of this.e.zombieCorpses) {
       if (!corpse.isGrounded) {
+        corpse.x += corpse.velocityX;
+        corpse.velocityX *= 0.92;
+        if (Math.abs(corpse.velocityX) < 0.1) corpse.velocityX = 0;
+
         corpse.velocityY += GAME_CONSTANTS.GRAVITY;
         if (corpse.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
           corpse.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
         }
         corpse.y += corpse.velocityY;
+
+        if (corpse.x < 0) { corpse.x = 0; corpse.velocityX = 0; }
+        const maxCX: number = GAME_CONSTANTS.CANVAS_WIDTH - corpse.width;
+        if (corpse.x > maxCX) { corpse.x = maxCX; corpse.velocityX = 0; }
 
         for (const plat of this.e.platforms) {
           const bottom: number = corpse.y + corpse.height;
@@ -585,28 +670,68 @@ export class ZombieSystem {
           ) {
             corpse.y = plat.y - corpse.height;
             corpse.velocityY = 0;
+            corpse.velocityX = 0;
             corpse.isGrounded = true;
             this.e.zombieSpriteAnimator.setState(corpse.id, ZombieAnimState.Dead);
           }
         }
+
+        if (!corpse.isGrounded) {
+          const ratio: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
+          for (const other of this.e.zombieCorpses) {
+            if (other === corpse || !other.isGrounded) continue;
+            const effectiveX: number = other.x + other.width * (1 - ratio) / 2;
+            const effectiveW: number = other.width * ratio;
+            const surfaceY: number = other.y + other.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+            const bottom: number = corpse.y + corpse.height;
+            const prevBottom: number = bottom - corpse.velocityY;
+            if (
+              corpse.x + corpse.width > effectiveX &&
+              corpse.x < effectiveX + effectiveW &&
+              bottom >= surfaceY &&
+              prevBottom <= surfaceY + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
+              corpse.velocityY >= 0
+            ) {
+              corpse.y = surfaceY - corpse.height;
+              corpse.velocityY = 0;
+              corpse.isGrounded = true;
+              const corpseCx: number = corpse.x + corpse.width / 2;
+              const otherCx: number = other.x + other.width / 2;
+              const slideDir: number = corpseCx > otherCx ? 1 : -1;
+              corpse.x += slideDir * Math.random() * GAME_CONSTANTS.ZOMBIE_CORPSE_SLIDE_OFFSET;
+              this.e.zombieSpriteAnimator.setState(corpse.id, ZombieAnimState.Dead);
+              break;
+            }
+          }
+        }
       }
 
-      this.e.zombieSpriteAnimator.tick(corpse.id, corpse.spriteKey);
+      if (corpse.isGrounded && !corpse.landProcessed) {
+        corpse.landProcessed = true;
+        this.diversifyCorpsePose(corpse);
+      }
 
-      if (corpse.isGrounded) {
-        corpse.fadeTimer--;
+      if (!corpse.frozen) {
+        this.e.zombieSpriteAnimator.tick(corpse.id, corpse.spriteKey);
       }
     }
+  }
 
-    const expired: ZombieCorpse[] = this.e.zombieCorpses.filter(
-      (c: ZombieCorpse) => c.fadeTimer <= 0,
+  private diversifyCorpsePose(corpse: ZombieCorpse): void {
+    const nearPile: boolean = this.e.zombieCorpses.some(
+      (other: ZombieCorpse) =>
+        other !== corpse &&
+        other.isGrounded &&
+        Math.abs((other.x + other.width / 2) - (corpse.x + corpse.width / 2)) < corpse.width * 2,
     );
-    for (const corpse of expired) {
-      this.e.zombieSpriteAnimator.removeInstance(corpse.id);
-    }
+    if (!nearPile) return;
+    if (Math.random() >= GAME_CONSTANTS.ZOMBIE_CORPSE_DIVERSE_CHANCE) return;
 
-    this.e.zombieCorpses = this.e.zombieCorpses.filter(
-      (c: ZombieCorpse) => c.fadeTimer > 0,
-    );
+    const frameCount: number = this.e.zombieSpriteAnimator.getFrameCount(corpse.spriteKey, ZombieAnimState.Dead);
+    const firstDiverseFrame: number = Math.max(0, frameCount - 3);
+    const frame: number = firstDiverseFrame + Math.floor(Math.random() * (frameCount - firstDiverseFrame));
+    this.e.zombieSpriteAnimator.setStateAtFrame(corpse.id, ZombieAnimState.Dead, frame);
+    if (Math.random() > 0.5) corpse.facing = -corpse.facing;
+    corpse.frozen = true;
   }
 }

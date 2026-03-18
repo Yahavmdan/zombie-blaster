@@ -48,6 +48,11 @@ export class DevComponent implements OnInit {
     this.gameComponent()?.syncCanvasProgression();
   }
 
+  maxOutPlayer(): void {
+    this.gameState.maxOutPlayer();
+    this.gameComponent()?.syncCanvasProgression();
+  }
+
   setWave(): void {
     const wave: number = Math.max(1, this.waveInput());
     this.gameComponent()?.setWave(wave);

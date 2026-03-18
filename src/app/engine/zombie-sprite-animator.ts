@@ -159,6 +159,31 @@ export class ZombieSpriteAnimator {
     }
   }
 
+  setStateAtFrame(zombieId: string, state: ZombieAnimState, frame: number): void {
+    const instance: ZombieAnimInstance | undefined = this.instances.get(zombieId);
+    if (instance) {
+      instance.state = state;
+      instance.currentFrame = frame;
+      instance.tickCounter = 0;
+      instance.reverse = false;
+      instance.frameDurationOverride = 0;
+    } else {
+      this.instances.set(zombieId, {
+        state,
+        currentFrame: frame,
+        tickCounter: 0,
+        reverse: false,
+        frameDurationOverride: 0,
+      });
+    }
+  }
+
+  getFrameCount(spriteKey: string, state: ZombieAnimState): number {
+    const animMap: Map<ZombieAnimState, ZombieSpriteAnimation> | undefined = this.spriteCache.get(spriteKey);
+    const anim: ZombieSpriteAnimation | undefined = animMap?.get(state);
+    return anim ? anim.frameCount : 1;
+  }
+
   setStateReversed(zombieId: string, state: ZombieAnimState, spriteKey: string, totalTicks: number): void {
     const animMap: Map<ZombieAnimState, ZombieSpriteAnimation> | undefined = this.spriteCache.get(spriteKey);
     const anim: ZombieSpriteAnimation | undefined = animMap?.get(state);
