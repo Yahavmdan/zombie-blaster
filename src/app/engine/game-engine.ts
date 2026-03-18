@@ -82,6 +82,7 @@ export class GameEngine implements IGameEngine {
   passiveRecoveryTimers: Map<string, number> = new Map();
   playerStandingStillTicks: number = 0;
   playerStunTicks: number = 0;
+  autoPotionCooldown: number = 0;
 
   wave: number = 1;
   zombiesKilledThisWave: number = 0;
@@ -133,6 +134,7 @@ export class GameEngine implements IGameEngine {
   onUseMpPotion: (() => boolean) | null = null;
   onOpenShop: (() => void) | null = null;
   godMode: boolean = false;
+  showCollisionBoxes: boolean = false;
 
   private readonly physicsSystem: PhysicsSystem;
   private readonly vfxSystem: VfxSystem;
@@ -222,6 +224,7 @@ export class GameEngine implements IGameEngine {
     this.passiveRecoveryTimers.clear();
     this.playerStandingStillTicks = 0;
     this.playerStunTicks = 0;
+    this.autoPotionCooldown = 0;
     this.zombieSystem.startWave();
     this.lastTimestamp = performance.now();
     this.loop(this.lastTimestamp);
@@ -321,6 +324,7 @@ export class GameEngine implements IGameEngine {
     this.spriteEffectSystem.tick();
     this.combatSystem.updateActiveBuffs();
     this.combatSystem.updatePassiveSkills();
+    this.combatSystem.updateAutoPotion();
     this.zombieSystem.checkWaveCompletion();
 
     if (this.invincibilityFrames > 0) this.invincibilityFrames--;

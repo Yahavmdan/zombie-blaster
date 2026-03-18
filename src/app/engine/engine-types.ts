@@ -146,6 +146,7 @@ export interface IGameEngine {
   passiveRecoveryTimers: Map<string, number>;
   playerStandingStillTicks: number;
   playerStunTicks: number;
+  autoPotionCooldown: number;
 
   wave: number;
   zombiesKilledThisWave: number;
@@ -186,6 +187,7 @@ export interface IGameEngine {
   readonly HIT_MARK_RENDER_SIZE: number;
 
   godMode: boolean;
+  showCollisionBoxes: boolean;
 
   onPlayerUpdate: ((player: CharacterState) => void) | null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null;

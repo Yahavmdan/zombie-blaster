@@ -15,6 +15,7 @@ import {
   getBuffEffectValue,
   getBuffDurationMs,
   getPassiveEffectValue,
+  getAutoPotionSuccessChance,
   PassiveEffect,
 } from '@shared/index';
 import { ZombieState, ZombieType } from '@shared/game-entities';
@@ -436,6 +437,7 @@ export class CombatSystem {
 
     for (const skill of passiveSkills) {
       const passive: PassiveEffect = skill.passiveEffect!;
+      if (passive.type === 'autoPotion') continue;
       if (passive.condition === 'standingStill' && !isStandingStill) continue;
 
       const intervalTicks: number = Math.floor(passive.intervalMs / this.e.fixedDt);
@@ -460,6 +462,68 @@ export class CombatSystem {
       } else {
         this.e.passiveRecoveryTimers.set(skill.id, elapsed);
       }
+    }
+  }
+
+  updateAutoPotion(): void {
+    const p: CharacterState | null = this.e.player;
+    if (!p || p.isDead) return;
+    if (this.e.potionCooldown > 0) return;
+    if (this.e.autoPotionCooldown > 0) {
+      this.e.autoPotionCooldown--;
+      return;
+    }
+
+    const autoPotionSkill: SkillDefinition | undefined = SKILLS.find(
+      (s: SkillDefinition) =>
+        s.classId === p.classId &&
+        s.passiveEffect?.type === 'autoPotion' &&
+        (p.skillLevels[s.id] ?? 0) > 0,
+    );
+    if (!autoPotionSkill || !autoPotionSkill.passiveEffect) return;
+
+    const level: number = p.skillLevels[autoPotionSkill.id] ?? 0;
+    const successChance: number = getAutoPotionSuccessChance(autoPotionSkill, level);
+    const hpThreshold: number = autoPotionSkill.passiveEffect.hpThresholdPercent ?? GAME_CONSTANTS.AUTO_POTION_HP_THRESHOLD_PERCENT;
+    const mpThreshold: number = autoPotionSkill.passiveEffect.mpThresholdPercent ?? GAME_CONSTANTS.AUTO_POTION_MP_THRESHOLD_PERCENT;
+
+    const hpPercent: number = (p.hp / p.derived.maxHp) * 100;
+    const mpPercent: number = (p.mp / p.derived.maxMp) * 100;
+    const playerCX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+
+    if (hpPercent <= hpThreshold && p.inventory.hpPotions > 0 && p.hp < p.derived.maxHp) {
+      const roll: number = Math.random() * 100;
+      if (roll < successChance) {
+        const used: boolean = this.e.onUseHpPotion?.() ?? false;
+        if (used) {
+          p.hp = Math.min(p.hp + GAME_CONSTANTS.HP_POTION_RESTORE, p.derived.maxHp);
+          p.inventory.hpPotions = Math.max(0, p.inventory.hpPotions - 1);
+          this.e.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
+          this.vfx.spawnHitParticles(playerCX, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, '#ff4488');
+          this.vfx.spawnDamageNumber(playerCX, p.y - 10, GAME_CONSTANTS.HP_POTION_RESTORE, false, '#44ff44');
+          this.e.onPlayerUpdate?.(p);
+          return;
+        }
+      }
+      this.e.autoPotionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
+      return;
+    }
+
+    if (mpPercent <= mpThreshold && p.inventory.mpPotions > 0 && p.mp < p.derived.maxMp) {
+      const roll: number = Math.random() * 100;
+      if (roll < successChance) {
+        const used: boolean = this.e.onUseMpPotion?.() ?? false;
+        if (used) {
+          p.mp = Math.min(p.mp + GAME_CONSTANTS.MP_POTION_RESTORE, p.derived.maxMp);
+          p.inventory.mpPotions = Math.max(0, p.inventory.mpPotions - 1);
+          this.e.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
+          this.vfx.spawnHitParticles(playerCX, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, '#4488ff');
+          this.vfx.spawnDamageNumber(playerCX, p.y - 10, GAME_CONSTANTS.MP_POTION_RESTORE, false, '#4488ff');
+          this.e.onPlayerUpdate?.(p);
+          return;
+        }
+      }
+      this.e.autoPotionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
     }
   }
 

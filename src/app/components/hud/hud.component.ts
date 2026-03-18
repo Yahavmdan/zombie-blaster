@@ -38,6 +38,7 @@ export class HudComponent {
 
   readonly isDevMode: boolean = isDevMode();
   readonly godMode: WritableSignal<boolean> = this.gameState.godMode;
+  readonly showCollisionBoxes: WritableSignal<boolean> = this.gameState.showCollisionBoxes;
 
   readonly playerData: InputSignal<CharacterState> = input.required<CharacterState>();
   readonly wave: InputSignal<number> = input.required<number>();
@@ -154,6 +155,10 @@ export class HudComponent {
 
   onToggleGodMode(): void {
     this.gameState.godMode.update((v: boolean) => !v);
+  }
+
+  onToggleCollisionBoxes(): void {
+    this.gameState.showCollisionBoxes.update((v: boolean) => !v);
   }
 
   private formatFirstKey(action: GameAction): string {

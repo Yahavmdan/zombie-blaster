@@ -23,6 +23,7 @@ import {
   getBuffEffectValue,
   getBuffDurationMs,
   getPassiveEffectValue,
+  getAutoPotionSuccessChance,
 } from '@shared/index';
 
 export interface SkillTreeNode {
@@ -196,6 +197,14 @@ export class SkillTreeComponent {
 
   private describePassiveEffect(skill: SkillDefinition, level: number): string {
     if (!skill.passiveEffect) return `Lv.${level}`;
+
+    if (skill.passiveEffect.type === 'autoPotion') {
+      const chance: number = getAutoPotionSuccessChance(skill, level);
+      const hpThreshold: number = skill.passiveEffect.hpThresholdPercent ?? 50;
+      const mpThreshold: number = skill.passiveEffect.mpThresholdPercent ?? 30;
+      return `Lv.${level}: ${Math.round(chance)}% chance, HP<${hpThreshold}% / MP<${mpThreshold}%`;
+    }
+
     const value: number = getPassiveEffectValue(skill, level);
     const typeLabel: string = skill.passiveEffect.type === 'hpRecovery' ? 'HP' : 'MP';
     const intervalSec: number = Math.floor(skill.passiveEffect.intervalMs / 1000);

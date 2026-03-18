@@ -50,6 +50,14 @@
       >
         {{ godMode() ? 'GOD ON' : 'GOD OFF' }}
       </button>
+      <button
+        class="god-mode-toggle"
+        [class.god-mode-toggle--active]="showCollisionBoxes()"
+        (click)="onToggleCollisionBoxes()"
+        data-testid="hud-hitboxes-button-toggle"
+      >
+        {{ showCollisionBoxes() ? 'BOXES ON' : 'BOXES OFF' }}
+      </button>
     }
     @if (hasStatPoints()) {
       <button

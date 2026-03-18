@@ -88,6 +88,12 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
+  setShowCollisionBoxes(enabled: boolean): void {
+    if (this.engine) {
+      this.engine.showCollisionBoxes = enabled;
+    }
+  }
+
   ngOnDestroy(): void {
     this.engine?.stop();
     window.removeEventListener('keydown', this.boundKeyDown);

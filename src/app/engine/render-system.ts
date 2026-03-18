@@ -13,6 +13,7 @@ import {
 } from '@shared/game-entities';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PlayerAnimState } from './sprite-animator';
+import { ZombieSpriteAnchor } from './zombie-sprite-animator';
 import {
   DamageNumber,
   DropNotification,
@@ -55,6 +56,9 @@ export class RenderSystem {
     this.renderDamageNumbers(ctx);
     this.renderDropNotifications(ctx);
     this.renderWaveInfo(ctx);
+    if (this.e.showCollisionBoxes) {
+      this.renderDebugCollisionBoxes(ctx);
+    }
 
     ctx.restore();
 
@@ -118,11 +122,12 @@ export class RenderSystem {
 
     const classColor: string = CHARACTER_CLASSES[p.classId].color;
     const spriteSize: number = this.e.SPRITE_RENDER_SIZE;
-    const offsetX: number = (GAME_CONSTANTS.PLAYER_WIDTH - spriteSize) / 2;
-    const offsetY: number = GAME_CONSTANTS.PLAYER_HEIGHT - spriteSize;
-    const drawX: number = p.x + offsetX;
-    const drawY: number = p.y + offsetY;
     const flipX: boolean = p.facing === Direction.Left;
+    const playerAnchorX: number = 0.30;
+    const playerAnchorY: number = 0.979;
+    const effectiveAnchorX: number = flipX ? (1 - playerAnchorX) : playerAnchorX;
+    const drawX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2 - spriteSize * effectiveAnchorX;
+    const drawY: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT - spriteSize * playerAnchorY;
 
     if (this.e.spriteAnimator.isLoaded()) {
       this.e.spriteAnimator.draw(ctx, drawX, drawY, spriteSize, spriteSize, flipX);
@@ -169,11 +174,11 @@ export class RenderSystem {
         const scale: number = z.instanceHeight / baseH;
         const renderW: number = Math.round(baseRenderSize * scale);
         const renderH: number = renderW;
-        const offsetX: number = (z.instanceWidth - renderW) / 2;
-        const offsetY: number = z.instanceHeight - renderH;
-        const drawX: number = z.x + offsetX;
-        const drawY: number = z.y + offsetY;
         const flipX: boolean = z.type === ZombieType.DragonBoss ? z.facing > 0 : z.facing < 0;
+        const anchor: ZombieSpriteAnchor = this.e.zombieSpriteAnimator.getAnchor(spriteKey);
+        const effectiveAnchorX: number = flipX ? (1 - anchor.anchorX) : anchor.anchorX;
+        const drawX: number = z.x + z.instanceWidth / 2 - renderW * effectiveAnchorX;
+        const drawY: number = z.y + z.instanceHeight - renderH * anchor.anchorY;
 
         this.e.zombieSpriteAnimator.draw(ctx, z.id, spriteKey, drawX, drawY, renderW, renderH, flipX);
       } else {
@@ -221,11 +226,11 @@ export class RenderSystem {
       const scale: number = corpse.height / baseH;
       const renderW: number = Math.round(baseRenderSize * scale);
       const renderH: number = renderW;
-      const offsetX: number = (corpse.width - renderW) / 2;
-      const offsetY: number = corpse.height - renderH;
-      const drawX: number = corpse.x + offsetX;
-      const drawY: number = corpse.y + offsetY;
       const flipX: boolean = corpse.type === ZombieType.DragonBoss ? corpse.facing > 0 : corpse.facing < 0;
+      const anchor: ZombieSpriteAnchor = this.e.zombieSpriteAnimator.getAnchor(corpse.spriteKey);
+      const effectiveAnchorX: number = flipX ? (1 - anchor.anchorX) : anchor.anchorX;
+      const drawX: number = corpse.x + corpse.width / 2 - renderW * effectiveAnchorX;
+      const drawY: number = corpse.y + corpse.height - renderH * anchor.anchorY;
 
       ctx.save();
       ctx.globalAlpha = alpha;
@@ -236,6 +241,7 @@ export class RenderSystem {
       ctx.restore();
 
       if (corpse.isGrounded) {
+        this.renderCorpseBlood(ctx, corpse);
         this.renderCorpseFlies(ctx, corpse);
       }
     }
@@ -258,6 +264,103 @@ export class RenderSystem {
       const fy: number = cy + Math.sin(t * s2 + p) * r * 0.6 + Math.cos(t * s1 * 1.4 + p * 2) * r * 0.4;
       ctx.fillRect(Math.round(fx), Math.round(fy), 1, 1);
     }
+  }
+
+  private renderCorpseBlood(ctx: CanvasRenderingContext2D, corpse: ZombieCorpse): void {
+    const cx: number = corpse.x + corpse.width / 2 - 8;
+    const baseY: number = corpse.y + corpse.height + 6;
+    const t: number = performance.now() / 1000;
+    const seed: number = corpse.id.charCodeAt(0) * 13 + corpse.id.charCodeAt(1) * 31;
+    const decay: number = 1 - corpse.fadeTimer / corpse.maxFadeTimer;
+
+    const bloodColors: string[] = ['#bb0000', '#cc1100', '#aa0000', '#dd2200', '#990011'];
+    const darkColors: string[] = ['#550000', '#4a0000', '#3a0000'];
+
+    ctx.save();
+
+    const streamCount: number = 4 + (seed % 4);
+    for (let i: number = 0; i < streamCount; i++) {
+      const sx: number = seed + i * 23;
+      const originX: number = corpse.x - 20 + corpse.width * (0.1 + (sx % 80) / 100);
+      const originY: number = baseY - corpse.height * (0.35 + (sx % 20) / 100);
+      const streamLen: number = corpse.height * (0.3 + (sx % 30) / 100);
+      const speed: number = 0.5 + (i % 3) * 0.2;
+      const wobble: number = Math.sin(t * 1.5 + sx) * 1.5;
+
+      const segCount: number = 8 + (sx % 4);
+      for (let s: number = 0; s < segCount; s++) {
+        const rawPhase: number = (t * speed + s * (1.0 / segCount) + sx * 0.03) % 1.0;
+        const py: number = originY + rawPhase * streamLen;
+        const sineShift: number = Math.sin(rawPhase * Math.PI * 2 + sx) * 1.2 + wobble;
+        const px: number = originX + sineShift;
+
+        const fade: number = rawPhase < 0.15
+          ? rawPhase / 0.15
+          : rawPhase > 0.7 ? (1 - rawPhase) / 0.3 : 1;
+        ctx.globalAlpha = fade * 0.85;
+        ctx.fillStyle = bloodColors[(sx + s) % bloodColors.length];
+
+        const sz: number = 2 + ((sx + s) % 2);
+        ctx.fillRect(Math.round(px), Math.round(py), sz, sz);
+
+        if (s % 2 === 0) {
+          ctx.globalAlpha = fade * 0.5;
+          ctx.fillStyle = darkColors[(sx + s) % darkColors.length];
+          ctx.fillRect(Math.round(px) + 1, Math.round(py) + sz, sz - 1, 1);
+        }
+      }
+
+      const tipPhase: number = (t * speed * 1.4 + sx * 0.07) % 1.6;
+      if (tipPhase < 1.0) {
+        const tipY: number = originY + streamLen + tipPhase * 6;
+        ctx.globalAlpha = (1 - tipPhase) * 0.9;
+        ctx.fillStyle = bloodColors[sx % bloodColors.length];
+        ctx.fillRect(Math.round(originX + wobble), Math.round(tipY), 2, 3);
+      }
+    }
+
+    const poolGrowth: number = Math.min(1, decay * 2.5);
+    const maxPoolHalf: number = corpse.width * 0.6;
+    const poolHalf: number = maxPoolHalf * poolGrowth;
+    const layerCount: number = 3;
+
+    for (let layer: number = 0; layer < layerCount; layer++) {
+      const layerHalf: number = poolHalf * (1 - layer * 0.25);
+      const pixelCount: number = Math.floor((layerHalf * 2) / 2);
+      const layerY: number = baseY + layer * 2 - 1;
+
+      for (let i: number = 0; i < pixelCount; i++) {
+        const hash: number = (seed + i * 7 + layer * 53) % 1000;
+        const offset: number = hash / 1000;
+        const px: number = cx - layerHalf + offset * layerHalf * 2;
+        const jitterY: number = (seed + i * 11 + layer * 31) % 3;
+        const pSize: number = 2 + ((seed + i * 3 + layer) % 2);
+        const pulse: number = 0.08 * Math.sin(t * 2 + i * 0.5 + layer);
+
+        ctx.globalAlpha = (0.7 + pulse) * poolGrowth;
+        ctx.fillStyle = layer === 0
+          ? darkColors[i % darkColors.length]
+          : bloodColors[(seed + i) % bloodColors.length];
+        ctx.fillRect(Math.round(px), Math.round(layerY + jitterY), pSize, Math.max(1, pSize - 1));
+      }
+    }
+
+    const edgeCount: number = Math.floor(poolHalf * 0.4);
+    for (let i: number = 0; i < edgeCount; i++) {
+      const angle: number = (seed + i * 41) % 360;
+      const rad: number = angle * Math.PI / 180;
+      const dist: number = poolHalf * (0.7 + ((seed + i * 19) % 30) / 100);
+      const ex: number = cx + Math.cos(rad) * dist;
+      const ey: number = baseY + Math.abs(Math.sin(rad)) * 4;
+      const flowDist: number = Math.min(4, decay * 12) * ((seed + i) % 3);
+      const flowX: number = ex + Math.cos(rad) * flowDist * Math.min(1, decay * 2);
+
+      ctx.globalAlpha = 0.5 * poolGrowth;
+      ctx.fillStyle = bloodColors[(seed + i) % bloodColors.length];
+      ctx.fillRect(Math.round(flowX), Math.round(ey), 2, 1);
+    }
+
+    ctx.restore();
   }
 
   private renderZombieFallback(ctx: CanvasRenderingContext2D, z: ZombieState): void {
@@ -613,6 +716,60 @@ export class RenderSystem {
 
     ctx.globalAlpha = 1;
     ctx.restore();
+  }
+
+  private renderDebugCollisionBoxes(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    ctx.lineWidth = 1;
+
+    const p: CharacterState | null = this.e.player;
+    if (p && !p.isDead) {
+      ctx.strokeStyle = '#00ff00';
+      ctx.strokeRect(p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT);
+
+      ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
+      const attackRange: number = GAME_CONSTANTS.PLAYER_BASE_ATTACK_RANGE;
+      const attackX: number = p.facing === Direction.Right
+        ? p.x + GAME_CONSTANTS.PLAYER_WIDTH
+        : p.x - attackRange;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(attackX, p.y, attackRange, GAME_CONSTANTS.PLAYER_HEIGHT);
+      ctx.setLineDash([]);
+
+      this.renderDebugLabel(ctx, '#00ff00', 'PLAYER', p.x, p.y - 4);
+    }
+
+    for (const z of this.e.zombies) {
+      if (z.isDead || z.spawnTimer > 0) continue;
+      ctx.strokeStyle = '#ff4444';
+      ctx.strokeRect(z.x, z.y, z.instanceWidth, z.instanceHeight);
+      this.renderDebugLabel(ctx, '#ff4444', z.type, z.x, z.y - 4);
+    }
+
+    for (const drop of this.e.worldDrops) {
+      const size: number = GAME_CONSTANTS.DROP_SIZE;
+      ctx.strokeStyle = '#ffcc44';
+      ctx.strokeRect(drop.x, drop.y, size, size);
+    }
+
+    for (const proj of this.e.dragonProjectiles) {
+      ctx.strokeStyle = '#88ccff';
+      ctx.strokeRect(proj.x - 20, proj.y - 20, 40, 40);
+    }
+
+    for (const proj of this.e.spitterProjectiles) {
+      ctx.strokeStyle = '#44ff44';
+      ctx.strokeRect(proj.x - 10, proj.y - 10, 20, 20);
+    }
+
+    ctx.restore();
+  }
+
+  private renderDebugLabel(ctx: CanvasRenderingContext2D, color: string, text: string, x: number, y: number): void {
+    ctx.font = 'bold 8px monospace';
+    ctx.fillStyle = color;
+    ctx.textAlign = 'left';
+    ctx.fillText(text, x, y);
   }
 
   updatePlayerAnimState(): void {

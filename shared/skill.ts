@@ -7,12 +7,14 @@ export enum SkillType {
 }
 
 export type PassiveCondition = 'always' | 'standingStill';
-export type PassiveEffectType = 'hpRecovery' | 'mpRecovery';
+export type PassiveEffectType = 'hpRecovery' | 'mpRecovery' | 'autoPotion';
 
 export interface PassiveEffect {
   type: PassiveEffectType;
   intervalMs: number;
   condition: PassiveCondition;
+  hpThresholdPercent?: number;
+  mpThresholdPercent?: number;
 }
 
 export type SkillMechanic = 'damage' | 'pull' | 'dash';

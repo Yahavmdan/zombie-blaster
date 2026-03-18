@@ -32,6 +32,21 @@ type ZombieAnimConfigs = Record<ZombieAnimState, ZombieSpriteConfig>;
 
 const ZOMBIE_FRAME_SIZE: number = 128;
 
+export interface ZombieSpriteAnchor {
+  anchorX: number;
+  anchorY: number;
+}
+
+const DEFAULT_ANCHOR: ZombieSpriteAnchor = { anchorX: 0.5, anchorY: 1.0 };
+
+const ZOMBIE_SPRITE_ANCHORS: Record<string, ZombieSpriteAnchor> = {
+  zombie_1: { anchorX: 0.49, anchorY: 0.992 },
+  zombie_2: { anchorX: 0.45, anchorY: 0.992 },
+  zombie_3: { anchorX: 0.47, anchorY: 0.992 },
+  zombie_4: { anchorX: 0.49, anchorY: 0.992 },
+  dragon_boss: { anchorX: 0.50, anchorY: 0.994 },
+};
+
 const ZOMBIE_SPRITE_KEY_MAP: Record<ZombieType, string> = {
   [ZombieType.Walker]: 'zombie_1',
   [ZombieType.Runner]: 'zombie_2',
@@ -137,6 +152,10 @@ export class ZombieSpriteAnimator {
 
   getSpriteKey(type: ZombieType): string {
     return ZOMBIE_SPRITE_KEY_MAP[type];
+  }
+
+  getAnchor(spriteKey: string): ZombieSpriteAnchor {
+    return ZOMBIE_SPRITE_ANCHORS[spriteKey] ?? DEFAULT_ANCHOR;
   }
 
   setState(zombieId: string, state: ZombieAnimState): void {

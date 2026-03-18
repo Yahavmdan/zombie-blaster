@@ -49,3 +49,5 @@ Work through these one at a time in separate sessions.
 ## 12. Make zombies tackle each other and also wont go over each other in z-index so they will be pushed by each other and it will look more real - done ✅
 
 ## 13. Make zombies bodies stay on the ground and pile and player could walk on them and climb
+
+## 14. In dev mode mark all entities in the game with their collision box so I get reference to stuff

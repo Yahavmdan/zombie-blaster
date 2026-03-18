@@ -127,6 +127,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     passiveRecoveryTimers: new Map(),
     playerStandingStillTicks: 0,
     playerStunTicks: 0,
+    autoPotionCooldown: 0,
     wave: 1,
     zombiesKilledThisWave: 0,
     zombiesToSpawnThisWave: 5,
@@ -141,6 +142,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     spriteAnimator: { setState: vi.fn(), tick: vi.fn(), restart: vi.fn(), load: vi.fn(), isLoaded: vi.fn().mockReturnValue(false), draw: vi.fn() } as never,
     zombieSpriteAnimator: {
       getSpriteKey: vi.fn().mockReturnValue('walker'),
+      getAnchor: vi.fn().mockReturnValue({ anchorX: 0.5, anchorY: 1.0 }),
       tick: vi.fn(),
       setState: vi.fn(),
       setStateReversed: vi.fn(),
@@ -168,6 +170,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     HIT_MARK_TICKS_PER_FRAME: 3,
     HIT_MARK_RENDER_SIZE: 55,
     godMode: false,
+    showCollisionBoxes: false,
     onPlayerUpdate: null,
     onZombiesUpdate: null,
     onWaveUpdate: null,

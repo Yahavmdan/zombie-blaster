@@ -62,6 +62,13 @@ export class GameComponent implements OnInit {
         canvas.setGodMode(enabled);
       }
     });
+    effect((): void => {
+      const enabled: boolean = this.gameState.showCollisionBoxes();
+      const canvas: GameCanvasComponent | undefined = this.gameCanvas();
+      if (canvas) {
+        canvas.setShowCollisionBoxes(enabled);
+      }
+    });
   }
 
   ngOnInit(): void {
