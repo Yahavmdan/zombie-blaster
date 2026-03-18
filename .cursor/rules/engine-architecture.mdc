@@ -1,0 +1,45 @@
+---
+description: Game engine system architecture and file organization
+globs: src/app/engine/**/*.ts
+alwaysApply: false
+---
+
+# Game Engine Architecture
+
+The game engine is split into focused system files under `src/app/engine/`.
+
+## File Responsibilities
+
+| File | Responsibility |
+|------|---------------|
+| `engine-types.ts` | Shared interfaces (`IGameEngine`, `Platform`, `Rope`, `DamageNumber`, etc.) |
+| `game-engine.ts` | Orchestrator — owns all state, creates systems, runs the game loop |
+| `physics-system.ts` | Player movement, gravity, platform/rope collision, climbing |
+| `combat-system.ts` | Player attacks, skill execution, buffs, passives, damage to/from zombies, zombie death |
+| `zombie-system.ts` | Zombie AI, spawning, waves, corpse management, zombie collisions |
+| `projectile-system.ts` | Dragon/spitter projectiles, poison effects |
+| `drop-system.ts` | Loot drops, potion use, item collection |
+| `vfx-system.ts` | Particles, damage numbers, screen shake/flash, skill animations, hit marks |
+| `render-system.ts` | All canvas drawing: background, player, zombies, projectiles, UI overlays |
+
+## System Dependency Rules
+
+- All systems reference the engine state via the `IGameEngine` interface (from `engine-types.ts`).
+- Systems never import from `game-engine.ts` — only from `engine-types.ts` and other system files.
+- Dependency graph (no circular deps allowed):
+
+```
+PhysicsSystem, VfxSystem → standalone
+DropSystem → VfxSystem, PhysicsSystem
+CombatSystem → VfxSystem, PhysicsSystem, DropSystem
+ProjectileSystem → VfxSystem, PhysicsSystem
+ZombieSystem → VfxSystem, PhysicsSystem, CombatSystem, ProjectileSystem
+RenderSystem → reads state only (no system deps)
+```
+
+## Adding New Logic
+
+- Place new gameplay logic in the matching system file.
+- If new shared state is needed, add it to `IGameEngine` in `engine-types.ts` and to `GameEngine`.
+- Keep `game-engine.ts` as a thin orchestrator — no gameplay logic in the orchestrator.
+- New systems should follow the same pattern: constructor takes `IGameEngine` + required peer systems.
