@@ -6,7 +6,8 @@
       (playerUpdated)="onPlayerUpdate($event)"
       (xpGained)="onXpGained($event)"
       (scoreUpdated)="onScoreUpdate($event)"
-      (waveUpdated)="onWaveUpdate($event)"
+      (levelUpdated)="onLevelUpdate($event)"
+      (levelCompleted)="onLevelComplete()"
       (gameOver)="onGameOver()"
       (openStatsRequested)="onStatPanelRequested()"
       (openSkillsRequested)="onSkillTreeRequested()"
@@ -16,7 +17,7 @@
     />
     <app-hud
       [playerData]="currentPlayerDisplay()"
-      [wave]="wave()"
+      [level]="level()"
       [score]="score()"
       (statPanelRequested)="onStatPanelRequested()"
       (skillTreeRequested)="onSkillTreeRequested()"
@@ -70,8 +71,8 @@
               <span class="go-stat-value go-stat-value--score">{{ score() }}</span>
             </div>
             <div class="go-stat">
-              <span class="go-stat-label">Wave Reached</span>
-              <span class="go-stat-value">{{ wave() }}</span>
+              <span class="go-stat-label">Level Reached</span>
+              <span class="go-stat-value">{{ level() }}</span>
             </div>
             <div class="go-stat">
               <span class="go-stat-label">Level</span>

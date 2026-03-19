@@ -70,8 +70,9 @@ export class CombatSystem {
     if (!p || p.isDead) return;
 
     const attackRange: number = GAME_CONSTANTS.PLAYER_BASE_ATTACK_RANGE;
+    const attackW: number = GAME_CONSTANTS.PLAYER_WIDTH + attackRange;
     const attackX: number = p.facing === Direction.Right
-      ? p.x + GAME_CONSTANTS.PLAYER_WIDTH
+      ? p.x
       : p.x - attackRange;
 
     const playerCx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
@@ -80,7 +81,7 @@ export class CombatSystem {
 
     for (const z of this.e.zombies) {
       if (z.isDead || z.spawnTimer > 0) continue;
-      if (this.physics.rectsOverlap(attackX, p.y, attackRange, GAME_CONSTANTS.PLAYER_HEIGHT, z.x, z.y, z.instanceWidth, z.instanceHeight)) {
+      if (this.physics.rectsOverlap(attackX, p.y, attackW, GAME_CONSTANTS.PLAYER_HEIGHT, z.x, z.y, z.instanceWidth, z.instanceHeight)) {
         const dist: number = Math.abs((z.x + z.instanceWidth / 2) - playerCx);
         if (dist < closestDist) {
           closestDist = dist;
@@ -182,13 +183,15 @@ export class CombatSystem {
     }, GAME_CONSTANTS.PLAYER_SKILL_ANIM_MS);
 
     const attackX: number = p.facing === Direction.Right
-      ? p.x + GAME_CONSTANTS.PLAYER_WIDTH
+      ? p.x
       : p.x - range;
 
-    const attackCenterX: number = attackX + range / 2;
+    const attackCenterX: number = p.facing === Direction.Right
+      ? p.x + GAME_CONSTANTS.PLAYER_WIDTH + range / 2
+      : p.x - range / 2;
     const attackCenterY: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
     this.vfx.triggerSkillAnimation(skill.animationKey, attackCenterX, attackCenterY, p.facing, skillLevel);
-    const attackW: number = range;
+    const attackW: number = GAME_CONSTANTS.PLAYER_WIDTH + range;
     const attackH: number = range > 100 ? GAME_CONSTANTS.PLAYER_HEIGHT * 2 : GAME_CONSTANTS.PLAYER_HEIGHT;
     const attackY: number = range > 100 ? p.y - GAME_CONSTANTS.PLAYER_HEIGHT / 2 : p.y;
 
@@ -904,7 +907,7 @@ export class CombatSystem {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
     const knockDir: number = z.x > p.x ? 1 : -1;
-    z.velocityX = knockDir * z.instanceKnockbackForce;
+    z.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_ZOMBIE;
     z.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
     z.isGrounded = false;
     z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES;
@@ -949,7 +952,6 @@ export class CombatSystem {
 
   handleZombieDeath(z: ZombieState): void {
     z.isDead = true;
-    this.e.zombiesKilledThisWave++;
 
     const grounded: boolean = z.isGrounded;
     const initialAnim: ZombieAnimState = grounded ? ZombieAnimState.Dead : ZombieAnimState.Hurt;
@@ -977,8 +979,8 @@ export class CombatSystem {
     };
     this.e.zombieCorpses.push(corpse);
 
-    const waveBonus: number = 1 + (this.e.wave - 1) * 0.1;
-    const xpReward: number = Math.floor(z.instanceXpReward * waveBonus);
+    const levelBonus: number = 1 + (this.e.level - 1) * 0.1;
+    const xpReward: number = Math.floor(z.instanceXpReward * levelBonus);
     this.e.onXpGained?.(xpReward);
     this.e.onScoreUpdate?.(xpReward * 10);
 

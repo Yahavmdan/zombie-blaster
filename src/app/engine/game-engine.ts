@@ -85,12 +85,10 @@ export class GameEngine implements IGameEngine {
   playerStunTicks: number = 0;
   autoPotionCooldown: number = 0;
 
-  wave: number = 1;
-  zombiesKilledThisWave: number = 0;
-  zombiesToSpawnThisWave: number = 0;
-  zombiesSpawnedThisWave: number = 0;
+  level: number = 1;
   spawnTimer: number = 0;
-  waveTransitionTimer: number = 0;
+  levelTransitionTimer: number = 0;
+  exitPlatform: Platform = { x: 0, y: 0, width: 0, height: 0 };
 
   backgroundStars: BackgroundStar[] = [];
 
@@ -125,7 +123,8 @@ export class GameEngine implements IGameEngine {
 
   onPlayerUpdate: ((player: CharacterState) => void) | null = null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null = null;
-  onWaveUpdate: ((wave: number, remaining: number) => void) | null = null;
+  onLevelUpdate: ((level: number) => void) | null = null;
+  onLevelComplete: (() => void) | null = null;
   onXpGained: ((amount: number) => void) | null = null;
   onScoreUpdate: ((delta: number) => void) | null = null;
   onGameOver: (() => void) | null = null;
@@ -161,6 +160,7 @@ export class GameEngine implements IGameEngine {
     this.renderSystem = new RenderSystem(this);
 
     this.initPlatforms();
+    this.initExitPlatform();
     this.initRopes();
     this.initStars();
     this.spriteAnimator.load();
@@ -180,6 +180,16 @@ export class GameEngine implements IGameEngine {
       { x: 150, y: 330, width: 200, height: 20 },
       { x: 820, y: 340, width: 200, height: 20 },
     ];
+  }
+
+  private initExitPlatform(): void {
+    const exitX: number = (GAME_CONSTANTS.CANVAS_WIDTH - GAME_CONSTANTS.EXIT_PLATFORM_WIDTH) / 2;
+    this.exitPlatform = {
+      x: exitX,
+      y: GAME_CONSTANTS.EXIT_PLATFORM_Y,
+      width: GAME_CONSTANTS.EXIT_PLATFORM_WIDTH,
+      height: GAME_CONSTANTS.EXIT_PLATFORM_HEIGHT,
+    };
   }
 
   private initRopes(): void {
@@ -214,8 +224,7 @@ export class GameEngine implements IGameEngine {
     this.spitterProjectiles = [];
     this.poisonEffect = null;
     this.hitMarks = [];
-    this.wave = 1;
-    this.zombiesKilledThisWave = 0;
+    this.level = 1;
     this.playerUsableSkills = SKILLS.filter(
       (s: SkillDefinition) =>
         s.classId === player.classId &&
@@ -228,7 +237,7 @@ export class GameEngine implements IGameEngine {
     this.playerStandingStillTicks = 0;
     this.playerStunTicks = 0;
     this.autoPotionCooldown = 0;
-    this.zombieSystem.startWave();
+    this.zombieSystem.startLevel();
     this.lastTimestamp = performance.now();
     this.loop(this.lastTimestamp);
   }
@@ -240,7 +249,7 @@ export class GameEngine implements IGameEngine {
     }
   }
 
-  setWave(wave: number): void {
+  setLevel(level: number): void {
     for (const z of this.zombies) {
       z.isDead = true;
     }
@@ -249,8 +258,8 @@ export class GameEngine implements IGameEngine {
       this.zombieSpriteAnimator.removeInstance(corpse.id);
     }
     this.zombieCorpses = [];
-    this.wave = wave;
-    this.zombieSystem.startWave();
+    this.level = level;
+    this.zombieSystem.startLevel();
   }
 
   setKeys(keys: InputKeys): void {
@@ -329,7 +338,7 @@ export class GameEngine implements IGameEngine {
     this.combatSystem.updateActiveBuffs();
     this.combatSystem.updatePassiveSkills();
     this.combatSystem.updateAutoPotion();
-    this.zombieSystem.checkWaveCompletion();
+    this.zombieSystem.checkLevelCompletion();
 
     if (this.invincibilityFrames > 0) this.invincibilityFrames--;
     if (this.ropeJumpCooldown > 0) this.ropeJumpCooldown--;

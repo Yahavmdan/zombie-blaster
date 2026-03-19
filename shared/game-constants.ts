@@ -21,196 +21,203 @@ import { SkillDefinition, SkillType } from './skill';
 export const GAME_CONSTANTS = {
 
   // ─── Canvas & World ─────────────────────────────
-  CANVAS_WIDTH: 1280,
-  CANVAS_HEIGHT: 720,
-  GROUND_Y: 620,
-  BACKGROUND_STAR_COUNT: 80,
+  CANVAS_WIDTH: 1280, // Width of the game screen in pixels
+  CANVAS_HEIGHT: 720, // Height of the game screen in pixels
+  GROUND_Y: 620, // Y position of the ground floor (pixels from top)
+  BACKGROUND_STAR_COUNT: 80, // Number of decorative stars drawn in the background
 
   // ─── Physics ────────────────────────────────────
-  GRAVITY: 0.5,
-  TERMINAL_VELOCITY: 25,
-  PLATFORM_SNAP_TOLERANCE: 6,
-  PLATFORM_DROP_TICKS: 8,
+  GRAVITY: 0.5, // Downward pull applied every tick to airborne entities
+  TERMINAL_VELOCITY: 25, // Maximum falling speed anything can reach
+  PLATFORM_SNAP_TOLERANCE: 6, // How close (pixels) you must be to a platform edge to land on it
+  PLATFORM_DROP_TICKS: 8, // How many ticks the player falls through a platform when pressing down
 
   // ─── Player Movement ────────────────────────────
-  PLAYER_WIDTH: 32,
-  PLAYER_HEIGHT: 48,
-  PLAYER_JUMP_FORCE: -10,
-  PLAYER_MOVE_SPEED: 5,
-  PLAYER_FRICTION: .9,
-  PLAYER_AIR_DRAG: 0.98,
-  PLAYER_MIN_VELOCITY: 1,
+  PLAYER_WIDTH: 32, // Player hitbox width in pixels
+  PLAYER_HEIGHT: 48, // Player hitbox height in pixels
+  PLAYER_JUMP_FORCE: -10, // Upward velocity applied when jumping (negative = up)
+  PLAYER_MOVE_SPEED: 5, // Horizontal speed when walking
+  PLAYER_FRICTION: .9, // Ground friction multiplier each tick (closer to 0 = more slippery)
+  PLAYER_AIR_DRAG: 0.98, // Air resistance multiplier each tick while airborne
+  PLAYER_MIN_VELOCITY: 1, // Speeds below this are snapped to zero (stops sliding)
 
   // ─── Player Combat ─────────────────────────────
-  PLAYER_BASE_ATTACK_RANGE: 50,
-  PLAYER_ATTACK_COOLDOWN_TICKS: 24,
-  PLAYER_ATTACK_ANIM_MS: 480,
-  PLAYER_ATTACK_HIT_DELAY_MS: 240,
-  PLAYER_SKILL_ANIM_MS: 480,
-  INVINCIBILITY_FRAMES: 90,
-  INVINCIBILITY_BLINK_RATE: 3,
+  PLAYER_BASE_ATTACK_RANGE: 50, // How far (pixels) the basic attack reaches beyond the player body
+  PLAYER_ATTACK_COOLDOWN_TICKS: 24, // Minimum ticks between basic attacks
+  PLAYER_ATTACK_ANIM_MS: 480, // How long the attack animation plays in milliseconds
+  PLAYER_ATTACK_HIT_DELAY_MS: 240, // Delay after pressing attack before damage is actually dealt
+  PLAYER_SKILL_ANIM_MS: 480, // How long skill attack animations play in milliseconds
+  INVINCIBILITY_FRAMES: 90, // Ticks of invincibility after the player takes damage
+  INVINCIBILITY_BLINK_RATE: 3, // Player blinks every N ticks during invincibility
 
   // ─── Knockback ──────────────────────────────────
-  KNOCKBACK_FORCE_PLAYER: 6,
-  KNOCKBACK_UP_FORCE: -5,
-  KNOCKBACK_ZOMBIE_FRAMES: 10,
+  KNOCKBACK_FORCE_PLAYER: 6, // How far the player is pushed back when hit by a zombie
+  KNOCKBACK_FORCE_ZOMBIE: 8, // How far a zombie is pushed back when hit by the player
+  KNOCKBACK_UP_FORCE: -5, // Upward pop applied during any knockback (negative = up)
+  KNOCKBACK_ZOMBIE_FRAMES: 10, // How many ticks a zombie stays in knockback before regaining control
 
   // ─── Player Derived Stat Formulas ───────────────
-  PLAYER_BASE_HP: 50,
-  PLAYER_BASE_MP: 30,
-  PLAYER_HP_PER_LEVEL: 25,
-  PLAYER_MP_PER_LEVEL: 3,
-  PLAYER_SPEED_PER_DEX: 0.05,
-  PLAYER_CRIT_RATE_CAP: 60,
-  PLAYER_CRIT_DAMAGE_BASE: 150,
+  PLAYER_BASE_HP: 50, // Starting HP at level 1 before any stat bonuses
+  PLAYER_BASE_MP: 30, // Starting MP at level 1 before any stat bonuses
+  PLAYER_HP_PER_LEVEL: 25, // Extra max HP gained per level up
+  PLAYER_MP_PER_LEVEL: 3, // Extra max MP gained per level up
+  PLAYER_SPEED_PER_DEX: 0.05, // Bonus move speed per point of DEX
+  PLAYER_CRIT_RATE_CAP: 60, // Maximum critical hit chance in percent
+  PLAYER_CRIT_DAMAGE_BASE: 150, // Base critical hit damage as a percent of normal damage
 
   // ─── XP & Leveling ─────────────────────────────
-  XP_BASE: 120,
-  XP_GROWTH: 1.6,
-  STAT_POINTS_PER_LEVEL: 5,
-  SKILL_POINTS_PER_LEVEL: 3,
-  MAX_SKILL_LEVEL: 20,
+  XP_BASE: 120, // XP needed to reach level 2
+  XP_GROWTH: 1.6, // Each level requires this much more XP than the previous one
+  STAT_POINTS_PER_LEVEL: 5, // Stat points awarded per level up
+  SKILL_POINTS_PER_LEVEL: 3, // Skill points awarded per level up
+  MAX_SKILL_LEVEL: 20, // Highest level any skill can be raised to
 
-  // ─── Waves ──────────────────────────────────────
-  WAVE_ZOMBIE_COUNT_BASE: 5,
-  WAVE_ZOMBIE_COUNT_GROWTH: 3,
-  WAVE_TRANSITION_TICKS: 120,
-  WAVE_INITIAL_SPAWN_DELAY_TICKS: 60,
+  // ─── Level Progression ─────────────────────────
+  LEVEL_TRANSITION_TICKS: 120, // Ticks the "level complete" screen shows before the next level
+  LEVEL_INITIAL_SPAWN_DELAY_TICKS: 60, // Ticks before zombies start spawning at the start of a new level
+  LEVEL_MAX_ALIVE_ZOMBIES_BASE: 10, // Max zombies alive at once on level 1
+  LEVEL_MAX_ALIVE_ZOMBIES_GROWTH: 2, // Extra max zombies added per level
+  LEVEL_MAX_ALIVE_ZOMBIES_CAP: 30, // Absolute max zombies alive at once regardless of level
+
+  // ─── Exit Platform (level exit) ───────────────
+  EXIT_PLATFORM_Y: 130, // Y position of the exit platform (pixels from top)
+  EXIT_PLATFORM_WIDTH: 250, // Width of the exit platform in pixels
+  EXIT_PLATFORM_HEIGHT: 20, // Height of the exit platform in pixels
 
   // ─── Zombie Spawning ───────────────────────────
-  ZOMBIE_SPAWN_INTERVAL_MS: 2000,
-  ZOMBIE_SPAWN_MIN_INTERVAL_MS: 500,
-  ZOMBIE_SPAWN_DECREASE_PER_WAVE: 100,
-  ZOMBIE_HP_SCALE_PER_WAVE: 0.15,
-  ZOMBIE_DAMAGE_SCALE_PER_WAVE: 0.08,
-  ZOMBIE_RUNNER_MIN_WAVE: 2,
-  ZOMBIE_RUNNER_ROLL_THRESHOLD: 0.7,
-  ZOMBIE_TANK_MIN_WAVE: 3,
-  ZOMBIE_TANK_ROLL_THRESHOLD: 0.85,
-  ZOMBIE_SPITTER_MIN_WAVE: 4,
-  ZOMBIE_SPITTER_ROLL_THRESHOLD: 0.6,
-  ZOMBIE_BOSS_MIN_WAVE: 5,
-  ZOMBIE_BOSS_WAVE_INTERVAL: 5,
-  ZOMBIE_DRAGON_BOSS_MIN_WAVE: 10,
-  ZOMBIE_DRAGON_BOSS_WAVE_INTERVAL: 10,
+  ZOMBIE_SPAWN_INTERVAL_MS: 2000, // Time between zombie spawns in milliseconds
+  ZOMBIE_SPAWN_MIN_INTERVAL_MS: 500, // Fastest possible spawn interval after scaling
+  ZOMBIE_SPAWN_DECREASE_PER_WAVE: 100, // Spawn interval shrinks by this many ms each wave
+  ZOMBIE_HP_SCALE_PER_WAVE: 0.15, // Zombie HP increases by this fraction each wave (0.15 = +15%)
+  ZOMBIE_DAMAGE_SCALE_PER_WAVE: 0.08, // Zombie damage increases by this fraction each wave
+  ZOMBIE_RUNNER_MIN_WAVE: 2, // First wave that Runner zombies can appear
+  ZOMBIE_RUNNER_ROLL_THRESHOLD: 0.7, // Chance (0-1) a spawn is NOT a Runner when eligible
+  ZOMBIE_TANK_MIN_WAVE: 3, // First wave that Tank zombies can appear
+  ZOMBIE_TANK_ROLL_THRESHOLD: 0.85, // Chance (0-1) a spawn is NOT a Tank when eligible
+  ZOMBIE_SPITTER_MIN_WAVE: 4, // First wave that Spitter zombies can appear
+  ZOMBIE_SPITTER_ROLL_THRESHOLD: 0.6, // Chance (0-1) a spawn is NOT a Spitter when eligible
+  ZOMBIE_BOSS_MIN_WAVE: 5, // First wave a Boss can spawn
+  ZOMBIE_BOSS_WAVE_INTERVAL: 5, // A Boss spawns every N waves
+  ZOMBIE_DRAGON_BOSS_MIN_WAVE: 10, // First wave the Dragon Boss can spawn
+  ZOMBIE_DRAGON_BOSS_WAVE_INTERVAL: 10, // Dragon Boss spawns every N waves
 
   // ─── Dragon Boss ─────────────────────────────
-  DRAGON_HOVER_Y_OFFSET: 140,
-  DRAGON_ATTACK_RANGE: 350,
-  DRAGON_KEEP_DISTANCE: 280,
-  DRAGON_APPROACH_SPEED_MULT: 0.6,
-  DRAGON_PROJECTILE_SPEED: 7,
-  DRAGON_PROJECTILE_LIFETIME: 100,
+  DRAGON_HOVER_Y_OFFSET: 140, // How high above the ground the dragon hovers
+  DRAGON_ATTACK_RANGE: 350, // Distance at which the dragon starts shooting fireballs
+  DRAGON_KEEP_DISTANCE: 280, // Dragon tries to stay at least this far from the player
+  DRAGON_APPROACH_SPEED_MULT: 0.6, // Dragon moves at this fraction of its base speed when approaching
+  DRAGON_PROJECTILE_SPEED: 7, // How fast dragon fireballs travel in pixels per tick
+  DRAGON_PROJECTILE_LIFETIME: 100, // How many ticks a dragon fireball lives before disappearing
 
   // ─── Spitter (Ranged Poison) ────────────────
-  SPITTER_ATTACK_RANGE: 280,
-  SPITTER_KEEP_DISTANCE: 200,
-  SPITTER_PROJECTILE_SPEED: 5,
-  SPITTER_PROJECTILE_LIFETIME: 80,
-  SPITTER_PROJECTILE_GRAVITY: 0.08,
-  SPITTER_POISON_DURATION_TICKS: 150,
-  SPITTER_POISON_TICK_INTERVAL: 25,
-  SPITTER_POISON_DAMAGE_PER_TICK: 3,
-  SPITTER_POISON_DAMAGE_WAVE_SCALE: 0.5,
+  SPITTER_ATTACK_RANGE: 280, // Distance at which the spitter starts shooting
+  SPITTER_KEEP_DISTANCE: 200, // Spitter tries to stay at least this far from the player
+  SPITTER_PROJECTILE_SPEED: 5, // How fast spitter projectiles travel in pixels per tick
+  SPITTER_PROJECTILE_LIFETIME: 80, // How many ticks a spitter projectile lives before disappearing
+  SPITTER_PROJECTILE_GRAVITY: 0.08, // Downward pull on spitter projectiles (arcing shots)
+  SPITTER_POISON_DURATION_TICKS: 150, // Total ticks the poison effect lasts on the player
+  SPITTER_POISON_TICK_INTERVAL: 25, // Ticks between each poison damage tick
+  SPITTER_POISON_DAMAGE_PER_TICK: 3, // Base damage dealt per poison tick
+  SPITTER_POISON_DAMAGE_WAVE_SCALE: 0.5, // Extra poison damage scaling per wave
 
   // ─── Zombie AI ────────────────────────────────
-  ZOMBIE_ORBIT_MIN: 25,
-  ZOMBIE_ORBIT_MAX: 55,
-  ZOMBIE_ORBIT_ARRIVE_THRESHOLD: 15,
-  ZOMBIE_JUMP_FORCE: -9.5,
-  ZOMBIE_JUMP_COOLDOWN_MIN: 80,
-  ZOMBIE_JUMP_COOLDOWN_MAX: 200,
-  ZOMBIE_JUMP_CHANCE_PER_TICK: 0.015,
-  ZOMBIE_JUMP_PLATFORM_CHASE_CHANCE: 0.04,
-  ZOMBIE_ATTACK_RANGE: 35,
-  ZOMBIE_ATTACK_COOLDOWN_MIN: 40,
-  ZOMBIE_ATTACK_COOLDOWN_MAX: 70,
-  ZOMBIE_ATTACK_ANIM_TICKS: 12,
-  ZOMBIE_ATTACK_HIT_TICK: 6,
-  ZOMBIE_HESITATION_RANGE_MIN: 0,
-  ZOMBIE_HESITATION_RANGE_MAX: 40,
-  ZOMBIE_CONTACT_DAMAGE_MULT: 0.5,
-  ZOMBIE_PLATFORM_DROP_TICKS: 10,
-  ZOMBIE_PLATFORM_DROP_CHANCE: 0.03,
-  ZOMBIE_REACTION_DELAY_MIN_TICKS: 5,
-  ZOMBIE_REACTION_DELAY_MAX_TICKS: 50,
-  ZOMBIE_DETECTION_RANGE: 0.5,
-  ZOMBIE_IDLE_WANDER_SPEED_MULT: 0.3,
-  ZOMBIE_IDLE_DIRECTION_CHANGE_CHANCE: 0.015,
-  ZOMBIE_IDLE_ATTACK_CHANCE: 0.004,
-  ZOMBIE_IDLE_STOP_CHANCE: 0.02,
+  ZOMBIE_ORBIT_MIN: 25, // Closest distance a zombie tries to orbit around the player
+  ZOMBIE_ORBIT_MAX: 55, // Farthest distance a zombie tries to orbit around the player
+  ZOMBIE_ORBIT_ARRIVE_THRESHOLD: 15, // How close to the orbit target before the zombie considers it "arrived"
+  ZOMBIE_JUMP_FORCE: -9.5, // Upward velocity when a zombie jumps (negative = up)
+  ZOMBIE_JUMP_COOLDOWN_MIN: 80, // Minimum ticks between zombie jumps
+  ZOMBIE_JUMP_COOLDOWN_MAX: 200, // Maximum ticks between zombie jumps
+  ZOMBIE_JUMP_CHANCE_PER_TICK: 0.015, // Probability each tick that a zombie decides to jump
+  ZOMBIE_JUMP_PLATFORM_CHASE_CHANCE: 0.04, // Chance per tick a zombie jumps to chase the player onto a platform
+  ZOMBIE_ATTACK_RANGE: 35, // How close a zombie must be to melee attack the player
+  ZOMBIE_ATTACK_COOLDOWN_MIN: 40, // Minimum ticks between zombie attacks
+  ZOMBIE_ATTACK_COOLDOWN_MAX: 70, // Maximum ticks between zombie attacks
+  ZOMBIE_ATTACK_ANIM_TICKS: 12, // Duration of the zombie attack animation in ticks
+  ZOMBIE_ATTACK_HIT_TICK: 6, // Tick within the attack animation when damage is actually dealt
+  ZOMBIE_HESITATION_RANGE_MIN: 0, // Minimum extra distance a zombie pauses before attacking
+  ZOMBIE_HESITATION_RANGE_MAX: 40, // Maximum extra distance a zombie pauses before attacking
+  ZOMBIE_CONTACT_DAMAGE_MULT: 0.5, // Damage multiplier when a zombie walks into the player (no attack anim)
+  ZOMBIE_PLATFORM_DROP_TICKS: 10, // Ticks a zombie falls through a platform when dropping down
+  ZOMBIE_PLATFORM_DROP_CHANCE: 0.03, // Chance per tick a zombie drops through its current platform
+  ZOMBIE_REACTION_DELAY_MIN_TICKS: 5, // Minimum ticks before a zombie reacts to the player
+  ZOMBIE_REACTION_DELAY_MAX_TICKS: 50, // Maximum ticks before a zombie reacts to the player
+  ZOMBIE_DETECTION_RANGE: 0.5, // Fraction of canvas width a zombie can detect the player from
+  ZOMBIE_IDLE_WANDER_SPEED_MULT: 0.3, // Speed multiplier when a zombie is wandering idly
+  ZOMBIE_IDLE_DIRECTION_CHANGE_CHANCE: 0.015, // Chance per tick an idle zombie turns around
+  ZOMBIE_IDLE_ATTACK_CHANCE: 0.004, // Chance per tick an idle zombie randomly swings
+  ZOMBIE_IDLE_STOP_CHANCE: 0.02, // Chance per tick an idle wandering zombie stops moving
 
   // ─── Zombie-to-Zombie Collision ────────────────
-  ZOMBIE_COLLISION_PUSH_STRENGTH: 0.45,
-  ZOMBIE_COLLISION_Y_TOLERANCE: 20,
-  ZOMBIE_CROWD_OVERLAP_LIMIT: 5,
-  ZOMBIE_CROWD_PUSH_STRENGTH: 0.08,
+  ZOMBIE_COLLISION_PUSH_STRENGTH: 0.45, // How hard two overlapping zombies push each other apart
+  ZOMBIE_COLLISION_Y_TOLERANCE: 20, // Vertical tolerance for two zombies to be considered on the same level
+  ZOMBIE_CROWD_OVERLAP_LIMIT: 5, // Max number of overlapping zombies before crowd-push kicks in
+  ZOMBIE_CROWD_PUSH_STRENGTH: 0.08, // Extra push applied when too many zombies overlap in a crowd
 
   // ─── Zombie-on-Zombie Climbing ───────────────
-  ZOMBIE_CLIMB_SNAP_TOLERANCE: 10,
-  ZOMBIE_CLIMB_WIDTH_RATIO: 0.7,
+  ZOMBIE_CLIMB_SNAP_TOLERANCE: 10, // How close a zombie must be to another's top to climb on it
+  ZOMBIE_CLIMB_WIDTH_RATIO: 0.7, // Fraction of a zombie's width used for climb collision checks
 
   // ─── Zombie Spawn Animation ────────────────────
-  ZOMBIE_SPAWN_ANIM_TICKS: 50,
+  ZOMBIE_SPAWN_ANIM_TICKS: 50, // Duration of the rising-from-ground spawn animation in ticks
 
-  // ─── Zombie Corpse Fade ─────────────────────────
-  ZOMBIE_CORPSE_LINGER_TICKS: 1500,
-  ZOMBIE_CORPSE_PLATFORM_HEIGHT: 12,
-  ZOMBIE_CORPSE_SNAP_TOLERANCE: 16,
-  ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO: 0.55,
-  ZOMBIE_CORPSE_SLIDE_OFFSET: 4,
-  ZOMBIE_CORPSE_DEATH_SCATTER: 0.2,
-  ZOMBIE_CORPSE_DIVERSE_CHANCE: 0.45,
-  ZOMBIE_CORPSE_BLOOD_CHANCE: 0.3,
+  // ─── Zombie Corpse ─────────────────────────────
+  ZOMBIE_CORPSE_LINGER_TICKS: 999_999, // How long a corpse stays on screen before fading (very large = nearly forever)
+  ZOMBIE_CORPSE_PLATFORM_HEIGHT: 12, // Height of the invisible platform a corpse becomes
+  ZOMBIE_CORPSE_SNAP_TOLERANCE: 16, // How close something must be to snap onto a corpse platform
+  ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO: 0.55, // Fraction of corpse width used as a walkable platform
+  ZOMBIE_CORPSE_SLIDE_OFFSET: 4, // Small horizontal offset applied to corpses so they don't stack perfectly
+  ZOMBIE_CORPSE_DEATH_SCATTER: 0.2, // Random horizontal scatter applied to corpses on death
+  ZOMBIE_CORPSE_DIVERSE_CHANCE: 0.45, // Chance a corpse uses a different visual variant
+  ZOMBIE_CORPSE_BLOOD_CHANCE: 0.3, // Chance a corpse shows a blood splatter
 
   // ─── Ropes ──────────────────────────────────────
-  ROPE_CLIMB_SPEED: 5,
-  ROPE_WIDTH: 20,
-  ROPE_GRAB_RANGE: 24,
-  ROPE_JUMP_COOLDOWN_TICKS: 12,
+  ROPE_CLIMB_SPEED: 5, // How fast the player moves up/down on a rope
+  ROPE_WIDTH: 20, // Visual width of ropes in pixels
+  ROPE_GRAB_RANGE: 24, // How close the player must be to grab a rope
+  ROPE_JUMP_COOLDOWN_TICKS: 12, // Ticks before the player can grab a rope again after jumping off
 
   // ─── Particles ──────────────────────────────────
-  MAX_PARTICLES: 400,
-  PARTICLE_LIFETIME_MS: 600,
-  HIT_PARTICLE_COUNT: 6,
-  HIT_PARTICLE_VELOCITY: 6,
-  HIT_PARTICLE_UP_BIAS: 2,
-  HIT_PARTICLE_LIFE: 30,
-  DEATH_PARTICLE_COUNT: 15,
-  DEATH_PARTICLE_VELOCITY: 10,
-  DEATH_PARTICLE_UP_BIAS: 3,
-  DEATH_PARTICLE_LIFE: 45,
-  PARTICLE_GRAVITY: 0.15,
+  MAX_PARTICLES: 400, // Maximum particles alive at once (oldest removed when exceeded)
+  PARTICLE_LIFETIME_MS: 600, // Default particle lifetime in milliseconds
+  HIT_PARTICLE_COUNT: 6, // Number of particles spawned per hit
+  HIT_PARTICLE_VELOCITY: 6, // Speed of hit particles flying outward
+  HIT_PARTICLE_UP_BIAS: 2, // Extra upward push on hit particles
+  HIT_PARTICLE_LIFE: 30, // Lifetime of hit particles in ticks
+  DEATH_PARTICLE_COUNT: 15, // Number of particles spawned when a zombie dies
+  DEATH_PARTICLE_VELOCITY: 10, // Speed of death particles flying outward
+  DEATH_PARTICLE_UP_BIAS: 3, // Extra upward push on death particles
+  DEATH_PARTICLE_LIFE: 45, // Lifetime of death particles in ticks
+  PARTICLE_GRAVITY: 0.15, // Downward pull on particles each tick
 
   // ─── Damage Numbers ────────────────────────────
-  DAMAGE_NUMBER_LIFE_TICKS: 60,
+  DAMAGE_NUMBER_LIFE_TICKS: 60, // How many ticks a floating damage number stays visible
 
   // ─── Drop Rates ───────────────────────────────
-  DROP_HP_POTION_CHANCE: 0.02,
-  DROP_MP_POTION_CHANCE: 0.02,
-  DROP_GOLD_CHANCE: 0.55,
-  DROP_GOLD_MIN: 5,
-  DROP_GOLD_MAX: 25,
-  DROP_GOLD_WAVE_BONUS: 3,
-  DROP_LIFETIME: 600,
-  DROP_SIZE: 14,
-  DROP_POP_FORCE: -2,
+  DROP_HP_POTION_CHANCE: 0.02, // Chance (0-1) a killed zombie drops an HP potion
+  DROP_MP_POTION_CHANCE: 0.02, // Chance (0-1) a killed zombie drops an MP potion
+  DROP_GOLD_CHANCE: 0.55, // Chance (0-1) a killed zombie drops gold
+  DROP_GOLD_MIN: 5, // Minimum gold dropped per drop
+  DROP_GOLD_MAX: 25, // Maximum gold dropped per drop
+  DROP_GOLD_WAVE_BONUS: 3, // Extra gold added to drops per wave
+  DROP_LIFETIME: 600, // Ticks before an uncollected drop disappears
+  DROP_SIZE: 14, // Visual size of drop items in pixels
+  DROP_POP_FORCE: -2, // Upward pop when a drop spawns (negative = up)
 
   // ─── Potions ──────────────────────────────────
-  HP_POTION_RESTORE: 50,
-  MP_POTION_RESTORE: 30,
-  POTION_USE_COOLDOWN_TICKS: 30,
+  HP_POTION_RESTORE: 50, // HP restored when using an HP potion
+  MP_POTION_RESTORE: 30, // MP restored when using an MP potion
+  POTION_USE_COOLDOWN_TICKS: 30, // Ticks before another potion can be used
 
   // ─── Auto Potion ─────────────────────────────
-  AUTO_POTION_HP_THRESHOLD_PERCENT: 50,
-  AUTO_POTION_MP_THRESHOLD_PERCENT: 30,
+  AUTO_POTION_HP_THRESHOLD_PERCENT: 50, // Auto-use HP potion when HP drops below this percent
+  AUTO_POTION_MP_THRESHOLD_PERCENT: 30, // Auto-use MP potion when MP drops below this percent
 
   // ─── Shop ────────────────────────────────────
-  SHOP_HP_POTION_PRICE: 30,
-  SHOP_MP_POTION_PRICE: 20,
+  SHOP_HP_POTION_PRICE: 30, // Gold cost to buy one HP potion
+  SHOP_MP_POTION_PRICE: 20, // Gold cost to buy one MP potion
 
   // ─── Tick Rate ──────────────────────────────────
-  TICK_RATE: 50,
+  TICK_RATE: 50, // Game loop runs at this many ticks per second
 
 } as const;
 

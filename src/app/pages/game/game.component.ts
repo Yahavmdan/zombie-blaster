@@ -30,7 +30,7 @@ export class GameComponent implements OnInit {
   private readonly gameCanvas: Signal<GameCanvasComponent | undefined> = viewChild(GameCanvasComponent);
 
   readonly player: WritableSignal<CharacterState | null> = this.gameState.player;
-  readonly wave: WritableSignal<number> = signal<number>(1);
+  readonly level: WritableSignal<number> = signal<number>(1);
   readonly score: WritableSignal<number> = signal<number>(0);
   readonly isGameOver: WritableSignal<boolean> = signal<boolean>(false);
   readonly settingsOpen: WritableSignal<boolean> = signal<boolean>(false);
@@ -117,10 +117,16 @@ export class GameComponent implements OnInit {
     this.gameState.score.set(this.score());
   }
 
-  onWaveUpdate(event: { wave: number; remaining: number }): void {
-    this.wave.set(event.wave);
-    this.gameState.wave.set(event.wave);
-    this.gameState.zombiesRemaining.set(event.remaining);
+  onLevelUpdate(level: number): void {
+    this.level.set(level);
+    this.gameState.level.set(level);
+  }
+
+  onLevelComplete(): void {
+    const updated: CharacterState | null = this.gameState.player();
+    if (updated) {
+      this.currentPlayerDisplay.set({ ...updated });
+    }
   }
 
   onSettingsOpenChanged(isOpen: boolean): void {
@@ -215,10 +221,10 @@ export class GameComponent implements OnInit {
   }
 
 
-  setWave(wave: number): void {
-    this.wave.set(wave);
-    this.gameState.wave.set(wave);
-    this.gameCanvas()?.setWave(wave);
+  setLevel(level: number): void {
+    this.level.set(level);
+    this.gameState.level.set(level);
+    this.gameCanvas()?.setLevel(level);
   }
 
   syncCanvasProgression(): void {
@@ -237,7 +243,7 @@ export class GameComponent implements OnInit {
     this.statPanelOpen.set(false);
     this.skillPanelOpen.set(false);
     this.shopOpen.set(false);
-    this.wave.set(1);
+    this.level.set(1);
     this.score.set(0);
     this.syncPlayerDisplay();
   }

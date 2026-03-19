@@ -525,20 +525,24 @@ export class ZombieSystem {
   }
 
   updateSpawning(): void {
-    if (this.e.waveTransitionTimer > 0) {
-      this.e.waveTransitionTimer--;
+    if (this.e.levelTransitionTimer > 0) {
+      this.e.levelTransitionTimer--;
       return;
     }
 
-    if (this.e.zombiesSpawnedThisWave >= this.e.zombiesToSpawnThisWave) return;
+    const maxAlive: number = Math.min(
+      GAME_CONSTANTS.LEVEL_MAX_ALIVE_ZOMBIES_BASE + (this.e.level - 1) * GAME_CONSTANTS.LEVEL_MAX_ALIVE_ZOMBIES_GROWTH,
+      GAME_CONSTANTS.LEVEL_MAX_ALIVE_ZOMBIES_CAP,
+    );
+    const aliveCount: number = this.e.zombies.filter((z: ZombieState) => !z.isDead).length;
+    if (aliveCount >= maxAlive) return;
 
     this.e.spawnTimer--;
     if (this.e.spawnTimer <= 0) {
       this.spawnZombie();
-      this.e.zombiesSpawnedThisWave++;
       const interval: number = Math.max(
         GAME_CONSTANTS.ZOMBIE_SPAWN_MIN_INTERVAL_MS,
-        GAME_CONSTANTS.ZOMBIE_SPAWN_INTERVAL_MS - this.e.wave * GAME_CONSTANTS.ZOMBIE_SPAWN_DECREASE_PER_WAVE,
+        GAME_CONSTANTS.ZOMBIE_SPAWN_INTERVAL_MS - this.e.level * GAME_CONSTANTS.ZOMBIE_SPAWN_DECREASE_PER_WAVE,
       );
       this.e.spawnTimer = Math.floor(interval / this.e.fixedDt);
     }
@@ -547,18 +551,23 @@ export class ZombieSystem {
   private spawnZombie(): void {
     let type: ZombieType = ZombieType.Walker;
     const roll: number = Math.random();
-    if (this.e.wave >= GAME_CONSTANTS.ZOMBIE_TANK_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_TANK_ROLL_THRESHOLD) type = ZombieType.Tank;
-    else if (this.e.wave >= GAME_CONSTANTS.ZOMBIE_RUNNER_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_RUNNER_ROLL_THRESHOLD) type = ZombieType.Runner;
-    else if (this.e.wave >= GAME_CONSTANTS.ZOMBIE_SPITTER_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_SPITTER_ROLL_THRESHOLD) type = ZombieType.Spitter;
-    if (this.e.wave >= GAME_CONSTANTS.ZOMBIE_DRAGON_BOSS_MIN_WAVE && this.e.wave % GAME_CONSTANTS.ZOMBIE_DRAGON_BOSS_WAVE_INTERVAL === 0 && this.e.zombiesSpawnedThisWave === 0) {
-      type = ZombieType.DragonBoss;
-    } else if (this.e.wave >= GAME_CONSTANTS.ZOMBIE_BOSS_MIN_WAVE && this.e.wave % GAME_CONSTANTS.ZOMBIE_BOSS_WAVE_INTERVAL === 0 && this.e.zombiesSpawnedThisWave === 0) {
-      type = ZombieType.Boss;
+    if (this.e.level >= GAME_CONSTANTS.ZOMBIE_TANK_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_TANK_ROLL_THRESHOLD) type = ZombieType.Tank;
+    else if (this.e.level >= GAME_CONSTANTS.ZOMBIE_RUNNER_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_RUNNER_ROLL_THRESHOLD) type = ZombieType.Runner;
+    else if (this.e.level >= GAME_CONSTANTS.ZOMBIE_SPITTER_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_SPITTER_ROLL_THRESHOLD) type = ZombieType.Spitter;
+    const hasBoss: boolean = this.e.zombies.some(
+      (z: ZombieState) => !z.isDead && (z.type === ZombieType.DragonBoss || z.type === ZombieType.Boss),
+    );
+    if (!hasBoss) {
+      if (this.e.level >= GAME_CONSTANTS.ZOMBIE_DRAGON_BOSS_MIN_WAVE && this.e.level % GAME_CONSTANTS.ZOMBIE_DRAGON_BOSS_WAVE_INTERVAL === 0 && Math.random() < 0.02) {
+        type = ZombieType.DragonBoss;
+      } else if (this.e.level >= GAME_CONSTANTS.ZOMBIE_BOSS_MIN_WAVE && this.e.level % GAME_CONSTANTS.ZOMBIE_BOSS_WAVE_INTERVAL === 0 && Math.random() < 0.04) {
+        type = ZombieType.Boss;
+      }
     }
 
     const zDef: ZombieDefinition = ZOMBIE_TYPES[type];
-    const hpScale: number = 1 + (this.e.wave - 1) * GAME_CONSTANTS.ZOMBIE_HP_SCALE_PER_WAVE;
-    const damageScale: number = 1 + (this.e.wave - 1) * GAME_CONSTANTS.ZOMBIE_DAMAGE_SCALE_PER_WAVE;
+    const hpScale: number = 1 + (this.e.level - 1) * GAME_CONSTANTS.ZOMBIE_HP_SCALE_PER_WAVE;
+    const damageScale: number = 1 + (this.e.level - 1) * GAME_CONSTANTS.ZOMBIE_DAMAGE_SCALE_PER_WAVE;
 
     const rolledHp: number = Math.floor((zDef.hpMin + Math.random() * (zDef.hpMax - zDef.hpMin)) * hpScale);
     const rolledSpeed: number = zDef.speedMin + Math.random() * (zDef.speedMax - zDef.speedMin);
@@ -620,25 +629,58 @@ export class ZombieSystem {
     this.e.onZombiesUpdate?.(this.e.zombies);
   }
 
-  checkWaveCompletion(): void {
-    if (
-      this.e.zombiesSpawnedThisWave >= this.e.zombiesToSpawnThisWave &&
-      this.e.zombies.every((z: ZombieState) => z.isDead)
-    ) {
-      this.e.wave++;
-      this.e.waveTransitionTimer = GAME_CONSTANTS.WAVE_TRANSITION_TICKS;
-      this.startWave();
-      this.e.onWaveUpdate?.(this.e.wave, this.e.zombiesToSpawnThisWave);
+  checkLevelCompletion(): void {
+    const p: CharacterState | null = this.e.player;
+    if (!p || p.isDead) return;
+    if (this.e.levelTransitionTimer > 0) return;
+
+    const exit: Platform = this.e.exitPlatform;
+    const playerBottom: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT;
+    const playerRight: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH;
+
+    const onExitPlatform: boolean =
+      playerRight > exit.x &&
+      p.x < exit.x + exit.width &&
+      playerBottom >= exit.y &&
+      playerBottom <= exit.y + exit.height + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
+      p.isGrounded;
+
+    if (onExitPlatform) {
+      this.e.onLevelComplete?.();
+      this.advanceLevel();
     }
   }
 
-  startWave(): void {
-    this.e.zombiesToSpawnThisWave = GAME_CONSTANTS.WAVE_ZOMBIE_COUNT_BASE + (this.e.wave - 1) * GAME_CONSTANTS.WAVE_ZOMBIE_COUNT_GROWTH;
-    this.e.zombiesSpawnedThisWave = 0;
-    this.e.zombiesKilledThisWave = 0;
+  private advanceLevel(): void {
+    this.e.level++;
+    this.e.levelTransitionTimer = GAME_CONSTANTS.LEVEL_TRANSITION_TICKS;
+
+    for (const z of this.e.zombies) {
+      z.isDead = true;
+    }
+    this.e.zombies = [];
+
+    for (const corpse of this.e.zombieCorpses) {
+      this.e.zombieSpriteAnimator.removeInstance(corpse.id);
+    }
+    this.e.zombieCorpses = [];
+
+    if (this.e.player) {
+      this.e.player.x = GAME_CONSTANTS.CANVAS_WIDTH / 2 - GAME_CONSTANTS.PLAYER_WIDTH / 2;
+      this.e.player.y = GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT;
+      this.e.player.velocityX = 0;
+      this.e.player.velocityY = 0;
+      this.e.player.isGrounded = true;
+    }
+
+    this.startLevel();
+    this.e.onLevelUpdate?.(this.e.level);
+  }
+
+  startLevel(): void {
     this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead);
-    this.e.spawnTimer = GAME_CONSTANTS.WAVE_INITIAL_SPAWN_DELAY_TICKS;
-    this.e.onWaveUpdate?.(this.e.wave, this.e.zombiesToSpawnThisWave);
+    this.e.spawnTimer = GAME_CONSTANTS.LEVEL_INITIAL_SPAWN_DELAY_TICKS;
+    this.e.onLevelUpdate?.(this.e.level);
   }
 
   updateZombieCorpses(): void {

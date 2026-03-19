@@ -41,7 +41,7 @@ export class HudComponent {
   readonly showCollisionBoxes: WritableSignal<boolean> = this.gameState.showCollisionBoxes;
 
   readonly playerData: InputSignal<CharacterState> = input.required<CharacterState>();
-  readonly wave: InputSignal<number> = input.required<number>();
+  readonly level: InputSignal<number> = input.required<number>();
   readonly score: InputSignal<number> = input.required<number>();
 
   readonly statPanelRequested: OutputEmitterRef<void> = output<void>();

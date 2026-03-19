@@ -10,8 +10,8 @@ export enum MessageType {
   ZombieKilled = 'zombie-killed',
   DamageDealt = 'damage-dealt',
   LootDropped = 'loot-dropped',
-  WaveStarted = 'wave-started',
-  WaveCompleted = 'wave-completed',
+  LevelStarted = 'level-started',
+  LevelCompleted = 'level-completed',
   PlayerDied = 'player-died',
   PlayerRespawned = 'player-respawned',
   ChatMessage = 'chat-message',
@@ -52,8 +52,7 @@ export interface InputKeys {
 export interface GameStateUpdatePayload {
   players: CharacterState[];
   zombies: ZombieState[];
-  wave: number;
-  zombiesRemaining: number;
+  level: number;
 }
 
 export interface DamageDealtPayload {
@@ -65,9 +64,8 @@ export interface DamageDealtPayload {
   y: number;
 }
 
-export interface WaveStartedPayload {
-  wave: number;
-  zombieCount: number;
+export interface LevelStartedPayload {
+  level: number;
 }
 
 export interface ChatMessagePayload {

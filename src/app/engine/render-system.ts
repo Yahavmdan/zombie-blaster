@@ -45,6 +45,7 @@ export class RenderSystem {
       this.renderRopes(ctx);
       this.renderPlatforms(ctx);
     }
+    this.renderExitPlatform(ctx);
     this.renderZombies(ctx);
     this.renderHitMarks(ctx);
     this.renderDragonProjectiles(ctx);
@@ -57,7 +58,7 @@ export class RenderSystem {
     this.e.spriteEffectSystem.render(ctx);
     this.renderDamageNumbers(ctx);
     this.renderDropNotifications(ctx);
-    this.renderWaveInfo(ctx);
+    this.renderLevelInfo(ctx);
     if (this.e.showCollisionBoxes) {
       this.renderDebugCollisionBoxes(ctx);
     }
@@ -749,16 +750,74 @@ export class RenderSystem {
     ctx.textBaseline = 'alphabetic';
   }
 
-  private renderWaveInfo(ctx: CanvasRenderingContext2D): void {
-    const halfTransition: number = GAME_CONSTANTS.WAVE_TRANSITION_TICKS / 2;
-    if (this.e.waveTransitionTimer > halfTransition) {
-      ctx.globalAlpha = (this.e.waveTransitionTimer - halfTransition) / halfTransition;
-      ctx.fillStyle = '#ff4444';
+  private renderLevelInfo(ctx: CanvasRenderingContext2D): void {
+    const halfTransition: number = GAME_CONSTANTS.LEVEL_TRANSITION_TICKS / 2;
+    if (this.e.levelTransitionTimer > halfTransition) {
+      ctx.globalAlpha = (this.e.levelTransitionTimer - halfTransition) / halfTransition;
+      ctx.fillStyle = '#44ddff';
       ctx.font = 'bold 48px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`WAVE ${this.e.wave}`, GAME_CONSTANTS.CANVAS_WIDTH / 2, GAME_CONSTANTS.CANVAS_HEIGHT / 2);
+      ctx.fillText(`LEVEL ${this.e.level}`, GAME_CONSTANTS.CANVAS_WIDTH / 2, GAME_CONSTANTS.CANVAS_HEIGHT / 2);
+      ctx.font = 'bold 20px sans-serif';
+      ctx.fillStyle = '#aaeeff';
+      ctx.fillText('Pile corpses to reach the exit!', GAME_CONSTANTS.CANVAS_WIDTH / 2, GAME_CONSTANTS.CANVAS_HEIGHT / 2 + 40);
       ctx.globalAlpha = 1;
     }
+  }
+
+  private renderExitPlatform(ctx: CanvasRenderingContext2D): void {
+    const exit: { x: number; y: number; width: number; height: number } = this.e.exitPlatform;
+    const t: number = performance.now() / 1000;
+    const pulse: number = 0.6 + Math.sin(t * 2) * 0.2;
+
+    ctx.save();
+
+    const glowGrad: CanvasGradient = ctx.createRadialGradient(
+      exit.x + exit.width / 2, exit.y + exit.height / 2, 0,
+      exit.x + exit.width / 2, exit.y + exit.height / 2, exit.width / 2 + 30,
+    );
+    glowGrad.addColorStop(0, `rgba(68,221,255,${pulse * 0.3})`);
+    glowGrad.addColorStop(0.5, `rgba(68,221,255,${pulse * 0.1})`);
+    glowGrad.addColorStop(1, 'rgba(68,221,255,0)');
+    ctx.fillStyle = glowGrad;
+    ctx.fillRect(exit.x - 30, exit.y - 30, exit.width + 60, exit.height + 60);
+
+    const platGrad: CanvasGradient = ctx.createLinearGradient(exit.x, exit.y, exit.x, exit.y + exit.height);
+    platGrad.addColorStop(0, '#44ddff');
+    platGrad.addColorStop(0.5, '#2299cc');
+    platGrad.addColorStop(1, '#116688');
+    ctx.fillStyle = platGrad;
+    ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
+
+    ctx.fillStyle = `rgba(255,255,255,${pulse * 0.5})`;
+    ctx.fillRect(exit.x, exit.y, exit.width, 3);
+
+    ctx.strokeStyle = '#66eeff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(exit.x, exit.y, exit.width, exit.height);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.globalAlpha = pulse;
+    ctx.fillText('EXIT', exit.x + exit.width / 2, exit.y - 8);
+
+    const arrowCount: number = 3;
+    for (let i: number = 0; i < arrowCount; i++) {
+      const arrowY: number = exit.y - 25 - i * 16 + Math.sin(t * 3 + i) * 4;
+      const arrowAlpha: number = (1 - i / arrowCount) * pulse;
+      ctx.globalAlpha = arrowAlpha;
+      ctx.fillStyle = '#44ddff';
+      ctx.beginPath();
+      const cx: number = exit.x + exit.width / 2;
+      ctx.moveTo(cx, arrowY);
+      ctx.lineTo(cx - 8, arrowY + 10);
+      ctx.lineTo(cx + 8, arrowY + 10);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.restore();
   }
 
   private renderRopes(ctx: CanvasRenderingContext2D): void {

@@ -30,7 +30,7 @@ export class DropSystem {
     if (Math.random() < GAME_CONSTANTS.DROP_GOLD_CHANCE) {
       const goldAmount: number = GAME_CONSTANTS.DROP_GOLD_MIN +
         Math.floor(Math.random() * (GAME_CONSTANTS.DROP_GOLD_MAX - GAME_CONSTANTS.DROP_GOLD_MIN)) +
-        this.e.wave * GAME_CONSTANTS.DROP_GOLD_WAVE_BONUS;
+        this.e.level * GAME_CONSTANTS.DROP_GOLD_WAVE_BONUS;
       this.spawnDrop(DropType.Gold, dropX - 10, dropY, goldAmount);
     }
   }

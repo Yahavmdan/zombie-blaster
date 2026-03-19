@@ -22,8 +22,7 @@ import { DropType, PlayerInventory, ShopItemDefinition, ZombieState } from '@sha
 export class GameStateService {
   readonly player: WritableSignal<CharacterState | null> = signal<CharacterState | null>(null);
   readonly zombies: WritableSignal<ZombieState[]> = signal<ZombieState[]>([]);
-  readonly wave: WritableSignal<number> = signal<number>(1);
-  readonly zombiesRemaining: WritableSignal<number> = signal<number>(0);
+  readonly level: WritableSignal<number> = signal<number>(1);
   readonly score: WritableSignal<number> = signal<number>(0);
   readonly gameOver: WritableSignal<boolean> = signal<boolean>(false);
   readonly isPaused: WritableSignal<boolean> = signal<boolean>(false);
@@ -88,11 +87,10 @@ export class GameStateService {
     };
 
     this.player.set(character);
-    this.wave.set(1);
+    this.level.set(1);
     this.score.set(0);
     this.gameOver.set(false);
     this.zombies.set([]);
-    this.zombiesRemaining.set(0);
   }
 
   calculateDerived(baseStats: CharacterStats, allocatedStats: CharacterStats, classId: CharacterClass, level: number = 1): CharacterDerived {
@@ -410,8 +408,7 @@ export class GameStateService {
   reset(): void {
     this.player.set(null);
     this.zombies.set([]);
-    this.wave.set(1);
-    this.zombiesRemaining.set(0);
+    this.level.set(1);
     this.score.set(0);
     this.gameOver.set(false);
     this.isPaused.set(false);

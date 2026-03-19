@@ -173,12 +173,10 @@ export interface IGameEngine {
   playerStunTicks: number;
   autoPotionCooldown: number;
 
-  wave: number;
-  zombiesKilledThisWave: number;
-  zombiesToSpawnThisWave: number;
-  zombiesSpawnedThisWave: number;
+  level: number;
   spawnTimer: number;
-  waveTransitionTimer: number;
+  levelTransitionTimer: number;
+  exitPlatform: Platform;
 
   backgroundStars: BackgroundStar[];
 
@@ -218,7 +216,8 @@ export interface IGameEngine {
 
   onPlayerUpdate: ((player: CharacterState) => void) | null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null;
-  onWaveUpdate: ((wave: number, remaining: number) => void) | null;
+  onLevelUpdate: ((level: number) => void) | null;
+  onLevelComplete: (() => void) | null;
   onXpGained: ((amount: number) => void) | null;
   onScoreUpdate: ((delta: number) => void) | null;
   onGameOver: (() => void) | null;

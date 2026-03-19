@@ -38,7 +38,8 @@ export class GameCanvasComponent implements OnDestroy {
   readonly playerUpdated: OutputEmitterRef<CharacterState> = output<CharacterState>();
   readonly xpGained: OutputEmitterRef<number> = output<number>();
   readonly scoreUpdated: OutputEmitterRef<number> = output<number>();
-  readonly waveUpdated: OutputEmitterRef<{ wave: number; remaining: number }> = output<{ wave: number; remaining: number }>();
+  readonly levelUpdated: OutputEmitterRef<number> = output<number>();
+  readonly levelCompleted: OutputEmitterRef<void> = output<void>();
   readonly gameOver: OutputEmitterRef<void> = output<void>();
   readonly openStatsRequested: OutputEmitterRef<void> = output<void>();
   readonly openSkillsRequested: OutputEmitterRef<void> = output<void>();
@@ -78,8 +79,8 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.syncProgression(player);
   }
 
-  setWave(wave: number): void {
-    this.engine?.setWave(wave);
+  setLevel(level: number): void {
+    this.engine?.setLevel(level);
   }
 
   setGodMode(enabled: boolean): void {
@@ -121,7 +122,8 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine!.onPlayerUpdate = (p: CharacterState): void => this.playerUpdated.emit(p);
     this.engine!.onXpGained = (amount: number): void => this.xpGained.emit(amount);
     this.engine!.onScoreUpdate = (delta: number): void => this.scoreUpdated.emit(delta);
-    this.engine!.onWaveUpdate = (wave: number, remaining: number): void => this.waveUpdated.emit({ wave, remaining });
+    this.engine!.onLevelUpdate = (level: number): void => this.levelUpdated.emit(level);
+    this.engine!.onLevelComplete = (): void => this.levelCompleted.emit();
     this.engine!.onGameOver = (): void => this.gameOver.emit();
     this.engine!.onGoldPickup = (amount: number): void => this.goldPickedUp.emit(amount);
     this.engine!.onPotionPickup = (type: DropType): void => this.potionPickedUp.emit(type);

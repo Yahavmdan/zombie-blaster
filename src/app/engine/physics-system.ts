@@ -72,6 +72,12 @@ export class PhysicsSystem {
       }
     }
 
+    if (this.isOnPlatform(p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, this.e.exitPlatform, p.velocityY)) {
+      p.y = this.e.exitPlatform.y - GAME_CONSTANTS.PLAYER_HEIGHT;
+      p.velocityY = 0;
+      p.isGrounded = true;
+    }
+
     const stunnedCorpseSurface: number | null = this.findHighestCorpseSurface(
       p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, p.velocityY,
     );
@@ -88,6 +94,14 @@ export class PhysicsSystem {
     if (p.x < 0) p.x = 0;
     if (p.x + GAME_CONSTANTS.PLAYER_WIDTH > GAME_CONSTANTS.CANVAS_WIDTH) {
       p.x = GAME_CONSTANTS.CANVAS_WIDTH - GAME_CONSTANTS.PLAYER_WIDTH;
+    }
+  }
+
+  private clampPlayerToGround(p: CharacterState): void {
+    if (p.y + GAME_CONSTANTS.PLAYER_HEIGHT > GAME_CONSTANTS.GROUND_Y) {
+      p.y = GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT;
+      p.velocityY = 0;
+      p.isGrounded = true;
     }
   }
 
@@ -131,6 +145,7 @@ export class PhysicsSystem {
       p.y += GAME_CONSTANTS.ROPE_CLIMB_SPEED;
       if (p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2 > activeRope.bottomY) {
         p.isClimbing = false;
+        this.clampPlayerToGround(p);
       }
     }
 
@@ -220,6 +235,12 @@ export class PhysicsSystem {
       }
     }
 
+    if (this.isOnPlatform(p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, this.e.exitPlatform, p.velocityY)) {
+      p.y = this.e.exitPlatform.y - GAME_CONSTANTS.PLAYER_HEIGHT;
+      p.velocityY = 0;
+      p.isGrounded = true;
+    }
+
     const movementCorpseSurface: number | null = this.findHighestCorpseSurface(
       p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, p.velocityY,
     );
@@ -228,6 +249,8 @@ export class PhysicsSystem {
       p.velocityY = 0;
       p.isGrounded = true;
     }
+
+    this.clampPlayerToGround(p);
   }
 
   private findHighestCorpseSurface(
