@@ -241,7 +241,9 @@ export class RenderSystem {
       ctx.restore();
 
       if (corpse.isGrounded) {
-        this.renderCorpseBlood(ctx, corpse);
+        if (corpse.showBlood) {
+          this.renderCorpseBlood(ctx, corpse);
+        }
         this.renderCorpseFlies(ctx, corpse);
       }
     }
@@ -273,7 +275,7 @@ export class RenderSystem {
     const seed: number = corpse.id.charCodeAt(0) * 13 + corpse.id.charCodeAt(1) * 31;
     const decay: number = 1 - corpse.fadeTimer / corpse.maxFadeTimer;
 
-    const bloodColors: string[] = ['#bb0000', '#cc1100', '#aa0000', '#dd2200', '#990011'];
+    const bloodColors: string[] = ['#980000', '#960c00', '#aa0000', '#500b00', '#990011'];
     const darkColors: string[] = ['#550000', '#4a0000', '#3a0000'];
 
     ctx.save();

@@ -621,6 +621,7 @@ export class CombatSystem {
       landProcessed: false,
       fadeTimer: lingerTicks,
       maxFadeTimer: lingerTicks,
+      showBlood: Math.random() < GAME_CONSTANTS.ZOMBIE_CORPSE_BLOOD_CHANCE,
     };
     this.e.zombieCorpses.push(corpse);
 

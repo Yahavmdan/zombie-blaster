@@ -71,6 +71,7 @@ export interface ZombieCorpse {
   landProcessed: boolean;
   fadeTimer: number;
   maxFadeTimer: number;
+  showBlood: boolean;
 }
 
 export interface DragonProjectile {
