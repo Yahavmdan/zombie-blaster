@@ -1,5 +1,6 @@
 import {
   CharacterState,
+  Direction,
   SkillDefinition,
 } from '@shared/index';
 import {
@@ -14,6 +15,29 @@ import { SpriteAnimator } from './sprite-animator';
 import { ZombieSpriteAnimator } from './zombie-sprite-animator';
 import { MapRenderer } from './map-renderer';
 import { SpriteEffectSystem } from './sprite-effect-system';
+
+export type DashPhase = 'vanishing' | 'swishing' | 'appearing';
+
+export interface DashPhaseState {
+  startX: number;
+  endX: number;
+  playerY: number;
+  startCX: number;
+  endCX: number;
+  playerCY: number;
+  facing: Direction;
+  dir: number;
+  phase: DashPhase;
+  ticksInPhase: number;
+  vanishTicks: number;
+  swishTicks: number;
+  appearTicks: number;
+  skill: SkillDefinition;
+  skillLevel: number;
+  hitZombies: ZombieState[];
+  damageMultiplier: number;
+  damageApplied: boolean;
+}
 
 export interface DamageNumber {
   x: number;
@@ -186,6 +210,8 @@ export interface IGameEngine {
   hitMarks: HitMark[];
   readonly HIT_MARK_TICKS_PER_FRAME: number;
   readonly HIT_MARK_RENDER_SIZE: number;
+
+  dashPhase: DashPhaseState | null;
 
   godMode: boolean;
   showCollisionBoxes: boolean;

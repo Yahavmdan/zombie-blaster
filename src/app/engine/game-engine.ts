@@ -24,6 +24,7 @@ import {
   DropNotification,
   HitMark,
   IGameEngine,
+  DashPhaseState,
   Platform,
   PoisonEffect,
   Rope,
@@ -133,6 +134,8 @@ export class GameEngine implements IGameEngine {
   onUseHpPotion: (() => boolean) | null = null;
   onUseMpPotion: (() => boolean) | null = null;
   onOpenShop: (() => void) | null = null;
+  dashPhase: DashPhaseState | null = null;
+
   godMode: boolean = false;
   showCollisionBoxes: boolean = false;
 
@@ -321,6 +324,7 @@ export class GameEngine implements IGameEngine {
     this.vfxSystem.updateDamageNumbers();
     this.vfxSystem.updateDropNotifications();
     this.combatSystem.updateSkillCooldowns();
+    this.combatSystem.updateDashPhase();
     this.spriteEffectSystem.tick();
     this.combatSystem.updateActiveBuffs();
     this.combatSystem.updatePassiveSkills();

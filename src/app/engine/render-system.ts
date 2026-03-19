@@ -16,6 +16,7 @@ import { PlayerAnimState } from './sprite-animator';
 import { ZombieSpriteAnchor } from './zombie-sprite-animator';
 import {
   DamageNumber,
+  DashPhaseState,
   DropNotification,
   IGameEngine,
   ZombieCorpse,
@@ -52,6 +53,7 @@ export class RenderSystem {
     this.renderPlayer(ctx);
     this.renderPoisonOverlay(ctx);
     this.renderParticles(ctx);
+    this.renderDashOverlay(ctx);
     this.e.spriteEffectSystem.render(ctx);
     this.renderDamageNumbers(ctx);
     this.renderDropNotifications(ctx);
@@ -120,6 +122,25 @@ export class RenderSystem {
 
     if (this.e.invincibilityFrames > 0 && Math.floor(this.e.invincibilityFrames / GAME_CONSTANTS.INVINCIBILITY_BLINK_RATE) % 2 === 0) return;
 
+    const dash: DashPhaseState | null = this.e.dashPhase;
+    let dashAlpha: number = 1;
+    if (dash) {
+      if (dash.phase === 'vanishing') {
+        dashAlpha = 1 - dash.ticksInPhase / dash.vanishTicks;
+      } else if (dash.phase === 'swishing') {
+        dashAlpha = 0;
+      } else if (dash.phase === 'appearing') {
+        dashAlpha = dash.ticksInPhase / dash.appearTicks;
+      }
+    }
+    if (dashAlpha <= 0) return;
+
+    const needsAlpha: boolean = dashAlpha < 1;
+    if (needsAlpha) {
+      ctx.save();
+      ctx.globalAlpha = dashAlpha;
+    }
+
     const classColor: string = CHARACTER_CLASSES[p.classId].color;
     const spriteSize: number = this.e.SPRITE_RENDER_SIZE;
     const flipX: boolean = p.facing === Direction.Left;
@@ -147,6 +168,116 @@ export class RenderSystem {
     ctx.fillStyle = '#ffffff';
     ctx.font = '9px sans-serif';
     ctx.fillText(`Lv.${p.level}`, p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 2);
+
+    if (needsAlpha) {
+      ctx.restore();
+    }
+  }
+
+  private renderDashOverlay(ctx: CanvasRenderingContext2D): void {
+    const dash: DashPhaseState | null = this.e.dashPhase;
+    if (!dash) return;
+
+    ctx.save();
+
+    if (dash.phase === 'vanishing') {
+      const progress: number = dash.ticksInPhase / dash.vanishTicks;
+      this.renderPortalGlow(ctx, dash.startCX, dash.playerCY, progress, true);
+    }
+
+    if (dash.phase === 'swishing') {
+      const progress: number = dash.ticksInPhase / dash.swishTicks;
+      const fadePortalStart: number = Math.max(0, 1 - progress * 2);
+      if (fadePortalStart > 0) {
+        this.renderPortalGlow(ctx, dash.startCX, dash.playerCY, fadePortalStart * 0.8, true);
+      }
+      this.renderSwishBeam(ctx, dash, progress);
+      const fadePortalEnd: number = Math.max(0, (progress - 0.5) * 2);
+      if (fadePortalEnd > 0) {
+        this.renderPortalGlow(ctx, dash.endCX, dash.playerCY, fadePortalEnd * 0.6, false);
+      }
+    }
+
+    if (dash.phase === 'appearing') {
+      const progress: number = dash.ticksInPhase / dash.appearTicks;
+      const fadeOut: number = Math.max(0, 1 - progress);
+      this.renderPortalGlow(ctx, dash.endCX, dash.playerCY, fadeOut, false);
+    }
+
+    ctx.restore();
+  }
+
+  private renderPortalGlow(ctx: CanvasRenderingContext2D, cx: number, cy: number, intensity: number, isEntry: boolean): void {
+    const baseRadius: number = 50;
+    const glowRadius: number = baseRadius * (0.6 + intensity * 0.4);
+
+    ctx.save();
+    ctx.globalAlpha = intensity * 0.6;
+
+    const gradient: CanvasGradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowRadius);
+    const coreColor: string = isEntry ? 'rgba(170,100,255,' : 'rgba(255,136,68,';
+    gradient.addColorStop(0, coreColor + '0.9)');
+    gradient.addColorStop(0.3, coreColor + '0.5)');
+    gradient.addColorStop(0.7, 'rgba(100,68,255,0.2)');
+    gradient.addColorStop(1, 'rgba(100,68,255,0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, glowRadius, glowRadius * 1.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = intensity * 0.8;
+    const innerGlow: CanvasGradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowRadius * 0.4);
+    innerGlow.addColorStop(0, 'rgba(255,255,255,0.9)');
+    innerGlow.addColorStop(0.5, 'rgba(200,170,255,0.4)');
+    innerGlow.addColorStop(1, 'rgba(200,170,255,0)');
+    ctx.fillStyle = innerGlow;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, glowRadius * 0.4, glowRadius * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  private renderSwishBeam(ctx: CanvasRenderingContext2D, dash: DashPhaseState, progress: number): void {
+    const headX: number = dash.startCX + (dash.endCX - dash.startCX) * progress;
+    const tailX: number = dash.startCX + (dash.endCX - dash.startCX) * Math.max(0, progress - 0.4);
+    const cy: number = dash.playerCY;
+
+    ctx.save();
+
+    const beamGradient: CanvasGradient = ctx.createLinearGradient(tailX, cy, headX, cy);
+    beamGradient.addColorStop(0, 'rgba(187,102,255,0)');
+    beamGradient.addColorStop(0.3, 'rgba(255,136,68,0.4)');
+    beamGradient.addColorStop(0.7, 'rgba(255,204,68,0.6)');
+    beamGradient.addColorStop(1, 'rgba(255,255,255,0.8)');
+
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = beamGradient;
+    const beamHeight: number = 18;
+    const left: number = Math.min(tailX, headX);
+    const right: number = Math.max(tailX, headX);
+    ctx.beginPath();
+    ctx.ellipse((left + right) / 2, cy, (right - left) / 2, beamHeight, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = beamGradient;
+    const coreHeight: number = 6;
+    ctx.beginPath();
+    ctx.ellipse((left + right) / 2, cy, (right - left) / 2, coreHeight, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    const headGlow: CanvasGradient = ctx.createRadialGradient(headX, cy, 0, headX, cy, 25);
+    headGlow.addColorStop(0, 'rgba(255,255,255,0.9)');
+    headGlow.addColorStop(0.4, 'rgba(255,204,68,0.5)');
+    headGlow.addColorStop(1, 'rgba(255,136,68,0)');
+    ctx.fillStyle = headGlow;
+    ctx.beginPath();
+    ctx.arc(headX, cy, 25, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
   }
 
   private renderZombies(ctx: CanvasRenderingContext2D): void {

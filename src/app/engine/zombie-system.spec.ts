@@ -169,6 +169,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     hitMarks: [],
     HIT_MARK_TICKS_PER_FRAME: 3,
     HIT_MARK_RENDER_SIZE: 55,
+    dashPhase: null,
     godMode: false,
     showCollisionBoxes: false,
     onPlayerUpdate: null,

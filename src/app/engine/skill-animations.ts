@@ -306,14 +306,33 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
   },
 
   'warrior-power-dash': {
-    spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
-      const dir: number = facingSign(facing);
-      const trail: Particle[] = projectileTrailParticles(x, y, facing, level, '#ff8844', 10);
-      const slash: Particle[] = arcSlashParticles(x + dir * 40, y, facing, level, '#ffaa44', 5);
-      return [...trail, ...slash];
+    spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] => {
+      const particles: Particle[] = [];
+      const spiralCount: number = 16 + Math.floor(level / 3);
+      for (let i: number = 0; i < spiralCount; i++) {
+        const angle: number = (i / spiralCount) * Math.PI * 2;
+        const radius: number = 45 + Math.random() * 25;
+        const tangent: number = angle + Math.PI / 2;
+        particles.push(makeParticle({
+          x: x + Math.cos(angle) * radius,
+          y: y + Math.sin(angle) * radius,
+          vx: -Math.cos(angle) * 3 + Math.cos(tangent) * 2,
+          vy: -Math.sin(angle) * 3 + Math.sin(tangent) * 2,
+          life: 24 + Math.floor(level / 3),
+          maxLife: 32,
+          color: i % 4 === 0 ? '#ffffff' : i % 4 === 1 ? '#bb66ff' : i % 4 === 2 ? '#6644ff' : '#ff8844',
+          size: 5 + Math.random() * 4,
+          shape: ParticleShape.Star,
+          rotation: angle,
+          rotationSpeed: 0.35,
+          fadeMode: FadeMode.Late,
+          scaleOverLife: true,
+        }));
+      }
+      return particles;
     },
-    screenShake: 5, screenShakeIntensity: 4, flashColor: '#ff8844', flashFrames: 3,
-    spriteEffect: 'brightfire',
+    screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: null,
   },
 
 };

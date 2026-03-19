@@ -19,7 +19,8 @@ import {
   PassiveEffect,
 } from '@shared/index';
 import { ZombieState, ZombieType } from '@shared/game-entities';
-import { IGameEngine, ZombieCorpse } from './engine-types';
+import { DashPhaseState, IGameEngine, ZombieCorpse } from './engine-types';
+import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { DropSystem } from './drop-system';
@@ -295,6 +296,7 @@ export class CombatSystem {
   private performDashSkill(skill: SkillDefinition, skillLevel: number, playerCX: number, playerCY: number): void {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
+    if (this.e.dashPhase) return;
 
     const range: number = getSkillRange(skill, skillLevel);
     const damageMultiplier: number = getSkillDamageMultiplier(skill, skillLevel);
@@ -327,30 +329,380 @@ export class CombatSystem {
       }
     }
 
-    p.x = endX;
-    p.velocityX = dir * GAME_CONSTANTS.PLAYER_MOVE_SPEED * 2;
+    const endCX: number = endX + GAME_CONSTANTS.PLAYER_WIDTH / 2;
 
-    const dashEndCX: number = endX + GAME_CONSTANTS.PLAYER_WIDTH / 2;
-    this.vfx.triggerSkillAnimation(skill.animationKey, dashEndCX, playerCY, p.facing, skillLevel);
+    const dashState: DashPhaseState = {
+      startX,
+      endX,
+      playerY: p.y,
+      startCX: playerCX,
+      endCX,
+      playerCY,
+      facing: p.facing,
+      dir,
+      phase: 'vanishing',
+      ticksInPhase: 0,
+      vanishTicks: 14,
+      swishTicks: 10,
+      appearTicks: 14,
+      skill,
+      skillLevel,
+      hitZombies,
+      damageMultiplier,
+      damageApplied: false,
+    };
+
+    this.e.dashPhase = dashState;
+
+    this.spawnPortalVortex(playerCX, playerCY, true);
+    this.vfx.triggerScreenShake(6, 5);
+    this.vfx.triggerScreenFlash('#9944ff', 5);
 
     p.isAttacking = true;
-    setTimeout((): void => {
-      if (this.e.player) this.e.player.isAttacking = false;
-    }, GAME_CONSTANTS.PLAYER_SKILL_ANIM_MS);
+    p.velocityX = 0;
+  }
 
-    for (const z of hitZombies) {
+  updateDashPhase(): void {
+    const dash: DashPhaseState | null = this.e.dashPhase;
+    if (!dash) return;
+    const p: CharacterState | null = this.e.player;
+    if (!p) { this.e.dashPhase = null; return; }
+
+    dash.ticksInPhase++;
+
+    if (dash.phase === 'vanishing') {
+      this.spawnVanishTickParticles(dash);
+      if (dash.ticksInPhase >= dash.vanishTicks) {
+        dash.phase = 'swishing';
+        dash.ticksInPhase = 0;
+        this.spawnSwishBurst(dash);
+      }
+      return;
+    }
+
+    if (dash.phase === 'swishing') {
+      this.spawnSwishTickParticles(dash);
+      if (dash.ticksInPhase >= dash.swishTicks) {
+        dash.phase = 'appearing';
+        dash.ticksInPhase = 0;
+        p.x = dash.endX;
+        p.velocityX = dash.dir * GAME_CONSTANTS.PLAYER_MOVE_SPEED * 2;
+        this.applyDashDamage(dash);
+        this.spawnPortalVortex(dash.endCX, dash.playerCY, false);
+        this.vfx.triggerScreenShake(8, 6);
+        this.vfx.triggerScreenFlash('#ff6622', 5);
+      }
+      return;
+    }
+
+    if (dash.phase === 'appearing') {
+      this.spawnAppearTickParticles(dash);
+      if (dash.ticksInPhase >= dash.appearTicks) {
+        this.e.dashPhase = null;
+        p.isAttacking = false;
+        this.e.onPlayerUpdate?.(p);
+      }
+    }
+  }
+
+  private spawnPortalVortex(cx: number, cy: number, inward: boolean): void {
+    const spiralCount: number = 24;
+    for (let i: number = 0; i < spiralCount; i++) {
+      const angle: number = (i / spiralCount) * Math.PI * 2;
+      const radius: number = inward ? (50 + Math.random() * 40) : 4;
+      const tangentAngle: number = angle + (inward ? Math.PI / 2 : -Math.PI / 2);
+      const radialSpeed: number = inward ? -(3 + Math.random() * 3) : (5 + Math.random() * 4);
+      const tangentSpeed: number = 2 + Math.random() * 2;
+      const particle: Particle = {
+        x: cx + Math.cos(angle) * radius,
+        y: cy + Math.sin(angle) * radius,
+        vx: Math.cos(angle) * radialSpeed + Math.cos(tangentAngle) * tangentSpeed,
+        vy: Math.sin(angle) * radialSpeed + Math.sin(tangentAngle) * tangentSpeed,
+        life: 28 + Math.floor(Math.random() * 12),
+        maxLife: 40,
+        color: i % 4 === 0 ? '#ffffff' : i % 4 === 1 ? '#bb66ff' : i % 4 === 2 ? '#6644ff' : '#ff8844',
+        size: 5 + Math.random() * 5,
+        shape: ParticleShape.Star,
+        rotation: angle,
+        rotationSpeed: (inward ? 0.4 : -0.4) + (Math.random() - 0.5) * 0.1,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: true,
+      };
+      this.vfx.addParticle(particle);
+    }
+    const vertSlitCount: number = 10;
+    for (let i: number = 0; i < vertSlitCount; i++) {
+      const yOff: number = (i / vertSlitCount - 0.5) * 80;
+      const particle: Particle = {
+        x: cx + (Math.random() - 0.5) * 6,
+        y: cy + yOff,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: inward ? -yOff * 0.08 : yOff * 0.06,
+        life: 18 + Math.floor(Math.random() * 8),
+        maxLife: 26,
+        color: '#ddaaff',
+        size: 3 + Math.random() * 3,
+        shape: ParticleShape.Line,
+        rotation: Math.PI / 2,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Quick,
+        scaleOverLife: true,
+      };
+      this.vfx.addParticle(particle);
+    }
+    const ringCount: number = 16;
+    for (let i: number = 0; i < ringCount; i++) {
+      const angle: number = (i / ringCount) * Math.PI * 2;
+      const speed: number = inward ? 1.5 : (3 + Math.random() * 2.5);
+      const particle: Particle = {
+        x: cx + Math.cos(angle) * (inward ? 35 : 8),
+        y: cy + Math.sin(angle) * (inward ? 35 : 8),
+        vx: (inward ? -1 : 1) * Math.cos(angle) * speed,
+        vy: (inward ? -1 : 1) * Math.sin(angle) * speed * 0.5 - 1.2,
+        life: 22,
+        maxLife: 28,
+        color: '#cc88ff',
+        size: 5 + Math.random() * 4,
+        shape: ParticleShape.Ring,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: true,
+      };
+      this.vfx.addParticle(particle);
+    }
+  }
+
+  private spawnVanishTickParticles(dash: DashPhaseState): void {
+    const progress: number = dash.ticksInPhase / dash.vanishTicks;
+    const swirlCount: number = 4;
+    const baseAngle: number = dash.ticksInPhase * 0.8;
+    for (let i: number = 0; i < swirlCount; i++) {
+      const angle: number = baseAngle + (i / swirlCount) * Math.PI * 2;
+      const radius: number = 40 * (1 - progress * 0.8);
+      const particle: Particle = {
+        x: dash.startCX + Math.cos(angle) * radius,
+        y: dash.playerCY + Math.sin(angle) * radius * 0.6,
+        vx: -Math.cos(angle) * (2 + progress * 3),
+        vy: -Math.sin(angle) * (2 + progress * 3),
+        life: 14 - Math.floor(progress * 6),
+        maxLife: 16,
+        color: progress > 0.6 ? '#ffffff' : '#bb66ff',
+        size: 4 + (1 - progress) * 4,
+        shape: ParticleShape.Star,
+        rotation: angle,
+        rotationSpeed: 0.3,
+        fadeMode: FadeMode.Quick,
+        scaleOverLife: true,
+      };
+      this.vfx.addParticle(particle);
+    }
+    if (progress > 0.3) {
+      const sparkCount: number = 2;
+      for (let i: number = 0; i < sparkCount; i++) {
+        const particle: Particle = {
+          x: dash.startCX + (Math.random() - 0.5) * 20 * (1 - progress),
+          y: dash.playerCY + (Math.random() - 0.5) * 40 * (1 - progress),
+          vx: (Math.random() - 0.5) * 1.5,
+          vy: -(2 + Math.random() * 3),
+          life: 10,
+          maxLife: 12,
+          color: '#ffddff',
+          size: 2 + Math.random() * 2,
+          shape: ParticleShape.Circle,
+          rotation: 0,
+          rotationSpeed: 0,
+          fadeMode: FadeMode.Quick,
+          scaleOverLife: false,
+        };
+        this.vfx.addParticle(particle);
+      }
+    }
+  }
+
+  private spawnSwishBurst(dash: DashPhaseState): void {
+    const pathLen: number = Math.abs(dash.endCX - dash.startCX);
+    const cometCount: number = 16;
+    for (let i: number = 0; i < cometCount; i++) {
+      const t: number = i / cometCount;
+      const x: number = dash.startCX + (dash.endCX - dash.startCX) * t;
+      const particle: Particle = {
+        x,
+        y: dash.playerCY + (Math.random() - 0.5) * 8,
+        vx: dash.dir * (14 + Math.random() * 6),
+        vy: (Math.random() - 0.5) * 1.2,
+        life: 16 + Math.floor(t * 6),
+        maxLife: 22,
+        color: '#ffffff',
+        size: 7 + Math.random() * 4,
+        shape: ParticleShape.Line,
+        rotation: dash.dir > 0 ? 0 : Math.PI,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Linear,
+        scaleOverLife: true,
+      };
+      this.vfx.addParticle(particle);
+    }
+    const ringSegments: number = Math.max(3, Math.floor(pathLen / 80));
+    for (let s: number = 0; s < ringSegments; s++) {
+      const t: number = (s + 0.5) / ringSegments;
+      const rx: number = dash.startCX + (dash.endCX - dash.startCX) * t;
+      const expandCount: number = 8;
+      for (let i: number = 0; i < expandCount; i++) {
+        const angle: number = (i / expandCount) * Math.PI * 2;
+        const particle: Particle = {
+          x: rx,
+          y: dash.playerCY,
+          vx: Math.cos(angle) * 2.5,
+          vy: Math.sin(angle) * 2.5,
+          life: 12 + Math.floor(Math.random() * 6),
+          maxLife: 18,
+          color: s % 2 === 0 ? '#ff8844' : '#bb66ff',
+          size: 4 + Math.random() * 3,
+          shape: ParticleShape.Ring,
+          rotation: 0,
+          rotationSpeed: 0,
+          fadeMode: FadeMode.Quick,
+          scaleOverLife: true,
+        };
+        this.vfx.addParticle(particle);
+      }
+    }
+  }
+
+  private spawnSwishTickParticles(dash: DashPhaseState): void {
+    const progress: number = dash.ticksInPhase / dash.swishTicks;
+    const pathLength: number = dash.endCX - dash.startCX;
+    const headX: number = dash.startCX + pathLength * progress;
+    const cometParticles: number = 3;
+    for (let i: number = 0; i < cometParticles; i++) {
+      const particle: Particle = {
+        x: headX + (Math.random() - 0.5) * 12,
+        y: dash.playerCY + (Math.random() - 0.5) * 16,
+        vx: dash.dir * (6 + Math.random() * 4),
+        vy: (Math.random() - 0.5) * 3,
+        life: 8 + Math.floor(Math.random() * 5),
+        maxLife: 13,
+        color: '#ffcc44',
+        size: 5 + Math.random() * 4,
+        shape: ParticleShape.Star,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.4,
+        fadeMode: FadeMode.Quick,
+        scaleOverLife: true,
+      };
+      this.vfx.addParticle(particle);
+    }
+    const trailCount: number = 4;
+    for (let i: number = 0; i < trailCount; i++) {
+      const trailT: number = Math.max(0, progress - 0.1 - Math.random() * 0.3);
+      const tx: number = dash.startCX + pathLength * trailT;
+      const particle: Particle = {
+        x: tx + (Math.random() - 0.5) * 20,
+        y: dash.playerCY + (Math.random() - 0.5) * 24,
+        vx: dash.dir * (2 + Math.random() * 2),
+        vy: -(1 + Math.random() * 2),
+        life: 10 + Math.floor(Math.random() * 6),
+        maxLife: 16,
+        color: i % 2 === 0 ? '#ff6622' : '#bb44ff',
+        size: 3 + Math.random() * 3,
+        shape: ParticleShape.Circle,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: true,
+      };
+      this.vfx.addParticle(particle);
+    }
+    const speedLineCount: number = 3;
+    for (let i: number = 0; i < speedLineCount; i++) {
+      const lx: number = headX - dash.dir * (20 + Math.random() * 50);
+      const particle: Particle = {
+        x: lx,
+        y: dash.playerCY + (Math.random() - 0.5) * 40,
+        vx: dash.dir * (10 + Math.random() * 8),
+        vy: 0,
+        life: 6 + Math.floor(Math.random() * 4),
+        maxLife: 10,
+        color: '#ffffff',
+        size: 2 + Math.random() * 2,
+        shape: ParticleShape.Line,
+        rotation: dash.dir > 0 ? 0 : Math.PI,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Quick,
+        scaleOverLife: false,
+      };
+      this.vfx.addParticle(particle);
+    }
+  }
+
+  private spawnAppearTickParticles(dash: DashPhaseState): void {
+    const progress: number = dash.ticksInPhase / dash.appearTicks;
+    if (dash.ticksInPhase <= 3) {
+      const burstCount: number = 6;
+      for (let i: number = 0; i < burstCount; i++) {
+        const angle: number = (i / burstCount) * Math.PI * 2 + dash.ticksInPhase * 0.5;
+        const speed: number = 3 + Math.random() * 4;
+        const particle: Particle = {
+          x: dash.endCX,
+          y: dash.playerCY,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 16 + Math.floor(Math.random() * 8),
+          maxLife: 24,
+          color: i % 3 === 0 ? '#ffffff' : i % 3 === 1 ? '#ff8844' : '#ffcc44',
+          size: 5 + Math.random() * 5,
+          shape: ParticleShape.Star,
+          rotation: angle,
+          rotationSpeed: -0.2,
+          fadeMode: FadeMode.Late,
+          scaleOverLife: true,
+        };
+        this.vfx.addParticle(particle);
+      }
+    }
+    const sparkCount: number = 2;
+    for (let i: number = 0; i < sparkCount; i++) {
+      const angle: number = Math.random() * Math.PI * 2;
+      const radius: number = 10 + 30 * progress;
+      const particle: Particle = {
+        x: dash.endCX + Math.cos(angle) * radius,
+        y: dash.playerCY + Math.sin(angle) * radius,
+        vx: Math.cos(angle) * 1.2,
+        vy: Math.sin(angle) * 1.2 - 1.5,
+        life: 8 + Math.floor(Math.random() * 4),
+        maxLife: 12,
+        color: progress < 0.4 ? '#ffaa44' : '#bb66ff',
+        size: 2 + Math.random() * 3,
+        shape: ParticleShape.Circle,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Quick,
+        scaleOverLife: true,
+      };
+      this.vfx.addParticle(particle);
+    }
+  }
+
+  private applyDashDamage(dash: DashPhaseState): void {
+    const p: CharacterState | null = this.e.player;
+    if (!p || dash.damageApplied) return;
+    dash.damageApplied = true;
+
+    for (const z of dash.hitZombies) {
+      if (z.isDead) continue;
       const isCrit: boolean = Math.random() * 100 < p.derived.critRate;
-      let damage: number = Math.max(1, Math.floor(p.derived.attack * damageMultiplier) + Math.floor(Math.random() * 5));
+      let damage: number = Math.max(1, Math.floor(p.derived.attack * dash.damageMultiplier) + Math.floor(Math.random() * 5));
       if (isCrit) damage = Math.max(1, Math.floor(damage * p.derived.critDamage / 100));
 
       z.hp -= damage;
-      z.velocityX = dir * z.instanceKnockbackForce * 1.5;
+      z.velocityX = dash.dir * z.instanceKnockbackForce * 1.5;
       z.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
       z.isGrounded = false;
       z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES * 2;
 
-      this.vfx.spawnHitParticles(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, skill.color);
-      this.vfx.spawnDamageNumber(z.x + z.instanceWidth / 2, z.y - 10, damage, isCrit, isCrit ? '#ffaa00' : skill.color);
+      this.vfx.spawnHitParticles(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, dash.skill.color);
+      this.vfx.spawnDamageNumber(z.x + z.instanceWidth / 2, z.y - 10, damage, isCrit, isCrit ? '#ffaa00' : dash.skill.color);
       this.vfx.spawnHitMark(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);
 
       if (z.hp <= 0) {
@@ -360,7 +712,6 @@ export class CombatSystem {
 
     this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead || z.hp > -100);
     this.e.onZombiesUpdate?.(this.e.zombies);
-    this.e.onPlayerUpdate?.(p);
   }
 
   private activateBuff(skill: SkillDefinition, level: number): void {
@@ -562,6 +913,7 @@ export class CombatSystem {
   applyZombieDamageToPlayer(damage: number, z: ZombieState): void {
     const p: CharacterState | null = this.e.player;
     if (!p || this.e.invincibilityFrames > 0) return;
+    if (this.e.dashPhase) return;
     if (this.e.godMode) return;
 
     p.hp -= damage;
