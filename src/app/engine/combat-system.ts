@@ -19,7 +19,8 @@ import {
   PassiveEffect,
 } from '@shared/index';
 import { ZombieState, ZombieType } from '@shared/game-entities';
-import { DashPhaseState, IGameEngine, ZombieCorpse } from './engine-types';
+import { ZombieCorpse } from '@shared/game-entities';
+import { DashPhaseState, IGameEngine } from './engine-types';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
@@ -27,6 +28,8 @@ import { DropSystem } from './drop-system';
 import { ZombieAnimState } from './zombie-sprite-animator';
 
 export class CombatSystem {
+  private clientDamageEvents: Array<{ zombieId: string; damage: number; killed: boolean }> = [];
+
   constructor(
     private readonly e: IGameEngine,
     private readonly physics: PhysicsSystem,
@@ -96,6 +99,7 @@ export class CombatSystem {
       if (isCrit) damage = Math.max(1, Math.floor(damage * p.derived.critDamage / 100));
 
       closest.hp -= damage;
+      this.collectDamageEvent(closest.id, damage, closest.hp <= 0);
       this.applyZombieKnockback(closest);
       this.vfx.spawnHitParticles(closest.x + closest.instanceWidth / 2, closest.y + closest.instanceHeight / 2, '#ff4444');
       this.vfx.spawnDamageNumber(closest.x + closest.instanceWidth / 2, closest.y - 10, damage, isCrit, isCrit ? '#ffaa00' : '#ffffff');
@@ -108,6 +112,7 @@ export class CombatSystem {
 
     this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead || z.hp > -100);
     this.e.onZombiesUpdate?.(this.e.zombies);
+    this.flushDamageEvents();
   }
 
   tryPerformSkill(slotIndex: number): void {
@@ -237,6 +242,7 @@ export class CombatSystem {
 
     this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead || z.hp > -100);
     this.e.onZombiesUpdate?.(this.e.zombies);
+    this.flushDamageEvents();
   }
 
   private applySkillDamageToZombie(z: ZombieState, damageMultiplier: number, skillColor: string): void {
@@ -247,6 +253,7 @@ export class CombatSystem {
     if (isCrit) damage = Math.max(1, Math.floor(damage * p.derived.critDamage / 100));
 
     z.hp -= damage;
+    this.collectDamageEvent(z.id, damage, z.hp <= 0);
     this.applyZombieKnockback(z);
     this.vfx.spawnHitParticles(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, skillColor);
     this.vfx.spawnDamageNumber(z.x + z.instanceWidth / 2, z.y - 10, damage, isCrit, isCrit ? '#ffaa00' : skillColor);
@@ -699,13 +706,14 @@ export class CombatSystem {
       if (isCrit) damage = Math.max(1, Math.floor(damage * p.derived.critDamage / 100));
 
       z.hp -= damage;
+      this.collectDamageEvent(z.id, damage, z.hp <= 0);
       z.velocityX = dash.dir * z.instanceKnockbackForce * 1.5;
       z.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
       z.isGrounded = false;
       z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES * 2;
 
       this.vfx.spawnHitParticles(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, dash.skill.color);
-      this.vfx.spawnDamageNumber(z.x + z.instanceWidth / 2, z.y - 10, damage, isCrit, isCrit ? '#ffaa00' : dash.skill.color);
+      this.vfx.spawnDamageNumber(z.x + z.instanceWidth / 2, z.y - z.instanceHeight / 2, damage, isCrit, isCrit ? '#ffaa00' : dash.skill.color);
       this.vfx.spawnHitMark(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);
 
       if (z.hp <= 0) {
@@ -715,6 +723,7 @@ export class CombatSystem {
 
     this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead || z.hp > -100);
     this.e.onZombiesUpdate?.(this.e.zombies);
+    this.flushDamageEvents();
   }
 
   private activateBuff(skill: SkillDefinition, level: number): void {
@@ -950,8 +959,12 @@ export class CombatSystem {
     this.e.onPlayerUpdate?.(p);
   }
 
-  handleZombieDeath(z: ZombieState): void {
+  handleZombieDeath(z: ZombieState, awardRewards: boolean = true): void {
     z.isDead = true;
+
+    if (this.e.isMultiplayerClient) {
+      this.e.pendingLocalKills.add(z.id);
+    }
 
     const grounded: boolean = z.isGrounded;
     const initialAnim: ZombieAnimState = grounded ? ZombieAnimState.Dead : ZombieAnimState.Hurt;
@@ -979,11 +992,23 @@ export class CombatSystem {
     };
     this.e.zombieCorpses.push(corpse);
 
-    const levelBonus: number = 1 + (this.e.level - 1) * 0.1;
-    const xpReward: number = Math.floor(z.instanceXpReward * levelBonus);
-    this.e.onXpGained?.(xpReward);
-    this.e.onScoreUpdate?.(xpReward * 10);
+    if (awardRewards) {
+      const levelBonus: number = 1 + (this.e.level - 1) * 0.1;
+      const xpReward: number = Math.floor(z.instanceXpReward * levelBonus);
+      this.e.onXpGained?.(xpReward);
+      this.e.onScoreUpdate?.(xpReward * 10);
+      this.drops.rollDrops(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);
+    }
+  }
 
-    this.drops.rollDrops(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);
+  private collectDamageEvent(zombieId: string, damage: number, killed: boolean): void {
+    if (!this.e.isMultiplayerClient) return;
+    this.clientDamageEvents.push({ zombieId, damage, killed });
+  }
+
+  private flushDamageEvents(): void {
+    if (this.clientDamageEvents.length === 0) return;
+    this.e.onZombieDamaged?.(this.clientDamageEvents.slice());
+    this.clientDamageEvents = [];
   }
 }

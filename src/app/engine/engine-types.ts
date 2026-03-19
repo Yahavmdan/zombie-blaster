@@ -6,6 +6,7 @@ import {
 import {
   DropType,
   WorldDrop,
+  ZombieCorpse,
   ZombieState,
   ZombieType,
 } from '@shared/game-entities';
@@ -79,25 +80,6 @@ export interface BackgroundStar {
   brightness: number;
 }
 
-export interface ZombieCorpse {
-  id: string;
-  type: ZombieType;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  spriteKey: string;
-  facing: number;
-  velocityX: number;
-  velocityY: number;
-  isGrounded: boolean;
-  frozen: boolean;
-  landProcessed: boolean;
-  fadeTimer: number;
-  maxFadeTimer: number;
-  showBlood: boolean;
-}
-
 export interface DragonProjectile {
   x: number;
   y: number;
@@ -145,6 +127,7 @@ export interface IGameEngine {
   readonly fixedDt: number;
 
   player: CharacterState | null;
+  remotePlayers: CharacterState[];
   zombies: ZombieState[];
   zombieCorpses: ZombieCorpse[];
   particles: Particle[];
@@ -187,6 +170,7 @@ export interface IGameEngine {
 
   readonly spriteAnimator: SpriteAnimator;
   readonly zombieSpriteAnimator: ZombieSpriteAnimator;
+  remotePlayerAnimators: Map<string, SpriteAnimator>;
   readonly mapRenderer: MapRenderer;
   readonly spriteEffectSystem: SpriteEffectSystem;
   readonly SPRITE_RENDER_SIZE: number;
@@ -213,6 +197,9 @@ export interface IGameEngine {
 
   godMode: boolean;
   showCollisionBoxes: boolean;
+  isMultiplayerHost: boolean;
+  isMultiplayerClient: boolean;
+  pendingLocalKills: Set<string>;
 
   onPlayerUpdate: ((player: CharacterState) => void) | null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null;
@@ -226,4 +213,5 @@ export interface IGameEngine {
   onUseHpPotion: (() => boolean) | null;
   onUseMpPotion: (() => boolean) | null;
   onOpenShop: (() => void) | null;
+  onZombieDamaged: ((events: Array<{ zombieId: string; damage: number; killed: boolean }>) => void) | null;
 }

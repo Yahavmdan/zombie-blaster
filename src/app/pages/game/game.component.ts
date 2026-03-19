@@ -1,7 +1,11 @@
-import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inject, OnInit, viewChild, effect } from '@angular/core';
-import { Router } from '@angular/router';
-import { CharacterState, CharacterStats, SkillDefinition } from '@shared/index';
+import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inject, OnInit, OnDestroy, viewChild, effect, NgZone, DestroyRef } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType } from '@shared/index';
+import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload } from '@shared/multiplayer';
+import { ZombieCorpse, ZombieState } from '@shared/game-entities';
 import { GameStateService } from '../../services/game-state.service';
+import { WebSocketService } from '../../services/websocket.service';
 import { GameCanvasComponent } from '../../components/game-canvas/game-canvas.component';
 import { HudComponent } from '../../components/hud/hud.component';
 import { SettingsComponent } from '../../components/settings/settings.component';
@@ -24,10 +28,20 @@ export interface LevelUpToast {
   templateUrl: './game.component.html',
   styleUrl: './game.component.css',
 })
-export class GameComponent implements OnInit {
+export class GameComponent implements OnInit, OnDestroy {
   private readonly gameState: GameStateService = inject(GameStateService);
   private readonly router: Router = inject(Router);
+  private readonly route: ActivatedRoute = inject(ActivatedRoute);
+  private readonly ws: WebSocketService = inject(WebSocketService);
+  private readonly zone: NgZone = inject(NgZone);
+  private readonly destroyRef: DestroyRef = inject(DestroyRef);
   private readonly gameCanvas: Signal<GameCanvasComponent | undefined> = viewChild(GameCanvasComponent);
+
+  private syncTimer: ReturnType<typeof setInterval> | null = null;
+  private isMultiplayer: boolean = false;
+  private isHost: boolean = false;
+  private roomId: string = '';
+  private remotePlayerStates: Map<string, CharacterState> = new Map<string, CharacterState>();
 
   readonly player: WritableSignal<CharacterState | null> = this.gameState.player;
   readonly level: WritableSignal<number> = signal<number>(1);
@@ -69,10 +83,109 @@ export class GameComponent implements OnInit {
         canvas.setShowCollisionBoxes(enabled);
       }
     });
+    effect((): void => {
+      const canvas: GameCanvasComponent | undefined = this.gameCanvas();
+      if (canvas && this.isMultiplayer) {
+        if (this.isHost) {
+          canvas.setMultiplayerHost(true);
+        } else {
+          canvas.setMultiplayerClient(true);
+        }
+      }
+    });
   }
 
   ngOnInit(): void {
+    const mode: string | null = this.route.snapshot.queryParamMap.get('mode');
+    this.roomId = this.route.snapshot.queryParamMap.get('roomId') ?? '';
+    this.isMultiplayer = mode === GameMode.Multiplayer && this.roomId !== '';
+    this.isHost = this.route.snapshot.queryParamMap.get('isHost') === '1';
+
     this.syncPlayerDisplay();
+
+    if (this.isMultiplayer) {
+      this.setupMultiplayer();
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.syncTimer) {
+      clearInterval(this.syncTimer);
+      this.syncTimer = null;
+    }
+    if (this.isMultiplayer && this.roomId) {
+      this.ws.send(ClientMessageType.LeaveRoom, { roomId: this.roomId });
+    }
+  }
+
+  private setupMultiplayer(): void {
+    this.ws.onMessage(ServerMessageType.GameSync)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((msg: ServerMessage): void => {
+        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number } =
+          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number };
+
+        this.remotePlayerStates.set(payload.player.id, payload.player);
+
+        if (!this.isHost) {
+          this.gameCanvas()?.applyRemoteZombies(payload.zombies);
+          this.gameCanvas()?.applyRemoteCorpses(payload.corpses ?? []);
+          this.gameCanvas()?.syncRemoteLevel(payload.level);
+          this.level.set(payload.level);
+        }
+
+        this.updateRemotePlayersOnCanvas();
+      });
+
+    this.ws.onMessage(ServerMessageType.PlayerStateBroadcast)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((msg: ServerMessage): void => {
+        const payload: { playerId: string; data: { player: CharacterState } } =
+          msg.payload as { playerId: string; data: { player: CharacterState } };
+
+        this.remotePlayerStates.set(payload.playerId, payload.data.player);
+        this.updateRemotePlayersOnCanvas();
+      });
+
+    if (this.isHost) {
+      this.ws.onMessage(ServerMessageType.ZombieDamage)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe((msg: ServerMessage): void => {
+          const payload: RemoteZombieDamagePayload =
+            msg.payload as RemoteZombieDamagePayload;
+          this.gameCanvas()?.applyRemoteDamage(payload.events);
+        });
+    }
+
+    this.zone.runOutsideAngular((): void => {
+      const SYNC_INTERVAL_MS: number = 50;
+      this.syncTimer = setInterval((): void => {
+        if (!this.isMultiplayer) return;
+        const canvas: GameCanvasComponent | undefined = this.gameCanvas();
+        if (!canvas) return;
+
+        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number } | null =
+          canvas.getStateSnapshot();
+        if (!snapshot) return;
+
+        if (this.isHost) {
+          this.ws.send(ClientMessageType.GameSync, snapshot);
+        } else {
+          this.ws.send(ClientMessageType.PlayerState, { player: snapshot.player });
+        }
+      }, SYNC_INTERVAL_MS);
+    });
+  }
+
+  private updateRemotePlayersOnCanvas(): void {
+    const myId: string = this.gameState.player()?.id ?? '';
+    const remotePlayers: CharacterState[] = [];
+    for (const [id, state] of this.remotePlayerStates) {
+      if (id !== myId) {
+        remotePlayers.push(state);
+      }
+    }
+    this.gameCanvas()?.setRemotePlayers(remotePlayers);
   }
 
   onPlayerUpdate(enginePlayer: CharacterState): void {
@@ -220,6 +333,15 @@ export class GameComponent implements OnInit {
     }
   }
 
+  onZombieDamaged(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
+    if (!this.isMultiplayer || this.isHost) return;
+    const payload: ZombieDamagePayload = {
+      roomId: this.roomId,
+      events,
+    };
+    this.ws.send(ClientMessageType.ZombieDamage, payload);
+  }
+
 
   setLevel(level: number): void {
     this.level.set(level);
@@ -249,6 +371,10 @@ export class GameComponent implements OnInit {
   }
 
   backToMenu(): void {
+    if (this.syncTimer) {
+      clearInterval(this.syncTimer);
+      this.syncTimer = null;
+    }
     this.gameState.reset();
     void this.router.navigate(['/']);
   }

@@ -1,0 +1,22 @@
+{
+  "name": "zombie-blaster-api",
+  "version": "0.1.0",
+  "description": "Zombie Blaster multiplayer game server",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.0",
+    "@types/uuid": "^10.0.0",
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "~5.9.2"
+  }
+}

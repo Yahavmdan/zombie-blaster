@@ -1,4 +1,5 @@
 import {
+  CharacterClassDefinition,
   CharacterState,
   CHARACTER_CLASSES,
   Direction,
@@ -12,14 +13,14 @@ import {
   ZombieType,
 } from '@shared/game-entities';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
-import { PlayerAnimState } from './sprite-animator';
+import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
 import { ZombieSpriteAnchor } from './zombie-sprite-animator';
+import { ZombieCorpse } from '@shared/game-entities';
 import {
   DamageNumber,
   DashPhaseState,
   DropNotification,
   IGameEngine,
-  ZombieCorpse,
 } from './engine-types';
 
 export class RenderSystem {
@@ -51,6 +52,7 @@ export class RenderSystem {
     this.renderDragonProjectiles(ctx);
     this.renderSpitterProjectiles(ctx);
     this.renderDrops(ctx);
+    this.renderRemotePlayers(ctx);
     this.renderPlayer(ctx);
     this.renderPoisonOverlay(ctx);
     this.renderParticles(ctx);
@@ -172,6 +174,60 @@ export class RenderSystem {
 
     if (needsAlpha) {
       ctx.restore();
+    }
+  }
+
+  private renderRemotePlayers(ctx: CanvasRenderingContext2D): void {
+    for (const rp of this.e.remotePlayers) {
+      if (rp.isDead) continue;
+
+      const classDef: CharacterClassDefinition = CHARACTER_CLASSES[rp.classId];
+      const classColor: string = classDef.color;
+      const flipX: boolean = rp.facing === Direction.Left;
+      const spriteSize: number = this.e.SPRITE_RENDER_SIZE;
+      const animator: SpriteAnimator | undefined =
+        this.e.remotePlayerAnimators.get(rp.id);
+
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+
+      if (animator && animator.isLoaded()) {
+        const playerAnchorX: number = 0.30;
+        const playerAnchorY: number = 0.979;
+        const effectiveAnchorX: number = flipX ? (1 - playerAnchorX) : playerAnchorX;
+        const drawX: number = rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2 - spriteSize * effectiveAnchorX;
+        const drawY: number = rp.y + GAME_CONSTANTS.PLAYER_HEIGHT - spriteSize * playerAnchorY;
+        animator.draw(ctx, drawX, drawY, spriteSize, spriteSize, flipX);
+      } else {
+        ctx.translate(rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2);
+        if (flipX) ctx.scale(-1, 1);
+        ctx.fillStyle = classColor;
+        ctx.fillRect(
+          -GAME_CONSTANTS.PLAYER_WIDTH / 2,
+          -GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+          GAME_CONSTANTS.PLAYER_WIDTH,
+          GAME_CONSTANTS.PLAYER_HEIGHT,
+        );
+      }
+
+      ctx.restore();
+
+      ctx.fillStyle = classColor;
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(rp.name, rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 12);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '9px sans-serif';
+      ctx.fillText(`Lv.${rp.level}`, rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 2);
+
+      const hpPercent: number = rp.hp / rp.derived.maxHp;
+      const barWidth: number = 40;
+      const barX: number = rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2 - barWidth / 2;
+      const barY: number = rp.y - 22;
+      ctx.fillStyle = '#333333';
+      ctx.fillRect(barX, barY, barWidth, 4);
+      ctx.fillStyle = hpPercent > 0.3 ? '#44cc44' : '#ff4444';
+      ctx.fillRect(barX, barY, barWidth * hpPercent, 4);
     }
   }
 

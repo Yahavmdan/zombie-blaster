@@ -16,6 +16,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'lobby',
+    loadComponent: () =>
+      import('./pages/lobby/lobby.component').then(
+        (m: typeof import('./pages/lobby/lobby.component')) => m.LobbyComponent,
+      ),
+  },
+  {
     path: 'game',
     loadComponent: () =>
       import('./pages/game/game.component').then(

@@ -1,6 +1,11 @@
 <div class="select-backdrop">
   <div class="select-container">
     <h1 class="select-title">CHOOSE YOUR CLASS</h1>
+    @if (isMultiplayer()) {
+      <div class="mode-badge mode-badge--multi">MULTIPLAYER</div>
+    } @else {
+      <div class="mode-badge mode-badge--single">SINGLE PLAYER</div>
+    }
 
     <div class="name-input-row">
       <label for="player-name" class="name-label">Character Name</label>
@@ -72,11 +77,12 @@
       <button
         class="start-btn"
         [class.start-btn--disabled]="!canStart()"
+        [class.start-btn--multi]="isMultiplayer()"
         [disabled]="!canStart()"
         data-testid="charselect-nav-button-start"
         (click)="startGame()"
       >
-        START GAME
+        {{ startButtonLabel() }}
       </button>
     </div>
   </div>

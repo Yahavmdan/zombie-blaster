@@ -9,10 +9,17 @@
     <div class="menu-buttons">
       <button
         class="menu-btn menu-btn--primary"
-        data-testid="menu-main-button-play"
-        (click)="onPlay()"
+        data-testid="menu-main-button-singleplayer"
+        (click)="onSinglePlayer()"
       >
-        PLAY
+        SINGLE PLAYER
+      </button>
+      <button
+        class="menu-btn menu-btn--multiplayer"
+        data-testid="menu-main-button-multiplayer"
+        (click)="onMultiplayer()"
+      >
+        MULTIPLAYER
       </button>
       <button
         class="menu-btn"
@@ -36,7 +43,7 @@
       </div>
     }
 
-    <div class="version-tag">v0.1.0 — Single Player</div>
+    <div class="version-tag">v0.2.0 — Single Player &amp; Multiplayer</div>
   </div>
 
   <div class="floating-zombies">

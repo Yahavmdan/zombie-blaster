@@ -46,6 +46,8 @@ export class GameCanvasComponent implements OnDestroy {
   readonly openShopRequested: OutputEmitterRef<void> = output<void>();
   readonly goldPickedUp: OutputEmitterRef<number> = output<number>();
   readonly potionPickedUp: OutputEmitterRef<DropType> = output<DropType>();
+  readonly zombieDamaged: OutputEmitterRef<Array<{ zombieId: string; damage: number; killed: boolean }>> =
+    output<Array<{ zombieId: string; damage: number; killed: boolean }>>();
 
   useHpPotionHandler: (() => boolean) | null = null;
   useMpPotionHandler: (() => boolean) | null = null;
@@ -54,6 +56,8 @@ export class GameCanvasComponent implements OnDestroy {
 
   private engine: GameEngine | null = null;
   private currentClassId: CharacterClass | null = null;
+  private pendingMultiplayerHost: boolean = false;
+  private pendingMultiplayerClient: boolean = false;
   private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false };
   private readonly boundKeyDown: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyDown(e);
   private readonly boundKeyUp: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyUp(e);
@@ -95,6 +99,44 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
+  setMultiplayerHost(enabled: boolean): void {
+    this.pendingMultiplayerHost = enabled;
+    if (this.engine) {
+      this.engine.isMultiplayerHost = enabled;
+    }
+  }
+
+  setMultiplayerClient(enabled: boolean): void {
+    this.pendingMultiplayerClient = enabled;
+    if (this.engine) {
+      this.engine.isMultiplayerClient = enabled;
+    }
+  }
+
+  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; level: number } | null {
+    return this.engine?.getStateSnapshot() ?? null;
+  }
+
+  applyRemoteZombies(zombies: import('@shared/game-entities').ZombieState[]): void {
+    this.engine?.applyRemoteZombies(zombies);
+  }
+
+  applyRemoteCorpses(corpses: import('@shared/game-entities').ZombieCorpse[]): void {
+    this.engine?.applyRemoteCorpses(corpses);
+  }
+
+  syncRemoteLevel(level: number): void {
+    this.engine?.syncRemoteLevel(level);
+  }
+
+  applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
+    this.engine?.applyRemoteDamage(events);
+  }
+
+  setRemotePlayers(players: CharacterState[]): void {
+    this.engine?.setRemotePlayers(players);
+  }
+
   ngOnDestroy(): void {
     this.engine?.stop();
     window.removeEventListener('keydown', this.boundKeyDown);
@@ -107,6 +149,8 @@ export class GameCanvasComponent implements OnDestroy {
     const canvas: HTMLCanvasElement = this.canvasRef().nativeElement;
     const p: CharacterState = this.player();
     this.engine = new GameEngine(canvas);
+    this.engine.isMultiplayerHost = this.pendingMultiplayerHost;
+    this.engine.isMultiplayerClient = this.pendingMultiplayerClient;
     this.bindEngineCallbacks();
     this.currentClassId = p.classId;
     this.engine.start({ ...p });
@@ -130,6 +174,8 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine!.onOpenShop = (): void => this.openShopRequested.emit();
     this.engine!.onUseHpPotion = (): boolean => this.useHpPotionHandler?.() ?? false;
     this.engine!.onUseMpPotion = (): boolean => this.useMpPotionHandler?.() ?? false;
+    this.engine!.onZombieDamaged = (events: Array<{ zombieId: string; damage: number; killed: boolean }>): void =>
+      this.zombieDamaged.emit(events);
   }
 
   private bindInput(): void {

@@ -1,0 +1,160 @@
+<div class="lobby-backdrop">
+  <div class="lobby-container">
+    <div class="lobby-header">
+      <h1 class="lobby-title">MULTIPLAYER LOBBY</h1>
+      <div class="connection-status" [class.connection-status--connected]="isConnected()">
+        {{ isConnected() ? 'CONNECTED' : connectionStatus() | uppercase }}
+      </div>
+    </div>
+
+    @if (errorMessage(); as err) {
+      <div class="error-banner">{{ err }}</div>
+    }
+
+    @if (view() === 'browser') {
+      <div class="lobby-browser">
+        <div class="create-room-panel">
+          <h2 class="section-title">CREATE A ROOM</h2>
+          <div class="create-room-row">
+            <input
+              class="room-name-input"
+              placeholder="Room name (optional)"
+              [(ngModel)]="newRoomNameInput"
+              maxlength="30"
+              data-testid="lobby-create-input-roomname"
+            />
+            <button
+              class="btn btn--create"
+              [disabled]="!isConnected()"
+              data-testid="lobby-create-button-create"
+              (click)="createRoom()"
+            >
+              CREATE
+            </button>
+          </div>
+        </div>
+
+        <div class="room-list-panel">
+          <div class="room-list-header">
+            <h2 class="section-title">AVAILABLE ROOMS</h2>
+            <button
+              class="btn btn--refresh"
+              [disabled]="!isConnected()"
+              data-testid="lobby-rooms-button-refresh"
+              (click)="requestRoomList()"
+            >
+              REFRESH
+            </button>
+          </div>
+
+          @if (rooms().length === 0) {
+            <div class="empty-rooms">No rooms available. Create one!</div>
+          } @else {
+            <div class="room-grid">
+              @for (room of rooms(); track room.id) {
+                <div class="room-card">
+                  <div class="room-card-info">
+                    <div class="room-card-name">{{ room.name }}</div>
+                    <div class="room-card-host">Host: {{ room.hostName }}</div>
+                    <div class="room-card-players">
+                      {{ room.players.length }} / {{ room.maxPlayers }} players
+                    </div>
+                  </div>
+                  <button
+                    class="btn btn--join"
+                    [disabled]="room.players.length >= room.maxPlayers"
+                    (click)="joinRoom(room.id)"
+                  >
+                    JOIN
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <button
+          class="btn btn--back"
+          data-testid="lobby-nav-button-back"
+          (click)="goBack()"
+        >
+          BACK
+        </button>
+      </div>
+    }
+
+    @if (view() === 'room') {
+      @if (currentRoom(); as room) {
+        <div class="room-view">
+          <div class="room-info-bar">
+            <h2 class="room-name">{{ room.name }}</h2>
+            <div class="room-player-count">
+              {{ room.players.length }} / {{ maxPlayers }} players
+            </div>
+          </div>
+
+          <div class="player-list">
+            @for (player of room.players; track player.id) {
+              <div
+                class="player-row"
+                [class.player-row--ready]="player.isReady"
+                [class.player-row--self]="player.id === playerId()"
+              >
+                <span class="player-class-icon">{{ getClassIcon(player.classId) }}</span>
+                <span class="player-name">
+                  {{ player.name }}
+                  @if (player.isHost) {
+                    <span class="host-badge">HOST</span>
+                  }
+                </span>
+                <span class="player-ready-status">
+                  {{ player.isReady ? 'READY' : 'NOT READY' }}
+                </span>
+                @if (isHost() && player.id !== playerId()) {
+                  <button
+                    class="btn btn--kick"
+                    (click)="kickPlayer(player.id)"
+                  >
+                    KICK
+                  </button>
+                }
+              </div>
+            }
+          </div>
+
+          <div class="room-actions">
+            <button
+              class="btn btn--back"
+              data-testid="lobby-room-button-leave"
+              (click)="leaveRoom()"
+            >
+              LEAVE
+            </button>
+
+            @if (!isHost()) {
+              <button
+                class="btn btn--ready"
+                data-testid="lobby-room-button-ready"
+                (click)="toggleReady()"
+              >
+                TOGGLE READY
+              </button>
+            }
+
+            @if (isHost()) {
+              <button
+                class="btn btn--start"
+                [disabled]="!allReady()"
+                [class.btn--disabled]="!allReady()"
+                data-testid="lobby-room-button-start"
+                (click)="startGame()"
+              >
+                START GAME
+              </button>
+            }
+          </div>
+        </div>
+      }
+    }
+  </div>
+</div>

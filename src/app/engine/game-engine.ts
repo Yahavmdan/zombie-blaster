@@ -8,12 +8,13 @@ import {
 import {
   DropType,
   WorldDrop,
+  ZombieCorpse,
   ZombieState,
 } from '@shared/game-entities';
 import { InputKeys } from '@shared/messages';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
-import { SpriteAnimator } from './sprite-animator';
-import { ZombieSpriteAnimator } from './zombie-sprite-animator';
+import { SpriteAnimator, PlayerAnimState } from './sprite-animator';
+import { ZombieSpriteAnimator, ZombieAnimState } from './zombie-sprite-animator';
 import { MapRenderer } from './map-renderer';
 import { SpriteEffectSystem } from './sprite-effect-system';
 import {
@@ -29,7 +30,6 @@ import {
   PoisonEffect,
   Rope,
   SpitterProjectile,
-  ZombieCorpse,
 } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
@@ -58,6 +58,7 @@ export class GameEngine implements IGameEngine {
   readonly fixedDt: number = 1000 / GAME_CONSTANTS.TICK_RATE;
 
   player: CharacterState | null = null;
+  remotePlayers: CharacterState[] = [];
   zombies: ZombieState[] = [];
   zombieCorpses: ZombieCorpse[] = [];
   particles: Particle[] = [];
@@ -133,10 +134,17 @@ export class GameEngine implements IGameEngine {
   onUseHpPotion: (() => boolean) | null = null;
   onUseMpPotion: (() => boolean) | null = null;
   onOpenShop: (() => void) | null = null;
+  onZombieDamaged: ((events: Array<{ zombieId: string; damage: number; killed: boolean }>) => void) | null = null;
   dashPhase: DashPhaseState | null = null;
 
   godMode: boolean = false;
   showCollisionBoxes: boolean = false;
+  isMultiplayerHost: boolean = false;
+  isMultiplayerClient: boolean = false;
+  pendingLocalKills: Set<string> = new Set<string>();
+  remotePlayerAnimators: Map<string, SpriteAnimator> = new Map<string, SpriteAnimator>();
+  private previousZombieStates: Map<string, boolean> = new Map<string, boolean>();
+  private previousZombieHp: Map<string, number> = new Map<string, number>();
 
   private readonly physicsSystem: PhysicsSystem;
   private readonly vfxSystem: VfxSystem;
@@ -319,14 +327,23 @@ export class GameEngine implements IGameEngine {
 
     this.combatSystem.updateAttackTiming();
     this.updatePlayerActions();
-    this.zombieSystem.updateZombies();
-    this.projectileSystem.updateDragonProjectiles();
-    this.projectileSystem.updateSpitterProjectiles();
-    this.projectileSystem.updatePoisonEffect();
+
+    if (!this.isMultiplayerClient) {
+      this.zombieSystem.updateZombies();
+      this.projectileSystem.updateDragonProjectiles();
+      this.projectileSystem.updateSpitterProjectiles();
+      this.projectileSystem.updatePoisonEffect();
+      this.zombieSystem.updateSpawning();
+    } else {
+      this.tickClientZombieVisuals();
+    }
+
+    this.tickRemotePlayerAnimations();
+
     this.vfxSystem.updateDragonImpacts();
     this.vfxSystem.updateHitMarks();
-    this.zombieSystem.updateSpawning();
     this.zombieSystem.updateZombieCorpses();
+
     this.dropSystem.updateDrops();
     this.dropSystem.updatePotionUse();
     this.vfxSystem.updateParticles();
@@ -338,7 +355,10 @@ export class GameEngine implements IGameEngine {
     this.combatSystem.updateActiveBuffs();
     this.combatSystem.updatePassiveSkills();
     this.combatSystem.updateAutoPotion();
-    this.zombieSystem.checkLevelCompletion();
+
+    if (!this.isMultiplayerClient) {
+      this.zombieSystem.checkLevelCompletion();
+    }
 
     if (this.invincibilityFrames > 0) this.invincibilityFrames--;
     if (this.ropeJumpCooldown > 0) this.ropeJumpCooldown--;
@@ -365,5 +385,187 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill4) this.combatSystem.tryPerformSkill(3);
     if (this.keys.skill5) this.combatSystem.tryPerformSkill(4);
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
+  }
+
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number } | null {
+    if (!this.player) return null;
+    return {
+      player: { ...this.player },
+      zombies: this.zombies.map((z: ZombieState): ZombieState => ({ ...z })),
+      corpses: this.zombieCorpses.map((c: ZombieCorpse): ZombieCorpse => ({ ...c })),
+      level: this.level,
+    };
+  }
+
+  applyRemoteZombies(zombies: ZombieState[]): void {
+    if (!this.isMultiplayerClient) return;
+
+    const currentIds: Set<string> = new Set<string>(zombies.map((z: ZombieState) => z.id));
+
+    for (const [prevId] of this.previousZombieStates) {
+      if (!currentIds.has(prevId)) {
+        this.zombieSpriteAnimator.removeInstance(prevId);
+        this.previousZombieHp.delete(prevId);
+      }
+    }
+
+    for (const z of zombies) {
+      const wasPreviouslyKnown: boolean = this.previousZombieStates.has(z.id);
+
+      if (!wasPreviouslyKnown && !z.isDead) {
+        const spriteKey: string = this.zombieSpriteAnimator.getSpriteKey(z.type);
+        if (z.spawnTimer > 0) {
+          this.zombieSpriteAnimator.setStateReversed(
+            z.id, ZombieAnimState.Dead, spriteKey, z.spawnTimer,
+          );
+        } else {
+          this.zombieSpriteAnimator.setState(z.id, this.deriveZombieAnimState(z));
+        }
+      } else if (!z.isDead && z.spawnTimer <= 0) {
+        this.zombieSpriteAnimator.setState(z.id, this.deriveZombieAnimState(z));
+      }
+
+      if (!z.isDead) {
+        const prevHp: number | undefined = this.previousZombieHp.get(z.id);
+        if (prevHp !== undefined && z.hp < prevHp) {
+          const delta: number = prevHp - z.hp;
+          const cx: number = z.x + z.instanceWidth / 2;
+          const cy: number = z.y + z.instanceHeight / 2;
+          this.vfxSystem.spawnDamageNumber(cx, z.y - 10, delta, false, '#aaccff');
+          this.vfxSystem.spawnHitParticles(cx, cy, '#6699cc');
+        }
+        this.previousZombieHp.set(z.id, z.hp);
+      }
+    }
+
+    this.zombies = zombies.filter((z: ZombieState) => !this.pendingLocalKills.has(z.id));
+
+    for (const killId of this.pendingLocalKills) {
+      if (!currentIds.has(killId)) {
+        this.pendingLocalKills.delete(killId);
+      }
+    }
+
+    this.previousZombieStates = new Map<string, boolean>(
+      zombies.map((z: ZombieState): [string, boolean] => [z.id, z.isDead]),
+    );
+  }
+
+  syncRemoteLevel(level: number): void {
+    if (!this.isMultiplayerClient) return;
+    if (level === this.level) return;
+    this.level = level;
+    this.levelTransitionTimer = GAME_CONSTANTS.LEVEL_TRANSITION_TICKS;
+  }
+
+  applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
+    if (!this.isMultiplayerHost) return;
+
+    for (const evt of events) {
+      const z: ZombieState | undefined = this.zombies.find(
+        (zombie: ZombieState) => zombie.id === evt.zombieId,
+      );
+      if (!z || z.isDead) continue;
+
+      z.hp -= evt.damage;
+
+      const cx: number = z.x + z.instanceWidth / 2;
+      const cy: number = z.y + z.instanceHeight / 2;
+      this.vfxSystem.spawnDamageNumber(cx, z.y - 10, evt.damage, false, '#aaccff');
+      this.vfxSystem.spawnHitParticles(cx, cy, '#6699cc');
+      this.vfxSystem.spawnHitMark(cx, cy);
+
+      if (z.hp <= 0) {
+        this.combatSystem.handleZombieDeath(z, false);
+      }
+    }
+
+    this.zombies = this.zombies.filter((z: ZombieState) => !z.isDead || z.hp > -100);
+  }
+
+  setRemotePlayers(players: CharacterState[]): void {
+    const currentIds: Set<string> = new Set<string>(
+      players.map((p: CharacterState) => p.id),
+    );
+    for (const [id] of this.remotePlayerAnimators) {
+      if (!currentIds.has(id)) {
+        this.remotePlayerAnimators.delete(id);
+      }
+    }
+    this.remotePlayers = players;
+  }
+
+  applyRemoteCorpses(corpses: ZombieCorpse[]): void {
+    if (!this.isMultiplayerClient) return;
+
+    const syncedIds: Set<string> = new Set<string>(
+      corpses.map((c: ZombieCorpse) => c.id),
+    );
+
+    const pendingLocalCorpses: ZombieCorpse[] = this.zombieCorpses.filter(
+      (c: ZombieCorpse) => this.pendingLocalKills.has(c.id) && !syncedIds.has(c.id),
+    );
+
+    const allNewIds: Set<string> = new Set<string>([
+      ...corpses.map((c: ZombieCorpse) => c.id),
+      ...pendingLocalCorpses.map((c: ZombieCorpse) => c.id),
+    ]);
+
+    for (const existing of this.zombieCorpses) {
+      if (!allNewIds.has(existing.id)) {
+        this.zombieSpriteAnimator.removeInstance(existing.id);
+      }
+    }
+
+    for (const c of corpses) {
+      const alreadyHasInstance: boolean = this.zombieCorpses.some(
+        (ec: ZombieCorpse) => ec.id === c.id,
+      );
+      if (!alreadyHasInstance) {
+        this.zombieSpriteAnimator.setState(c.id, ZombieAnimState.Dead);
+      }
+    }
+
+    this.zombieCorpses = [...corpses, ...pendingLocalCorpses];
+  }
+
+  private tickClientZombieVisuals(): void {
+    for (const z of this.zombies) {
+      if (z.isDead) continue;
+      const spriteKey: string = this.zombieSpriteAnimator.getSpriteKey(z.type);
+      this.zombieSpriteAnimator.tick(z.id, spriteKey);
+    }
+  }
+
+  private tickRemotePlayerAnimations(): void {
+    for (const rp of this.remotePlayers) {
+      if (rp.isDead) continue;
+      let animator: SpriteAnimator | undefined = this.remotePlayerAnimators.get(rp.id);
+      if (!animator) {
+        animator = new SpriteAnimator();
+        animator.load();
+        this.remotePlayerAnimators.set(rp.id, animator);
+      }
+      const state: PlayerAnimState = this.deriveRemotePlayerAnimState(rp);
+      animator.setState(state);
+      animator.tick();
+    }
+  }
+
+  private deriveRemotePlayerAnimState(p: CharacterState): PlayerAnimState {
+    if (p.isDead) return PlayerAnimState.Death;
+    if (p.isAttacking) return PlayerAnimState.Attack;
+    if (p.isClimbing) return PlayerAnimState.Climb;
+    if (!p.isGrounded) return PlayerAnimState.Jump;
+    if (Math.abs(p.velocityX) > 0.3) return PlayerAnimState.Run;
+    return PlayerAnimState.Idle;
+  }
+
+  private deriveZombieAnimState(z: ZombieState): ZombieAnimState {
+    if (z.isDead) return ZombieAnimState.Dead;
+    if (z.attackAnimTimer > 0) return ZombieAnimState.Attack;
+    if (z.knockbackFrames > 0) return ZombieAnimState.Hurt;
+    if (Math.abs(z.velocityX) > 0.1) return ZombieAnimState.Walk;
+    return ZombieAnimState.Idle;
   }
 }

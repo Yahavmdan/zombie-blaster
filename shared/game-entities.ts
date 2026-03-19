@@ -88,6 +88,25 @@ export interface PlayerInventory {
   gold: number;
 }
 
+export interface ZombieCorpse {
+  id: string;
+  type: ZombieType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  spriteKey: string;
+  facing: number;
+  velocityX: number;
+  velocityY: number;
+  isGrounded: boolean;
+  frozen: boolean;
+  landProcessed: boolean;
+  fadeTimer: number;
+  maxFadeTimer: number;
+  showBlood: boolean;
+}
+
 export interface ShopItemDefinition {
   id: string;
   name: string;

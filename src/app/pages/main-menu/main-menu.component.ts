@@ -1,5 +1,6 @@
 import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { Router } from '@angular/router';
+import { GameMode } from '@shared/multiplayer';
 
 interface FloatingZombie {
   id: number;
@@ -40,8 +41,16 @@ export class MainMenuComponent {
 
   constructor(private readonly router: Router) {}
 
-  onPlay(): void {
-    void this.router.navigate(['/character-select']);
+  onSinglePlayer(): void {
+    void this.router.navigate(['/character-select'], {
+      queryParams: { mode: GameMode.SinglePlayer },
+    });
+  }
+
+  onMultiplayer(): void {
+    void this.router.navigate(['/character-select'], {
+      queryParams: { mode: GameMode.Multiplayer },
+    });
   }
 
   toggleHelp(): void {

@@ -257,3 +257,35 @@
   font-style: italic;
   margin: 0;
 }
+
+.mode-badge {
+  padding: 0.3rem 1rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.mode-badge--single {
+  background: rgba(255, 68, 68, 0.15);
+  border: 1px solid rgba(255, 68, 68, 0.4);
+  color: #ff6666;
+}
+
+.mode-badge--multi {
+  background: rgba(34, 68, 170, 0.15);
+  border: 1px solid rgba(34, 68, 170, 0.4);
+  color: #6699ff;
+}
+
+.start-btn--multi {
+  background: #2244aa;
+  border-color: #2244aa;
+}
+
+.start-btn--multi:hover {
+  background: #3366cc;
+  border-color: #3366cc;
+  box-shadow: 0 0 25px rgba(34, 68, 170, 0.3);
+}

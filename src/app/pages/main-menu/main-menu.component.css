@@ -92,6 +92,19 @@
   box-shadow: 0 0 30px rgba(255, 68, 68, 0.3);
 }
 
+.menu-btn--multiplayer {
+  background: #2244aa;
+  border-color: #2244aa;
+  color: #ffffff;
+  font-size: 1.15rem;
+}
+
+.menu-btn--multiplayer:hover {
+  background: #3366cc;
+  border-color: #3366cc;
+  box-shadow: 0 0 30px rgba(34, 68, 170, 0.4);
+}
+
 .help-panel {
   background: #14141fcc;
   border: 1px solid #333;

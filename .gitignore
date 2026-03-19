@@ -39,6 +39,10 @@ testem.log
 /typings
 __screenshots__/
 
+# Backend
+zombie-blaster-api/node_modules
+zombie-blaster-api/dist
+
 # System files
 .DS_Store
 Thumbs.db

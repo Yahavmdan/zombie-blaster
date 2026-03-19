@@ -1,5 +1,5 @@
-import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, computed } from '@angular/core';
-import { Router } from '@angular/router';
+import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, computed, inject, OnInit } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ReactiveFormsModule, FormControl, Validators } from '@angular/forms';
 import {
   CharacterClass,
@@ -9,6 +9,7 @@ import {
   ClassStatWeights,
   SKILLS,
   SkillDefinition,
+  GameMode,
 } from '@shared/index';
 import { GameStateService } from '../../services/game-state.service';
 
@@ -22,7 +23,13 @@ import { GameStateService } from '../../services/game-state.service';
   templateUrl: './character-select.component.html',
   styleUrl: './character-select.component.css',
 })
-export class CharacterSelectComponent {
+export class CharacterSelectComponent implements OnInit {
+  private readonly router: Router = inject(Router);
+  private readonly route: ActivatedRoute = inject(ActivatedRoute);
+  private readonly gameState: GameStateService = inject(GameStateService);
+
+  readonly gameMode: WritableSignal<GameMode> = signal<GameMode>(GameMode.SinglePlayer);
+
   readonly nameControl: FormControl<string> = new FormControl<string>('', {
     nonNullable: true,
     validators: [Validators.required, Validators.minLength(2), Validators.maxLength(16)],
@@ -65,10 +72,22 @@ export class CharacterSelectComponent {
     return this.selectedClass() !== null && this.nameControl.valid;
   });
 
-  constructor(
-    private readonly router: Router,
-    private readonly gameState: GameStateService,
-  ) {}
+  readonly isMultiplayer: Signal<boolean> = computed((): boolean => {
+    return this.gameMode() === GameMode.Multiplayer;
+  });
+
+  readonly startButtonLabel: Signal<string> = computed((): string => {
+    return this.isMultiplayer() ? 'FIND LOBBY' : 'START GAME';
+  });
+
+  ngOnInit(): void {
+    const modeParam: string | null = this.route.snapshot.queryParamMap.get('mode');
+    if (modeParam === GameMode.Multiplayer) {
+      this.gameMode.set(GameMode.Multiplayer);
+    } else {
+      this.gameMode.set(GameMode.SinglePlayer);
+    }
+  }
 
   selectClass(classId: CharacterClass): void {
     this.selectedClass.set(classId);
@@ -82,7 +101,16 @@ export class CharacterSelectComponent {
     const classId: CharacterClass | null = this.selectedClass();
     if (!classId || !this.nameControl.valid) return;
 
-    this.gameState.createPlayer(this.nameControl.value, classId);
-    void this.router.navigate(['/game']);
+    if (this.gameMode() === GameMode.SinglePlayer) {
+      this.gameState.createPlayer(this.nameControl.value, classId);
+      void this.router.navigate(['/game']);
+    } else {
+      void this.router.navigate(['/lobby'], {
+        queryParams: {
+          name: this.nameControl.value,
+          classId,
+        },
+      });
+    }
   }
 }

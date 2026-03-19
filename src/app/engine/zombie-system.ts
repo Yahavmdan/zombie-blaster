@@ -8,7 +8,8 @@ import {
   ZombieState,
   ZombieType,
 } from '@shared/game-entities';
-import { IGameEngine, Platform, ZombieCorpse } from './engine-types';
+import { ZombieCorpse } from '@shared/game-entities';
+import { IGameEngine, Platform } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { CombatSystem } from './combat-system';
