@@ -206,8 +206,7 @@ export class GameEngine implements IGameEngine {
     this.ropes = [
       { x: 190, topY: 330, bottomY: 530 },
       { x: 910, topY: 340, bottomY: 530 },
-      { x: 560, topY: 430, bottomY: GAME_CONSTANTS.GROUND_Y },
-      { x: 640, topY: GAME_CONSTANTS.EXIT_PLATFORM_Y, bottomY: 430 },
+      { x: 560, topY: 430, bottomY: GAME_CONSTANTS.GROUND_Y }
     ];
   }
 
