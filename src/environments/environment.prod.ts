@@ -1,4 +1,7 @@
-import type { Environment } from './environment';
+export interface Environment {
+  production: boolean;
+  wsUrl: string;
+}
 
 export const environment: Environment = {
   production: true,
