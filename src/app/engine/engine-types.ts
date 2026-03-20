@@ -200,6 +200,7 @@ export interface IGameEngine {
   isMultiplayerHost: boolean;
   isMultiplayerClient: boolean;
   pendingLocalKills: Set<string>;
+  pendingRemoteAttacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>;
 
   onPlayerUpdate: ((player: CharacterState) => void) | null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null;
@@ -214,4 +215,5 @@ export interface IGameEngine {
   onUseMpPotion: (() => boolean) | null;
   onOpenShop: (() => void) | null;
   onZombieDamaged: ((events: Array<{ zombieId: string; damage: number; killed: boolean }>) => void) | null;
+  onRemotePlayerDamaged: ((targetPlayerId: string, damage: number, zombieX: number, zombieY: number, knockbackDir: number, isPoisonAttack: boolean) => void) | null;
 }

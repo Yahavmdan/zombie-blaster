@@ -11,23 +11,75 @@ import {
 import { ZombieCorpse } from '@shared/game-entities';
 import { IGameEngine, Platform } from './engine-types';
 import { PhysicsSystem } from './physics-system';
-import { VfxSystem } from './vfx-system';
 import { CombatSystem } from './combat-system';
 import { ProjectileSystem } from './projectile-system';
-import { ZombieSpriteAnimator, ZombieAnimState } from './zombie-sprite-animator';
+import { ZombieAnimState } from './zombie-sprite-animator';
+
+interface TargetInfo {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  isLocal: boolean;
+  defense: number;
+}
 
 export class ZombieSystem {
   constructor(
     private readonly e: IGameEngine,
     private readonly physics: PhysicsSystem,
-    private readonly vfx: VfxSystem,
     private readonly combat: CombatSystem,
     private readonly projectiles: ProjectileSystem,
   ) {}
 
-  updateZombies(): void {
+  private getAllTargets(): TargetInfo[] {
+    const targets: TargetInfo[] = [];
     const p: CharacterState | null = this.e.player;
-    if (!p) return;
+    if (p && !p.isDead) {
+      targets.push({
+        id: p.id,
+        x: p.x,
+        y: p.y,
+        width: GAME_CONSTANTS.PLAYER_WIDTH,
+        height: GAME_CONSTANTS.PLAYER_HEIGHT,
+        isLocal: true,
+        defense: p.derived.defense,
+      });
+    }
+    for (const rp of this.e.remotePlayers) {
+      if (rp.isDead) continue;
+      targets.push({
+        id: rp.id,
+        x: rp.x,
+        y: rp.y,
+        width: GAME_CONSTANTS.PLAYER_WIDTH,
+        height: GAME_CONSTANTS.PLAYER_HEIGHT,
+        isLocal: false,
+        defense: rp.derived.defense,
+      });
+    }
+    return targets;
+  }
+
+  private findNearestTarget(zx: number, zy: number): TargetInfo | null {
+    const targets: TargetInfo[] = this.getAllTargets();
+    let nearest: TargetInfo | null = null;
+    let bestDist: number = Infinity;
+    for (const t of targets) {
+      const dx: number = (t.x + t.width / 2) - zx;
+      const dy: number = (t.y + t.height / 2) - zy;
+      const dist: number = dx * dx + dy * dy;
+      if (dist < bestDist) {
+        bestDist = dist;
+        nearest = t;
+      }
+    }
+    return nearest;
+  }
+
+  updateZombies(): void {
+    if (this.getAllTargets().length === 0) return;
 
     for (const z of this.e.zombies) {
       if (z.isDead) continue;
@@ -57,7 +109,10 @@ export class ZombieSystem {
       if (z.attackCooldown > 0) z.attackCooldown--;
       if (z.platformDropTimer > 0) z.platformDropTimer--;
 
-      this.tickHesitation(z, p);
+      const nearestForHesitation: TargetInfo | null = this.findNearestTarget(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);
+      if (nearestForHesitation) {
+        this.tickHesitation(z, nearestForHesitation);
+      }
 
       this.updateZombieAnimState(z);
       const spriteKey: string = this.e.zombieSpriteAnimator.getSpriteKey(z.type);
@@ -169,18 +224,18 @@ export class ZombieSystem {
     this.resolveZombieCollisions();
   }
 
-  private tickHesitation(z: ZombieState, p: CharacterState): void {
+  private tickHesitation(z: ZombieState, target: TargetInfo): void {
     if (z.attackHesitation <= 0 || z.attackCooldown > 0 || z.attackAnimTimer > 0 || z.knockbackFrames > 0) return;
     if (z.type === ZombieType.DragonBoss || z.type === ZombieType.Spitter) return;
 
     const zCx: number = z.x + z.instanceWidth / 2;
     const zCy: number = z.y + z.instanceHeight / 2;
-    const pCx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
-    const pCy: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
-    const dx: number = Math.abs(pCx - zCx);
-    const dy: number = Math.abs(pCy - zCy);
+    const tCx: number = target.x + target.width / 2;
+    const tCy: number = target.y + target.height / 2;
+    const dx: number = Math.abs(tCx - zCx);
+    const dy: number = Math.abs(tCy - zCy);
     const effectiveRange: number = GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE + z.hesitationRange;
-    const inRange: boolean = dx < z.instanceWidth / 2 + effectiveRange + GAME_CONSTANTS.PLAYER_WIDTH / 2
+    const inRange: boolean = dx < z.instanceWidth / 2 + effectiveRange + target.width / 2
       && dy < z.instanceHeight;
 
     if (inRange) {
@@ -189,9 +244,6 @@ export class ZombieSystem {
   }
 
   private updateZombieAttack(z: ZombieState, zDef: ZombieDefinition): void {
-    const p: CharacterState | null = this.e.player;
-    if (!p) return;
-
     if (z.attackAnimTimer > 0) {
       z.attackAnimTimer--;
 
@@ -202,10 +254,8 @@ export class ZombieSystem {
           this.projectiles.spawnDragonProjectile(z);
         } else if (z.type === ZombieType.Spitter) {
           this.projectiles.spawnSpitterProjectile(z);
-        } else if (this.e.invincibilityFrames <= 0 && this.zombieSwingHitsPlayer(z)) {
-          const baseHit: number = z.instanceDamageMin + Math.floor(Math.random() * (z.instanceDamageMax - z.instanceDamageMin + 1));
-          const rawDamage: number = Math.max(1, baseHit - p.derived.defense);
-          this.combat.applyZombieDamageToPlayer(rawDamage, z);
+        } else {
+          this.resolveZombieSwingHits(z);
         }
       }
       return;
@@ -215,10 +265,13 @@ export class ZombieSystem {
 
     const zCenterX: number = z.x + z.instanceWidth / 2;
     const zCenterY: number = z.y + z.instanceHeight / 2;
-    const pCenterX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
-    const pCenterY: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
-    const distX: number = Math.abs(pCenterX - zCenterX);
-    const distY: number = Math.abs(pCenterY - zCenterY);
+    const target: TargetInfo | null = this.findNearestTarget(zCenterX, zCenterY);
+    if (!target) return;
+
+    const tCenterX: number = target.x + target.width / 2;
+    const tCenterY: number = target.y + target.height / 2;
+    const distX: number = Math.abs(tCenterX - zCenterX);
+    const distY: number = Math.abs(tCenterY - zCenterY);
 
     const isDragon: boolean = z.type === ZombieType.DragonBoss;
     const isSpitter: boolean = z.type === ZombieType.Spitter;
@@ -227,7 +280,7 @@ export class ZombieSystem {
       ? GAME_CONSTANTS.DRAGON_ATTACK_RANGE
       : isSpitter
         ? GAME_CONSTANTS.SPITTER_ATTACK_RANGE
-        : z.instanceWidth / 2 + GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+        : z.instanceWidth / 2 + GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE + target.width / 2;
     const heightCheck: number = isRanged ? attackRange : z.instanceHeight;
 
     if (distX < attackRange && distY < heightCheck) {
@@ -244,10 +297,7 @@ export class ZombieSystem {
     }
   }
 
-  private zombieSwingHitsPlayer(z: ZombieState): boolean {
-    const p: CharacterState | null = this.e.player;
-    if (!p) return false;
-
+  private resolveZombieSwingHits(z: ZombieState): void {
     const swingX: number = z.facing > 0
       ? z.x + z.instanceWidth
       : z.x - GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE;
@@ -255,15 +305,33 @@ export class ZombieSystem {
     const swingW: number = GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE;
     const swingH: number = z.instanceHeight;
 
-    return this.physics.rectsOverlap(
-      swingX, swingY, swingW, swingH,
-      p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT,
-    );
+    for (const target of this.getAllTargets()) {
+      const hit: boolean = this.physics.rectsOverlap(
+        swingX, swingY, swingW, swingH,
+        target.x, target.y, target.width, target.height,
+      );
+      if (!hit) continue;
+
+      const baseHit: number = z.instanceDamageMin + Math.floor(Math.random() * (z.instanceDamageMax - z.instanceDamageMin + 1));
+      const rawDamage: number = Math.max(1, baseHit - target.defense);
+
+      if (target.isLocal) {
+        if (this.e.invincibilityFrames <= 0) {
+          this.combat.applyZombieDamageToPlayer(rawDamage, z);
+        }
+      } else {
+        const knockDir: number = target.x > z.x ? 1 : -1;
+        this.e.pendingRemoteAttacks.push({ targetPlayerId: target.id, damage: rawDamage, knockbackDir: knockDir, isPoisonAttack: false });
+        this.e.onRemotePlayerDamaged?.(target.id, rawDamage, z.x, z.y, knockDir, false);
+      }
+    }
   }
 
   private updateZombieAI(z: ZombieState, zDef: ZombieDefinition): void {
-    const p: CharacterState | null = this.e.player;
-    if (!p) return;
+    const zCx: number = z.x + z.instanceWidth / 2;
+    const zCy: number = z.y + z.instanceHeight / 2;
+    const target: TargetInfo | null = this.findNearestTarget(zCx, zCy);
+    if (!target) return;
 
     if (z.type === ZombieType.DragonBoss) {
       this.updateDragonAI(z);
@@ -276,23 +344,21 @@ export class ZombieSystem {
     }
 
     const detectionRadius: number = GAME_CONSTANTS.CANVAS_WIDTH * GAME_CONSTANTS.ZOMBIE_DETECTION_RANGE;
-    const distToPlayerX: number = Math.abs((z.x + z.instanceWidth / 2) - (p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2));
-    if (distToPlayerX > detectionRadius) {
+    const distToTargetX: number = Math.abs(zCx - (target.x + target.width / 2));
+    if (distToTargetX > detectionRadius) {
       this.updateZombieIdleWander(z, zDef);
       return;
     }
 
-    z.facing = p.x > z.x ? 1 : -1;
+    z.facing = target.x > z.x ? 1 : -1;
 
     if (z.attackCooldown <= 0 && z.attackAnimTimer <= 0 && z.attackHesitation > 0) {
       const effectiveRange: number = GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE + z.hesitationRange;
-      const zCx: number = z.x + z.instanceWidth / 2;
-      const pCx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
-      const pCy: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
-      const zCy: number = z.y + z.instanceHeight / 2;
-      const dx: number = Math.abs(pCx - zCx);
-      const dy: number = Math.abs(pCy - zCy);
-      const inRange: boolean = dx < z.instanceWidth / 2 + effectiveRange + GAME_CONSTANTS.PLAYER_WIDTH / 2
+      const tCx: number = target.x + target.width / 2;
+      const tCy: number = target.y + target.height / 2;
+      const dx: number = Math.abs(tCx - zCx);
+      const dy: number = Math.abs(tCy - zCy);
+      const inRange: boolean = dx < z.instanceWidth / 2 + effectiveRange + target.width / 2
         && dy < z.instanceHeight;
       if (inRange) {
         z.velocityX = 0;
@@ -300,11 +366,11 @@ export class ZombieSystem {
       }
     }
 
-    const targetX: number = p.x + z.orbitOffset;
+    const targetX: number = target.x + z.orbitOffset;
     const dxToTarget: number = targetX - z.x;
-    const dy: number = p.y - z.y;
-    const playerIsAbove: boolean = dy < -z.instanceHeight;
-    const distToPlayer: number = Math.abs(p.x - z.x);
+    const dy: number = target.y - z.y;
+    const targetIsAbove: boolean = dy < -z.instanceHeight;
+    const distToTarget: number = Math.abs(target.x - z.x);
 
     if (Math.abs(dxToTarget) < GAME_CONSTANTS.ZOMBIE_ORBIT_ARRIVE_THRESHOLD) {
       const side: number = z.orbitOffset > 0 ? -1 : 1;
@@ -316,24 +382,26 @@ export class ZombieSystem {
 
     if (!z.isGrounded || z.jumpCooldown > 0) return;
 
-    const playerIsBelow: boolean = dy > z.instanceHeight;
+    const targetIsBelow: boolean = dy > z.instanceHeight;
 
-    if (playerIsBelow && z.y + z.instanceHeight < GAME_CONSTANTS.GROUND_Y && Math.random() < GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_CHANCE) {
+    if (targetIsBelow && z.y + z.instanceHeight < GAME_CONSTANTS.GROUND_Y && Math.random() < GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_CHANCE) {
       z.platformDropTimer = GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_TICKS;
       z.y += GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE + 1;
       z.isGrounded = false;
-    } else if (playerIsAbove && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_PLATFORM_CHASE_CHANCE) {
+    } else if (targetIsAbove && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_PLATFORM_CHASE_CHANCE) {
       this.zombieJump(z);
-    } else if (distToPlayer < GAME_CONSTANTS.ZOMBIE_ORBIT_MAX * 2 && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_CHANCE_PER_TICK) {
+    } else if (distToTarget < GAME_CONSTANTS.ZOMBIE_ORBIT_MAX * 2 && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_CHANCE_PER_TICK) {
       this.zombieJump(z);
     }
   }
 
   private updateDragonAI(z: ZombieState): void {
-    const p: CharacterState | null = this.e.player;
-    if (!p) return;
+    const zCx: number = z.x + z.instanceWidth / 2;
+    const zCy: number = z.y + z.instanceHeight / 2;
+    const target: TargetInfo | null = this.findNearestTarget(zCx, zCy);
+    if (!target) return;
 
-    const dx: number = p.x - z.x;
+    const dx: number = target.x - z.x;
     const dist: number = Math.abs(dx);
     const keepDist: number = GAME_CONSTANTS.DRAGON_KEEP_DISTANCE;
 
@@ -355,10 +423,12 @@ export class ZombieSystem {
   }
 
   private updateSpitterAI(z: ZombieState): void {
-    const p: CharacterState | null = this.e.player;
-    if (!p) return;
+    const zCx: number = z.x + z.instanceWidth / 2;
+    const zCy: number = z.y + z.instanceHeight / 2;
+    const target: TargetInfo | null = this.findNearestTarget(zCx, zCy);
+    if (!target) return;
 
-    const dx: number = p.x - z.x;
+    const dx: number = target.x - z.x;
     const dist: number = Math.abs(dx);
     const keepDist: number = GAME_CONSTANTS.SPITTER_KEEP_DISTANCE;
 
@@ -383,14 +453,14 @@ export class ZombieSystem {
 
     if (!z.isGrounded || z.jumpCooldown > 0) return;
 
-    const playerIsAbove: boolean = (p.y - z.y) < -z.instanceHeight;
-    const playerIsBelow: boolean = (p.y - z.y) > z.instanceHeight;
+    const targetIsAbove: boolean = (target.y - z.y) < -z.instanceHeight;
+    const targetIsBelow: boolean = (target.y - z.y) > z.instanceHeight;
 
-    if (playerIsBelow && z.y + z.instanceHeight < GAME_CONSTANTS.GROUND_Y && Math.random() < GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_CHANCE) {
+    if (targetIsBelow && z.y + z.instanceHeight < GAME_CONSTANTS.GROUND_Y && Math.random() < GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_CHANCE) {
       z.platformDropTimer = GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_TICKS;
       z.y += GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE + 1;
       z.isGrounded = false;
-    } else if (playerIsAbove && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_PLATFORM_CHASE_CHANCE) {
+    } else if (targetIsAbove && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_PLATFORM_CHASE_CHANCE) {
       this.zombieJump(z);
     }
   }
@@ -585,7 +655,8 @@ export class ZombieSystem {
     const platMaxX: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - rolledWidth, plat.x + plat.width - rolledWidth);
     const x: number = platMinX + Math.floor(Math.random() * (platMaxX - platMinX + 1));
     const y: number = plat.y - rolledHeight;
-    const facing: number = this.e.player ? (this.e.player.x > x ? 1 : -1) : (Math.random() > 0.5 ? 1 : -1);
+    const nearestSpawnTarget: TargetInfo | null = this.findNearestTarget(x + rolledWidth / 2, y + rolledHeight / 2);
+    const facing: number = nearestSpawnTarget ? (nearestSpawnTarget.x > x ? 1 : -1) : (Math.random() > 0.5 ? 1 : -1);
 
     const zombie: ZombieState = {
       id: crypto.randomUUID(),
@@ -685,6 +756,11 @@ export class ZombieSystem {
   }
 
   updateZombieCorpses(): void {
+    if (this.e.isMultiplayerClient) {
+      this.tickClientCorpseVisuals();
+      return;
+    }
+
     for (const corpse of this.e.zombieCorpses) {
       if (!corpse.isGrounded) {
         corpse.x += corpse.velocityX;
@@ -752,6 +828,42 @@ export class ZombieSystem {
       if (corpse.isGrounded && !corpse.landProcessed) {
         corpse.landProcessed = true;
         this.diversifyCorpsePose(corpse);
+      }
+
+      if (!corpse.frozen) {
+        this.e.zombieSpriteAnimator.tick(corpse.id, corpse.spriteKey);
+      }
+    }
+  }
+
+  private tickClientCorpseVisuals(): void {
+    for (const corpse of this.e.zombieCorpses) {
+      if (!corpse.isGrounded && this.e.pendingLocalKills.has(corpse.id)) {
+        corpse.velocityY += GAME_CONSTANTS.GRAVITY;
+        if (corpse.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
+          corpse.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
+        }
+        corpse.x += corpse.velocityX;
+        corpse.y += corpse.velocityY;
+        corpse.velocityX *= 0.92;
+
+        for (const plat of this.e.platforms) {
+          const bottom: number = corpse.y + corpse.height;
+          const prevBottom: number = bottom - corpse.velocityY;
+          if (
+            corpse.x + corpse.width > plat.x &&
+            corpse.x < plat.x + plat.width &&
+            bottom >= plat.y &&
+            prevBottom <= plat.y + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
+            corpse.velocityY >= 0
+          ) {
+            corpse.y = plat.y - corpse.height;
+            corpse.velocityY = 0;
+            corpse.velocityX = 0;
+            corpse.isGrounded = true;
+            this.e.zombieSpriteAnimator.setState(corpse.id, ZombieAnimState.Dead);
+          }
+        }
       }
 
       if (!corpse.frozen) {

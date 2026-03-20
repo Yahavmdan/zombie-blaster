@@ -110,7 +110,7 @@ export class CombatSystem {
       }
     }
 
-    this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead || z.hp > -100);
+    this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead);
     this.e.onZombiesUpdate?.(this.e.zombies);
     this.flushDamageEvents();
   }
@@ -240,7 +240,7 @@ export class CombatSystem {
       this.e.playerStunTicks = Math.floor(stunMs / this.e.fixedDt);
     }
 
-    this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead || z.hp > -100);
+    this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead);
     this.e.onZombiesUpdate?.(this.e.zombies);
     this.flushDamageEvents();
   }
@@ -721,7 +721,7 @@ export class CombatSystem {
       }
     }
 
-    this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead || z.hp > -100);
+    this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead);
     this.e.onZombiesUpdate?.(this.e.zombies);
     this.flushDamageEvents();
   }
@@ -967,7 +967,8 @@ export class CombatSystem {
     }
 
     const grounded: boolean = z.isGrounded;
-    const initialAnim: ZombieAnimState = grounded ? ZombieAnimState.Dead : ZombieAnimState.Hurt;
+    const useDeadImmediate: boolean = grounded || this.e.isMultiplayerClient;
+    const initialAnim: ZombieAnimState = useDeadImmediate ? ZombieAnimState.Dead : ZombieAnimState.Hurt;
     this.e.zombieSpriteAnimator.setState(z.id, initialAnim);
 
     const lingerTicks: number = GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS;

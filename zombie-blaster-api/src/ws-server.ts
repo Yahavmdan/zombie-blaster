@@ -140,6 +140,9 @@ export class GameWebSocketServer {
       case 'zombie-damage':
         this.handleZombieDamage(clientId, msg.payload);
         break;
+      case 'zombie-attack-player':
+        this.handleZombieAttackPlayer(clientId, msg.payload);
+        break;
       case 'ping':
         this.send(clientId, 'pong' as ServerMessageType, {});
         break;
@@ -203,6 +206,13 @@ export class GameWebSocketServer {
   }
 
   private handleLeaveRoom(clientId: string): void {
+    const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
+    const wasInGame: boolean = room !== undefined && room.status === ('in-game' as string);
+
+    if (wasInGame && room) {
+      this.broadcastToRoom(room, 'player-left' as ServerMessageType, { playerId: clientId }, clientId);
+    }
+
     const result = this.roomManager.leaveRoom(clientId);
     if (!result) {
       this.sendError(clientId, 'NOT_IN_ROOM', 'You are not in any room');
@@ -358,6 +368,18 @@ export class GameWebSocketServer {
     this.send(hostId, 'zombie-damage' as ServerMessageType, wrapped);
   }
 
+  private handleZombieAttackPlayer(clientId: string, payload: unknown): void {
+    const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
+    if (!room) return;
+    if (room.hostId !== clientId) return;
+
+    const typed: { targetPlayerId: string } = payload as { targetPlayerId: string };
+    const targetId: string = typed.targetPlayerId;
+    if (!room.getPlayer(targetId)) return;
+
+    this.send(targetId, 'zombie-attack-player' as ServerMessageType, payload);
+  }
+
   private handleGameSync(clientId: string, payload: unknown): void {
     const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
     if (!room) return;
@@ -379,6 +401,13 @@ export class GameWebSocketServer {
 
   private handleDisconnect(clientId: string): void {
     console.log(`[WS] Client disconnected: ${clientId}`);
+
+    const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
+    const wasInGame: boolean = room !== undefined && room.status === ('in-game' as string);
+
+    if (wasInGame && room) {
+      this.broadcastToRoom(room, 'player-left' as ServerMessageType, { playerId: clientId }, clientId);
+    }
 
     const result = this.roomManager.leaveRoom(clientId);
     if (result && !result.wasEmpty) {

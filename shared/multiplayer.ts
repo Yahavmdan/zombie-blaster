@@ -47,6 +47,8 @@ export enum ServerMessageType {
   ChatMessage = 'chat-message',
   Pong = 'pong',
   ZombieDamage = 'zombie-damage',
+  ZombieAttackPlayer = 'zombie-attack-player',
+  PlayerLeft = 'player-left',
 }
 
 export enum ClientMessageType {
@@ -63,6 +65,7 @@ export enum ClientMessageType {
   ChatMessage = 'chat-message',
   Ping = 'ping',
   ZombieDamage = 'zombie-damage',
+  ZombieAttackPlayer = 'zombie-attack-player',
 }
 
 export interface CreateRoomPayload {
@@ -171,6 +174,10 @@ export interface RemoteInputPayload {
   attackSkillId?: string;
 }
 
+export interface PlayerLeftPayload {
+  playerId: string;
+}
+
 export interface ZombieDamageEvent {
   zombieId: string;
   damage: number;
@@ -185,4 +192,13 @@ export interface ZombieDamagePayload {
 export interface RemoteZombieDamagePayload {
   playerId: string;
   events: ZombieDamageEvent[];
+}
+
+export interface ZombieAttackPlayerPayload {
+  targetPlayerId: string;
+  damage: number;
+  zombieX: number;
+  zombieY: number;
+  knockbackDir: number;
+  isPoisonAttack: boolean;
 }

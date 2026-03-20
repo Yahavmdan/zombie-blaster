@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inj
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType } from '@shared/index';
-import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload } from '@shared/multiplayer';
+import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload } from '@shared/multiplayer';
 import { ZombieCorpse, ZombieState } from '@shared/game-entities';
 import { GameStateService } from '../../services/game-state.service';
 import { WebSocketService } from '../../services/websocket.service';
@@ -122,8 +122,8 @@ export class GameComponent implements OnInit, OnDestroy {
     this.ws.onMessage(ServerMessageType.GameSync)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
-        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number } =
-          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number };
+        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } =
+          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> };
 
         this.remotePlayerStates.set(payload.player.id, payload.player);
 
@@ -132,6 +132,15 @@ export class GameComponent implements OnInit, OnDestroy {
           this.gameCanvas()?.applyRemoteCorpses(payload.corpses ?? []);
           this.gameCanvas()?.syncRemoteLevel(payload.level);
           this.level.set(payload.level);
+
+          if (payload.attacks && payload.attacks.length > 0) {
+            const myId: string = this.gameState.player()?.id ?? '';
+            for (const atk of payload.attacks) {
+              if (atk.targetPlayerId === myId) {
+                this.gameCanvas()?.applyIncomingZombieDamage(atk.damage, atk.knockbackDir, atk.isPoisonAttack);
+              }
+            }
+          }
         }
 
         this.updateRemotePlayersOnCanvas();
@@ -157,6 +166,31 @@ export class GameComponent implements OnInit, OnDestroy {
         });
     }
 
+    if (!this.isHost) {
+      this.ws.onMessage(ServerMessageType.ZombieAttackPlayer)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe((msg: ServerMessage): void => {
+          const payload: ZombieAttackPlayerPayload =
+            msg.payload as ZombieAttackPlayerPayload;
+          const myId: string = this.gameState.player()?.id ?? '';
+          if (payload.targetPlayerId === myId) {
+            this.gameCanvas()?.applyIncomingZombieDamage(
+              payload.damage,
+              payload.knockbackDir,
+              payload.isPoisonAttack,
+            );
+          }
+        });
+    }
+
+    this.ws.onMessage(ServerMessageType.PlayerLeft)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((msg: ServerMessage): void => {
+        const payload: PlayerLeftPayload = msg.payload as PlayerLeftPayload;
+        this.remotePlayerStates.delete(payload.playerId);
+        this.updateRemotePlayersOnCanvas();
+      });
+
     this.zone.runOutsideAngular((): void => {
       const SYNC_INTERVAL_MS: number = 50;
       this.syncTimer = setInterval((): void => {
@@ -164,7 +198,7 @@ export class GameComponent implements OnInit, OnDestroy {
         const canvas: GameCanvasComponent | undefined = this.gameCanvas();
         if (!canvas) return;
 
-        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number } | null =
+        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } | null =
           canvas.getStateSnapshot();
         if (!snapshot) return;
 
@@ -340,6 +374,19 @@ export class GameComponent implements OnInit, OnDestroy {
       events,
     };
     this.ws.send(ClientMessageType.ZombieDamage, payload);
+  }
+
+  onRemotePlayerDamaged(event: { targetPlayerId: string; damage: number; zombieX: number; zombieY: number; knockbackDir: number; isPoisonAttack: boolean }): void {
+    if (!this.isMultiplayer || !this.isHost) return;
+    const payload: ZombieAttackPlayerPayload = {
+      targetPlayerId: event.targetPlayerId,
+      damage: event.damage,
+      zombieX: event.zombieX,
+      zombieY: event.zombieY,
+      knockbackDir: event.knockbackDir,
+      isPoisonAttack: event.isPoisonAttack,
+    };
+    this.ws.send(ClientMessageType.ZombieAttackPlayer, payload);
   }
 
 

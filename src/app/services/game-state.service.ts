@@ -52,14 +52,14 @@ export class GameStateService {
     return (p.xp / p.xpToNext) * 100;
   });
 
-  createPlayer(name: string, classId: CharacterClass): void {
+  createPlayer(name: string, classId: CharacterClass, overrideId?: string): void {
     const classDef: CharacterClassDefinition = CHARACTER_CLASSES[classId];
     const allocatedStats: CharacterStats = { str: 0, dex: 0, int: 0, luk: 0 };
     const derived: CharacterDerived = this.calculateDerived(classDef.baseStats, allocatedStats, classId);
     const totalStats: CharacterStats = this.getTotalStats(classDef.baseStats, allocatedStats);
 
     const character: CharacterState = {
-      id: crypto.randomUUID(),
+      id: overrideId ?? crypto.randomUUID(),
       name,
       classId,
       level: 1,

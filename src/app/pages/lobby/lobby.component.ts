@@ -158,7 +158,7 @@ export class LobbyComponent implements OnInit, OnDestroy {
       .subscribe((msg: ServerMessage): void => {
         const payload: GameStartedPayload = msg.payload as GameStartedPayload;
         this.gameStarting = true;
-        this.gameState.createPlayer(this.playerName(), this.playerClass());
+        this.gameState.createPlayer(this.playerName(), this.playerClass(), this.playerId());
         void this.router.navigate(['/game'], {
           queryParams: {
             roomId: payload.roomId,

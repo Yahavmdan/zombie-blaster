@@ -48,6 +48,8 @@ export class GameCanvasComponent implements OnDestroy {
   readonly potionPickedUp: OutputEmitterRef<DropType> = output<DropType>();
   readonly zombieDamaged: OutputEmitterRef<Array<{ zombieId: string; damage: number; killed: boolean }>> =
     output<Array<{ zombieId: string; damage: number; killed: boolean }>>();
+  readonly remotePlayerDamaged: OutputEmitterRef<{ targetPlayerId: string; damage: number; zombieX: number; zombieY: number; knockbackDir: number; isPoisonAttack: boolean }> =
+    output<{ targetPlayerId: string; damage: number; zombieX: number; zombieY: number; knockbackDir: number; isPoisonAttack: boolean }>();
 
   useHpPotionHandler: (() => boolean) | null = null;
   useMpPotionHandler: (() => boolean) | null = null;
@@ -113,7 +115,7 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; level: number } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; level: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } | null {
     return this.engine?.getStateSnapshot() ?? null;
   }
 
@@ -131,6 +133,10 @@ export class GameCanvasComponent implements OnDestroy {
 
   applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
     this.engine?.applyRemoteDamage(events);
+  }
+
+  applyIncomingZombieDamage(damage: number, knockbackDir: number, isPoisonAttack: boolean): void {
+    this.engine?.applyIncomingZombieDamage(damage, knockbackDir, isPoisonAttack);
   }
 
   setRemotePlayers(players: CharacterState[]): void {
@@ -176,6 +182,8 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine!.onUseMpPotion = (): boolean => this.useMpPotionHandler?.() ?? false;
     this.engine!.onZombieDamaged = (events: Array<{ zombieId: string; damage: number; killed: boolean }>): void =>
       this.zombieDamaged.emit(events);
+    this.engine!.onRemotePlayerDamaged = (targetPlayerId: string, damage: number, zombieX: number, zombieY: number, knockbackDir: number, isPoisonAttack: boolean): void =>
+      this.remotePlayerDamaged.emit({ targetPlayerId, damage, zombieX, zombieY, knockbackDir, isPoisonAttack });
   }
 
   private bindInput(): void {

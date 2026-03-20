@@ -135,6 +135,7 @@ export class GameEngine implements IGameEngine {
   onUseMpPotion: (() => boolean) | null = null;
   onOpenShop: (() => void) | null = null;
   onZombieDamaged: ((events: Array<{ zombieId: string; damage: number; killed: boolean }>) => void) | null = null;
+  onRemotePlayerDamaged: ((targetPlayerId: string, damage: number, zombieX: number, zombieY: number, knockbackDir: number, isPoisonAttack: boolean) => void) | null = null;
   dashPhase: DashPhaseState | null = null;
 
   godMode: boolean = false;
@@ -142,6 +143,7 @@ export class GameEngine implements IGameEngine {
   isMultiplayerHost: boolean = false;
   isMultiplayerClient: boolean = false;
   pendingLocalKills: Set<string> = new Set<string>();
+  pendingRemoteAttacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [];
   remotePlayerAnimators: Map<string, SpriteAnimator> = new Map<string, SpriteAnimator>();
   private previousZombieStates: Map<string, boolean> = new Map<string, boolean>();
   private previousZombieHp: Map<string, number> = new Map<string, number>();
@@ -164,7 +166,7 @@ export class GameEngine implements IGameEngine {
     this.dropSystem = new DropSystem(this, this.physicsSystem, this.vfxSystem);
     this.combatSystem = new CombatSystem(this, this.physicsSystem, this.vfxSystem, this.dropSystem);
     this.projectileSystem = new ProjectileSystem(this, this.physicsSystem, this.vfxSystem);
-    this.zombieSystem = new ZombieSystem(this, this.physicsSystem, this.vfxSystem, this.combatSystem, this.projectileSystem);
+    this.zombieSystem = new ZombieSystem(this, this.physicsSystem, this.combatSystem, this.projectileSystem);
     this.renderSystem = new RenderSystem(this);
 
     this.initPlatforms();
@@ -387,13 +389,18 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } | null {
     if (!this.player) return null;
+    const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
+    this.pendingRemoteAttacks.length = 0;
     return {
       player: { ...this.player },
-      zombies: this.zombies.map((z: ZombieState): ZombieState => ({ ...z })),
+      zombies: this.zombies
+        .filter((z: ZombieState) => !z.isDead)
+        .map((z: ZombieState): ZombieState => ({ ...z })),
       corpses: this.zombieCorpses.map((c: ZombieCorpse): ZombieCorpse => ({ ...c })),
       level: this.level,
+      attacks,
     };
   }
 
@@ -402,14 +409,29 @@ export class GameEngine implements IGameEngine {
 
     const currentIds: Set<string> = new Set<string>(zombies.map((z: ZombieState) => z.id));
 
-    for (const [prevId] of this.previousZombieStates) {
-      if (!currentIds.has(prevId)) {
+    for (const [prevId, wasDead] of this.previousZombieStates) {
+      if (!currentIds.has(prevId) && !this.pendingLocalKills.has(prevId)) {
+        if (!wasDead) {
+          const oldZ: ZombieState | undefined = this.zombies.find((z: ZombieState) => z.id === prevId);
+          if (oldZ) {
+            const cx: number = oldZ.x + oldZ.instanceWidth / 2;
+            const cy: number = oldZ.y + oldZ.instanceHeight / 2;
+            this.vfxSystem.spawnHitParticles(cx, cy, '#ff4444');
+            this.vfxSystem.spawnHitMark(cx, cy);
+            const lastHp: number | undefined = this.previousZombieHp.get(prevId);
+            if (lastHp !== undefined && lastHp > 0) {
+              this.vfxSystem.spawnDamageNumber(cx, oldZ.y - 10, lastHp, false, '#ff6666');
+            }
+          }
+        }
         this.zombieSpriteAnimator.removeInstance(prevId);
         this.previousZombieHp.delete(prevId);
       }
     }
 
     for (const z of zombies) {
+      if (this.pendingLocalKills.has(z.id)) continue;
+
       const wasPreviouslyKnown: boolean = this.previousZombieStates.has(z.id);
 
       if (!wasPreviouslyKnown && !z.isDead) {
@@ -433,12 +455,15 @@ export class GameEngine implements IGameEngine {
           const cy: number = z.y + z.instanceHeight / 2;
           this.vfxSystem.spawnDamageNumber(cx, z.y - 10, delta, false, '#aaccff');
           this.vfxSystem.spawnHitParticles(cx, cy, '#6699cc');
+          this.vfxSystem.spawnHitMark(cx, cy);
         }
         this.previousZombieHp.set(z.id, z.hp);
+      } else {
+        this.previousZombieHp.delete(z.id);
       }
     }
 
-    this.zombies = zombies.filter((z: ZombieState) => !this.pendingLocalKills.has(z.id));
+    this.zombies = zombies.filter((z: ZombieState) => !z.isDead && !this.pendingLocalKills.has(z.id));
 
     for (const killId of this.pendingLocalKills) {
       if (!currentIds.has(killId)) {
@@ -456,6 +481,56 @@ export class GameEngine implements IGameEngine {
     if (level === this.level) return;
     this.level = level;
     this.levelTransitionTimer = GAME_CONSTANTS.LEVEL_TRANSITION_TICKS;
+  }
+
+  applyIncomingZombieDamage(damage: number, knockbackDir: number, isPoisonAttack: boolean): void {
+    const p: CharacterState | null = this.player;
+    if (!p || p.isDead) return;
+    if (this.godMode) return;
+    if (this.invincibilityFrames > 0) return;
+
+    p.hp -= damage;
+    this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
+
+    p.velocityX = knockbackDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
+    p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
+    p.isGrounded = false;
+    if (p.isClimbing) {
+      p.isClimbing = false;
+    }
+
+    this.vfxSystem.spawnHitParticles(
+      p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+      p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+      '#ffffff',
+    );
+    this.vfxSystem.spawnDamageNumber(
+      p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+      p.y - 10,
+      damage,
+      false,
+      '#ff4444',
+    );
+
+    if (isPoisonAttack) {
+      const damagePerTick: number = GAME_CONSTANTS.SPITTER_POISON_DAMAGE_PER_TICK +
+        Math.floor(this.level * GAME_CONSTANTS.SPITTER_POISON_DAMAGE_WAVE_SCALE);
+      this.poisonEffect = {
+        remainingTicks: GAME_CONSTANTS.SPITTER_POISON_DURATION_TICKS,
+        tickInterval: GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL,
+        tickTimer: GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL,
+        damagePerTick,
+      };
+    }
+
+    if (p.hp <= 0) {
+      p.hp = 0;
+      p.isDead = true;
+      this.onPlayerUpdate?.(p);
+      this.onGameOver?.();
+      return;
+    }
+    this.onPlayerUpdate?.(p);
   }
 
   applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
@@ -480,7 +555,7 @@ export class GameEngine implements IGameEngine {
       }
     }
 
-    this.zombies = this.zombies.filter((z: ZombieState) => !z.isDead || z.hp > -100);
+    this.zombies = this.zombies.filter((z: ZombieState) => !z.isDead);
   }
 
   setRemotePlayers(players: CharacterState[]): void {
@@ -518,12 +593,10 @@ export class GameEngine implements IGameEngine {
     }
 
     for (const c of corpses) {
-      const alreadyHasInstance: boolean = this.zombieCorpses.some(
-        (ec: ZombieCorpse) => ec.id === c.id,
-      );
-      if (!alreadyHasInstance) {
-        this.zombieSpriteAnimator.setState(c.id, ZombieAnimState.Dead);
-      }
+      this.zombieSpriteAnimator.setState(c.id, ZombieAnimState.Dead);
+    }
+    for (const c of pendingLocalCorpses) {
+      this.zombieSpriteAnimator.setState(c.id, ZombieAnimState.Dead);
     }
 
     this.zombieCorpses = [...corpses, ...pendingLocalCorpses];

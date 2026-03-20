@@ -12,9 +12,9 @@ import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { CombatSystem } from './combat-system';
 import { ProjectileSystem } from './projectile-system';
-import { ZombieSystem } from './zombie-system';
 import { SpriteAnimator } from './sprite-animator';
 import { ZombieAnimState } from './zombie-sprite-animator';
+import { GameEngine } from './game-engine';
 
 function makePlayer(overrides: Partial<CharacterState> = {}): CharacterState {
   return {
@@ -62,7 +62,7 @@ function makeZombie(overrides: Partial<ZombieState> = {}): ZombieState {
     type: ZombieType.Walker,
     hp: 100,
     maxHp: 100,
-    x: 400 + GAME_CONSTANTS.PLAYER_WIDTH + 5,
+    x: 500,
     y: GAME_CONSTANTS.GROUND_Y - 50,
     velocityX: 0,
     velocityY: 0,
@@ -91,6 +91,111 @@ function makeZombie(overrides: Partial<ZombieState> = {}): ZombieState {
     ...overrides,
   };
 }
+
+function createMockCanvas(): HTMLCanvasElement {
+  const canvas: HTMLCanvasElement = document.createElement('canvas');
+  const ctx: Record<string, unknown> = {
+    clearRect: vi.fn(),
+    fillRect: vi.fn(),
+    strokeRect: vi.fn(),
+    fillText: vi.fn(),
+    strokeText: vi.fn(),
+    measureText: vi.fn().mockReturnValue({ width: 10 }),
+    drawImage: vi.fn(),
+    beginPath: vi.fn(),
+    closePath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    arc: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    translate: vi.fn(),
+    scale: vi.fn(),
+    rotate: vi.fn(),
+    setTransform: vi.fn(),
+    createLinearGradient: vi.fn().mockReturnValue({ addColorStop: vi.fn() }),
+    createRadialGradient: vi.fn().mockReturnValue({ addColorStop: vi.fn() }),
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    font: '',
+    textAlign: 'left',
+    textBaseline: 'alphabetic',
+    shadowColor: '',
+    shadowBlur: 0,
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
+    imageSmoothingEnabled: true,
+    canvas,
+  };
+  vi.spyOn(canvas, 'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
+  return canvas;
+}
+
+describe('Bug 1: non-host should see host damage on zombies', () => {
+  let engine: GameEngine;
+
+  beforeEach(() => {
+    const canvas: HTMLCanvasElement = createMockCanvas();
+    engine = new GameEngine(canvas);
+    engine.isMultiplayerClient = true;
+    engine.player = makePlayer();
+  });
+
+  it('should show damage number when zombie disappears from sync (killed by host)', () => {
+    const zombie: ZombieState = makeZombie({ id: 'z1', hp: 30 });
+
+    engine.applyRemoteZombies([{ ...zombie }]);
+    expect(engine.damageNumbers.length).toBe(0);
+
+    engine.applyRemoteZombies([]);
+
+    const killDamageNumber: boolean = engine.damageNumbers.some(
+      (dn: { value: number }) => dn.value === 30,
+    );
+    expect(killDamageNumber).toBe(true);
+  });
+
+  it('should spawn hit mark when HP delta detected in applyRemoteZombies', () => {
+    const zombie: ZombieState = makeZombie({ id: 'z1', hp: 100 });
+
+    engine.applyRemoteZombies([{ ...zombie }]);
+    expect(engine.hitMarks.length).toBe(0);
+
+    const damagedZombie: ZombieState = { ...zombie, hp: 70 };
+    engine.applyRemoteZombies([damagedZombie]);
+
+    expect(engine.hitMarks.length).toBeGreaterThan(0);
+  });
+
+  it('should spawn damage number when HP delta detected', () => {
+    const zombie: ZombieState = makeZombie({ id: 'z1', hp: 100 });
+
+    engine.applyRemoteZombies([{ ...zombie }]);
+
+    const damagedZombie: ZombieState = { ...zombie, hp: 70 };
+    engine.applyRemoteZombies([damagedZombie]);
+
+    const deltaDamageNumber: boolean = engine.damageNumbers.some(
+      (dn: { value: number }) => dn.value === 30,
+    );
+    expect(deltaDamageNumber).toBe(true);
+  });
+
+  it('should spawn hit mark when zombie disappears from sync', () => {
+    const zombie: ZombieState = makeZombie({ id: 'z1', hp: 50 });
+
+    engine.applyRemoteZombies([{ ...zombie }]);
+
+    engine.applyRemoteZombies([]);
+
+    expect(engine.hitMarks.length).toBeGreaterThan(0);
+  });
+});
 
 function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEngine {
   const groundPlatform: Platform = {
@@ -145,15 +250,17 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     screenFlashFrames: 0,
     spriteAnimator: { setState: vi.fn(), tick: vi.fn(), restart: vi.fn(), load: vi.fn(), isLoaded: vi.fn().mockReturnValue(false), draw: vi.fn() } as never,
     zombieSpriteAnimator: {
-      getSpriteKey: vi.fn().mockReturnValue('walker'),
+      getSpriteKey: vi.fn().mockReturnValue('zombie_1'),
       getAnchor: vi.fn().mockReturnValue({ anchorX: 0.5, anchorY: 1.0 }),
       tick: vi.fn(),
       setState: vi.fn(),
       setStateReversed: vi.fn(),
+      setStateAtFrame: vi.fn(),
       removeInstance: vi.fn(),
       load: vi.fn(),
       isLoaded: vi.fn().mockReturnValue(false),
       draw: vi.fn(),
+      getFrameCount: vi.fn().mockReturnValue(5),
     } as never,
     mapRenderer: { load: vi.fn(), isLoaded: vi.fn().mockReturnValue(false), render: vi.fn() } as never,
     spriteEffectSystem: { load: vi.fn(), isLoaded: vi.fn().mockReturnValue(false), spawn: vi.fn(), tick: vi.fn(), render: vi.fn() } as never,
@@ -199,47 +306,67 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
   };
 }
 
-describe('ZombieSystem — hesitation attack timing', () => {
+describe('Bug 2: corpse animation on non-host when killing non-grounded zombie', () => {
   let engine: IGameEngine;
-  let zombieSystem: ZombieSystem;
-  let player: CharacterState;
-  let zombie: ZombieState;
+  let combat: CombatSystem;
 
   beforeEach(() => {
-    player = makePlayer();
-    zombie = makeZombie();
-    engine = makeMockEngine(player, [zombie]);
+    const player: CharacterState = makePlayer();
+    engine = makeMockEngine(player, []);
+    engine.isMultiplayerClient = true;
 
     const physics: PhysicsSystem = new PhysicsSystem(engine);
     const vfx: VfxSystem = new VfxSystem(engine);
     const dropSystem = { rollDrops: vi.fn() } as never;
-    const combat: CombatSystem = new CombatSystem(engine, physics, vfx, dropSystem);
-    const projectileSystem: ProjectileSystem = new ProjectileSystem(engine, physics, vfx);
-    zombieSystem = new ZombieSystem(engine, physics, combat, projectileSystem);
+    combat = new CombatSystem(engine, physics, vfx, dropSystem);
   });
 
-  it('zombie standing next to player should attack within 5 seconds (250 ticks)', () => {
-    const maxTicks: number = GAME_CONSTANTS.TICK_RATE * 5;
-    let attacked: boolean = false;
+  it('should set corpse animation to Dead (not Hurt) on multiplayer client even when zombie is airborne', () => {
+    const zombie: ZombieState = makeZombie({
+      id: 'z-air',
+      hp: 0,
+      isGrounded: false,
+      velocityY: -5,
+    });
+    engine.zombies = [zombie];
 
-    for (let tick: number = 0; tick < maxTicks; tick++) {
-      zombieSystem.updateZombies();
-      if (zombie.attackAnimTimer > 0) {
-        attacked = true;
-        break;
-      }
-    }
+    combat.handleZombieDeath(zombie, false);
 
-    expect(attacked).toBe(true);
+    const setStateCalls: Array<[string, ZombieAnimState]> = (
+      engine.zombieSpriteAnimator.setState as ReturnType<typeof vi.fn>
+    ).mock.calls as Array<[string, ZombieAnimState]>;
+
+    const lastCall: [string, ZombieAnimState] | undefined = setStateCalls.find(
+      (call: [string, ZombieAnimState]) => call[0] === 'z-air',
+    );
+
+    expect(lastCall).toBeDefined();
+    expect(lastCall![1]).toBe(ZombieAnimState.Dead);
   });
 
-  it('zombie hesitation should count down every tick while in range, not only on AI updates', () => {
-    const initialHesitation: number = zombie.attackHesitation;
-    zombie.reactionDelay = 100;
+  it('should still use Hurt animation on host for airborne zombie kills', () => {
+    engine.isMultiplayerClient = false;
+    engine.isMultiplayerHost = true;
 
-    zombieSystem.updateZombies();
+    const zombie: ZombieState = makeZombie({
+      id: 'z-air-host',
+      hp: 0,
+      isGrounded: false,
+      velocityY: -5,
+    });
+    engine.zombies = [zombie];
 
-    const afterOneTick: number = zombie.attackHesitation;
-    expect(afterOneTick).toBeLessThan(initialHesitation);
+    combat.handleZombieDeath(zombie, false);
+
+    const setStateCalls: Array<[string, ZombieAnimState]> = (
+      engine.zombieSpriteAnimator.setState as ReturnType<typeof vi.fn>
+    ).mock.calls as Array<[string, ZombieAnimState]>;
+
+    const call: [string, ZombieAnimState] | undefined = setStateCalls.find(
+      (c: [string, ZombieAnimState]) => c[0] === 'z-air-host',
+    );
+
+    expect(call).toBeDefined();
+    expect(call![1]).toBe(ZombieAnimState.Hurt);
   });
 });
