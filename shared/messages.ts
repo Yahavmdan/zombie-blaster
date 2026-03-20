@@ -10,8 +10,8 @@ export enum MessageType {
   ZombieKilled = 'zombie-killed',
   DamageDealt = 'damage-dealt',
   LootDropped = 'loot-dropped',
-  LevelStarted = 'level-started',
-  LevelCompleted = 'level-completed',
+  FloorStarted = 'floor-started',
+  FloorCompleted = 'floor-completed',
   PlayerDied = 'player-died',
   PlayerRespawned = 'player-respawned',
   ChatMessage = 'chat-message',
@@ -47,12 +47,21 @@ export interface InputKeys {
   useHpPotion: boolean;
   useMpPotion: boolean;
   openShop: boolean;
+  openInventory: boolean;
+  quickSlot1: boolean;
+  quickSlot2: boolean;
+  quickSlot3: boolean;
+  quickSlot4: boolean;
+  quickSlot5: boolean;
+  quickSlot6: boolean;
+  quickSlot7: boolean;
+  quickSlot8: boolean;
 }
 
 export interface GameStateUpdatePayload {
   players: CharacterState[];
   zombies: ZombieState[];
-  level: number;
+  floor: number;
 }
 
 export interface DamageDealtPayload {
@@ -64,8 +73,8 @@ export interface DamageDealtPayload {
   y: number;
 }
 
-export interface LevelStartedPayload {
-  level: number;
+export interface FloorStartedPayload {
+  floor: number;
 }
 
 export interface ChatMessagePayload {

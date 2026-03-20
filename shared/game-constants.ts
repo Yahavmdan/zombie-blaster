@@ -6,8 +6,9 @@ import {
 import {
   ZombieType,
   ZombieDefinition,
-  DropType,
   ShopItemDefinition,
+  PotionDefinition,
+  PotionCategory,
 } from './game-entities';
 import { KeyBindings } from './messages';
 import { SkillDefinition, SkillType } from './skill';
@@ -72,14 +73,14 @@ export const GAME_CONSTANTS = {
   SKILL_POINTS_PER_LEVEL: 3, // Skill points awarded per level up
   MAX_SKILL_LEVEL: 20, // Highest level any skill can be raised to
 
-  // ─── Level Progression ─────────────────────────
-  LEVEL_TRANSITION_TICKS: 120, // Ticks the "level complete" screen shows before the next level
-  LEVEL_INITIAL_SPAWN_DELAY_TICKS: 60, // Ticks before zombies start spawning at the start of a new level
-  LEVEL_MAX_ALIVE_ZOMBIES_BASE: 10, // Max zombies alive at once on level 1
-  LEVEL_MAX_ALIVE_ZOMBIES_GROWTH: 2, // Extra max zombies added per level
-  LEVEL_MAX_ALIVE_ZOMBIES_CAP: 30, // Absolute max zombies alive at once regardless of level
+  // ─── Floor Progression ────────────────────────
+  FLOOR_TRANSITION_TICKS: 120, // Ticks the "floor complete" screen shows before the next floor
+  FLOOR_INITIAL_SPAWN_DELAY_TICKS: 60, // Ticks before zombies start spawning at the start of a new floor
+  FLOOR_MAX_ALIVE_ZOMBIES_BASE: 10, // Max zombies alive at once on floor 1
+  FLOOR_MAX_ALIVE_ZOMBIES_GROWTH: 2, // Extra max zombies added per floor
+  FLOOR_MAX_ALIVE_ZOMBIES_CAP: 30, // Absolute max zombies alive at once regardless of floor
 
-  // ─── Exit Platform (level exit) ───────────────
+  // ─── Exit Platform (floor exit) ──────────────
   EXIT_PLATFORM_Y: 130, // Y position of the exit platform (pixels from top)
   EXIT_PLATFORM_WIDTH: 1280, // Width of the exit platform in pixels (full canvas width)
   EXIT_PLATFORM_HEIGHT: 20, // Height of the exit platform in pixels
@@ -217,8 +218,17 @@ export const GAME_CONSTANTS = {
   AUTO_POTION_MP_THRESHOLD_PERCENT: 30, // Auto-use MP potion when MP drops below this percent
 
   // ─── Shop ────────────────────────────────────
-  SHOP_HP_POTION_PRICE: 30, // Gold cost to buy one HP potion
-  SHOP_MP_POTION_PRICE: 20, // Gold cost to buy one MP potion
+  SHOP_HP_POTION_PRICE: 30, // Gold cost to buy one HP potion (tier 1)
+  SHOP_HP_POTION_2_PRICE: 100, // Gold cost for HP Potion II
+  SHOP_HP_ELIXIR_PRICE: 250, // Gold cost for HP Elixir (percent)
+  SHOP_MP_POTION_PRICE: 20, // Gold cost to buy one MP potion (tier 1)
+  SHOP_MP_POTION_2_PRICE: 80, // Gold cost for MP Potion II
+  SHOP_MP_ELIXIR_PRICE: 200, // Gold cost for MP Elixir (percent)
+
+  HP_POTION_2_RESTORE: 200, // HP restored by HP Potion II
+  HP_ELIXIR_RESTORE_PERCENT: 30, // Percent of max HP restored by HP Elixir
+  MP_POTION_2_RESTORE: 100, // MP restored by MP Potion II
+  MP_ELIXIR_RESTORE_PERCENT: 30, // Percent of max MP restored by MP Elixir
 
   // ─── Tick Rate ──────────────────────────────────
   TICK_RATE: 50, // Game loop runs at this many ticks per second
@@ -1165,27 +1175,133 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   useHpPotion: ['7'],
   useMpPotion: ['8'],
   openShop: ['b'],
+  openInventory: ['i'],
+  quickSlot1: ['shift'],
+  quickSlot2: ['insert'],
+  quickSlot3: ['home'],
+  quickSlot4: ['pageup'],
+  quickSlot5: ['control'],
+  quickSlot6: ['delete'],
+  quickSlot7: ['end'],
+  quickSlot8: ['pagedown'],
 };
+
+// ─── Potion Definitions ─────────────────────────
+
+export const POTION_DEFINITIONS: PotionDefinition[] = [
+  {
+    id: 'hp-potion-1',
+    name: 'HP Potion',
+    description: `Restores ${GAME_CONSTANTS.HP_POTION_RESTORE} HP.`,
+    icon: '❤️',
+    category: 'hp',
+    mode: 'flat',
+    value: GAME_CONSTANTS.HP_POTION_RESTORE,
+    shopPrice: GAME_CONSTANTS.SHOP_HP_POTION_PRICE,
+  },
+  {
+    id: 'hp-potion-2',
+    name: 'HP Potion II',
+    description: `Restores ${GAME_CONSTANTS.HP_POTION_2_RESTORE} HP.`,
+    icon: '❤️‍🔥',
+    category: 'hp',
+    mode: 'flat',
+    value: GAME_CONSTANTS.HP_POTION_2_RESTORE,
+    shopPrice: GAME_CONSTANTS.SHOP_HP_POTION_2_PRICE,
+  },
+  {
+    id: 'hp-elixir',
+    name: 'HP Elixir',
+    description: `Restores ${GAME_CONSTANTS.HP_ELIXIR_RESTORE_PERCENT}% of max HP.`,
+    icon: '💖',
+    category: 'hp',
+    mode: 'percent',
+    value: GAME_CONSTANTS.HP_ELIXIR_RESTORE_PERCENT,
+    shopPrice: GAME_CONSTANTS.SHOP_HP_ELIXIR_PRICE,
+  },
+  {
+    id: 'mp-potion-1',
+    name: 'MP Potion',
+    description: `Restores ${GAME_CONSTANTS.MP_POTION_RESTORE} MP.`,
+    icon: '💧',
+    category: 'mp',
+    mode: 'flat',
+    value: GAME_CONSTANTS.MP_POTION_RESTORE,
+    shopPrice: GAME_CONSTANTS.SHOP_MP_POTION_PRICE,
+  },
+  {
+    id: 'mp-potion-2',
+    name: 'MP Potion II',
+    description: `Restores ${GAME_CONSTANTS.MP_POTION_2_RESTORE} MP.`,
+    icon: '🔵',
+    category: 'mp',
+    mode: 'flat',
+    value: GAME_CONSTANTS.MP_POTION_2_RESTORE,
+    shopPrice: GAME_CONSTANTS.SHOP_MP_POTION_2_PRICE,
+  },
+  {
+    id: 'mp-elixir',
+    name: 'MP Elixir',
+    description: `Restores ${GAME_CONSTANTS.MP_ELIXIR_RESTORE_PERCENT}% of max MP.`,
+    icon: '💎',
+    category: 'mp',
+    mode: 'percent',
+    value: GAME_CONSTANTS.MP_ELIXIR_RESTORE_PERCENT,
+    shopPrice: GAME_CONSTANTS.SHOP_MP_ELIXIR_PRICE,
+  },
+];
+
+export function getPotionById(potionId: string): PotionDefinition | undefined {
+  return POTION_DEFINITIONS.find((p: PotionDefinition): boolean => p.id === potionId);
+}
+
+export function getPotionRestoreAmount(potionId: string, maxHp: number, maxMp: number): number {
+  const def: PotionDefinition | undefined = getPotionById(potionId);
+  if (!def) return 0;
+  if (def.mode === 'percent') {
+    const maxStat: number = def.category === 'hp' ? maxHp : maxMp;
+    return Math.floor((def.value / 100) * maxStat);
+  }
+  return def.value;
+}
+
+export function getPotionsByCategory(category: PotionCategory): PotionDefinition[] {
+  return POTION_DEFINITIONS.filter((p: PotionDefinition): boolean => p.category === category);
+}
+
+export function getTotalPotionsByCategory(potions: Record<string, number>, category: PotionCategory): number {
+  const categoryPotions: PotionDefinition[] = getPotionsByCategory(category);
+  let total: number = 0;
+  for (const def of categoryPotions) {
+    total += potions[def.id] ?? 0;
+  }
+  return total;
+}
+
+export function resolveAutoPotionId(
+  configuredId: string | null,
+  potions: Record<string, number>,
+  category: PotionCategory,
+): string | null {
+  if (configuredId && (potions[configuredId] ?? 0) > 0) {
+    return configuredId;
+  }
+  const categoryPotions: PotionDefinition[] = getPotionsByCategory(category);
+  for (const def of categoryPotions) {
+    if ((potions[def.id] ?? 0) > 0) return def.id;
+  }
+  return null;
+}
 
 // ─── Shop Items ─────────────────────────────────
 
-export const SHOP_ITEMS: ShopItemDefinition[] = [
-  {
-    id: 'shop-hp-potion',
-    name: 'HP Potion',
-    description: 'Restores 50 HP when used.',
-    icon: '❤️',
-    price: GAME_CONSTANTS.SHOP_HP_POTION_PRICE,
-    type: DropType.HpPotion,
-    value: GAME_CONSTANTS.HP_POTION_RESTORE,
-  },
-  {
-    id: 'shop-mp-potion',
-    name: 'MP Potion',
-    description: 'Restores 30 MP when used.',
-    icon: '💧',
-    price: GAME_CONSTANTS.SHOP_MP_POTION_PRICE,
-    type: DropType.MpPotion,
-    value: GAME_CONSTANTS.MP_POTION_RESTORE,
-  },
-];
+export const SHOP_ITEMS: ShopItemDefinition[] = POTION_DEFINITIONS.map(
+  (p: PotionDefinition): ShopItemDefinition => ({
+    id: `shop-${p.id}`,
+    name: p.name,
+    description: p.description,
+    icon: p.icon,
+    price: p.shopPrice,
+    potionId: p.id,
+  }),
+);

@@ -130,6 +130,14 @@ export class SkillTreeComponent {
     this.skillAllocated.emit(skillId);
   }
 
+  onSkillDragStart(event: DragEvent, skillId: string): void {
+    const payload: string = JSON.stringify({ type: 'skill', id: skillId });
+    event.dataTransfer?.setData('application/json', payload);
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'copy';
+    }
+  }
+
   onClose(): void {
     this.closed.emit();
   }

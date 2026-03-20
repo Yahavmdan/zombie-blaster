@@ -26,6 +26,7 @@ import {
   HitMark,
   IGameEngine,
   DashPhaseState,
+  LevelUpNotification,
   Platform,
   PoisonEffect,
   Rope,
@@ -58,6 +59,7 @@ export class GameEngine implements IGameEngine {
   readonly fixedDt: number = 1000 / GAME_CONSTANTS.TICK_RATE;
 
   player: CharacterState | null = null;
+  levelUpNotification: LevelUpNotification | null = null;
   remotePlayers: CharacterState[] = [];
   zombies: ZombieState[] = [];
   zombieCorpses: ZombieCorpse[] = [];
@@ -68,7 +70,7 @@ export class GameEngine implements IGameEngine {
   worldDrops: WorldDrop[] = [];
   platforms: Platform[] = [];
   ropes: Rope[] = [];
-  keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false };
+  keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
   attackCooldown: number = 0;
   attackAnimTicks: number = 0;
   attackHitPending: boolean = false;
@@ -86,9 +88,9 @@ export class GameEngine implements IGameEngine {
   playerStunTicks: number = 0;
   autoPotionCooldown: number = 0;
 
-  level: number = 1;
+  floor: number = 1;
   spawnTimer: number = 0;
-  levelTransitionTimer: number = 0;
+  floorTransitionTimer: number = 0;
   exitPlatform: Platform = { x: 0, y: 0, width: 0, height: 0 };
 
   backgroundStars: BackgroundStar[] = [];
@@ -124,8 +126,8 @@ export class GameEngine implements IGameEngine {
 
   onPlayerUpdate: ((player: CharacterState) => void) | null = null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null = null;
-  onLevelUpdate: ((level: number) => void) | null = null;
-  onLevelComplete: (() => void) | null = null;
+  onFloorUpdate: ((floor: number) => void) | null = null;
+  onFloorComplete: (() => void) | null = null;
   onXpGained: ((amount: number) => void) | null = null;
   onScoreUpdate: ((delta: number) => void) | null = null;
   onGameOver: (() => void) | null = null;
@@ -206,7 +208,8 @@ export class GameEngine implements IGameEngine {
     this.ropes = [
       { x: 190, topY: 330, bottomY: 530 },
       { x: 910, topY: 340, bottomY: 530 },
-      { x: 560, topY: 430, bottomY: GAME_CONSTANTS.GROUND_Y }
+      { x: 560, topY: 430, bottomY: GAME_CONSTANTS.GROUND_Y },
+      // { x: 640, topY: GAME_CONSTANTS.EXIT_PLATFORM_Y, bottomY: 430 },
     ];
   }
 
@@ -234,7 +237,7 @@ export class GameEngine implements IGameEngine {
     this.spitterProjectiles = [];
     this.poisonEffect = null;
     this.hitMarks = [];
-    this.level = 1;
+    this.floor = 1;
     this.playerUsableSkills = SKILLS.filter(
       (s: SkillDefinition) =>
         s.classId === player.classId &&
@@ -247,7 +250,7 @@ export class GameEngine implements IGameEngine {
     this.playerStandingStillTicks = 0;
     this.playerStunTicks = 0;
     this.autoPotionCooldown = 0;
-    this.zombieSystem.startLevel();
+    this.zombieSystem.startFloor();
     this.lastTimestamp = performance.now();
     this.loop(this.lastTimestamp);
   }
@@ -259,7 +262,7 @@ export class GameEngine implements IGameEngine {
     }
   }
 
-  setLevel(level: number): void {
+  setFloor(floor: number): void {
     for (const z of this.zombies) {
       z.isDead = true;
     }
@@ -268,8 +271,8 @@ export class GameEngine implements IGameEngine {
       this.zombieSpriteAnimator.removeInstance(corpse.id);
     }
     this.zombieCorpses = [];
-    this.level = level;
-    this.zombieSystem.startLevel();
+    this.floor = floor;
+    this.zombieSystem.startFloor();
   }
 
   setKeys(keys: InputKeys): void {
@@ -278,7 +281,8 @@ export class GameEngine implements IGameEngine {
 
   syncProgression(player: CharacterState): void {
     if (!this.player) return;
-    const leveled: boolean = player.level > this.player.level;
+    const prevCharLevel: number = this.player.level;
+    const leveled: boolean = player.level > prevCharLevel;
     this.player.classId = player.classId;
     this.player.level = player.level;
     this.player.xp = player.xp;
@@ -291,10 +295,19 @@ export class GameEngine implements IGameEngine {
     this.player.skillLevels = { ...player.skillLevels };
     this.player.activeBuffs = [...player.activeBuffs];
     this.player.inventory = { ...player.inventory };
+    this.player.hp = Math.max(this.player.hp, player.hp);
+    this.player.mp = Math.max(this.player.mp, player.mp);
     if (leveled) {
       this.player.hp = player.hp;
       this.player.mp = player.mp;
       this.vfxSystem.spawnLevelUpEffect();
+      const LEVEL_UP_LIFE_TICKS: number = 120;
+      this.levelUpNotification = {
+        life: LEVEL_UP_LIFE_TICKS,
+        maxLife: LEVEL_UP_LIFE_TICKS,
+        oldLevel: prevCharLevel,
+        newLevel: player.level,
+      };
     }
     this.playerUsableSkills = SKILLS.filter(
       (s: SkillDefinition) =>
@@ -338,7 +351,7 @@ export class GameEngine implements IGameEngine {
       this.zombieSystem.updateSpawning();
     } else {
       this.tickClientZombieVisuals();
-      if (this.levelTransitionTimer > 0) this.levelTransitionTimer--;
+      if (this.floorTransitionTimer > 0) this.floorTransitionTimer--;
     }
 
     this.tickRemotePlayerAnimations();
@@ -360,13 +373,17 @@ export class GameEngine implements IGameEngine {
     this.combatSystem.updateAutoPotion();
 
     if (!this.isMultiplayerClient) {
-      this.zombieSystem.checkLevelCompletion();
+      this.zombieSystem.checkFloorCompletion();
     }
 
     if (this.invincibilityFrames > 0) this.invincibilityFrames--;
     if (this.ropeJumpCooldown > 0) this.ropeJumpCooldown--;
     if (this.platformDropTimer > 0) this.platformDropTimer--;
     if (this.playerStunTicks > 0) this.playerStunTicks--;
+    if (this.levelUpNotification) {
+      this.levelUpNotification.life--;
+      if (this.levelUpNotification.life <= 0) this.levelUpNotification = null;
+    }
   }
 
   private updatePlayerActions(): void {
@@ -390,7 +407,7 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } | null {
     if (!this.player) return null;
     const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
@@ -400,7 +417,7 @@ export class GameEngine implements IGameEngine {
         .filter((z: ZombieState) => !z.isDead)
         .map((z: ZombieState): ZombieState => ({ ...z })),
       corpses: this.zombieCorpses.map((c: ZombieCorpse): ZombieCorpse => ({ ...c })),
-      level: this.level,
+      floor: this.floor,
       attacks,
     };
   }
@@ -477,11 +494,11 @@ export class GameEngine implements IGameEngine {
     );
   }
 
-  syncRemoteLevel(level: number): void {
+  syncRemoteFloor(floor: number): void {
     if (!this.isMultiplayerClient) return;
-    if (level === this.level) return;
-    this.level = level;
-    this.levelTransitionTimer = GAME_CONSTANTS.LEVEL_TRANSITION_TICKS;
+    if (floor === this.floor) return;
+    this.floor = floor;
+    this.floorTransitionTimer = GAME_CONSTANTS.FLOOR_TRANSITION_TICKS;
 
     if (this.player) {
       this.player.x = GAME_CONSTANTS.CANVAS_WIDTH / 2 - GAME_CONSTANTS.PLAYER_WIDTH / 2;
@@ -523,7 +540,7 @@ export class GameEngine implements IGameEngine {
 
     if (isPoisonAttack) {
       const damagePerTick: number = GAME_CONSTANTS.SPITTER_POISON_DAMAGE_PER_TICK +
-        Math.floor(this.level * GAME_CONSTANTS.SPITTER_POISON_DAMAGE_WAVE_SCALE);
+        Math.floor(this.floor * GAME_CONSTANTS.SPITTER_POISON_DAMAGE_WAVE_SCALE);
       this.poisonEffect = {
         remainingTicks: GAME_CONSTANTS.SPITTER_POISON_DURATION_TICKS,
         tickInterval: GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL,

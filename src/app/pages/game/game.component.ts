@@ -3,7 +3,9 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType } from '@shared/index';
 import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload } from '@shared/multiplayer';
-import { ShopPurchase, ZombieCorpse, ZombieState } from '@shared/game-entities';
+import { ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
+import { GameAction } from '@shared/messages';
+import { AutoPotionChange } from '../../components/shop/shop.component';
 import { GameStateService } from '../../services/game-state.service';
 import { WebSocketService } from '../../services/websocket.service';
 import { GameCanvasComponent } from '../../components/game-canvas/game-canvas.component';
@@ -12,16 +14,14 @@ import { SettingsComponent } from '../../components/settings/settings.component'
 import { StatAllocationComponent } from '../../components/stat-allocation/stat-allocation.component';
 import { SkillTreeComponent } from '../../components/skill-tree/skill-tree.component';
 import { ShopComponent } from '../../components/shop/shop.component';
-
-export interface LevelUpToast {
-  oldLevel: number;
-  newLevel: number;
-}
+import { InventoryComponent } from '../../components/inventory/inventory.component';
+import { QuickSlotsComponent } from '../../components/quick-slots/quick-slots.component';
+import { QuickSlotService } from '../../services/quick-slot.service';
 
 @Component({
   selector: 'app-game',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, ShopComponent],
+  imports: [GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, ShopComponent, InventoryComponent, QuickSlotsComponent],
   host: {
     class: 'game-page',
   },
@@ -35,6 +35,7 @@ export class GameComponent implements OnInit, OnDestroy {
   private readonly ws: WebSocketService = inject(WebSocketService);
   private readonly zone: NgZone = inject(NgZone);
   private readonly destroyRef: DestroyRef = inject(DestroyRef);
+  private readonly quickSlotService: QuickSlotService = inject(QuickSlotService);
   private readonly gameCanvas: Signal<GameCanvasComponent | undefined> = viewChild(GameCanvasComponent);
 
   private syncTimer: ReturnType<typeof setInterval> | null = null;
@@ -44,15 +45,15 @@ export class GameComponent implements OnInit, OnDestroy {
   private remotePlayerStates: Map<string, CharacterState> = new Map<string, CharacterState>();
 
   readonly player: WritableSignal<CharacterState | null> = this.gameState.player;
-  readonly level: WritableSignal<number> = signal<number>(1);
+  readonly floor: WritableSignal<number> = signal<number>(1);
   readonly score: WritableSignal<number> = signal<number>(0);
   readonly isGameOver: WritableSignal<boolean> = signal<boolean>(false);
   readonly settingsOpen: WritableSignal<boolean> = signal<boolean>(false);
   readonly statPanelOpen: WritableSignal<boolean> = signal<boolean>(false);
   readonly skillPanelOpen: WritableSignal<boolean> = signal<boolean>(false);
   readonly shopOpen: WritableSignal<boolean> = signal<boolean>(false);
+  readonly inventoryOpen: WritableSignal<boolean> = signal<boolean>(false);
   readonly currentPlayerDisplay: WritableSignal<CharacterState> = signal<CharacterState>(null!);
-  readonly levelUpToast: WritableSignal<LevelUpToast | null> = signal<LevelUpToast | null>(null);
   readonly availableSkills: Signal<SkillDefinition[]> = this.gameState.availableSkills;
 
   constructor() {
@@ -122,16 +123,16 @@ export class GameComponent implements OnInit, OnDestroy {
     this.ws.onMessage(ServerMessageType.GameSync)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
-        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } =
-          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> };
+        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } =
+          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> };
 
         this.remotePlayerStates.set(payload.player.id, payload.player);
 
         if (!this.isHost) {
           this.gameCanvas()?.applyRemoteZombies(payload.zombies);
           this.gameCanvas()?.applyRemoteCorpses(payload.corpses ?? []);
-          this.gameCanvas()?.syncRemoteLevel(payload.level);
-          this.level.set(payload.level);
+          this.gameCanvas()?.syncRemoteFloor(payload.floor);
+          this.floor.set(payload.floor);
 
           if (payload.attacks && payload.attacks.length > 0) {
             const myId: string = this.gameState.player()?.id ?? '';
@@ -198,7 +199,7 @@ export class GameComponent implements OnInit, OnDestroy {
         const canvas: GameCanvasComponent | undefined = this.gameCanvas();
         if (!canvas) return;
 
-        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; level: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } | null =
+        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } | null =
           canvas.getStateSnapshot();
         if (!snapshot) return;
 
@@ -246,14 +247,9 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
   onXpGained(amount: number): void {
-    const before: CharacterState | null = this.gameState.player();
-    const prevLevel: number = before?.level ?? 1;
     this.gameState.addXp(amount);
     const updated: CharacterState | null = this.gameState.player();
     if (updated) {
-      if (updated.level > prevLevel) {
-        this.showLevelUpToast(prevLevel, updated.level);
-      }
       this.gameCanvas()?.syncProgression(updated);
       this.currentPlayerDisplay.set({ ...updated });
     }
@@ -264,12 +260,12 @@ export class GameComponent implements OnInit, OnDestroy {
     this.gameState.score.set(this.score());
   }
 
-  onLevelUpdate(level: number): void {
-    this.level.set(level);
-    this.gameState.level.set(level);
+  onFloorUpdate(floor: number): void {
+    this.floor.set(floor);
+    this.gameState.floor.set(floor);
   }
 
-  onLevelComplete(): void {
+  onFloorComplete(): void {
     const updated: CharacterState | null = this.gameState.player();
     if (updated) {
       this.currentPlayerDisplay.set({ ...updated });
@@ -286,6 +282,11 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
   onStatPanelRequested(): void {
+    if (this.statPanelOpen()) {
+      this.statPanelOpen.set(false);
+      return;
+    }
+    this.closeAllDialogs();
     this.statPanelOpen.set(true);
   }
 
@@ -317,6 +318,11 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
   onSkillTreeRequested(): void {
+    if (this.skillPanelOpen()) {
+      this.skillPanelOpen.set(false);
+      return;
+    }
+    this.closeAllDialogs();
     this.skillPanelOpen.set(true);
   }
 
@@ -334,6 +340,11 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
   onShopRequested(): void {
+    if (this.shopOpen()) {
+      this.shopOpen.set(false);
+      return;
+    }
+    this.closeAllDialogs();
     this.shopOpen.set(true);
   }
 
@@ -348,8 +359,57 @@ export class GameComponent implements OnInit, OnDestroy {
     }
   }
 
+  onAutoPotionChanged(change: AutoPotionChange): void {
+    if (change.category === 'hp') {
+      this.gameState.setAutoPotionHp(change.potionId);
+    } else {
+      this.gameState.setAutoPotionMp(change.potionId);
+    }
+    const updated: CharacterState | null = this.gameState.player();
+    if (updated) {
+      this.currentPlayerDisplay.set({ ...updated });
+    }
+  }
+
   onShopClosed(): void {
     this.shopOpen.set(false);
+  }
+
+  onInventoryRequested(): void {
+    if (this.inventoryOpen()) {
+      this.inventoryOpen.set(false);
+      return;
+    }
+    this.closeAllDialogs();
+    this.inventoryOpen.set(true);
+  }
+
+  onInventoryClosed(): void {
+    this.inventoryOpen.set(false);
+  }
+
+  onQuickSlotKeyPressed(action: string): void {
+    const entry: QuickSlotEntry | null = this.quickSlotService.getEntry(action);
+    if (!entry) return;
+
+    if (entry.type === 'keybind') {
+      if (QUICK_SLOT_ACTION_SET.has(entry.id)) return;
+      this.gameCanvas()?.triggerQuickSlotAction(entry.id as GameAction);
+      return;
+    }
+
+    if (entry.type === 'potion') {
+      const used: boolean = this.gameState.usePotion(entry.id);
+      if (used) {
+        const updated: CharacterState | null = this.gameState.player();
+        if (updated) {
+          this.gameCanvas()?.syncProgression(updated);
+          this.currentPlayerDisplay.set({ ...updated });
+        }
+      }
+    } else if (entry.type === 'skill') {
+      this.gameCanvas()?.triggerQuickSlotSkill(entry.id);
+    }
   }
 
   onGoldPickup(amount: number): void {
@@ -390,10 +450,10 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
 
-  setLevel(level: number): void {
-    this.level.set(level);
-    this.gameState.level.set(level);
-    this.gameCanvas()?.setLevel(level);
+  setFloor(floor: number): void {
+    this.floor.set(floor);
+    this.gameState.floor.set(floor);
+    this.gameCanvas()?.setFloor(floor);
   }
 
   syncCanvasProgression(): void {
@@ -412,7 +472,8 @@ export class GameComponent implements OnInit, OnDestroy {
     this.statPanelOpen.set(false);
     this.skillPanelOpen.set(false);
     this.shopOpen.set(false);
-    this.level.set(1);
+    this.inventoryOpen.set(false);
+    this.floor.set(1);
     this.score.set(0);
     this.syncPlayerDisplay();
   }
@@ -426,6 +487,13 @@ export class GameComponent implements OnInit, OnDestroy {
     void this.router.navigate(['/']);
   }
 
+  private closeAllDialogs(): void {
+    this.statPanelOpen.set(false);
+    this.skillPanelOpen.set(false);
+    this.shopOpen.set(false);
+    this.inventoryOpen.set(false);
+  }
+
   private syncPlayerDisplay(): void {
     const p: CharacterState | null = this.gameState.player();
     if (p) {
@@ -433,10 +501,4 @@ export class GameComponent implements OnInit, OnDestroy {
     }
   }
 
-  private showLevelUpToast(oldLevel: number, newLevel: number): void {
-    this.levelUpToast.set({ oldLevel, newLevel });
-    setTimeout((): void => {
-      this.levelUpToast.set(null);
-    }, 3000);
-  }
 }

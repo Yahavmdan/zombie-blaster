@@ -15,14 +15,17 @@ import {
   SKILLS,
   SkillDefinition,
   SkillType,
+  getPotionById,
+  getPotionRestoreAmount,
+  resolveAutoPotionId,
 } from '@shared/index';
-import { DropType, PlayerInventory, ShopItemDefinition, ZombieState } from '@shared/game-entities';
+import { DropType, PotionDefinition, ShopItemDefinition, ZombieState } from '@shared/game-entities';
 
 @Injectable({ providedIn: 'root' })
 export class GameStateService {
   readonly player: WritableSignal<CharacterState | null> = signal<CharacterState | null>(null);
   readonly zombies: WritableSignal<ZombieState[]> = signal<ZombieState[]>([]);
-  readonly level: WritableSignal<number> = signal<number>(1);
+  readonly floor: WritableSignal<number> = signal<number>(1);
   readonly score: WritableSignal<number> = signal<number>(0);
   readonly gameOver: WritableSignal<boolean> = signal<boolean>(false);
   readonly isPaused: WritableSignal<boolean> = signal<boolean>(false);
@@ -83,11 +86,16 @@ export class GameStateService {
       allocatedStats,
       skillLevels: {},
       activeBuffs: [],
-      inventory: { hpPotions: 3, mpPotions: 3, gold: isDevMode() ? 1_000_000 : 0 },
+      inventory: {
+        potions: { 'hp-potion-1': 3, 'mp-potion-1': 3 },
+        gold: isDevMode() ? 1_000_000 : 0,
+        autoPotionHpId: 'hp-potion-1',
+        autoPotionMpId: 'mp-potion-1',
+      },
     };
 
     this.player.set(character);
-    this.level.set(1);
+    this.floor.set(1);
     this.score.set(0);
     this.gameOver.set(false);
     this.zombies.set([]);
@@ -343,27 +351,32 @@ export class GameStateService {
   }
 
   addPotion(type: DropType): void {
+    const potionId: string = type === DropType.HpPotion ? 'hp-potion-1' : 'mp-potion-1';
     this.player.update((p: CharacterState | null): CharacterState | null => {
       if (!p) return p;
-      const inv: PlayerInventory = { ...p.inventory };
-      if (type === DropType.HpPotion) inv.hpPotions++;
-      else if (type === DropType.MpPotion) inv.mpPotions++;
-      return { ...p, inventory: inv };
+      const potions: Record<string, number> = { ...p.inventory.potions };
+      potions[potionId] = (potions[potionId] ?? 0) + 1;
+      return { ...p, inventory: { ...p.inventory, potions } };
     });
   }
 
   useHpPotion(): boolean {
     const p: CharacterState | null = this.player();
-    if (!p || p.inventory.hpPotions <= 0) return false;
-    if (p.hp >= p.derived.maxHp) return false;
+    if (!p || p.hp >= p.derived.maxHp) return false;
+
+    const potionId: string | null = resolveAutoPotionId(p.inventory.autoPotionHpId, p.inventory.potions, 'hp');
+    if (!potionId || (p.inventory.potions[potionId] ?? 0) <= 0) return false;
 
     this.player.update((c: CharacterState | null): CharacterState | null => {
       if (!c) return c;
-      const healed: number = Math.min(GAME_CONSTANTS.HP_POTION_RESTORE, c.derived.maxHp - c.hp);
+      const restoreAmount: number = getPotionRestoreAmount(potionId, c.derived.maxHp, c.derived.maxMp);
+      const healed: number = Math.min(restoreAmount, c.derived.maxHp - c.hp);
+      const potions: Record<string, number> = { ...c.inventory.potions };
+      potions[potionId] = Math.max(0, (potions[potionId] ?? 0) - 1);
       return {
         ...c,
         hp: c.hp + healed,
-        inventory: { ...c.inventory, hpPotions: c.inventory.hpPotions - 1 },
+        inventory: { ...c.inventory, potions },
       };
     });
     return true;
@@ -371,16 +384,21 @@ export class GameStateService {
 
   useMpPotion(): boolean {
     const p: CharacterState | null = this.player();
-    if (!p || p.inventory.mpPotions <= 0) return false;
-    if (p.mp >= p.derived.maxMp) return false;
+    if (!p || p.mp >= p.derived.maxMp) return false;
+
+    const potionId: string | null = resolveAutoPotionId(p.inventory.autoPotionMpId, p.inventory.potions, 'mp');
+    if (!potionId || (p.inventory.potions[potionId] ?? 0) <= 0) return false;
 
     this.player.update((c: CharacterState | null): CharacterState | null => {
       if (!c) return c;
-      const restored: number = Math.min(GAME_CONSTANTS.MP_POTION_RESTORE, c.derived.maxMp - c.mp);
+      const restoreAmount: number = getPotionRestoreAmount(potionId, c.derived.maxHp, c.derived.maxMp);
+      const restored: number = Math.min(restoreAmount, c.derived.maxMp - c.mp);
+      const potions: Record<string, number> = { ...c.inventory.potions };
+      potions[potionId] = Math.max(0, (potions[potionId] ?? 0) - 1);
       return {
         ...c,
         mp: c.mp + restored,
-        inventory: { ...c.inventory, mpPotions: c.inventory.mpPotions - 1 },
+        inventory: { ...c.inventory, potions },
       };
     });
     return true;
@@ -399,20 +417,64 @@ export class GameStateService {
     const totalCost: number = clampedQty * item.price;
     if (p.inventory.gold < totalCost) return false;
 
+    const potionDef: PotionDefinition | undefined = getPotionById(item.potionId);
+    if (!potionDef) return false;
+
     this.player.update((c: CharacterState | null): CharacterState | null => {
       if (!c) return c;
-      const inv: PlayerInventory = { ...c.inventory, gold: c.inventory.gold - totalCost };
-      if (item.type === DropType.HpPotion) inv.hpPotions += clampedQty;
-      else if (item.type === DropType.MpPotion) inv.mpPotions += clampedQty;
-      return { ...c, inventory: inv };
+      const potions: Record<string, number> = { ...c.inventory.potions };
+      potions[item.potionId] = (potions[item.potionId] ?? 0) + clampedQty;
+      return { ...c, inventory: { ...c.inventory, gold: c.inventory.gold - totalCost, potions } };
     });
     return true;
+  }
+
+  usePotion(potionId: string): boolean {
+    const p: CharacterState | null = this.player();
+    if (!p) return false;
+
+    const def: PotionDefinition | undefined = getPotionById(potionId);
+    if (!def) return false;
+    if ((p.inventory.potions[potionId] ?? 0) <= 0) return false;
+    if (def.category === 'hp' && p.hp >= p.derived.maxHp) return false;
+    if (def.category === 'mp' && p.mp >= p.derived.maxMp) return false;
+
+    this.player.update((c: CharacterState | null): CharacterState | null => {
+      if (!c) return c;
+      const potionDef: PotionDefinition | undefined = getPotionById(potionId);
+      if (!potionDef) return c;
+      const restoreAmount: number = getPotionRestoreAmount(potionId, c.derived.maxHp, c.derived.maxMp);
+      const potions: Record<string, number> = { ...c.inventory.potions };
+      potions[potionId] = Math.max(0, (potions[potionId] ?? 0) - 1);
+
+      if (potionDef.category === 'hp') {
+        const healed: number = Math.min(restoreAmount, c.derived.maxHp - c.hp);
+        return { ...c, hp: c.hp + healed, inventory: { ...c.inventory, potions } };
+      }
+      const restored: number = Math.min(restoreAmount, c.derived.maxMp - c.mp);
+      return { ...c, mp: c.mp + restored, inventory: { ...c.inventory, potions } };
+    });
+    return true;
+  }
+
+  setAutoPotionHp(potionId: string | null): void {
+    this.player.update((p: CharacterState | null): CharacterState | null => {
+      if (!p) return p;
+      return { ...p, inventory: { ...p.inventory, autoPotionHpId: potionId } };
+    });
+  }
+
+  setAutoPotionMp(potionId: string | null): void {
+    this.player.update((p: CharacterState | null): CharacterState | null => {
+      if (!p) return p;
+      return { ...p, inventory: { ...p.inventory, autoPotionMpId: potionId } };
+    });
   }
 
   reset(): void {
     this.player.set(null);
     this.zombies.set([]);
-    this.level.set(1);
+    this.floor.set(1);
     this.score.set(0);
     this.gameOver.set(false);
     this.isPaused.set(false);

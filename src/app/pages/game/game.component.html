@@ -2,16 +2,18 @@
   <div class="game-wrapper">
     <app-game-canvas
       [player]="p"
-      [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen() || shopOpen()"
+      [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen() || shopOpen() || inventoryOpen()"
       (playerUpdated)="onPlayerUpdate($event)"
       (xpGained)="onXpGained($event)"
       (scoreUpdated)="onScoreUpdate($event)"
-      (levelUpdated)="onLevelUpdate($event)"
-      (levelCompleted)="onLevelComplete()"
+      (floorUpdated)="onFloorUpdate($event)"
+      (floorCompleted)="onFloorComplete()"
       (gameOver)="onGameOver()"
       (openStatsRequested)="onStatPanelRequested()"
       (openSkillsRequested)="onSkillTreeRequested()"
       (openShopRequested)="onShopRequested()"
+      (openInventoryRequested)="onInventoryRequested()"
+      (quickSlotKeyPressed)="onQuickSlotKeyPressed($event)"
       (goldPickedUp)="onGoldPickup($event)"
       (potionPickedUp)="onPotionPickup()"
       (zombieDamaged)="onZombieDamaged($event)"
@@ -19,14 +21,18 @@
     />
     <app-hud
       [playerData]="currentPlayerDisplay()"
-      [level]="level()"
+      [floor]="floor()"
       [score]="score()"
       (statPanelRequested)="onStatPanelRequested()"
       (skillTreeRequested)="onSkillTreeRequested()"
       (shopRequested)="onShopRequested()"
+      (inventoryRequested)="onInventoryRequested()"
     />
     <app-settings
       (openChanged)="onSettingsOpenChanged($event)"
+    />
+    <app-quick-slots
+      [player]="currentPlayerDisplay()"
     />
 
     @if (statPanelOpen()) {
@@ -51,16 +57,16 @@
       <app-shop
         [player]="currentPlayerDisplay()"
         (itemPurchased)="onShopItemPurchased($event)"
+        (autoPotionChanged)="onAutoPotionChanged($event)"
         (closed)="onShopClosed()"
       />
     }
 
-    @if (levelUpToast(); as toast) {
-      <div class="level-up-toast" data-testid="game-levelup-toast">
-        <span class="toast-title">LEVEL UP!</span>
-        <span class="toast-levels">Lv.{{ toast.oldLevel }} → Lv.{{ toast.newLevel }}</span>
-        <span class="toast-rewards">+5 Stat Points, +3 Skill Points</span>
-      </div>
+    @if (inventoryOpen()) {
+      <app-inventory
+        [player]="currentPlayerDisplay()"
+        (closed)="onInventoryClosed()"
+      />
     }
 
     @if (isGameOver()) {
@@ -73,8 +79,8 @@
               <span class="go-stat-value go-stat-value--score">{{ score() }}</span>
             </div>
             <div class="go-stat">
-              <span class="go-stat-label">Level Reached</span>
-              <span class="go-stat-value">{{ level() }}</span>
+              <span class="go-stat-label">Floor Reached</span>
+              <span class="go-stat-value">{{ floor() }}</span>
             </div>
             <div class="go-stat">
               <span class="go-stat-label">Level</span>

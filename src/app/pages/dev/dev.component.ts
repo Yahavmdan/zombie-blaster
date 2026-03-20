@@ -19,7 +19,7 @@ export class DevComponent implements OnInit {
   private readonly gameComponent: Signal<GameComponent | undefined> = viewChild(GameComponent);
 
   readonly selectedClass: WritableSignal<CharacterClass> = signal<CharacterClass>(CharacterClass.Warrior);
-  readonly levelInput: WritableSignal<number> = signal<number>(1);
+  readonly floorInput: WritableSignal<number> = signal<number>(1);
 
   readonly classList: CharacterClassDefinition[] = Object.values(CHARACTER_CLASSES);
 
@@ -53,8 +53,8 @@ export class DevComponent implements OnInit {
     this.gameComponent()?.syncCanvasProgression();
   }
 
-  setLevel(): void {
-    const level: number = Math.max(1, this.levelInput());
-    this.gameComponent()?.setLevel(level);
+  setFloor(): void {
+    const floor: number = Math.max(1, this.floorInput());
+    this.gameComponent()?.setFloor(floor);
   }
 }

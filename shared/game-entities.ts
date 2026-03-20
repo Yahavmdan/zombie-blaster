@@ -71,6 +71,20 @@ export enum DropType {
   Gold = 'gold',
 }
 
+export type PotionCategory = 'hp' | 'mp';
+export type PotionMode = 'flat' | 'percent';
+
+export interface PotionDefinition {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: PotionCategory;
+  mode: PotionMode;
+  value: number;
+  shopPrice: number;
+}
+
 export interface WorldDrop {
   id: string;
   type: DropType;
@@ -83,9 +97,10 @@ export interface WorldDrop {
 }
 
 export interface PlayerInventory {
-  hpPotions: number;
-  mpPotions: number;
+  potions: Record<string, number>;
   gold: number;
+  autoPotionHpId: string | null;
+  autoPotionMpId: string | null;
 }
 
 export interface ZombieCorpse {
@@ -113,11 +128,74 @@ export interface ShopItemDefinition {
   description: string;
   icon: string;
   price: number;
-  type: DropType;
-  value: number;
+  potionId: string;
 }
 
 export interface ShopPurchase {
   itemId: string;
   quantity: number;
 }
+
+export type QuickSlotContentType = 'skill' | 'potion' | 'keybind';
+
+export interface QuickSlotEntry {
+  type: QuickSlotContentType;
+  id: string;
+}
+
+export interface ActionInfo {
+  label: string;
+  icon: string;
+}
+
+export const ACTION_INFO: Record<string, ActionInfo> = {
+  left: { label: 'Move Left', icon: '←' },
+  right: { label: 'Move Right', icon: '→' },
+  up: { label: 'Up / Climb', icon: '↑' },
+  down: { label: 'Down', icon: '↓' },
+  jump: { label: 'Jump', icon: '⬆' },
+  attack: { label: 'Attack', icon: '⚔' },
+  skill1: { label: 'Skill 1', icon: '①' },
+  skill2: { label: 'Skill 2', icon: '②' },
+  skill3: { label: 'Skill 3', icon: '③' },
+  skill4: { label: 'Skill 4', icon: '④' },
+  skill5: { label: 'Skill 5', icon: '⑤' },
+  skill6: { label: 'Skill 6', icon: '⑥' },
+  openStats: { label: 'Stats', icon: '📊' },
+  openSkills: { label: 'Skills', icon: '📖' },
+  useHpPotion: { label: 'HP Potion', icon: '❤' },
+  useMpPotion: { label: 'MP Potion', icon: '💧' },
+  openShop: { label: 'Shop', icon: '🛒' },
+  openInventory: { label: 'Inventory', icon: '🎒' },
+  quickSlot1: { label: 'QSlot 1', icon: '❶' },
+  quickSlot2: { label: 'QSlot 2', icon: '❷' },
+  quickSlot3: { label: 'QSlot 3', icon: '❸' },
+  quickSlot4: { label: 'QSlot 4', icon: '❹' },
+  quickSlot5: { label: 'QSlot 5', icon: '❺' },
+  quickSlot6: { label: 'QSlot 6', icon: '❻' },
+  quickSlot7: { label: 'QSlot 7', icon: '❼' },
+  quickSlot8: { label: 'QSlot 8', icon: '❽' },
+};
+
+export type QuickSlotAction =
+  | 'quickSlot1'
+  | 'quickSlot2'
+  | 'quickSlot3'
+  | 'quickSlot4'
+  | 'quickSlot5'
+  | 'quickSlot6'
+  | 'quickSlot7'
+  | 'quickSlot8';
+
+export const QUICK_SLOT_ACTIONS: QuickSlotAction[] = [
+  'quickSlot1',
+  'quickSlot2',
+  'quickSlot3',
+  'quickSlot4',
+  'quickSlot5',
+  'quickSlot6',
+  'quickSlot7',
+  'quickSlot8',
+];
+
+export const QUICK_SLOT_ACTION_SET: Set<string> = new Set<string>(QUICK_SLOT_ACTIONS);

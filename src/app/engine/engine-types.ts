@@ -122,11 +122,19 @@ export interface HitMark {
   tickCounter: number;
 }
 
+export interface LevelUpNotification {
+  life: number;
+  maxLife: number;
+  oldLevel: number;
+  newLevel: number;
+}
+
 export interface IGameEngine {
   readonly ctx: CanvasRenderingContext2D;
   readonly fixedDt: number;
 
   player: CharacterState | null;
+  levelUpNotification: LevelUpNotification | null;
   remotePlayers: CharacterState[];
   zombies: ZombieState[];
   zombieCorpses: ZombieCorpse[];
@@ -156,9 +164,9 @@ export interface IGameEngine {
   playerStunTicks: number;
   autoPotionCooldown: number;
 
-  level: number;
+  floor: number;
   spawnTimer: number;
-  levelTransitionTimer: number;
+  floorTransitionTimer: number;
   exitPlatform: Platform;
 
   backgroundStars: BackgroundStar[];
@@ -204,8 +212,8 @@ export interface IGameEngine {
 
   onPlayerUpdate: ((player: CharacterState) => void) | null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null;
-  onLevelUpdate: ((level: number) => void) | null;
-  onLevelComplete: (() => void) | null;
+  onFloorUpdate: ((floor: number) => void) | null;
+  onFloorComplete: (() => void) | null;
   onXpGained: ((amount: number) => void) | null;
   onScoreUpdate: ((delta: number) => void) | null;
   onGameOver: (() => void) | null;

@@ -20,6 +20,11 @@ const KEY_DISPLAY_MAP: Record<string, string> = {
   'meta': 'Meta',
   'capslock': 'CapsLk',
   'delete': 'Del',
+  'insert': 'Ins',
+  'home': 'Hm',
+  'end': 'End',
+  'pageup': 'Pg↑',
+  'pagedown': 'Pg↓',
 };
 
 export function formatKeyName(key: string): string {
@@ -56,6 +61,33 @@ export class KeyBindingsService {
     const defaults: KeyBindings = this.copyDefaults();
     this.bindings.set(defaults);
     localStorage.removeItem(STORAGE_KEY);
+  }
+
+  assignKeyToAction(key: string, action: GameAction): void {
+    const normalizedKey: string = key.toLowerCase();
+    this.bindings.update((b: KeyBindings): KeyBindings => {
+      const updated: KeyBindings = {} as KeyBindings;
+      const actions: GameAction[] = Object.keys(b) as GameAction[];
+      for (const act of actions) {
+        updated[act] = b[act].filter((k: string): boolean => k !== normalizedKey);
+      }
+      updated[action] = [...updated[action], normalizedKey];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }
+
+  clearKey(key: string): void {
+    const normalizedKey: string = key.toLowerCase();
+    this.bindings.update((b: KeyBindings): KeyBindings => {
+      const updated: KeyBindings = {} as KeyBindings;
+      const actions: GameAction[] = Object.keys(b) as GameAction[];
+      for (const act of actions) {
+        updated[act] = b[act].filter((k: string): boolean => k !== normalizedKey);
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
   }
 
   getActionForKey(key: string): GameAction | null {

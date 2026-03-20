@@ -295,7 +295,7 @@ export class GameWebSocketServer {
       allocatedStats: { str: 0, dex: 0, int: 0, luk: 0 },
       skillLevels: {},
       activeBuffs: [],
-      inventory: { hpPotions: 3, mpPotions: 3, gold: 0 },
+      inventory: { potions: { 'hp-potion-1': 3, 'mp-potion-1': 3 }, gold: 0, autoPotionHpId: 'hp-potion-1', autoPotionMpId: 'mp-potion-1' },
     }));
 
     const gamePayload: GameStartedPayload = {

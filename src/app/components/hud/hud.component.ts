@@ -1,10 +1,11 @@
 import { Component, ChangeDetectionStrategy, InputSignal, OutputEmitterRef, Signal, WritableSignal, input, output, computed, inject, isDevMode } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { ActiveBuff, CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost, getSkillHpCost, KeyBindings, GameAction } from '@shared/index';
+import { ActiveBuff, CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost, getSkillHpCost, KeyBindings, GameAction, getTotalPotionsByCategory } from '@shared/index';
 import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
 import { GameStateService } from '../../services/game-state.service';
 
 export interface SkillSlot {
+  id: string;
   key: string;
   name: string;
   icon: string;
@@ -41,12 +42,13 @@ export class HudComponent {
   readonly showCollisionBoxes: WritableSignal<boolean> = this.gameState.showCollisionBoxes;
 
   readonly playerData: InputSignal<CharacterState> = input.required<CharacterState>();
-  readonly level: InputSignal<number> = input.required<number>();
+  readonly floor: InputSignal<number> = input.required<number>();
   readonly score: InputSignal<number> = input.required<number>();
 
   readonly statPanelRequested: OutputEmitterRef<void> = output<void>();
   readonly skillTreeRequested: OutputEmitterRef<void> = output<void>();
   readonly shopRequested: OutputEmitterRef<void> = output<void>();
+  readonly inventoryRequested: OutputEmitterRef<void> = output<void>();
 
   readonly classIcon: Signal<string> = computed((): string => {
     return CHARACTER_CLASSES[this.playerData().classId].icon;
@@ -62,6 +64,10 @@ export class HudComponent {
 
   readonly shopKey: Signal<string> = computed((): string => {
     return this.formatFirstKey('openShop');
+  });
+
+  readonly inventoryKey: Signal<string> = computed((): string => {
+    return this.formatFirstKey('openInventory');
   });
 
   readonly hpPercent: Signal<number> = computed((): number => {
@@ -112,6 +118,7 @@ export class HudComponent {
       const boundKeys: string[] = bindings[action] ?? [];
       const displayKey: string = boundKeys.length > 0 ? formatKeyName(boundKeys[0]) : '?';
       return {
+        id: skill.id,
         key: displayKey,
         name: `${skill.name} Lv.${level}`,
         icon: skill.icon,
@@ -137,8 +144,12 @@ export class HudComponent {
     });
   });
 
-  readonly hpPotions: Signal<number> = computed((): number => this.playerData().inventory.hpPotions);
-  readonly mpPotions: Signal<number> = computed((): number => this.playerData().inventory.mpPotions);
+  readonly hpPotions: Signal<number> = computed((): number =>
+    getTotalPotionsByCategory(this.playerData().inventory.potions, 'hp'),
+  );
+  readonly mpPotions: Signal<number> = computed((): number =>
+    getTotalPotionsByCategory(this.playerData().inventory.potions, 'mp'),
+  );
   readonly gold: Signal<number> = computed((): number => this.playerData().inventory.gold);
 
   onOpenStatPanel(): void {
@@ -151,6 +162,22 @@ export class HudComponent {
 
   onOpenShop(): void {
     this.shopRequested.emit();
+  }
+
+  onOpenInventory(): void {
+    this.inventoryRequested.emit();
+  }
+
+  onSkillDragStart(event: DragEvent, slot: SkillSlot): void {
+    event.dataTransfer?.setData('application/json', JSON.stringify({ type: 'skill', id: slot.id }));
+  }
+
+  onPotionDragStart(event: DragEvent, category: string): void {
+    const p: CharacterState = this.playerData();
+    const potionId: string = category === 'hp'
+      ? (p.inventory.autoPotionHpId ?? 'hp-potion-1')
+      : (p.inventory.autoPotionMpId ?? 'mp-potion-1');
+    event.dataTransfer?.setData('application/json', JSON.stringify({ type: 'potion', id: potionId }));
   }
 
   onToggleGodMode(): void {

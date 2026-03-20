@@ -251,7 +251,7 @@ export class ProjectileSystem {
 
   private applyPoisonToPlayer(): void {
     const damagePerTick: number = GAME_CONSTANTS.SPITTER_POISON_DAMAGE_PER_TICK +
-      Math.floor(this.e.level * GAME_CONSTANTS.SPITTER_POISON_DAMAGE_WAVE_SCALE);
+      Math.floor(this.e.floor * GAME_CONSTANTS.SPITTER_POISON_DAMAGE_WAVE_SCALE);
     this.e.poisonEffect = {
       remainingTicks: GAME_CONSTANTS.SPITTER_POISON_DURATION_TICKS,
       tickInterval: GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL,

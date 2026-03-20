@@ -26,8 +26,8 @@
 
   <div class="hud-center">
     <div class="wave-info">
-      <span class="wave-label">LEVEL</span>
-      <span class="wave-number">{{ level() }}</span>
+      <span class="wave-label">FLOOR</span>
+      <span class="wave-number">{{ floor() }}</span>
     </div>
   </div>
 
@@ -101,6 +101,8 @@
           class="skill-slot"
           [class.skill-slot--locked]="slot.locked"
           [class.skill-slot--buff]="slot.isBuff"
+          draggable="true"
+          (dragstart)="onSkillDragStart($event, slot)"
         >
           <span class="skill-key">{{ slot.key }}</span>
           <span class="skill-icon">{{ slot.icon }}</span>
@@ -109,12 +111,12 @@
     </div>
     <div class="bar-divider"></div>
     <div class="inventory-bar">
-      <div class="inv-item inv-item--hp" data-testid="hud-inv-hp">
+      <div class="inv-item inv-item--hp" data-testid="hud-inv-hp" draggable="true" (dragstart)="onPotionDragStart($event, 'hp')">
         <span class="inv-key">{{ hpPotionKey() }}</span>
         <span class="inv-icon">❤️</span>
         <span class="inv-count">{{ hpPotions() }}</span>
       </div>
-      <div class="inv-item inv-item--mp" data-testid="hud-inv-mp">
+      <div class="inv-item inv-item--mp" data-testid="hud-inv-mp" draggable="true" (dragstart)="onPotionDragStart($event, 'mp')">
         <span class="inv-key">{{ mpPotionKey() }}</span>
         <span class="inv-icon">💧</span>
         <span class="inv-count">{{ mpPotions() }}</span>
@@ -131,6 +133,15 @@
         <span class="inv-key">{{ shopKey() }}</span>
         <span class="inv-icon">🏪</span>
         <span class="inv-count">Shop</span>
+      </button>
+      <button
+        class="inv-item inv-item--inventory"
+        data-testid="hud-inv-button-inventory"
+        (click)="onOpenInventory()"
+      >
+        <span class="inv-key">{{ inventoryKey() }}</span>
+        <span class="inv-icon">🎒</span>
+        <span class="inv-count">Inv</span>
       </button>
     </div>
   </div>

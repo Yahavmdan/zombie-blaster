@@ -39,16 +39,16 @@
       class="dev-wave-input"
       type="number"
       min="1"
-      data-testid="dev-level-input"
-      [ngModel]="levelInput()"
-      (ngModelChange)="levelInput.set($event)"
+      data-testid="dev-floor-input"
+      [ngModel]="floorInput()"
+      (ngModelChange)="floorInput.set($event)"
     />
     <button
       class="dev-btn dev-btn--wave"
-      data-testid="dev-level-btn-set"
-      (click)="setLevel()"
+      data-testid="dev-floor-btn-set"
+      (click)="setFloor()"
     >
-      Set Level
+      Set Floor
     </button>
   </div>
 </div>

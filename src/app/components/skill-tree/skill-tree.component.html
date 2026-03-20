@@ -20,6 +20,9 @@
             [class.skill-card--locked]="!node.isUnlocked"
             [class.skill-card--maxed]="node.isMaxed"
             [class.skill-card--invested]="node.currentLevel > 0"
+            [class.skill-card--draggable]="node.currentLevel > 0"
+            [attr.draggable]="node.currentLevel > 0"
+            (dragstart)="node.currentLevel > 0 && onSkillDragStart($event, node.skill.id)"
             [attr.data-testid]="'skill-tree-card-' + node.skill.id"
           >
             <div class="skill-card-main">
@@ -105,6 +108,9 @@
             [class.skill-card--maxed]="node.isMaxed"
             [class.skill-card--invested]="node.currentLevel > 0"
             [class.skill-card--buff]="true"
+            [class.skill-card--draggable]="node.currentLevel > 0"
+            [attr.draggable]="node.currentLevel > 0"
+            (dragstart)="node.currentLevel > 0 && onSkillDragStart($event, node.skill.id)"
             [attr.data-testid]="'skill-tree-card-' + node.skill.id"
           >
             <div class="skill-card-main">

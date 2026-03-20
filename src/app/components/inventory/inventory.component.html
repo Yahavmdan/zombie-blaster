@@ -1,0 +1,48 @@
+<div class="inv-overlay" (click)="onClose()">
+  <div class="inv-panel" (click)="$event.stopPropagation()">
+    <div class="inv-header">
+      <h2 class="inv-title">🎒 INVENTORY</h2>
+      <div class="inv-gold">💰 {{ gold() }}G</div>
+      <button
+        class="inv-close"
+        (click)="onClose()"
+        data-testid="inventory-panel-button-close"
+      >✕</button>
+    </div>
+
+    <div class="inv-player-info">
+      <span class="inv-player-icon">{{ classIcon() }}</span>
+      <span class="inv-player-name">{{ player().name }}</span>
+      <span class="inv-player-class">{{ className() }}</span>
+      <span class="inv-player-level">Lv.{{ player().level }}</span>
+    </div>
+
+    <div class="inv-section">
+      <h3 class="inv-section-title">🧪 Potions</h3>
+      @if (rows().length > 0) {
+        <div class="inv-items">
+          @for (row of rows(); track row.potion.id) {
+            <div class="inv-item" draggable="true" (dragstart)="onPotionDragStart($event, row.potion.id)">
+              <span class="inv-item-icon">{{ row.potion.icon }}</span>
+              <div class="inv-item-info">
+                <span class="inv-item-name">{{ row.potion.name }}</span>
+                <span class="inv-item-desc">{{ row.potion.description }}</span>
+              </div>
+              <span class="inv-item-count">x{{ row.count }}</span>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="inv-empty">No potions in inventory</div>
+      }
+    </div>
+
+    <div class="inv-summary">
+      <span class="inv-summary-item">Total items: {{ totalItems() }}</span>
+    </div>
+
+    <div class="inv-hint">
+      Drag items to Quick Slots | Press <span class="inv-hint-key">I</span> or click outside to close
+    </div>
+  </div>
+</div>

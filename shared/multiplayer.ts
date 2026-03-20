@@ -159,7 +159,7 @@ export interface MultiplayerSyncPayload {
   hostId: string;
   players: CharacterState[];
   zombies: import('./game-entities').ZombieState[];
-  level: number;
+  floor: number;
 }
 
 export interface PlayerStateBroadcast {

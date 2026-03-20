@@ -8,56 +8,236 @@
 
 @if (isOpen()) {
   <div class="settings-overlay">
-    <div class="settings-panel">
-      <div class="settings-header">
-        <h2 class="settings-title">KEY BINDINGS</h2>
-        <button
-          class="settings-close"
-          data-testid="game-settings-button-close"
-          (click)="toggleSettings()"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div class="settings-body">
-        @for (row of bindingRows(); track row.action) {
-          <div
-            class="binding-row"
-            [class.binding-row--active]="rebindingAction() === row.action"
-          >
-            <span class="binding-label">{{ row.label }}</span>
-            <div class="binding-keys">
-              @for (key of row.keys; track key) {
-                <span class="key-chip">{{ formatKey(key) }}</span>
-              }
-            </div>
-            <div class="binding-action">
-              @if (rebindingAction() === row.action) {
-                <span class="binding-listening">Press a key…</span>
-              } @else {
-                <button
-                  class="rebind-btn"
-                  [attr.data-testid]="'game-settings-button-rebind-' + row.action"
-                  (click)="startRebind(row.action)"
-                >
-                  Rebind
-                </button>
-              }
-            </div>
+    <div class="kb-layout">
+      <div class="kb-panel">
+        <div class="kb-header">
+          <h2 class="kb-title">KEYBOARD SETTING</h2>
+          <div class="kb-header-actions">
+            <button
+              class="kb-header-btn"
+              [class.kb-header-btn--active]="sidePanelTab() === 'inventory'"
+              (click)="toggleSidePanel('inventory')"
+            >🎒 Inventory</button>
+            <button
+              class="kb-header-btn"
+              [class.kb-header-btn--active]="sidePanelTab() === 'skills'"
+              (click)="toggleSidePanel('skills')"
+            >📖 Skills</button>
           </div>
-        }
+          <button
+            class="kb-close"
+            data-testid="game-settings-button-close"
+            (click)="toggleSettings()"
+          >✕</button>
+        </div>
+
+        <div class="kb-board">
+          <div class="kb-main">
+            @for (row of mainRows; track $index) {
+              <div class="kb-row">
+                @for (key of row; track $index) {
+                  @if (key.code) {
+                    <button
+                      class="kb-key"
+                      [class.kb-key--bound]="getKeyBinding(key.code)"
+                      [class.kb-key--qs]="isQuickSlotBinding(key.code)"
+                      [class.kb-key--selected]="selectedKey() === key.code"
+                      [style.width.px]="keyWidthPx(key.w)"
+                      [title]="getKeyBinding(key.code)?.label ?? key.label"
+                      (click)="onKeyClick(key.code)"
+                      (contextmenu)="onKeyRightClick($event, key.code)"
+                      (dragover)="onKeyDragOver($event)"
+                      (drop)="onKeyDrop($event, key.code)"
+                    >
+                      <span class="kb-key-name">{{ key.label }}</span>
+                      @if (getKeyBinding(key.code); as binding) {
+                        <span class="kb-key-icon">{{ binding.icon }}</span>
+                        <span class="kb-key-action">{{ binding.label }}</span>
+                      }
+                    </button>
+                  } @else {
+                    <span class="kb-gap" [style.width.px]="keyWidthPx(key.w)"></span>
+                  }
+                }
+              </div>
+            }
+          </div>
+
+          <div class="kb-nav">
+            @for (row of navRows; track $index) {
+              <div class="kb-row">
+                @for (key of row; track $index) {
+                  @if (key.code) {
+                    <button
+                      class="kb-key"
+                      [class.kb-key--bound]="getKeyBinding(key.code)"
+                      [class.kb-key--qs]="isQuickSlotBinding(key.code)"
+                      [class.kb-key--selected]="selectedKey() === key.code"
+                      [style.width.px]="keyWidthPx(key.w)"
+                      [title]="getKeyBinding(key.code)?.label ?? key.label"
+                      (click)="onKeyClick(key.code)"
+                      (contextmenu)="onKeyRightClick($event, key.code)"
+                      (dragover)="onKeyDragOver($event)"
+                      (drop)="onKeyDrop($event, key.code)"
+                    >
+                      <span class="kb-key-name">{{ key.label }}</span>
+                      @if (getKeyBinding(key.code); as binding) {
+                        <span class="kb-key-icon">{{ binding.icon }}</span>
+                        <span class="kb-key-action">{{ binding.label }}</span>
+                      }
+                    </button>
+                  } @else {
+                    <span class="kb-gap" [style.width.px]="keyWidthPx(key.w)"></span>
+                  }
+                }
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="kb-actions-section">
+          <div class="kb-actions-hint">
+            @if (selectedKey()) {
+              Select an action to assign to <span class="kb-hint-key">{{ selectedKey() }}</span>
+            } @else {
+              Click a key above, then pick an action · Right-click to clear
+            }
+          </div>
+          <div class="kb-actions-grid">
+            @for (chip of actionChips; track chip.action) {
+              <button
+                class="kb-action-chip"
+                [class.kb-action-chip--disabled]="!selectedKey()"
+                [attr.data-testid]="'game-settings-action-' + chip.action"
+                draggable="true"
+                (dragstart)="onActionDragStart($event, chip.action)"
+                (click)="onActionChipClick(chip.action)"
+              >
+                <span class="kb-chip-icon">{{ chip.icon }}</span>
+                <span class="kb-chip-label">{{ chip.label }}</span>
+              </button>
+            }
+            <button
+              class="kb-action-chip kb-action-chip--clear"
+              [class.kb-action-chip--disabled]="!selectedKey()"
+              (click)="onClearSelectedKey()"
+            >
+              <span class="kb-chip-icon">✕</span>
+              <span class="kb-chip-label">Clear</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="kb-qs-section">
+          <h3 class="kb-qs-title">QUICK SLOT KEYS</h3>
+          <div class="kb-qs-grid">
+            @for (qs of quickSlotBindings(); track qs.action) {
+              <div
+                class="kb-qs-cell"
+                [class.kb-qs-cell--active]="rebindingAction() === qs.action"
+                [class.kb-qs-cell--filled]="!qs.isEmpty"
+                (dragover)="onQuickSlotDragOver($event)"
+                (drop)="onQuickSlotDrop($event, qs.action)"
+                (contextmenu)="onQuickSlotClear($event, qs.action)"
+                [attr.data-testid]="'game-settings-quickslot-' + qs.action"
+              >
+                <span class="kb-qs-num">{{ qs.slotNumber }}</span>
+                @if (!qs.isEmpty) {
+                  <span class="kb-qs-content-icon">{{ qs.contentIcon }}</span>
+                  <span class="kb-qs-content-label">{{ qs.contentLabel }}</span>
+                }
+                <span class="kb-qs-key">{{ qs.keyLabel }}</span>
+                <div class="kb-qs-actions">
+                  @if (rebindingAction() === qs.action) {
+                    <span class="kb-listening">Press…</span>
+                  } @else {
+                    <button
+                      class="kb-rebind-btn"
+                      (click)="startRebind(qs.action)"
+                    >Rebind</button>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="kb-footer">
+          <button
+            class="kb-footer-btn"
+            data-testid="game-settings-button-reset"
+            (click)="resetDefaults()"
+          >Reset Defaults</button>
+        </div>
       </div>
 
-      <div class="settings-footer">
-        <button
-          class="reset-btn"
-          data-testid="game-settings-button-reset"
-          (click)="resetDefaults()"
-        >
-          Reset Defaults
-        </button>
-      </div>
+      @if (sidePanelTab()) {
+        <div class="kb-side-panel">
+          <div class="kb-side-header">
+            <button
+              class="kb-side-tab"
+              [class.kb-side-tab--active]="sidePanelTab() === 'inventory'"
+              (click)="toggleSidePanel('inventory')"
+            >🎒 Inventory</button>
+            <button
+              class="kb-side-tab"
+              [class.kb-side-tab--active]="sidePanelTab() === 'skills'"
+              (click)="toggleSidePanel('skills')"
+            >📖 Skills</button>
+          </div>
+
+          <div class="kb-side-body">
+            @if (sidePanelTab() === 'inventory') {
+              @if (potionItems().length > 0) {
+                @for (item of potionItems(); track item.id) {
+                  <div
+                    class="kb-side-item"
+                    draggable="true"
+                    (dragstart)="onSidePanelDragStart($event, item)"
+                    [title]="item.sublabel"
+                  >
+                    <span class="kb-side-item-icon">{{ item.icon }}</span>
+                    <div class="kb-side-item-info">
+                      <span class="kb-side-item-name">{{ item.label }}</span>
+                      <span class="kb-side-item-desc">{{ item.sublabel }}</span>
+                    </div>
+                    @if (item.count !== null) {
+                      <span class="kb-side-item-count">x{{ item.count }}</span>
+                    }
+                  </div>
+                }
+              } @else {
+                <div class="kb-side-empty">No potions in inventory</div>
+              }
+            }
+
+            @if (sidePanelTab() === 'skills') {
+              @if (skillItems().length > 0) {
+                @for (item of skillItems(); track item.id) {
+                  <div
+                    class="kb-side-item"
+                    draggable="true"
+                    (dragstart)="onSidePanelDragStart($event, item)"
+                    [title]="item.sublabel"
+                  >
+                    <span class="kb-side-item-icon">{{ item.icon }}</span>
+                    <div class="kb-side-item-info">
+                      <span class="kb-side-item-name">{{ item.label }}</span>
+                      <span class="kb-side-item-desc">{{ item.sublabel }}</span>
+                    </div>
+                  </div>
+                }
+              } @else {
+                <div class="kb-side-empty">No usable skills learned</div>
+              }
+            }
+          </div>
+
+          <div class="kb-side-hint">
+            Drag items onto keyboard keys or quick slots
+          </div>
+        </div>
+      }
     </div>
   </div>
 }

@@ -21,6 +21,7 @@ import {
   DashPhaseState,
   DropNotification,
   IGameEngine,
+  LevelUpNotification,
 } from './engine-types';
 
 export class RenderSystem {
@@ -60,7 +61,8 @@ export class RenderSystem {
     this.e.spriteEffectSystem.render(ctx);
     this.renderDamageNumbers(ctx);
     this.renderDropNotifications(ctx);
-    this.renderLevelInfo(ctx);
+    this.renderLevelUpNotification(ctx);
+    this.renderFloorInfo(ctx);
     if (this.e.showCollisionBoxes) {
       this.renderDebugCollisionBoxes(ctx);
     }
@@ -806,19 +808,110 @@ export class RenderSystem {
     ctx.textBaseline = 'alphabetic';
   }
 
-  private renderLevelInfo(ctx: CanvasRenderingContext2D): void {
-    const halfTransition: number = GAME_CONSTANTS.LEVEL_TRANSITION_TICKS / 2;
-    if (this.e.levelTransitionTimer > halfTransition) {
-      ctx.globalAlpha = (this.e.levelTransitionTimer - halfTransition) / halfTransition;
+  private renderLevelUpNotification(ctx: CanvasRenderingContext2D): void {
+    const n: LevelUpNotification | null = this.e.levelUpNotification;
+    const p: CharacterState | null = this.e.player;
+    if (!n || !p) return;
+
+    const progress: number = 1 - n.life / n.maxLife;
+    const fadeIn: number = Math.min(1, progress * 5);
+    const fadeOut: number = n.life < 30 ? n.life / 30 : 1;
+    const alpha: number = fadeIn * fadeOut;
+    const floatOffset: number = progress * 40;
+
+    const cx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const baseY: number = p.y - 28;
+    const y: number = baseY - floatOffset;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const titleScale: number = progress < 0.1 ? 0.8 + progress * 2 : 1;
+    const titleFontSize: number = Math.round(16 * titleScale);
+    ctx.font = `bold ${titleFontSize}px 'Segoe UI', Impact, sans-serif`;
+
+    ctx.shadowColor = '#ffcc44';
+    ctx.shadowBlur = 12;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#000000';
+    ctx.lineJoin = 'round';
+    ctx.strokeText('LEVEL UP!', cx, y);
+    ctx.fillStyle = '#ffcc33';
+    ctx.fillText('LEVEL UP!', cx, y);
+
+    ctx.shadowBlur = 0;
+    ctx.font = 'bold 11px sans-serif';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    const subText: string = `Lv.${n.oldLevel} → Lv.${n.newLevel}`;
+    ctx.strokeText(subText, cx, y + 16);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(subText, cx, y + 16);
+
+    ctx.restore();
+  }
+
+  private renderFloorInfo(ctx: CanvasRenderingContext2D): void {
+    const total: number = GAME_CONSTANTS.FLOOR_TRANSITION_TICKS;
+    const timer: number = this.e.floorTransitionTimer;
+    if (timer <= 0) return;
+
+    const progress: number = 1 - timer / total;
+
+    ctx.save();
+
+    const wipePhase: number = Math.min(1, progress * 3);
+    if (wipePhase < 1) {
+      const wipeY: number = GAME_CONSTANTS.CANVAS_HEIGHT * (1 - wipePhase);
+      ctx.fillStyle = '#0a0a0f';
+      ctx.globalAlpha = 0.85 * (1 - wipePhase);
+      ctx.fillRect(0, wipeY, GAME_CONSTANTS.CANVAS_WIDTH, GAME_CONSTANTS.CANVAS_HEIGHT - wipeY);
+    }
+
+    const textFadeIn: number = Math.min(1, Math.max(0, (progress - 0.1) * 4));
+    const textFadeOut: number = Math.min(1, Math.max(0, (1 - progress) * 3));
+    const textAlpha: number = textFadeIn * textFadeOut;
+
+    if (textAlpha > 0) {
+      ctx.globalAlpha = textAlpha;
+      const slideOffset: number = (1 - textFadeIn) * 60;
+      const cy: number = GAME_CONSTANTS.CANVAS_HEIGHT / 2 + slideOffset;
+
+      ctx.shadowColor = '#44ddff';
+      ctx.shadowBlur = 20;
       ctx.fillStyle = '#44ddff';
-      ctx.font = 'bold 48px sans-serif';
+      ctx.font = 'bold 52px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`LEVEL ${this.e.level}`, GAME_CONSTANTS.CANVAS_WIDTH / 2, GAME_CONSTANTS.CANVAS_HEIGHT / 2);
+      ctx.fillText(`FLOOR ${this.e.floor}`, GAME_CONSTANTS.CANVAS_WIDTH / 2, cy);
+
+      ctx.shadowBlur = 0;
       ctx.font = 'bold 20px sans-serif';
       ctx.fillStyle = '#aaeeff';
-      ctx.fillText('Pile corpses to reach the exit!', GAME_CONSTANTS.CANVAS_WIDTH / 2, GAME_CONSTANTS.CANVAS_HEIGHT / 2 + 40);
-      ctx.globalAlpha = 1;
+      ctx.fillText('Pile corpses to reach the exit!', GAME_CONSTANTS.CANVAS_WIDTH / 2, cy + 42);
+
+      const lineWidth: number = 200;
+      const lineY: number = cy + 64;
+      const lineAlpha: number = textAlpha * 0.6;
+      ctx.globalAlpha = lineAlpha;
+      const grad: CanvasGradient = ctx.createLinearGradient(
+        GAME_CONSTANTS.CANVAS_WIDTH / 2 - lineWidth, lineY,
+        GAME_CONSTANTS.CANVAS_WIDTH / 2 + lineWidth, lineY,
+      );
+      grad.addColorStop(0, 'transparent');
+      grad.addColorStop(0.3, '#44ddff');
+      grad.addColorStop(0.7, '#44ddff');
+      grad.addColorStop(1, 'transparent');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(GAME_CONSTANTS.CANVAS_WIDTH / 2 - lineWidth, lineY);
+      ctx.lineTo(GAME_CONSTANTS.CANVAS_WIDTH / 2 + lineWidth, lineY);
+      ctx.stroke();
     }
+
+    ctx.restore();
   }
 
   private renderExitPlatform(ctx: CanvasRenderingContext2D): void {

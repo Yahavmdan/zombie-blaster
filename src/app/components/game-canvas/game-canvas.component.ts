@@ -13,12 +13,13 @@ import {
   inject,
   effect,
 } from '@angular/core';
-import { CharacterClass, CharacterState } from '@shared/index';
-import { DropType } from '@shared/game-entities';
+import { CharacterClass, CharacterState, SKILLS, SkillDefinition, SkillType } from '@shared/index';
+import { DropType, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { InputKeys } from '@shared/messages';
 import { KeyBindingsService } from '../../services/key-bindings.service';
+import { GameStateService } from '../../services/game-state.service';
 
 @Component({
   selector: 'app-game-canvas',
@@ -31,6 +32,7 @@ import { KeyBindingsService } from '../../services/key-bindings.service';
 })
 export class GameCanvasComponent implements OnDestroy {
   private readonly keyBindingsService: KeyBindingsService = inject(KeyBindingsService);
+  private readonly gameState: GameStateService = inject(GameStateService);
 
   readonly player: InputSignal<CharacterState> = input.required<CharacterState>();
   readonly inputDisabled: InputSignal<boolean> = input<boolean>(false);
@@ -38,12 +40,14 @@ export class GameCanvasComponent implements OnDestroy {
   readonly playerUpdated: OutputEmitterRef<CharacterState> = output<CharacterState>();
   readonly xpGained: OutputEmitterRef<number> = output<number>();
   readonly scoreUpdated: OutputEmitterRef<number> = output<number>();
-  readonly levelUpdated: OutputEmitterRef<number> = output<number>();
-  readonly levelCompleted: OutputEmitterRef<void> = output<void>();
+  readonly floorUpdated: OutputEmitterRef<number> = output<number>();
+  readonly floorCompleted: OutputEmitterRef<void> = output<void>();
   readonly gameOver: OutputEmitterRef<void> = output<void>();
   readonly openStatsRequested: OutputEmitterRef<void> = output<void>();
   readonly openSkillsRequested: OutputEmitterRef<void> = output<void>();
   readonly openShopRequested: OutputEmitterRef<void> = output<void>();
+  readonly openInventoryRequested: OutputEmitterRef<void> = output<void>();
+  readonly quickSlotKeyPressed: OutputEmitterRef<string> = output<string>();
   readonly goldPickedUp: OutputEmitterRef<number> = output<number>();
   readonly potionPickedUp: OutputEmitterRef<DropType> = output<DropType>();
   readonly zombieDamaged: OutputEmitterRef<Array<{ zombieId: string; damage: number; killed: boolean }>> =
@@ -60,7 +64,7 @@ export class GameCanvasComponent implements OnDestroy {
   private currentClassId: CharacterClass | null = null;
   private pendingMultiplayerHost: boolean = false;
   private pendingMultiplayerClient: boolean = false;
-  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false };
+  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
   private readonly boundKeyDown: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyDown(e);
   private readonly boundKeyUp: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyUp(e);
   private readonly boundMouseDown: () => void = (): void => this.onMouseDown();
@@ -75,7 +79,9 @@ export class GameCanvasComponent implements OnDestroy {
     effect((): void => {
       const p: CharacterState = this.player();
       if (!this.engine || this.currentClassId === null) return;
-      if (p.classId !== this.currentClassId) {
+      const classChanged: boolean = p.classId !== this.currentClassId;
+      const retried: boolean = !p.isDead && (this.engine.player?.isDead === true);
+      if (classChanged || retried) {
         this.restartEngine(p);
       }
     });
@@ -85,8 +91,8 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.syncProgression(player);
   }
 
-  setLevel(level: number): void {
-    this.engine?.setLevel(level);
+  setFloor(floor: number): void {
+    this.engine?.setFloor(floor);
   }
 
   setGodMode(enabled: boolean): void {
@@ -99,6 +105,42 @@ export class GameCanvasComponent implements OnDestroy {
     if (this.engine) {
       this.engine.showCollisionBoxes = enabled;
     }
+  }
+
+  triggerQuickSlotSkill(skillId: string): void {
+    const p: CharacterState | null = this.gameState.player();
+    if (!p) return;
+    const usableSkills: SkillDefinition[] = SKILLS.filter(
+      (s: SkillDefinition): boolean =>
+        s.classId === p.classId &&
+        (s.type === SkillType.Active || s.type === SkillType.Buff) &&
+        (p.skillLevels[s.id] ?? 0) > 0,
+    ).sort((a: SkillDefinition, b: SkillDefinition): number => a.requiredCharacterLevel - b.requiredCharacterLevel);
+
+    const idx: number = usableSkills.findIndex((s: SkillDefinition): boolean => s.id === skillId);
+    if (idx === -1 || idx >= 6) return;
+
+    const skillAction: GameAction = `skill${idx + 1}` as GameAction;
+    this.keys[skillAction] = true;
+    this.engine?.setKeys({ ...this.keys });
+    setTimeout((): void => {
+      this.keys[skillAction] = false;
+      this.engine?.setKeys({ ...this.keys });
+    }, 50);
+  }
+
+  triggerQuickSlotAction(action: GameAction): void {
+    if (action === 'openStats') { this.openStatsRequested.emit(); return; }
+    if (action === 'openSkills') { this.openSkillsRequested.emit(); return; }
+    if (action === 'openShop') { this.openShopRequested.emit(); return; }
+    if (action === 'openInventory') { this.openInventoryRequested.emit(); return; }
+
+    this.keys[action] = true;
+    this.engine?.setKeys({ ...this.keys });
+    setTimeout((): void => {
+      this.keys[action] = false;
+      this.engine?.setKeys({ ...this.keys });
+    }, 50);
   }
 
   setMultiplayerHost(enabled: boolean): void {
@@ -115,7 +157,7 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; level: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } | null {
     return this.engine?.getStateSnapshot() ?? null;
   }
 
@@ -127,8 +169,8 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.applyRemoteCorpses(corpses);
   }
 
-  syncRemoteLevel(level: number): void {
-    this.engine?.syncRemoteLevel(level);
+  syncRemoteFloor(floor: number): void {
+    this.engine?.syncRemoteFloor(floor);
   }
 
   applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
@@ -172,8 +214,8 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine!.onPlayerUpdate = (p: CharacterState): void => this.playerUpdated.emit(p);
     this.engine!.onXpGained = (amount: number): void => this.xpGained.emit(amount);
     this.engine!.onScoreUpdate = (delta: number): void => this.scoreUpdated.emit(delta);
-    this.engine!.onLevelUpdate = (level: number): void => this.levelUpdated.emit(level);
-    this.engine!.onLevelComplete = (): void => this.levelCompleted.emit();
+    this.engine!.onFloorUpdate = (floor: number): void => this.floorUpdated.emit(floor);
+    this.engine!.onFloorComplete = (): void => this.floorCompleted.emit();
     this.engine!.onGameOver = (): void => this.gameOver.emit();
     this.engine!.onGoldPickup = (amount: number): void => this.goldPickedUp.emit(amount);
     this.engine!.onPotionPickup = (type: DropType): void => this.potionPickedUp.emit(type);
@@ -194,8 +236,6 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onKeyDown(e: KeyboardEvent): void {
-    if (this.inputDisabled()) return;
-
     const action: GameAction | null = this.keyBindingsService.getActionForKey(e.key);
     if (!action) return;
 
@@ -209,6 +249,18 @@ export class GameCanvasComponent implements OnDestroy {
     }
     if (action === 'openShop') {
       this.openShopRequested.emit();
+      return;
+    }
+    if (action === 'openInventory') {
+      this.openInventoryRequested.emit();
+      return;
+    }
+
+    if (this.inputDisabled()) return;
+
+    if (QUICK_SLOT_ACTION_SET.has(action)) {
+      this.quickSlotKeyPressed.emit(action);
+      e.preventDefault();
       return;
     }
 

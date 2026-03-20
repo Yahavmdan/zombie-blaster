@@ -146,6 +146,14 @@
   border-color: #44cc4488;
 }
 
+.skill-card--draggable {
+  cursor: grab;
+}
+
+.skill-card--draggable:active {
+  cursor: grabbing;
+}
+
 .skill-card--locked {
   opacity: 0.45;
 }

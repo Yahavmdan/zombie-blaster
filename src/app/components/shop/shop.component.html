@@ -12,8 +12,8 @@
 
     <div class="shop-inventory">
       <span class="shop-inv-label">Inventory:</span>
-      <span class="shop-inv-item">❤️ {{ hpPotions() }}</span>
-      <span class="shop-inv-item">💧 {{ mpPotions() }}</span>
+      <span class="shop-inv-item">❤️ {{ totalHpPotions() }}</span>
+      <span class="shop-inv-item">💧 {{ totalMpPotions() }}</span>
     </div>
 
     <div class="shop-items">
@@ -23,6 +23,7 @@
           <div class="shop-item-info">
             <span class="shop-item-name">{{ row.item.name }}</span>
             <span class="shop-item-desc">{{ row.item.description }}</span>
+            <span class="shop-item-owned">Owned: {{ row.owned }}</span>
           </div>
           <div class="shop-item-action">
             <span class="shop-item-price">{{ row.totalPrice }}G</span>
@@ -59,6 +60,38 @@
           </div>
         </div>
       }
+    </div>
+
+    <div class="shop-auto-potion">
+      <h3 class="shop-auto-title">🧪 Auto Potion Settings</h3>
+      <div class="shop-auto-row">
+        <label class="shop-auto-label">HP Potion:</label>
+        <select
+          class="shop-auto-select"
+          [value]="autoPotionHpId() ?? ''"
+          (change)="onAutoPotionHpChange($event)"
+          data-testid="shop-auto-select-hp"
+        >
+          <option value="">None</option>
+          @for (pot of hpPotionOptions(); track pot.id) {
+            <option [value]="pot.id">{{ pot.icon }} {{ pot.name }}</option>
+          }
+        </select>
+      </div>
+      <div class="shop-auto-row">
+        <label class="shop-auto-label">MP Potion:</label>
+        <select
+          class="shop-auto-select"
+          [value]="autoPotionMpId() ?? ''"
+          (change)="onAutoPotionMpChange($event)"
+          data-testid="shop-auto-select-mp"
+        >
+          <option value="">None</option>
+          @for (pot of mpPotionOptions(); track pot.id) {
+            <option [value]="pot.id">{{ pot.icon }} {{ pot.name }}</option>
+          }
+        </select>
+      </div>
     </div>
 
     <div class="shop-hint">

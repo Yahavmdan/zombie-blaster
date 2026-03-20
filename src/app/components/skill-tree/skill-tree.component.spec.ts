@@ -39,7 +39,7 @@ function makePlayer(overrides: Partial<CharacterState> = {}): CharacterState {
     allocatedStats: { str: 0, dex: 0, int: 0, luk: 0 },
     skillLevels: {},
     activeBuffs: [],
-    inventory: { hpPotions: 0, mpPotions: 0, gold: 0 },
+    inventory: { potions: {}, gold: 0, autoPotionHpId: null, autoPotionMpId: null },
     ...overrides,
   };
 }

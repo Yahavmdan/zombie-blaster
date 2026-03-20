@@ -17,6 +17,8 @@ import {
   getPassiveEffectValue,
   getAutoPotionSuccessChance,
   PassiveEffect,
+  getPotionRestoreAmount,
+  resolveAutoPotionId,
 } from '@shared/index';
 import { ZombieState, ZombieType } from '@shared/game-entities';
 import { ZombieCorpse } from '@shared/game-entities';
@@ -854,16 +856,18 @@ export class CombatSystem {
     const mpPercent: number = (p.mp / p.derived.maxMp) * 100;
     const playerCX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
 
-    if (hpPercent <= hpThreshold && p.inventory.hpPotions > 0 && p.hp < p.derived.maxHp) {
+    const hpPotionId: string | null = resolveAutoPotionId(p.inventory.autoPotionHpId, p.inventory.potions, 'hp');
+    if (hpPercent <= hpThreshold && hpPotionId && p.hp < p.derived.maxHp) {
       const roll: number = Math.random() * 100;
       if (roll < successChance) {
         const used: boolean = this.e.onUseHpPotion?.() ?? false;
         if (used) {
-          p.hp = Math.min(p.hp + GAME_CONSTANTS.HP_POTION_RESTORE, p.derived.maxHp);
-          p.inventory.hpPotions = Math.max(0, p.inventory.hpPotions - 1);
+          const restoreAmount: number = getPotionRestoreAmount(hpPotionId, p.derived.maxHp, p.derived.maxMp);
+          p.hp = Math.min(p.hp + restoreAmount, p.derived.maxHp);
+          p.inventory.potions[hpPotionId] = Math.max(0, (p.inventory.potions[hpPotionId] ?? 0) - 1);
           this.e.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
           this.vfx.spawnHitParticles(playerCX, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, '#ff4488');
-          this.vfx.spawnDamageNumber(playerCX, p.y - 10, GAME_CONSTANTS.HP_POTION_RESTORE, false, '#44ff44');
+          this.vfx.spawnDamageNumber(playerCX, p.y - 10, restoreAmount, false, '#44ff44');
           this.e.onPlayerUpdate?.(p);
           return;
         }
@@ -872,16 +876,18 @@ export class CombatSystem {
       return;
     }
 
-    if (mpPercent <= mpThreshold && p.inventory.mpPotions > 0 && p.mp < p.derived.maxMp) {
+    const mpPotionId: string | null = resolveAutoPotionId(p.inventory.autoPotionMpId, p.inventory.potions, 'mp');
+    if (mpPercent <= mpThreshold && mpPotionId && p.mp < p.derived.maxMp) {
       const roll: number = Math.random() * 100;
       if (roll < successChance) {
         const used: boolean = this.e.onUseMpPotion?.() ?? false;
         if (used) {
-          p.mp = Math.min(p.mp + GAME_CONSTANTS.MP_POTION_RESTORE, p.derived.maxMp);
-          p.inventory.mpPotions = Math.max(0, p.inventory.mpPotions - 1);
+          const restoreAmount: number = getPotionRestoreAmount(mpPotionId, p.derived.maxHp, p.derived.maxMp);
+          p.mp = Math.min(p.mp + restoreAmount, p.derived.maxMp);
+          p.inventory.potions[mpPotionId] = Math.max(0, (p.inventory.potions[mpPotionId] ?? 0) - 1);
           this.e.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
           this.vfx.spawnHitParticles(playerCX, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, '#4488ff');
-          this.vfx.spawnDamageNumber(playerCX, p.y - 10, GAME_CONSTANTS.MP_POTION_RESTORE, false, '#4488ff');
+          this.vfx.spawnDamageNumber(playerCX, p.y - 10, restoreAmount, false, '#4488ff');
           this.e.onPlayerUpdate?.(p);
           return;
         }
@@ -994,8 +1000,8 @@ export class CombatSystem {
     this.e.zombieCorpses.push(corpse);
 
     if (awardRewards) {
-      const levelBonus: number = 1 + (this.e.level - 1) * 0.1;
-      const xpReward: number = Math.floor(z.instanceXpReward * levelBonus);
+      const floorBonus: number = 1 + (this.e.floor - 1) * 0.1;
+      const xpReward: number = Math.floor(z.instanceXpReward * floorBonus);
       this.e.onXpGained?.(xpReward);
       this.e.onScoreUpdate?.(xpReward * 10);
       this.drops.rollDrops(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);

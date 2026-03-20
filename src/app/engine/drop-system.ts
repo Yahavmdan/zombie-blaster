@@ -1,6 +1,8 @@
 import {
   CharacterState,
   GAME_CONSTANTS,
+  getPotionRestoreAmount,
+  resolveAutoPotionId,
 } from '@shared/index';
 import {
   DropType,
@@ -30,7 +32,7 @@ export class DropSystem {
     if (Math.random() < GAME_CONSTANTS.DROP_GOLD_CHANCE) {
       const goldAmount: number = GAME_CONSTANTS.DROP_GOLD_MIN +
         Math.floor(Math.random() * (GAME_CONSTANTS.DROP_GOLD_MAX - GAME_CONSTANTS.DROP_GOLD_MIN)) +
-        this.e.level * GAME_CONSTANTS.DROP_GOLD_WAVE_BONUS;
+        this.e.floor * GAME_CONSTANTS.DROP_GOLD_WAVE_BONUS;
       this.spawnDrop(DropType.Gold, dropX - 10, dropY, goldAmount);
     }
   }
@@ -141,12 +143,14 @@ export class DropSystem {
       this.vfx.spawnHitParticles(cx, cy, '#ffcc44');
       this.vfx.addDropNotification(DropType.Gold, `+${drop.value}G`, '#ffcc44', '💰');
     } else if (drop.type === DropType.HpPotion) {
-      p.inventory.hpPotions++;
+      const potionId: string = 'hp-potion-1';
+      p.inventory.potions[potionId] = (p.inventory.potions[potionId] ?? 0) + 1;
       this.e.onPotionPickup?.(DropType.HpPotion);
       this.vfx.spawnHitParticles(cx, cy, '#ff4488');
       this.vfx.addDropNotification(DropType.HpPotion, '+1 HP Potion', '#ff4488', '❤️');
     } else if (drop.type === DropType.MpPotion) {
-      p.inventory.mpPotions++;
+      const potionId: string = 'mp-potion-1';
+      p.inventory.potions[potionId] = (p.inventory.potions[potionId] ?? 0) + 1;
       this.e.onPotionPickup?.(DropType.MpPotion);
       this.vfx.spawnHitParticles(cx, cy, '#4488ff');
       this.vfx.addDropNotification(DropType.MpPotion, '+1 MP Potion', '#4488ff', '💧');
@@ -165,34 +169,42 @@ export class DropSystem {
     }
 
     if (this.e.keys.useHpPotion) {
-      const used: boolean = this.e.onUseHpPotion?.() ?? false;
-      if (used) {
-        p.hp = Math.min(p.hp + GAME_CONSTANTS.HP_POTION_RESTORE, p.derived.maxHp);
-        p.inventory.hpPotions = Math.max(0, p.inventory.hpPotions - 1);
-        this.e.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
-        this.vfx.spawnHitParticles(
-          p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
-          p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
-          '#ff4488',
-        );
-        this.vfx.spawnDamageNumber(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 10, GAME_CONSTANTS.HP_POTION_RESTORE, false, '#44ff44');
-        this.e.onPlayerUpdate?.(p);
+      const hpPotionId: string | null = resolveAutoPotionId(p.inventory.autoPotionHpId, p.inventory.potions, 'hp');
+      if (hpPotionId) {
+        const used: boolean = this.e.onUseHpPotion?.() ?? false;
+        if (used) {
+          const restoreAmount: number = getPotionRestoreAmount(hpPotionId, p.derived.maxHp, p.derived.maxMp);
+          p.hp = Math.min(p.hp + restoreAmount, p.derived.maxHp);
+          p.inventory.potions[hpPotionId] = Math.max(0, (p.inventory.potions[hpPotionId] ?? 0) - 1);
+          this.e.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
+          this.vfx.spawnHitParticles(
+            p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+            p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+            '#ff4488',
+          );
+          this.vfx.spawnDamageNumber(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 10, restoreAmount, false, '#44ff44');
+          this.e.onPlayerUpdate?.(p);
+        }
       }
     }
 
     if (this.e.keys.useMpPotion) {
-      const used: boolean = this.e.onUseMpPotion?.() ?? false;
-      if (used) {
-        p.mp = Math.min(p.mp + GAME_CONSTANTS.MP_POTION_RESTORE, p.derived.maxMp);
-        p.inventory.mpPotions = Math.max(0, p.inventory.mpPotions - 1);
-        this.e.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
-        this.vfx.spawnHitParticles(
-          p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
-          p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
-          '#4488ff',
-        );
-        this.vfx.spawnDamageNumber(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 10, GAME_CONSTANTS.MP_POTION_RESTORE, false, '#4488ff');
-        this.e.onPlayerUpdate?.(p);
+      const mpPotionId: string | null = resolveAutoPotionId(p.inventory.autoPotionMpId, p.inventory.potions, 'mp');
+      if (mpPotionId) {
+        const used: boolean = this.e.onUseMpPotion?.() ?? false;
+        if (used) {
+          const restoreAmount: number = getPotionRestoreAmount(mpPotionId, p.derived.maxHp, p.derived.maxMp);
+          p.mp = Math.min(p.mp + restoreAmount, p.derived.maxMp);
+          p.inventory.potions[mpPotionId] = Math.max(0, (p.inventory.potions[mpPotionId] ?? 0) - 1);
+          this.e.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
+          this.vfx.spawnHitParticles(
+            p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+            p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+            '#4488ff',
+          );
+          this.vfx.spawnDamageNumber(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 10, restoreAmount, false, '#4488ff');
+          this.e.onPlayerUpdate?.(p);
+        }
       }
     }
 
