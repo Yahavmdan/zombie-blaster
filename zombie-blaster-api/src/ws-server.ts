@@ -56,8 +56,8 @@ export class GameWebSocketServer {
     this.startHeartbeat();
     this.startCleanup();
 
-    this.httpServer.listen(port, (): void => {
-      console.log(`[WS] Zombie Blaster API running on port ${port}`);
+    this.httpServer.listen(port, '0.0.0.0', (): void => {
+      console.log(`[WS] Zombie Blaster API running on 0.0.0.0:${port}`);
     });
   }
 
