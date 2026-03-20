@@ -702,24 +702,38 @@ export class ZombieSystem {
   }
 
   checkLevelCompletion(): void {
-    const p: CharacterState | null = this.e.player;
-    if (!p || p.isDead) return;
     if (this.e.levelTransitionTimer > 0) return;
 
     const exit: Platform = this.e.exitPlatform;
-    const playerBottom: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT;
-    const playerRight: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH;
 
-    const onExitPlatform: boolean =
-      playerRight > exit.x &&
-      p.x < exit.x + exit.width &&
-      playerBottom >= exit.y &&
-      playerBottom <= exit.y + exit.height + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
-      p.isGrounded;
+    const candidates: CharacterState[] = [];
+    if (this.e.player && !this.e.player.isDead) {
+      candidates.push(this.e.player);
+    }
+    if (this.e.isMultiplayerHost) {
+      for (const rp of this.e.remotePlayers) {
+        if (!rp.isDead) {
+          candidates.push(rp);
+        }
+      }
+    }
 
-    if (onExitPlatform) {
-      this.e.onLevelComplete?.();
-      this.advanceLevel();
+    for (const c of candidates) {
+      const bottom: number = c.y + GAME_CONSTANTS.PLAYER_HEIGHT;
+      const right: number = c.x + GAME_CONSTANTS.PLAYER_WIDTH;
+
+      const onExitPlatform: boolean =
+        right > exit.x &&
+        c.x < exit.x + exit.width &&
+        bottom >= exit.y &&
+        bottom <= exit.y + exit.height + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
+        c.isGrounded;
+
+      if (onExitPlatform) {
+        this.e.onLevelComplete?.();
+        this.advanceLevel();
+        return;
+      }
     }
   }
 
@@ -737,16 +751,22 @@ export class ZombieSystem {
     }
     this.e.zombieCorpses = [];
 
-    if (this.e.player) {
-      this.e.player.x = GAME_CONSTANTS.CANVAS_WIDTH / 2 - GAME_CONSTANTS.PLAYER_WIDTH / 2;
-      this.e.player.y = GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT;
-      this.e.player.velocityX = 0;
-      this.e.player.velocityY = 0;
-      this.e.player.isGrounded = true;
+    this.resetPlayerToGround(this.e.player);
+    for (const rp of this.e.remotePlayers) {
+      this.resetPlayerToGround(rp);
     }
 
     this.startLevel();
     this.e.onLevelUpdate?.(this.e.level);
+  }
+
+  private resetPlayerToGround(p: CharacterState | null): void {
+    if (!p) return;
+    p.x = GAME_CONSTANTS.CANVAS_WIDTH / 2 - GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    p.y = GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT;
+    p.velocityX = 0;
+    p.velocityY = 0;
+    p.isGrounded = true;
   }
 
   startLevel(): void {

@@ -25,11 +25,35 @@
             <span class="shop-item-desc">{{ row.item.description }}</span>
           </div>
           <div class="shop-item-action">
-            <span class="shop-item-price">{{ row.item.price }}G</span>
+            <span class="shop-item-price">{{ row.totalPrice }}G</span>
+            <div class="shop-qty-row">
+              <button
+                class="shop-qty-btn"
+                [disabled]="!row.canAfford || row.quantity <= 1"
+                (click)="onQuantityChange(row.item.id, -1)"
+                [attr.data-testid]="'shop-item-button-qty-minus-' + row.item.id"
+              >−</button>
+              <input
+                type="number"
+                class="shop-qty-input"
+                [value]="row.quantity"
+                [disabled]="!row.canAfford"
+                [attr.min]="1"
+                [attr.max]="row.maxAffordable"
+                (input)="onQuantityInput(row.item.id, $event)"
+                [attr.data-testid]="'shop-item-input-qty-' + row.item.id"
+              />
+              <button
+                class="shop-qty-btn"
+                [disabled]="!row.canAfford || row.quantity >= row.maxAffordable"
+                (click)="onQuantityChange(row.item.id, 1)"
+                [attr.data-testid]="'shop-item-button-qty-plus-' + row.item.id"
+              >+</button>
+            </div>
             <button
               class="shop-buy-btn"
               [disabled]="!row.canAfford"
-              (click)="onBuy(row.item.id)"
+              (click)="onBuy(row.item.id, row.quantity)"
               [attr.data-testid]="'shop-item-button-buy-' + row.item.id"
             >BUY</button>
           </div>

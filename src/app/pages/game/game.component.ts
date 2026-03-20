@@ -3,7 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType } from '@shared/index';
 import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload } from '@shared/multiplayer';
-import { ZombieCorpse, ZombieState } from '@shared/game-entities';
+import { ShopPurchase, ZombieCorpse, ZombieState } from '@shared/game-entities';
 import { GameStateService } from '../../services/game-state.service';
 import { WebSocketService } from '../../services/websocket.service';
 import { GameCanvasComponent } from '../../components/game-canvas/game-canvas.component';
@@ -337,8 +337,8 @@ export class GameComponent implements OnInit, OnDestroy {
     this.shopOpen.set(true);
   }
 
-  onShopItemPurchased(itemId: string): void {
-    const success: boolean = this.gameState.buyShopItem(itemId);
+  onShopItemPurchased(purchase: ShopPurchase): void {
+    const success: boolean = this.gameState.buyShopItem(purchase.itemId, purchase.quantity);
     if (success) {
       const updated: CharacterState | null = this.gameState.player();
       if (updated) {

@@ -168,7 +168,7 @@ export class PhysicsSystem {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
 
-    const speed: number = p.derived.speed;
+    const speed: number = p.derived.speed * this.getCorpseSpeedMultiplier(p);
     if (p.isGrounded) {
       if (this.e.keys.left) {
         p.velocityX = -speed;
@@ -251,6 +251,34 @@ export class PhysicsSystem {
     }
 
     this.clampPlayerToGround(p);
+  }
+
+  private getCorpseSpeedMultiplier(p: CharacterState): number {
+    if (!p.isGrounded) return 1;
+    const count: number = this.countOverlappingCorpses(p);
+    if (count === 0) return 1;
+    const multiplier: number = Math.max(
+      GAME_CONSTANTS.ZOMBIE_CORPSE_MAX_SLOWDOWN,
+      1 - count * GAME_CONSTANTS.ZOMBIE_CORPSE_SPEED_PENALTY,
+    );
+    return multiplier;
+  }
+
+  private countOverlappingCorpses(p: CharacterState): number {
+    const px: number = p.x;
+    const pw: number = GAME_CONSTANTS.PLAYER_WIDTH;
+    const playerBottom: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT;
+    let count: number = 0;
+    for (const corpse of this.e.zombieCorpses) {
+      if (!corpse.isGrounded) continue;
+      const surfaceY: number = corpse.y + corpse.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+      if (playerBottom < surfaceY - GAME_CONSTANTS.ZOMBIE_CORPSE_SNAP_TOLERANCE) continue;
+      if (p.y > surfaceY + corpse.height) continue;
+      if (px + pw > corpse.x && px < corpse.x + corpse.width) {
+        count++;
+      }
+    }
+    return count;
   }
 
   private findHighestCorpseSurface(

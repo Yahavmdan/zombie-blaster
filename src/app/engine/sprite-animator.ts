@@ -112,6 +112,12 @@ export class SpriteAnimator {
     this.tickCounter = 0;
   }
 
+  isAnimationFinished(): boolean {
+    const anim: SpriteAnimation | undefined = this.animations.get(this.currentState);
+    if (!anim) return false;
+    return !anim.loop && this.currentFrame >= anim.frameCount - 1;
+  }
+
   tick(): void {
     const anim: SpriteAnimation | undefined = this.animations.get(this.currentState);
     if (!anim) return;

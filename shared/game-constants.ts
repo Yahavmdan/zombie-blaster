@@ -36,7 +36,7 @@ export const GAME_CONSTANTS = {
   PLAYER_WIDTH: 32, // Player hitbox width in pixels
   PLAYER_HEIGHT: 48, // Player hitbox height in pixels
   PLAYER_JUMP_FORCE: -10, // Upward velocity applied when jumping (negative = up)
-  PLAYER_MOVE_SPEED: 5, // Horizontal speed when walking
+  PLAYER_MOVE_SPEED: 3, // Horizontal speed when walking
   PLAYER_FRICTION: .9, // Ground friction multiplier each tick (closer to 0 = more slippery)
   PLAYER_AIR_DRAG: 0.98, // Air resistance multiplier each tick while airborne
   PLAYER_MIN_VELOCITY: 1, // Speeds below this are snapped to zero (stops sliding)
@@ -81,7 +81,7 @@ export const GAME_CONSTANTS = {
 
   // ─── Exit Platform (level exit) ───────────────
   EXIT_PLATFORM_Y: 130, // Y position of the exit platform (pixels from top)
-  EXIT_PLATFORM_WIDTH: 250, // Width of the exit platform in pixels
+  EXIT_PLATFORM_WIDTH: 1280, // Width of the exit platform in pixels (full canvas width)
   EXIT_PLATFORM_HEIGHT: 20, // Height of the exit platform in pixels
 
   // ─── Zombie Spawning ───────────────────────────
@@ -169,9 +169,11 @@ export const GAME_CONSTANTS = {
   ZOMBIE_CORPSE_DEATH_SCATTER: 0.2, // Random horizontal scatter applied to corpses on death
   ZOMBIE_CORPSE_DIVERSE_CHANCE: 0.45, // Chance a corpse uses a different visual variant
   ZOMBIE_CORPSE_BLOOD_CHANCE: 0.3, // Chance a corpse shows a blood splatter
+  ZOMBIE_CORPSE_SPEED_PENALTY: 0.18, // Fraction of speed lost per overlapping corpse (0.18 = -18% each)
+  ZOMBIE_CORPSE_MAX_SLOWDOWN: 0.55, // Minimum speed multiplier when buried in corpses (0.55 = 45% max reduction)
 
   // ─── Ropes ──────────────────────────────────────
-  ROPE_CLIMB_SPEED: 5, // How fast the player moves up/down on a rope
+  ROPE_CLIMB_SPEED: 3, // How fast the player moves up/down on a rope
   ROPE_WIDTH: 20, // Visual width of ropes in pixels
   ROPE_GRAB_RANGE: 24, // How close the player must be to grab a rope
   ROPE_JUMP_COOLDOWN_TICKS: 12, // Ticks before the player can grab a rope again after jumping off
@@ -202,6 +204,8 @@ export const GAME_CONSTANTS = {
   DROP_LIFETIME: 600, // Ticks before an uncollected drop disappears
   DROP_SIZE: 14, // Visual size of drop items in pixels
   DROP_POP_FORCE: -2, // Upward pop when a drop spawns (negative = up)
+  DROP_MAGNET_RADIUS: 120, // Distance (pixels) at which drops start flying toward the player
+  DROP_MAGNET_SPEED: 6, // Speed (pixels/tick) at which magnetized drops move toward the player
 
   // ─── Potions ──────────────────────────────────
   HP_POTION_RESTORE: 50, // HP restored when using an HP potion

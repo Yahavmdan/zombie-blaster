@@ -386,20 +386,24 @@ export class GameStateService {
     return true;
   }
 
-  buyShopItem(itemId: string): boolean {
+  buyShopItem(itemId: string, quantity: number = 1): boolean {
     const p: CharacterState | null = this.player();
     if (!p) return false;
 
     const item: ShopItemDefinition | undefined = SHOP_ITEMS.find(
       (i: ShopItemDefinition) => i.id === itemId,
     );
-    if (!item || p.inventory.gold < item.price) return false;
+    if (!item) return false;
+
+    const clampedQty: number = Math.max(1, Math.min(quantity, Math.floor(p.inventory.gold / item.price)));
+    const totalCost: number = clampedQty * item.price;
+    if (p.inventory.gold < totalCost) return false;
 
     this.player.update((c: CharacterState | null): CharacterState | null => {
       if (!c) return c;
-      const inv: PlayerInventory = { ...c.inventory, gold: c.inventory.gold - item.price };
-      if (item.type === DropType.HpPotion) inv.hpPotions++;
-      else if (item.type === DropType.MpPotion) inv.mpPotions++;
+      const inv: PlayerInventory = { ...c.inventory, gold: c.inventory.gold - totalCost };
+      if (item.type === DropType.HpPotion) inv.hpPotions += clampedQty;
+      else if (item.type === DropType.MpPotion) inv.mpPotions += clampedQty;
       return { ...c, inventory: inv };
     });
     return true;

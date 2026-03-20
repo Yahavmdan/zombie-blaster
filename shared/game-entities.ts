@@ -116,3 +116,8 @@ export interface ShopItemDefinition {
   type: DropType;
   value: number;
 }
+
+export interface ShopPurchase {
+  itemId: string;
+  quantity: number;
+}

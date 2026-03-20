@@ -828,29 +828,15 @@ export class RenderSystem {
 
     ctx.save();
 
-    const glowGrad: CanvasGradient = ctx.createRadialGradient(
-      exit.x + exit.width / 2, exit.y + exit.height / 2, 0,
-      exit.x + exit.width / 2, exit.y + exit.height / 2, exit.width / 2 + 30,
-    );
-    glowGrad.addColorStop(0, `rgba(68,221,255,${pulse * 0.3})`);
-    glowGrad.addColorStop(0.5, `rgba(68,221,255,${pulse * 0.1})`);
-    glowGrad.addColorStop(1, 'rgba(68,221,255,0)');
-    ctx.fillStyle = glowGrad;
-    ctx.fillRect(exit.x - 30, exit.y - 30, exit.width + 60, exit.height + 60);
-
-    const platGrad: CanvasGradient = ctx.createLinearGradient(exit.x, exit.y, exit.x, exit.y + exit.height);
-    platGrad.addColorStop(0, '#44ddff');
-    platGrad.addColorStop(0.5, '#2299cc');
-    platGrad.addColorStop(1, '#116688');
-    ctx.fillStyle = platGrad;
-    ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
-
-    ctx.fillStyle = `rgba(255,255,255,${pulse * 0.5})`;
-    ctx.fillRect(exit.x, exit.y, exit.width, 3);
-
-    ctx.strokeStyle = '#66eeff';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(exit.x, exit.y, exit.width, exit.height);
+    if (!this.e.mapRenderer.isLoaded()) {
+      ctx.fillStyle = '#2a2a3a';
+      ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
+      ctx.fillStyle = '#3a3a5a';
+      ctx.fillRect(exit.x, exit.y, exit.width, 4);
+      ctx.strokeStyle = '#1a1a2a';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(exit.x, exit.y, exit.width, exit.height);
+    }
 
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 14px sans-serif';

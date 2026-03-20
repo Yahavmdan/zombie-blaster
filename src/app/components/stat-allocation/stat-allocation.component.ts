@@ -46,6 +46,7 @@ export interface StatRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'stat-allocation',
+    '(document:keydown.escape)': 'onClose()',
   },
   templateUrl: './stat-allocation.component.html',
   styleUrl: './stat-allocation.component.css',

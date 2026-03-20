@@ -200,6 +200,7 @@ export class MapRenderer {
       { x: 420, y: 430, width: 280, height: 20 },
       { x: 150, y: 330, width: 200, height: 20 },
       { x: 820, y: 340, width: 200, height: 20 },
+      { x: 0, y: GAME_CONSTANTS.EXIT_PLATFORM_Y, width: GAME_CONSTANTS.CANVAS_WIDTH, height: GAME_CONSTANTS.EXIT_PLATFORM_HEIGHT },
     ];
 
     for (const plat of platforms) {

@@ -24,6 +24,7 @@ interface BindingRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'settings',
+    '(document:keydown.escape)': 'onEscapeKey()',
   },
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.css',
@@ -69,6 +70,12 @@ export class SettingsComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.cancelRebind();
+  }
+
+  onEscapeKey(): void {
+    if (this.isOpen()) {
+      this.toggleSettings();
+    }
   }
 
   toggleSettings(): void {

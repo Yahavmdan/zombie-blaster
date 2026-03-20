@@ -207,6 +207,7 @@ export class GameEngine implements IGameEngine {
       { x: 190, topY: 330, bottomY: 530 },
       { x: 910, topY: 340, bottomY: 530 },
       { x: 560, topY: 430, bottomY: GAME_CONSTANTS.GROUND_Y },
+      { x: 640, topY: GAME_CONSTANTS.EXIT_PLATFORM_Y, bottomY: 430 },
     ];
   }
 
@@ -338,6 +339,7 @@ export class GameEngine implements IGameEngine {
       this.zombieSystem.updateSpawning();
     } else {
       this.tickClientZombieVisuals();
+      if (this.levelTransitionTimer > 0) this.levelTransitionTimer--;
     }
 
     this.tickRemotePlayerAnimations();
@@ -481,6 +483,14 @@ export class GameEngine implements IGameEngine {
     if (level === this.level) return;
     this.level = level;
     this.levelTransitionTimer = GAME_CONSTANTS.LEVEL_TRANSITION_TICKS;
+
+    if (this.player) {
+      this.player.x = GAME_CONSTANTS.CANVAS_WIDTH / 2 - GAME_CONSTANTS.PLAYER_WIDTH / 2;
+      this.player.y = GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT;
+      this.player.velocityX = 0;
+      this.player.velocityY = 0;
+      this.player.isGrounded = true;
+    }
   }
 
   applyIncomingZombieDamage(damage: number, knockbackDir: number, isPoisonAttack: boolean): void {
@@ -621,6 +631,9 @@ export class GameEngine implements IGameEngine {
       }
       const state: PlayerAnimState = this.deriveRemotePlayerAnimState(rp);
       animator.setState(state);
+      if (state === PlayerAnimState.Attack && animator.isAnimationFinished()) {
+        animator.restart();
+      }
       animator.tick();
     }
   }

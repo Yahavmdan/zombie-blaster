@@ -45,6 +45,7 @@ export interface SkillTreeNode {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'skill-tree',
+    '(document:keydown.escape)': 'onClose()',
   },
   templateUrl: './skill-tree.component.html',
   styleUrl: './skill-tree.component.css',

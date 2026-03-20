@@ -52,9 +52,23 @@ export class DropSystem {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
     const size: number = GAME_CONSTANTS.DROP_SIZE;
+    const playerCx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const playerCy: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
 
     for (const drop of this.e.worldDrops) {
-      if (!drop.isGrounded) {
+      const dropCx: number = drop.x + size / 2;
+      const dropCy: number = drop.y + size / 2;
+      const dx: number = playerCx - dropCx;
+      const dy: number = playerCy - dropCy;
+      const dist: number = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < GAME_CONSTANTS.DROP_MAGNET_RADIUS && dist > 0) {
+        const speed: number = GAME_CONSTANTS.DROP_MAGNET_SPEED;
+        drop.x += (dx / dist) * speed;
+        drop.y += (dy / dist) * speed;
+        drop.isGrounded = false;
+        drop.velocityY = 0;
+      } else if (!drop.isGrounded) {
         drop.velocityY += GAME_CONSTANTS.GRAVITY;
         if (drop.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
           drop.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
@@ -74,6 +88,30 @@ export class DropSystem {
             drop.y = plat.y - size;
             drop.velocityY = 0;
             drop.isGrounded = true;
+          }
+        }
+
+        if (!drop.isGrounded) {
+          const widthRatio: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
+          for (const corpse of this.e.zombieCorpses) {
+            if (!corpse.isGrounded) continue;
+            const effectiveX: number = corpse.x + corpse.width * (1 - widthRatio) / 2;
+            const effectiveW: number = corpse.width * widthRatio;
+            const surfaceY: number = corpse.y + corpse.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+            const dropBottom: number = drop.y + size;
+            const prevBottom: number = dropBottom - drop.velocityY;
+            if (
+              drop.x + size > effectiveX &&
+              drop.x < effectiveX + effectiveW &&
+              dropBottom >= surfaceY &&
+              prevBottom <= surfaceY + GAME_CONSTANTS.ZOMBIE_CORPSE_SNAP_TOLERANCE &&
+              drop.velocityY >= 0
+            ) {
+              drop.y = surfaceY - size;
+              drop.velocityY = 0;
+              drop.isGrounded = true;
+              break;
+            }
           }
         }
       }
