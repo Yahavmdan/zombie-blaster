@@ -47,8 +47,13 @@ export class GameWebSocketServer {
 
   constructor(port: number) {
     this.httpServer = createServer((req: IncomingMessage, res: ServerResponse): void => {
+      console.log(`[HTTP] ${req.method} ${req.url} from ${req.headers['host']}`);
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       res.end('ok');
+    });
+
+    this.httpServer.on('error', (err: Error): void => {
+      console.error('[HTTP] Server error:', err);
     });
 
     this.wss = new WebSocketServer({ server: this.httpServer });
