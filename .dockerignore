@@ -1,0 +1,10 @@
+node_modules
+dist
+.angular
+.idea
+.vscode
+src
+public
+*.md
+zombie-blaster-api/node_modules
+zombie-blaster-api/dist
