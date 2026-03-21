@@ -56,7 +56,7 @@ export class RoomManager {
   listRooms(): RoomInfo[] {
     const result: RoomInfo[] = [];
     for (const room of this.rooms.values()) {
-      if (room.status === ('waiting' as unknown)) {
+      if (room.status === ('waiting' as unknown) || room.status === ('in-game' as unknown)) {
         result.push(room.toInfo());
       }
     }

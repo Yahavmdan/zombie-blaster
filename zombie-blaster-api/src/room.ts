@@ -46,14 +46,14 @@ export class Room {
 
   addPlayer(id: string, name: string, classId: CharacterClass, isHost: boolean): RoomPlayer | null {
     if (this.isFull) return null;
-    if (this._status !== ('waiting' as RoomStatus)) return null;
+    if (this._status !== ('waiting' as RoomStatus) && this._status !== ('in-game' as RoomStatus)) return null;
 
     const player: RoomPlayer = {
       id,
       name,
       classId,
       isHost,
-      isReady: isHost,
+      isReady: isHost || this._status === ('in-game' as RoomStatus),
     };
     this._players.set(id, player);
     return player;

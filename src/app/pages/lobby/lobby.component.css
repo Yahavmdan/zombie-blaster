@@ -151,6 +151,17 @@
   color: #e0e0e0;
 }
 
+.in-game-badge {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: rgba(255, 68, 68, 0.2);
+  color: #ff4444;
+  letter-spacing: 0.1em;
+}
+
 .room-card-host {
   font-size: 0.8rem;
   color: #888899;

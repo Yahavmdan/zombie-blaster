@@ -193,7 +193,7 @@ export class GameWebSocketServer {
     );
 
     if (!room) {
-      this.sendError(clientId, 'JOIN_FAILED', 'Room not found, full, or already started');
+      this.sendError(clientId, 'JOIN_FAILED', 'Room not found or full');
       return;
     }
 
@@ -206,6 +206,14 @@ export class GameWebSocketServer {
     this.send(clientId, 'room-joined' as ServerMessageType, joinedPayload);
     this.broadcastRoomUpdate(room, clientId);
     this.broadcastRoomListToLobby();
+
+    if (room.status === ('in-game' as string)) {
+      const gamePayload: GameStartedPayload = {
+        roomId: room.id,
+        players: [],
+      };
+      this.send(clientId, 'game-started' as ServerMessageType, gamePayload);
+    }
   }
 
   private handleLeaveRoom(clientId: string): void {

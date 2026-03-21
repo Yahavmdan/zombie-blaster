@@ -54,7 +54,12 @@
               @for (room of rooms(); track room.id) {
                 <div class="room-card">
                   <div class="room-card-info">
-                    <div class="room-card-name">{{ room.name }}</div>
+                    <div class="room-card-name">
+                      {{ room.name }}
+                      @if (room.status === 'in-game') {
+                        <span class="in-game-badge">IN GAME</span>
+                      }
+                    </div>
                     <div class="room-card-host">Host: {{ room.hostName }}</div>
                     <div class="room-card-players">
                       {{ room.players.length }} / {{ room.maxPlayers }} players
