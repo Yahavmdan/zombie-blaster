@@ -601,9 +601,11 @@ export class ZombieSystem {
       return;
     }
 
+    const playerCount: number = Math.max(1, this.getAllTargets().length);
+
     const maxAlive: number = Math.min(
-      GAME_CONSTANTS.FLOOR_MAX_ALIVE_ZOMBIES_BASE + (this.e.floor - 1) * GAME_CONSTANTS.FLOOR_MAX_ALIVE_ZOMBIES_GROWTH,
-      GAME_CONSTANTS.FLOOR_MAX_ALIVE_ZOMBIES_CAP,
+      (GAME_CONSTANTS.FLOOR_MAX_ALIVE_ZOMBIES_BASE + (this.e.floor - 1) * GAME_CONSTANTS.FLOOR_MAX_ALIVE_ZOMBIES_GROWTH) * playerCount,
+      GAME_CONSTANTS.FLOOR_MAX_ALIVE_ZOMBIES_CAP * playerCount,
     );
     const aliveCount: number = this.e.zombies.filter((z: ZombieState) => !z.isDead).length;
     if (aliveCount >= maxAlive) return;
@@ -611,10 +613,11 @@ export class ZombieSystem {
     this.e.spawnTimer--;
     if (this.e.spawnTimer <= 0) {
       this.spawnZombie();
-      const interval: number = Math.max(
+      const baseInterval: number = Math.max(
         GAME_CONSTANTS.ZOMBIE_SPAWN_MIN_INTERVAL_MS,
         GAME_CONSTANTS.ZOMBIE_SPAWN_INTERVAL_MS - this.e.floor * GAME_CONSTANTS.ZOMBIE_SPAWN_DECREASE_PER_WAVE,
       );
+      const interval: number = baseInterval / playerCount;
       this.e.spawnTimer = Math.floor(interval / this.e.fixedDt);
     }
   }
