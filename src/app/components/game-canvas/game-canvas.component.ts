@@ -54,6 +54,9 @@ export class GameCanvasComponent implements OnDestroy {
     output<Array<{ zombieId: string; damage: number; killed: boolean }>>();
   readonly remotePlayerDamaged: OutputEmitterRef<{ targetPlayerId: string; damage: number; zombieX: number; zombieY: number; knockbackDir: number; isPoisonAttack: boolean }> =
     output<{ targetPlayerId: string; damage: number; zombieX: number; zombieY: number; knockbackDir: number; isPoisonAttack: boolean }>();
+  readonly playerRevived: OutputEmitterRef<string> = output<string>();
+  readonly playerDowned: OutputEmitterRef<void> = output<void>();
+  readonly playerDownExpired: OutputEmitterRef<void> = output<void>();
 
   useHpPotionHandler: (() => boolean) | null = null;
   useMpPotionHandler: (() => boolean) | null = null;
@@ -64,7 +67,7 @@ export class GameCanvasComponent implements OnDestroy {
   private currentClassId: CharacterClass | null = null;
   private pendingMultiplayerHost: boolean = false;
   private pendingMultiplayerClient: boolean = false;
-  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
+  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
   private readonly boundKeyDown: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyDown(e);
   private readonly boundKeyUp: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyUp(e);
   private readonly boundMouseDown: () => void = (): void => this.onMouseDown();
@@ -157,7 +160,7 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[] } | null {
     return this.engine?.getStateSnapshot() ?? null;
   }
 
@@ -183,6 +186,10 @@ export class GameCanvasComponent implements OnDestroy {
 
   setRemotePlayers(players: CharacterState[]): void {
     this.engine?.setRemotePlayers(players);
+  }
+
+  applyRevive(): void {
+    this.engine?.applyRevive();
   }
 
   ngOnDestroy(): void {
@@ -226,6 +233,12 @@ export class GameCanvasComponent implements OnDestroy {
       this.zombieDamaged.emit(events);
     this.engine!.onRemotePlayerDamaged = (targetPlayerId: string, damage: number, zombieX: number, zombieY: number, knockbackDir: number, isPoisonAttack: boolean): void =>
       this.remotePlayerDamaged.emit({ targetPlayerId, damage, zombieX, zombieY, knockbackDir, isPoisonAttack });
+    this.engine!.onPlayerRevived = (targetPlayerId: string): void =>
+      this.playerRevived.emit(targetPlayerId);
+    this.engine!.onPlayerDowned = (): void =>
+      this.playerDowned.emit();
+    this.engine!.onPlayerDownExpired = (): void =>
+      this.playerDownExpired.emit();
   }
 
   private bindInput(): void {

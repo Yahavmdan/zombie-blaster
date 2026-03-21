@@ -36,7 +36,7 @@ export class ZombieSystem {
   private getAllTargets(): TargetInfo[] {
     const targets: TargetInfo[] = [];
     const p: CharacterState | null = this.e.player;
-    if (p && !p.isDead) {
+    if (p && !p.isDead && !p.isDown) {
       targets.push({
         id: p.id,
         x: p.x,
@@ -48,7 +48,7 @@ export class ZombieSystem {
       });
     }
     for (const rp of this.e.remotePlayers) {
-      if (rp.isDead) continue;
+      if (rp.isDead || rp.isDown) continue;
       targets.push({
         id: rp.id,
         x: rp.x,

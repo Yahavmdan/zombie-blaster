@@ -49,6 +49,7 @@ export enum ServerMessageType {
   ZombieDamage = 'zombie-damage',
   ZombieAttackPlayer = 'zombie-attack-player',
   PlayerLeft = 'player-left',
+  PlayerRevived = 'player-revived',
 }
 
 export enum ClientMessageType {
@@ -66,6 +67,7 @@ export enum ClientMessageType {
   Ping = 'ping',
   ZombieDamage = 'zombie-damage',
   ZombieAttackPlayer = 'zombie-attack-player',
+  RevivePlayer = 'revive-player',
 }
 
 export interface CreateRoomPayload {
@@ -201,4 +203,15 @@ export interface ZombieAttackPlayerPayload {
   zombieY: number;
   knockbackDir: number;
   isPoisonAttack: boolean;
+}
+
+export interface RevivePlayerPayload {
+  roomId: string;
+  targetPlayerId: string;
+  reviverId: string;
+}
+
+export interface PlayerRevivedPayload {
+  targetPlayerId: string;
+  reviverId: string;
 }

@@ -930,12 +930,14 @@ export class CombatSystem {
 
   applyZombieDamageToPlayer(damage: number, z: ZombieState): void {
     const p: CharacterState | null = this.e.player;
-    if (!p || this.e.invincibilityFrames > 0) return;
+    if (!p || p.isDown || this.e.invincibilityFrames > 0) return;
     if (this.e.dashPhase) return;
     if (this.e.godMode) return;
 
     p.hp -= damage;
     this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
+
+    this.interruptReviveChannel();
 
     const kbResistBuff: ActiveBuff | undefined = p.activeBuffs.find(
       (b: ActiveBuff) => b.stat === 'knockbackResist' && b.remainingMs > 0,
@@ -957,12 +959,27 @@ export class CombatSystem {
 
     if (p.hp <= 0) {
       p.hp = 0;
-      p.isDead = true;
-      this.e.onPlayerUpdate?.(p);
-      this.e.onGameOver?.();
+      const isMultiplayer: boolean = this.e.isMultiplayerHost || this.e.isMultiplayerClient;
+      if (isMultiplayer) {
+        p.isDown = true;
+        p.downTimer = GAME_CONSTANTS.REVIVE_WINDOW_TICKS;
+        this.e.onPlayerUpdate?.(p);
+        this.e.onPlayerDowned?.();
+      } else {
+        p.isDead = true;
+        this.e.onPlayerUpdate?.(p);
+        this.e.onGameOver?.();
+      }
       return;
     }
     this.e.onPlayerUpdate?.(p);
+  }
+
+  interruptReviveChannel(): void {
+    if (this.e.reviveTargetId !== null) {
+      this.e.reviveTargetId = null;
+      this.e.reviveProgressTicks = 0;
+    }
   }
 
   handleZombieDeath(z: ZombieState, awardRewards: boolean = true): void {

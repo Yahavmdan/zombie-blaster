@@ -48,6 +48,7 @@ export interface InputKeys {
   useMpPotion: boolean;
   openShop: boolean;
   openInventory: boolean;
+  revive: boolean;
   quickSlot1: boolean;
   quickSlot2: boolean;
   quickSlot3: boolean;

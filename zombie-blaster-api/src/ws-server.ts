@@ -143,6 +143,9 @@ export class GameWebSocketServer {
       case 'zombie-attack-player':
         this.handleZombieAttackPlayer(clientId, msg.payload);
         break;
+      case 'revive-player':
+        this.handleRevivePlayer(clientId, msg.payload);
+        break;
       case 'ping':
         this.send(clientId, 'pong' as ServerMessageType, {});
         break;
@@ -290,6 +293,8 @@ export class GameWebSocketServer {
       isAttacking: false,
       isClimbing: false,
       isDead: false,
+      isDown: false,
+      downTimer: 0,
       unallocatedStatPoints: 0,
       unallocatedSkillPoints: 0,
       allocatedStats: { str: 0, dex: 0, int: 0, luk: 0 },
@@ -378,6 +383,21 @@ export class GameWebSocketServer {
     if (!room.getPlayer(targetId)) return;
 
     this.send(targetId, 'zombie-attack-player' as ServerMessageType, payload);
+  }
+
+  private handleRevivePlayer(clientId: string, payload: unknown): void {
+    const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
+    if (!room) return;
+
+    const typed: { targetPlayerId: string; roomId: string } =
+      payload as { targetPlayerId: string; roomId: string };
+    const targetId: string = typed.targetPlayerId;
+    if (!room.getPlayer(targetId)) return;
+
+    this.send(targetId, 'player-revived' as ServerMessageType, {
+      targetPlayerId: targetId,
+      reviverId: clientId,
+    });
   }
 
   private handleGameSync(clientId: string, payload: unknown): void {

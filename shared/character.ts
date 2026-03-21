@@ -62,6 +62,8 @@ export interface CharacterState {
   isAttacking: boolean;
   isClimbing: boolean;
   isDead: boolean;
+  isDown: boolean;
+  downTimer: number;
   unallocatedStatPoints: number;
   unallocatedSkillPoints: number;
   allocatedStats: CharacterStats;

@@ -70,7 +70,7 @@ export class GameEngine implements IGameEngine {
   worldDrops: WorldDrop[] = [];
   platforms: Platform[] = [];
   ropes: Rope[] = [];
-  keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
+  keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
   attackCooldown: number = 0;
   attackAnimTicks: number = 0;
   attackHitPending: boolean = false;
@@ -138,7 +138,13 @@ export class GameEngine implements IGameEngine {
   onOpenShop: (() => void) | null = null;
   onZombieDamaged: ((events: Array<{ zombieId: string; damage: number; killed: boolean }>) => void) | null = null;
   onRemotePlayerDamaged: ((targetPlayerId: string, damage: number, zombieX: number, zombieY: number, knockbackDir: number, isPoisonAttack: boolean) => void) | null = null;
+  onPlayerRevived: ((targetPlayerId: string) => void) | null = null;
+  onPlayerDowned: (() => void) | null = null;
+  onPlayerDownExpired: (() => void) | null = null;
   dashPhase: DashPhaseState | null = null;
+
+  reviveTargetId: string | null = null;
+  reviveProgressTicks: number = 0;
 
   godMode: boolean = false;
   showCollisionBoxes: boolean = false;
@@ -146,6 +152,7 @@ export class GameEngine implements IGameEngine {
   isMultiplayerClient: boolean = false;
   pendingLocalKills: Set<string> = new Set<string>();
   pendingRemoteAttacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [];
+  pendingReviveTargetIds: string[] = [];
   remotePlayerAnimators: Map<string, SpriteAnimator> = new Map<string, SpriteAnimator>();
   private previousZombieStates: Map<string, boolean> = new Map<string, boolean>();
   private previousZombieHp: Map<string, number> = new Map<string, number>();
@@ -237,6 +244,9 @@ export class GameEngine implements IGameEngine {
     this.spitterProjectiles = [];
     this.poisonEffect = null;
     this.hitMarks = [];
+    this.reviveTargetId = null;
+    this.reviveProgressTicks = 0;
+    this.pendingReviveTargetIds.length = 0;
     this.floor = 1;
     this.playerUsableSkills = SKILLS.filter(
       (s: SkillDefinition) =>
@@ -338,10 +348,21 @@ export class GameEngine implements IGameEngine {
     this.renderSystem.updatePlayerAnimState();
     this.spriteAnimator.tick();
 
-    if (this.player.isDead) return;
+    const isMultiplayer: boolean = this.isMultiplayerHost || this.isMultiplayerClient;
 
-    this.combatSystem.updateAttackTiming();
-    this.updatePlayerActions();
+    if (this.player.isDead) {
+      if (!isMultiplayer) return;
+    } else {
+      this.updateDownedState();
+    }
+
+    const playerCanAct: boolean = !this.player.isDown && !this.player.isDead;
+
+    if (playerCanAct) {
+      this.updateReviveChannel();
+      this.combatSystem.updateAttackTiming();
+      this.updatePlayerActions();
+    }
 
     if (!this.isMultiplayerClient) {
       this.zombieSystem.updateZombies();
@@ -361,16 +382,20 @@ export class GameEngine implements IGameEngine {
     this.zombieSystem.updateZombieCorpses();
 
     this.dropSystem.updateDrops();
-    this.dropSystem.updatePotionUse();
+    if (playerCanAct) {
+      this.dropSystem.updatePotionUse();
+    }
     this.vfxSystem.updateParticles();
     this.vfxSystem.updateDamageNumbers();
     this.vfxSystem.updateDropNotifications();
     this.combatSystem.updateSkillCooldowns();
     this.combatSystem.updateDashPhase();
     this.spriteEffectSystem.tick();
-    this.combatSystem.updateActiveBuffs();
-    this.combatSystem.updatePassiveSkills();
-    this.combatSystem.updateAutoPotion();
+    if (playerCanAct) {
+      this.combatSystem.updateActiveBuffs();
+      this.combatSystem.updatePassiveSkills();
+      this.combatSystem.updateAutoPotion();
+    }
 
     if (!this.isMultiplayerClient) {
       this.zombieSystem.checkFloorCompletion();
@@ -384,6 +409,92 @@ export class GameEngine implements IGameEngine {
       this.levelUpNotification.life--;
       if (this.levelUpNotification.life <= 0) this.levelUpNotification = null;
     }
+  }
+
+  private updateDownedState(): void {
+    const p: CharacterState | null = this.player;
+    if (!p || !p.isDown) return;
+
+    p.downTimer--;
+    p.velocityX = 0;
+    p.velocityY = 0;
+
+    if (p.downTimer <= 0) {
+      p.isDown = false;
+      p.isDead = true;
+      this.onPlayerUpdate?.(p);
+      this.onPlayerDownExpired?.();
+    }
+  }
+
+  private updateReviveChannel(): void {
+    const p: CharacterState | null = this.player;
+    if (!p || p.isDead || p.isDown) return;
+
+    const isMultiplayer: boolean = this.isMultiplayerHost || this.isMultiplayerClient;
+    if (!isMultiplayer) return;
+
+    if (!this.keys.revive) {
+      if (this.reviveTargetId !== null) {
+        this.reviveTargetId = null;
+        this.reviveProgressTicks = 0;
+      }
+      return;
+    }
+
+    const playerCX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const playerCY: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+
+    let nearestDownId: string | null = null;
+    let nearestDist: number = Infinity;
+
+    for (const rp of this.remotePlayers) {
+      if (!rp.isDown) continue;
+      const rpCX: number = rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+      const rpCY: number = rp.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+      const dist: number = Math.sqrt((rpCX - playerCX) ** 2 + (rpCY - playerCY) ** 2);
+      if (dist <= GAME_CONSTANTS.REVIVE_RANGE && dist < nearestDist) {
+        nearestDist = dist;
+        nearestDownId = rp.id;
+      }
+    }
+
+    if (nearestDownId === null) {
+      this.reviveTargetId = null;
+      this.reviveProgressTicks = 0;
+      return;
+    }
+
+    if (this.reviveTargetId !== nearestDownId) {
+      this.reviveTargetId = nearestDownId;
+      this.reviveProgressTicks = 0;
+    }
+
+    this.reviveProgressTicks++;
+
+    if (this.reviveProgressTicks >= GAME_CONSTANTS.REVIVE_CHANNEL_TICKS) {
+      this.pendingReviveTargetIds.push(nearestDownId);
+      this.onPlayerRevived?.(nearestDownId);
+      this.reviveTargetId = null;
+      this.reviveProgressTicks = 0;
+    }
+  }
+
+  applyRevive(): void {
+    const p: CharacterState | null = this.player;
+    if (!p || !p.isDown) return;
+
+    p.isDown = false;
+    p.downTimer = 0;
+    p.hp = Math.max(1, Math.floor(p.derived.maxHp * GAME_CONSTANTS.REVIVE_HP_PERCENT / 100));
+    this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES * 2;
+
+    const cx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const cy: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+    this.vfxSystem.spawnBuffActivationParticles(cx, cy, '#44ff88');
+    this.vfxSystem.spawnDamageNumber(cx, p.y - 10, p.hp, false, '#44ff44');
+
+    this.onPlayerUpdate?.(p);
   }
 
   private updatePlayerActions(): void {
@@ -407,10 +518,12 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[] } | null {
     if (!this.player) return null;
     const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
+    const revives: string[] = [...this.pendingReviveTargetIds];
+    this.pendingReviveTargetIds.length = 0;
     return {
       player: { ...this.player },
       zombies: this.zombies
@@ -419,6 +532,7 @@ export class GameEngine implements IGameEngine {
       corpses: this.zombieCorpses.map((c: ZombieCorpse): ZombieCorpse => ({ ...c })),
       floor: this.floor,
       attacks,
+      revives,
     };
   }
 
@@ -511,12 +625,14 @@ export class GameEngine implements IGameEngine {
 
   applyIncomingZombieDamage(damage: number, knockbackDir: number, isPoisonAttack: boolean): void {
     const p: CharacterState | null = this.player;
-    if (!p || p.isDead) return;
+    if (!p || p.isDead || p.isDown) return;
     if (this.godMode) return;
     if (this.invincibilityFrames > 0) return;
 
     p.hp -= damage;
     this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
+
+    this.combatSystem.interruptReviveChannel();
 
     p.velocityX = knockbackDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
     p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
@@ -551,9 +667,17 @@ export class GameEngine implements IGameEngine {
 
     if (p.hp <= 0) {
       p.hp = 0;
-      p.isDead = true;
-      this.onPlayerUpdate?.(p);
-      this.onGameOver?.();
+      const isMultiplayer: boolean = this.isMultiplayerHost || this.isMultiplayerClient;
+      if (isMultiplayer) {
+        p.isDown = true;
+        p.downTimer = GAME_CONSTANTS.REVIVE_WINDOW_TICKS;
+        this.onPlayerUpdate?.(p);
+        this.onPlayerDowned?.();
+      } else {
+        p.isDead = true;
+        this.onPlayerUpdate?.(p);
+        this.onGameOver?.();
+      }
       return;
     }
     this.onPlayerUpdate?.(p);
@@ -655,7 +779,7 @@ export class GameEngine implements IGameEngine {
   }
 
   private deriveRemotePlayerAnimState(p: CharacterState): PlayerAnimState {
-    if (p.isDead) return PlayerAnimState.Death;
+    if (p.isDead || p.isDown) return PlayerAnimState.Death;
     if (p.isAttacking) return PlayerAnimState.Attack;
     if (p.isClimbing) return PlayerAnimState.Climb;
     if (!p.isGrounded) return PlayerAnimState.Jump;

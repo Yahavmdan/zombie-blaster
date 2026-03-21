@@ -203,12 +203,16 @@ export interface IGameEngine {
 
   dashPhase: DashPhaseState | null;
 
+  reviveTargetId: string | null;
+  reviveProgressTicks: number;
+
   godMode: boolean;
   showCollisionBoxes: boolean;
   isMultiplayerHost: boolean;
   isMultiplayerClient: boolean;
   pendingLocalKills: Set<string>;
   pendingRemoteAttacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>;
+  pendingReviveTargetIds: string[];
 
   onPlayerUpdate: ((player: CharacterState) => void) | null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null;
@@ -224,4 +228,7 @@ export interface IGameEngine {
   onOpenShop: (() => void) | null;
   onZombieDamaged: ((events: Array<{ zombieId: string; damage: number; killed: boolean }>) => void) | null;
   onRemotePlayerDamaged: ((targetPlayerId: string, damage: number, zombieX: number, zombieY: number, knockbackDir: number, isPoisonAttack: boolean) => void) | null;
+  onPlayerRevived: ((targetPlayerId: string) => void) | null;
+  onPlayerDowned: (() => void) | null;
+  onPlayerDownExpired: (() => void) | null;
 }

@@ -167,6 +167,7 @@ export const ACTION_INFO: Record<string, ActionInfo> = {
   useMpPotion: { label: 'MP Potion', icon: '💧' },
   openShop: { label: 'Shop', icon: '🛒' },
   openInventory: { label: 'Inventory', icon: '🎒' },
+  revive: { label: 'Revive', icon: '💖' },
   quickSlot1: { label: 'QSlot 1', icon: '❶' },
   quickSlot2: { label: 'QSlot 2', icon: '❷' },
   quickSlot3: { label: 'QSlot 3', icon: '❸' },

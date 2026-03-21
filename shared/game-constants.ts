@@ -230,6 +230,12 @@ export const GAME_CONSTANTS = {
   MP_POTION_2_RESTORE: 100, // MP restored by MP Potion II
   MP_ELIXIR_RESTORE_PERCENT: 30, // Percent of max MP restored by MP Elixir
 
+  // ─── Revival (Co-op) ───────────────────────────
+  REVIVE_WINDOW_TICKS: 1500, // Ticks the downed player can be revived (10 s at 50 tps)
+  REVIVE_CHANNEL_TICKS: 150, // Ticks the reviver must channel to complete (3 s at 50 tps)
+  REVIVE_RANGE: 60, // Pixels — reviver must be within this distance
+  REVIVE_HP_PERCENT: 30, // Percent of max HP the revived player comes back with
+
   // ─── Tick Rate ──────────────────────────────────
   TICK_RATE: 50, // Game loop runs at this many ticks per second
 
@@ -1176,6 +1182,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   useMpPotion: ['8'],
   openShop: ['b'],
   openInventory: ['i'],
+  revive: ['f'],
   quickSlot1: ['shift'],
   quickSlot2: ['insert'],
   quickSlot3: ['home'],

@@ -34,6 +34,8 @@ function makePlayer(overrides: Partial<CharacterState> = {}): CharacterState {
     isAttacking: false,
     isClimbing: false,
     isDead: false,
+    isDown: false,
+    downTimer: 0,
     unallocatedStatPoints: 0,
     unallocatedSkillPoints: 10,
     allocatedStats: { str: 0, dex: 0, int: 0, luk: 0 },

@@ -18,6 +18,9 @@
       (potionPickedUp)="onPotionPickup()"
       (zombieDamaged)="onZombieDamaged($event)"
       (remotePlayerDamaged)="onRemotePlayerDamaged($event)"
+      (playerRevived)="onPlayerRevived($event)"
+      (playerDowned)="onPlayerDowned()"
+      (playerDownExpired)="onPlayerDownExpired()"
     />
     <app-hud
       [playerData]="currentPlayerDisplay()"
@@ -88,15 +91,18 @@
             </div>
           </div>
           <div class="game-over-actions">
-            <button
-              class="go-btn go-btn--primary"
-              data-testid="game-gameover-button-retry"
-              (click)="retry()"
-            >
-              TRY AGAIN
-            </button>
+            @if (!isMultiplayer) {
+              <button
+                class="go-btn go-btn--primary"
+                data-testid="game-gameover-button-retry"
+                (click)="retry()"
+              >
+                TRY AGAIN
+              </button>
+            }
             <button
               class="go-btn"
+              [class.go-btn--primary]="isMultiplayer"
               data-testid="game-gameover-button-menu"
               (click)="backToMenu()"
             >

@@ -81,6 +81,8 @@ export class GameStateService {
       isAttacking: false,
       isClimbing: false,
       isDead: false,
+      isDown: false,
+      downTimer: 0,
       unallocatedStatPoints: 0,
       unallocatedSkillPoints: 0,
       allocatedStats,

@@ -55,6 +55,7 @@ export class RenderSystem {
     this.renderDrops(ctx);
     this.renderRemotePlayers(ctx);
     this.renderPlayer(ctx);
+    this.renderReviveProgress(ctx);
     this.renderPoisonOverlay(ctx);
     this.renderParticles(ctx);
     this.renderDashOverlay(ctx);
@@ -125,6 +126,11 @@ export class RenderSystem {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
 
+    if (p.isDown) {
+      this.renderDownedPlayer(ctx, p);
+      return;
+    }
+
     if (this.e.invincibilityFrames > 0 && Math.floor(this.e.invincibilityFrames / GAME_CONSTANTS.INVINCIBILITY_BLINK_RATE) % 2 === 0) return;
 
     const dash: DashPhaseState | null = this.e.dashPhase;
@@ -179,9 +185,120 @@ export class RenderSystem {
     }
   }
 
+  private renderDownedPlayer(ctx: CanvasRenderingContext2D, p: CharacterState): void {
+    const cx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const classColor: string = CHARACTER_CLASSES[p.classId].color;
+    const blink: boolean = Math.floor(Date.now() / 300) % 2 === 0;
+
+    const spriteSize: number = this.e.SPRITE_RENDER_SIZE;
+    const flipX: boolean = p.facing === Direction.Left;
+    const playerAnchorX: number = 0.30;
+    const playerAnchorY: number = 0.979;
+    const effectiveAnchorX: number = flipX ? (1 - playerAnchorX) : playerAnchorX;
+    const drawX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2 - spriteSize * effectiveAnchorX;
+    const drawY: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT - spriteSize * playerAnchorY;
+
+    const isLocal: boolean = this.e.player === p;
+
+    ctx.save();
+    ctx.globalAlpha = blink ? 0.7 : 0.4;
+
+    if (isLocal && this.e.spriteAnimator.isLoaded()) {
+      this.e.spriteAnimator.draw(ctx, drawX, drawY, spriteSize, spriteSize, flipX);
+    } else if (!isLocal) {
+      const animator: SpriteAnimator | undefined = this.e.remotePlayerAnimators.get(p.id);
+      if (animator && animator.isLoaded()) {
+        animator.draw(ctx, drawX, drawY, spriteSize, spriteSize, flipX);
+      } else {
+        ctx.fillStyle = classColor;
+        ctx.fillRect(p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT);
+      }
+    } else {
+      ctx.fillStyle = classColor;
+      ctx.fillRect(p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT);
+    }
+
+    ctx.restore();
+
+    const timerSeconds: number = Math.ceil(p.downTimer / GAME_CONSTANTS.TICK_RATE);
+    const timerPercent: number = p.downTimer / GAME_CONSTANTS.REVIVE_WINDOW_TICKS;
+    const barWidth: number = 50;
+    const barHeight: number = 6;
+    const barX: number = cx - barWidth / 2;
+    const barY: number = p.y - 30;
+
+    ctx.fillStyle = '#333333';
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+    const timerColor: string = timerPercent > 0.5 ? '#ffcc00' : timerPercent > 0.25 ? '#ff8800' : '#ff2200';
+    ctx.fillStyle = timerColor;
+    ctx.fillRect(barX, barY, barWidth * timerPercent, barHeight);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${timerSeconds}s`, cx, barY - 4);
+
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillText('DOWNED', cx, barY - 16);
+
+    ctx.fillStyle = classColor;
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText(p.name, cx, barY - 28);
+  }
+
+  private renderReviveProgress(ctx: CanvasRenderingContext2D): void {
+    const targetId: string | null = this.e.reviveTargetId;
+    if (targetId === null) return;
+
+    const target: CharacterState | undefined = this.e.remotePlayers.find(
+      (rp: CharacterState) => rp.id === targetId,
+    );
+    if (!target || !target.isDown) return;
+
+    const cx: number = target.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const cy: number = target.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+    const progress: number = this.e.reviveProgressTicks / GAME_CONSTANTS.REVIVE_CHANNEL_TICKS;
+
+    const barWidth: number = 60;
+    const barHeight: number = 8;
+    const barX: number = cx - barWidth / 2;
+    const barY: number = target.y - 10;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(barX - 2, barY - 2, barWidth + 4, barHeight + 4);
+    ctx.fillStyle = '#222222';
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+    ctx.fillStyle = '#44ff88';
+    ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+    ctx.fillStyle = '#44ff88';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('REVIVING...', cx, barY - 4);
+
+    const radius: number = 24;
+    ctx.strokeStyle = '#44ff88';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+    ctx.stroke();
+  }
+
   private renderRemotePlayers(ctx: CanvasRenderingContext2D): void {
     for (const rp of this.e.remotePlayers) {
       if (rp.isDead) continue;
+
+      if (rp.isDown) {
+        this.renderDownedPlayer(ctx, rp);
+        continue;
+      }
 
       const classDef: CharacterClassDefinition = CHARACTER_CLASSES[rp.classId];
       const classColor: string = classDef.color;
@@ -1103,7 +1220,7 @@ export class RenderSystem {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
 
-    if (p.isDead) {
+    if (p.isDead || p.isDown) {
       this.e.spriteAnimator.setState(PlayerAnimState.Death);
       return;
     }

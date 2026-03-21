@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inj
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType } from '@shared/index';
-import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload } from '@shared/multiplayer';
+import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload } from '@shared/multiplayer';
 import { ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { AutoPotionChange } from '../../components/shop/shop.component';
@@ -39,7 +39,7 @@ export class GameComponent implements OnInit, OnDestroy {
   private readonly gameCanvas: Signal<GameCanvasComponent | undefined> = viewChild(GameCanvasComponent);
 
   private syncTimer: ReturnType<typeof setInterval> | null = null;
-  private isMultiplayer: boolean = false;
+  protected isMultiplayer: boolean = false;
   private isHost: boolean = false;
   private roomId: string = '';
   private remotePlayerStates: Map<string, CharacterState> = new Map<string, CharacterState>();
@@ -123,8 +123,8 @@ export class GameComponent implements OnInit, OnDestroy {
     this.ws.onMessage(ServerMessageType.GameSync)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
-        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } =
-          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> };
+        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[] } =
+          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[] };
 
         this.remotePlayerStates.set(payload.player.id, payload.player);
 
@@ -142,19 +142,24 @@ export class GameComponent implements OnInit, OnDestroy {
               }
             }
           }
+
+          this.processIncomingRevives(payload.revives);
         }
 
         this.updateRemotePlayersOnCanvas();
+        this.checkAllPlayersDead();
       });
 
     this.ws.onMessage(ServerMessageType.PlayerStateBroadcast)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
-        const payload: { playerId: string; data: { player: CharacterState } } =
-          msg.payload as { playerId: string; data: { player: CharacterState } };
+        const payload: { playerId: string; data: { player: CharacterState; revives?: string[] } } =
+          msg.payload as { playerId: string; data: { player: CharacterState; revives?: string[] } };
 
         this.remotePlayerStates.set(payload.playerId, payload.data.player);
+        this.processIncomingRevives(payload.data.revives);
         this.updateRemotePlayersOnCanvas();
+        this.checkAllPlayersDead();
       });
 
     if (this.isHost) {
@@ -184,12 +189,19 @@ export class GameComponent implements OnInit, OnDestroy {
         });
     }
 
+    this.ws.onMessage(ServerMessageType.PlayerRevived)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((): void => {
+        this.applyLocalRevive();
+      });
+
     this.ws.onMessage(ServerMessageType.PlayerLeft)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
         const payload: PlayerLeftPayload = msg.payload as PlayerLeftPayload;
         this.remotePlayerStates.delete(payload.playerId);
         this.updateRemotePlayersOnCanvas();
+        this.checkAllPlayersDead();
       });
 
     this.zone.runOutsideAngular((): void => {
@@ -199,14 +211,14 @@ export class GameComponent implements OnInit, OnDestroy {
         const canvas: GameCanvasComponent | undefined = this.gameCanvas();
         if (!canvas) return;
 
-        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> } | null =
+        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[] } | null =
           canvas.getStateSnapshot();
         if (!snapshot) return;
 
         if (this.isHost) {
           this.ws.send(ClientMessageType.GameSync, snapshot);
         } else {
-          this.ws.send(ClientMessageType.PlayerState, { player: snapshot.player });
+          this.ws.send(ClientMessageType.PlayerState, { player: snapshot.player, revives: snapshot.revives });
         }
       }, SYNC_INTERVAL_MS);
     });
@@ -449,6 +461,62 @@ export class GameComponent implements OnInit, OnDestroy {
     this.ws.send(ClientMessageType.ZombieAttackPlayer, payload);
   }
 
+  onPlayerRevived(targetPlayerId: string): void {
+    if (!this.isMultiplayer) return;
+    const payload: RevivePlayerPayload = {
+      roomId: this.roomId,
+      targetPlayerId,
+      reviverId: this.gameState.player()?.id ?? '',
+    };
+    this.ws.send(ClientMessageType.RevivePlayer, payload);
+  }
+
+  private processIncomingRevives(revives: string[] | undefined): void {
+    if (!revives || revives.length === 0) return;
+    const myId: string = this.gameState.player()?.id ?? '';
+    for (const targetId of revives) {
+      if (targetId === myId) {
+        this.applyLocalRevive();
+        break;
+      }
+    }
+  }
+
+  private applyLocalRevive(): void {
+    this.gameCanvas()?.applyRevive();
+    const updated: CharacterState | null = this.gameState.player();
+    if (updated) {
+      updated.isDown = false;
+      updated.downTimer = 0;
+      this.gameState.player.set({ ...updated });
+      this.currentPlayerDisplay.set({ ...updated });
+    }
+  }
+
+  onPlayerDowned(): void {
+    // Downed state is synced via normal player state broadcast
+  }
+
+  onPlayerDownExpired(): void {
+    if (!this.isMultiplayer) {
+      this.isGameOver.set(true);
+      this.gameState.gameOver.set(true);
+      return;
+    }
+    this.checkAllPlayersDead();
+  }
+
+  private checkAllPlayersDead(): void {
+    const local: CharacterState | null = this.gameState.player();
+    if (!local || !local.isDead) return;
+
+    for (const [, state] of this.remotePlayerStates) {
+      if (!state.isDead) return;
+    }
+
+    this.isGameOver.set(true);
+    this.gameState.gameOver.set(true);
+  }
 
   setFloor(floor: number): void {
     this.floor.set(floor);
