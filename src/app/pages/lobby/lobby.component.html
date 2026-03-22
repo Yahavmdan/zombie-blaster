@@ -7,6 +7,10 @@
       </div>
     </div>
 
+    @if (shutdownWarning(); as warn) {
+      <div class="shutdown-banner" data-testid="lobby-shutdown-warning">{{ warn }}</div>
+    }
+
     @if (errorMessage(); as err) {
       <div class="error-banner">{{ err }}</div>
     }

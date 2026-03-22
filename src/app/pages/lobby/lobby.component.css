@@ -63,6 +63,22 @@
   font-size: 0.85rem;
 }
 
+.shutdown-banner {
+  background: rgba(255, 170, 0, 0.12);
+  border: 1px solid rgba(255, 170, 0, 0.4);
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  color: #ffbb33;
+  font-size: 0.85rem;
+  text-align: center;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .section-title {
   font-size: 1rem;
   color: #aaaacc;

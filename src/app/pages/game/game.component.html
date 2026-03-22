@@ -1,3 +1,7 @@
+@if (shutdownWarning(); as warn) {
+  <div class="shutdown-banner" data-testid="game-shutdown-warning">{{ warn }}</div>
+}
+
 @if (player(); as p) {
   <div class="game-wrapper">
     <app-game-canvas

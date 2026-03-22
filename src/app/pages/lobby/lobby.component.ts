@@ -32,6 +32,8 @@ import type {
   RoomListPayload,
   GameStartedPayload,
   ErrorPayload,
+  ServerShuttingDownPayload,
+  ReconnectResultPayload,
 } from '@shared/multiplayer';
 import { WebSocketService, ConnectionStatus } from '../../services/websocket.service';
 import { GameStateService } from '../../services/game-state.service';
@@ -64,6 +66,7 @@ export class LobbyComponent implements OnInit, OnDestroy {
   readonly currentRoom: WritableSignal<RoomInfo | null> = signal<RoomInfo | null>(null);
   readonly playerId: WritableSignal<string> = signal<string>('');
   readonly errorMessage: WritableSignal<string> = signal<string>('');
+  readonly shutdownWarning: WritableSignal<string> = signal<string>('');
 
   readonly playerName: WritableSignal<string> = signal<string>('');
   readonly playerClass: WritableSignal<CharacterClass> = signal<CharacterClass>(CharacterClass.Warrior);
@@ -117,6 +120,11 @@ export class LobbyComponent implements OnInit, OnDestroy {
         this.currentRoom.set(payload.room);
         this.view.set('room');
         this.clearError();
+        this.ws.setSessionInfo({
+          roomId: payload.room.id,
+          playerName: this.playerName(),
+          classId: this.playerClass(),
+        });
       });
 
     this.ws.onMessage(ServerMessageType.RoomJoined)
@@ -127,6 +135,11 @@ export class LobbyComponent implements OnInit, OnDestroy {
         this.currentRoom.set(payload.room);
         this.view.set('room');
         this.clearError();
+        this.ws.setSessionInfo({
+          roomId: payload.room.id,
+          playerName: this.playerName(),
+          classId: this.playerClass(),
+        });
       });
 
     this.ws.onMessage(ServerMessageType.RoomUpdated)
@@ -174,6 +187,26 @@ export class LobbyComponent implements OnInit, OnDestroy {
       .subscribe((msg: ServerMessage): void => {
         const payload: ErrorPayload = msg.payload as ErrorPayload;
         this.errorMessage.set(payload.message);
+      });
+
+    this.ws.serverShutdown$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((payload: ServerShuttingDownPayload): void => {
+        const seconds: number = Math.ceil(payload.gracePeriodMs / 1000);
+        this.shutdownWarning.set(`Server restarting in ${seconds}s — you will be reconnected automatically.`);
+      });
+
+    this.ws.onMessage(ServerMessageType.ReconnectResult)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((msg: ServerMessage): void => {
+        const payload: ReconnectResultPayload = msg.payload as ReconnectResultPayload;
+        this.shutdownWarning.set('');
+        if (payload.success && payload.room) {
+          this.playerId.set(payload.playerId);
+          this.currentRoom.set(payload.room);
+          this.view.set('room');
+          this.clearError();
+        }
       });
 
     this.ws.connect();
@@ -224,6 +257,7 @@ export class LobbyComponent implements OnInit, OnDestroy {
     const room: RoomInfo | null = this.currentRoom();
     if (!room) return;
     this.ws.send(ClientMessageType.LeaveRoom, { roomId: room.id });
+    this.ws.setSessionInfo(null);
     this.currentRoom.set(null);
     this.view.set('browser');
     this.requestRoomList();

@@ -50,6 +50,9 @@ export enum ServerMessageType {
   ZombieAttackPlayer = 'zombie-attack-player',
   PlayerLeft = 'player-left',
   PlayerRevived = 'player-revived',
+  ServerShuttingDown = 'server-shutting-down',
+  ReconnectResult = 'reconnect-result',
+  Welcome = 'welcome',
 }
 
 export enum ClientMessageType {
@@ -68,6 +71,7 @@ export enum ClientMessageType {
   ZombieDamage = 'zombie-damage',
   ZombieAttackPlayer = 'zombie-attack-player',
   RevivePlayer = 'revive-player',
+  Reconnect = 'reconnect',
 }
 
 export interface CreateRoomPayload {
@@ -214,4 +218,26 @@ export interface RevivePlayerPayload {
 export interface PlayerRevivedPayload {
   targetPlayerId: string;
   reviverId: string;
+}
+
+export interface WelcomePayload {
+  reconnectToken: string;
+}
+
+export interface ServerShuttingDownPayload {
+  reason: string;
+  gracePeriodMs: number;
+}
+
+export interface ReconnectPayload {
+  reconnectToken: string;
+  playerName: string;
+  classId: CharacterClass;
+}
+
+export interface ReconnectResultPayload {
+  success: boolean;
+  room: RoomInfo | null;
+  playerId: string;
+  reason?: string;
 }

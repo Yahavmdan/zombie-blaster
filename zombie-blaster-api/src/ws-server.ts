@@ -5,12 +5,10 @@ import { RoomManager } from './room-manager.js';
 import { Room } from './room.js';
 import type {
   ClientMessage,
-  ClientMessageType,
   ServerMessage,
   ServerMessageType,
   CreateRoomPayload,
   JoinRoomPayload,
-  LeaveRoomPayload,
   ToggleReadyPayload,
   StartGamePayload,
   KickPlayerPayload,
@@ -24,6 +22,9 @@ import type {
   GameStartedPayload,
   ChatBroadcastPayload,
   RoomPlayer,
+  ServerShuttingDownPayload,
+  ReconnectPayload,
+  ReconnectResultPayload,
 } from '../../shared/multiplayer.js';
 import type { CharacterState } from '../../shared/character.js';
 
@@ -31,19 +32,32 @@ interface ConnectedClient {
   id: string;
   ws: WebSocket;
   isAlive: boolean;
+  reconnectToken: string;
+}
+
+interface DisconnectedSession {
+  clientId: string;
+  roomId: string;
+  playerName: string;
+  classId: string;
+  disconnectedAt: number;
 }
 
 const HEARTBEAT_INTERVAL_MS: number = 30_000;
 const STALE_ROOM_MAX_AGE_MS: number = 3_600_000;
 const STALE_CLEANUP_INTERVAL_MS: number = 300_000;
+const GRACEFUL_SHUTDOWN_MS: number = 10_000;
+const RECONNECT_WINDOW_MS: number = 60_000;
 
 export class GameWebSocketServer {
   private readonly httpServer: HttpServer;
   private readonly wss: WebSocketServer;
   private readonly roomManager: RoomManager = new RoomManager();
   private readonly clients: Map<string, ConnectedClient> = new Map<string, ConnectedClient>();
+  private readonly disconnectedSessions: Map<string, DisconnectedSession> = new Map<string, DisconnectedSession>();
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+  private isShuttingDown: boolean = false;
 
   constructor(port: number) {
     this.httpServer = createServer((req: IncomingMessage, res: ServerResponse): void => {
@@ -68,11 +82,19 @@ export class GameWebSocketServer {
 
   private setupServer(): void {
     this.wss.on('connection', (ws: WebSocket): void => {
+      if (this.isShuttingDown) {
+        ws.close(1001, 'Server is shutting down');
+        return;
+      }
+
       const clientId: string = uuidv4();
-      const client: ConnectedClient = { id: clientId, ws, isAlive: true };
+      const reconnectToken: string = uuidv4();
+      const client: ConnectedClient = { id: clientId, ws, isAlive: true, reconnectToken };
       this.clients.set(clientId, client);
 
       console.log(`[WS] Client connected: ${clientId}`);
+
+      this.send(clientId, 'welcome' as ServerMessageType, { reconnectToken: reconnectToken });
 
       ws.on('pong', (): void => {
         client.isAlive = true;
@@ -145,6 +167,9 @@ export class GameWebSocketServer {
         break;
       case 'revive-player':
         this.handleRevivePlayer(clientId, msg.payload);
+        break;
+      case 'reconnect':
+        this.handleReconnect(clientId, msg.payload as ReconnectPayload);
         break;
       case 'ping':
         this.send(clientId, 'pong' as ServerMessageType, {});
@@ -408,6 +433,91 @@ export class GameWebSocketServer {
     });
   }
 
+  private handleReconnect(clientId: string, payload: ReconnectPayload): void {
+    const session: DisconnectedSession | undefined = this.disconnectedSessions.get(payload.reconnectToken);
+
+    if (!session) {
+      const result: ReconnectResultPayload = {
+        success: false,
+        room: null,
+        playerId: clientId,
+        reason: 'No session found for this token — it may have expired',
+      };
+      this.send(clientId, 'reconnect-result' as ServerMessageType, result);
+      return;
+    }
+
+    const now: number = Date.now();
+    if (now - session.disconnectedAt > RECONNECT_WINDOW_MS) {
+      this.disconnectedSessions.delete(payload.reconnectToken);
+      const result: ReconnectResultPayload = {
+        success: false,
+        room: null,
+        playerId: clientId,
+        reason: 'Reconnect window expired',
+      };
+      this.send(clientId, 'reconnect-result' as ServerMessageType, result);
+      return;
+    }
+
+    this.disconnectedSessions.delete(payload.reconnectToken);
+
+    const room: Room | undefined = this.roomManager.getRoom(session.roomId);
+    if (!room) {
+      const result: ReconnectResultPayload = {
+        success: false,
+        room: null,
+        playerId: clientId,
+        reason: 'Room no longer exists',
+      };
+      this.send(clientId, 'reconnect-result' as ServerMessageType, result);
+      return;
+    }
+
+    const rejoined: Room | null = this.roomManager.joinRoom(
+      session.roomId,
+      clientId,
+      payload.playerName,
+      payload.classId as import('../../shared/character.js').CharacterClass,
+    );
+
+    if (!rejoined) {
+      const result: ReconnectResultPayload = {
+        success: false,
+        room: null,
+        playerId: clientId,
+        reason: 'Could not rejoin room (room may be full)',
+      };
+      this.send(clientId, 'reconnect-result' as ServerMessageType, result);
+      return;
+    }
+
+    const newToken: string = uuidv4();
+    const client: ConnectedClient | undefined = this.clients.get(clientId);
+    if (client) {
+      client.reconnectToken = newToken;
+    }
+
+    console.log(`[WS] Client ${clientId} reconnected to room "${room.name}" (${room.id})`);
+
+    const result: ReconnectResultPayload = {
+      success: true,
+      room: rejoined.toInfo(),
+      playerId: clientId,
+    };
+    this.send(clientId, 'reconnect-result' as ServerMessageType, result);
+    this.broadcastRoomUpdate(rejoined, clientId);
+    this.broadcastRoomListToLobby();
+
+    if (rejoined.status === ('in-game' as string)) {
+      const gamePayload: GameStartedPayload = {
+        roomId: rejoined.id,
+        players: [],
+      };
+      this.send(clientId, 'game-started' as ServerMessageType, gamePayload);
+    }
+  }
+
   private handleGameSync(clientId: string, payload: unknown): void {
     const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
     if (!room) return;
@@ -430,7 +540,23 @@ export class GameWebSocketServer {
   private handleDisconnect(clientId: string): void {
     console.log(`[WS] Client disconnected: ${clientId}`);
 
+    const client: ConnectedClient | undefined = this.clients.get(clientId);
     const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
+
+    if (room && client) {
+      const player: RoomPlayer | undefined = room.getPlayer(clientId);
+      if (player) {
+        const session: DisconnectedSession = {
+          clientId,
+          roomId: room.id,
+          playerName: player.name,
+          classId: player.classId,
+          disconnectedAt: Date.now(),
+        };
+        this.disconnectedSessions.set(client.reconnectToken, session);
+      }
+    }
+
     const wasInGame: boolean = room !== undefined && room.status === ('in-game' as string);
 
     if (wasInGame && room) {
@@ -512,10 +638,31 @@ export class GameWebSocketServer {
   }
 
   shutdown(): void {
-    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
-    if (this.cleanupTimer) clearInterval(this.cleanupTimer);
-    this.wss.close();
-    this.httpServer.close();
-    console.log('[WS] Server shut down');
+    if (this.isShuttingDown) return;
+    this.isShuttingDown = true;
+
+    console.log(`[WS] Graceful shutdown started — ${GRACEFUL_SHUTDOWN_MS}ms grace period`);
+
+    const payload: ServerShuttingDownPayload = {
+      reason: 'Server is restarting for an update',
+      gracePeriodMs: GRACEFUL_SHUTDOWN_MS,
+    };
+
+    for (const [clientId] of this.clients) {
+      this.send(clientId, 'server-shutting-down' as ServerMessageType, payload);
+    }
+
+    setTimeout((): void => {
+      if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+      if (this.cleanupTimer) clearInterval(this.cleanupTimer);
+
+      for (const client of this.clients.values()) {
+        client.ws.close(1012, 'Server restarting');
+      }
+
+      this.wss.close();
+      this.httpServer.close();
+      console.log('[WS] Server shut down');
+    }, GRACEFUL_SHUTDOWN_MS);
   }
 }

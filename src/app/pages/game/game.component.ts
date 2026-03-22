@@ -2,12 +2,12 @@ import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inj
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType } from '@shared/index';
-import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload } from '@shared/multiplayer';
+import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload } from '@shared/multiplayer';
 import { ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { AutoPotionChange } from '../../components/shop/shop.component';
 import { GameStateService } from '../../services/game-state.service';
-import { WebSocketService } from '../../services/websocket.service';
+import { WebSocketService, ConnectionStatus } from '../../services/websocket.service';
 import { GameCanvasComponent } from '../../components/game-canvas/game-canvas.component';
 import { HudComponent } from '../../components/hud/hud.component';
 import { SettingsComponent } from '../../components/settings/settings.component';
@@ -55,6 +55,7 @@ export class GameComponent implements OnInit, OnDestroy {
   readonly inventoryOpen: WritableSignal<boolean> = signal<boolean>(false);
   readonly currentPlayerDisplay: WritableSignal<CharacterState> = signal<CharacterState>(null!);
   readonly availableSkills: Signal<SkillDefinition[]> = this.gameState.availableSkills;
+  readonly shutdownWarning: WritableSignal<string> = signal<string>('');
 
   constructor() {
     effect((): void => {
@@ -105,6 +106,30 @@ export class GameComponent implements OnInit, OnDestroy {
     this.syncPlayerDisplay();
 
     if (this.isMultiplayer) {
+      const player: CharacterState | null = this.gameState.player();
+      if (player) {
+        this.ws.setSessionInfo({
+          roomId: this.roomId,
+          playerName: player.name,
+          classId: player.classId,
+        });
+      }
+
+      this.ws.serverShutdown$
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe((payload: ServerShuttingDownPayload): void => {
+          const seconds: number = Math.ceil(payload.gracePeriodMs / 1000);
+          this.shutdownWarning.set(`Server restarting in ${seconds}s — reconnecting automatically...`);
+        });
+
+      this.ws.status$
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe((status: ConnectionStatus): void => {
+          if (status === 'connected' && this.shutdownWarning()) {
+            this.shutdownWarning.set('');
+          }
+        });
+
       this.setupMultiplayer();
     }
   }

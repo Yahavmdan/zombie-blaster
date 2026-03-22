@@ -14,13 +14,16 @@ process.on('unhandledRejection', (reason: unknown): void => {
 
 const server: GameWebSocketServer = new GameWebSocketServer(PORT);
 
+const FORCE_EXIT_MS: number = 15_000;
+
 process.on('SIGINT', (): void => {
-  console.log('\n[Server] Shutting down...');
+  console.log('\n[Server] Graceful shutdown requested (SIGINT)...');
   server.shutdown();
-  process.exit(0);
+  setTimeout((): void => process.exit(0), FORCE_EXIT_MS);
 });
 
 process.on('SIGTERM', (): void => {
+  console.log('[Server] Graceful shutdown requested (SIGTERM)...');
   server.shutdown();
-  process.exit(0);
+  setTimeout((): void => process.exit(0), FORCE_EXIT_MS);
 });
