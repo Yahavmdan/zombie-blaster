@@ -6,7 +6,7 @@
   <div class="game-wrapper">
     <app-game-canvas
       [player]="p"
-      [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen() || shopOpen() || inventoryOpen()"
+      [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen() || shopOpen() || inventoryOpen() || saveDialogOpen() || devDialogOpen()"
       (playerUpdated)="onPlayerUpdate($event)"
       (xpGained)="onXpGained($event)"
       (scoreUpdated)="onScoreUpdate($event)"
@@ -215,6 +215,102 @@
         [player]="currentPlayerDisplay()"
         (closed)="onInventoryClosed()"
       />
+    }
+
+    <button
+      class="save-btn"
+      data-testid="game-save-button-open"
+      (click)="onSaveDialogRequested()"
+    >
+      SAVE
+    </button>
+
+    @if (saveDialogOpen()) {
+      <div class="save-backdrop" (click)="onSaveDialogClosed()"></div>
+      <div class="save-dialog">
+        <div class="save-dialog__header">
+          <span class="save-dialog__title">Save Game</span>
+          <span class="save-dialog__slot-counter">{{ saveSlotCount() }}/{{ maxSaveSlots }}</span>
+          <button
+            class="save-dialog__close"
+            data-testid="game-save-button-close"
+            (click)="onSaveDialogClosed()"
+          >&times;</button>
+        </div>
+        <div class="save-dialog__body">
+          <div class="save-dialog__row">
+            <button
+              class="save-dialog__quick-save"
+              data-testid="game-save-button-quick"
+              (click)="onManualAutoSave()"
+            >
+              Quick Save
+            </button>
+          </div>
+
+          @if (saveSlots().length > 0) {
+            <div class="save-dialog__divider"></div>
+            <p class="save-dialog__label">Saved Slots</p>
+            <div class="save-dialog__slots">
+              @for (slot of saveSlots(); track slot.key) {
+                <div class="save-dialog__slot">
+                  <div class="save-dialog__slot-info">
+                    <span class="save-dialog__slot-name">{{ slot.data.saveName }}</span>
+                    <span class="save-dialog__slot-meta">
+                      Lv.{{ slot.data.level }} &middot; Floor {{ slot.data.floor }}
+                    </span>
+                  </div>
+                  <div class="save-dialog__slot-actions">
+                    <button
+                      class="save-dialog__slot-btn save-dialog__slot-btn--overwrite"
+                      data-testid="game-save-button-overwrite"
+                      (click)="onOverwriteSlot(slot)"
+                    >
+                      Save
+                    </button>
+                    <button
+                      class="save-dialog__slot-btn save-dialog__slot-btn--delete"
+                      [class.save-dialog__slot-btn--confirm]="confirmDeleteSaveSlot() === slot.key"
+                      data-testid="game-save-button-delete-slot"
+                      (click)="onDeleteSaveSlot(slot)"
+                    >
+                      {{ confirmDeleteSaveSlot() === slot.key ? 'Sure?' : 'Del' }}
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
+          <div class="save-dialog__divider"></div>
+          @if (saveSlotCount() < maxSaveSlots) {
+            <p class="save-dialog__label">New save</p>
+            <div class="save-dialog__name-row">
+              <input
+                class="save-dialog__input"
+                type="text"
+                placeholder="Enter save name..."
+                data-testid="game-save-input-name"
+                [formControl]="saveNameControl"
+                (keydown.enter)="onSaveByName()"
+              />
+              <button
+                class="save-dialog__save-btn"
+                data-testid="game-save-button-named"
+                [disabled]="!saveNameControl.valid"
+                (click)="onSaveByName()"
+              >
+                Save
+              </button>
+            </div>
+          } @else {
+            <p class="save-dialog__slots-full">All {{ maxSaveSlots }} slots used — overwrite or delete a save</p>
+          }
+          @if (saveConfirmMessage(); as msg) {
+            <p class="save-dialog__confirm">{{ msg }}</p>
+          }
+        </div>
+      </div>
     }
 
     @if (isGameOver()) {

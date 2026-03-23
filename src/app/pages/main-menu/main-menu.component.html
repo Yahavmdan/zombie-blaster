@@ -7,13 +7,31 @@
     </div>
 
     <div class="menu-buttons">
+      @if (hasAutoSave()) {
+        <button
+          class="menu-btn menu-btn--continue"
+          data-testid="menu-main-button-continue"
+          (click)="onContinue()"
+        >
+          CONTINUE
+        </button>
+      }
       <button
         class="menu-btn menu-btn--primary"
         data-testid="menu-main-button-singleplayer"
         (click)="onSinglePlayer()"
       >
-        SINGLE PLAYER
+        NEW GAME
       </button>
+      @if (savedGames().length > 0 || hasAutoSave()) {
+        <button
+          class="menu-btn menu-btn--load"
+          data-testid="menu-main-button-load"
+          (click)="onLoadGame()"
+        >
+          LOAD GAME
+        </button>
+      }
       <button
         class="menu-btn menu-btn--multiplayer"
         data-testid="menu-main-button-multiplayer"
@@ -29,6 +47,83 @@
         HOW TO PLAY
       </button>
     </div>
+
+    @if (loadPanelOpen()) {
+      <div class="load-backdrop" (click)="onCloseLoadPanel()"></div>
+      <div class="load-panel">
+        <div class="load-panel__header">
+          <span class="load-panel__title">Load Game</span>
+          <button
+            class="load-panel__close"
+            data-testid="menu-load-button-close"
+            (click)="onCloseLoadPanel()"
+          >&times;</button>
+        </div>
+        <div class="load-panel__body">
+          @if (hasAutoSave()) {
+            <div class="load-slot load-slot--auto">
+              <div class="load-slot__info" (click)="onContinue()">
+                <span class="load-slot__name">Auto Save</span>
+                <span class="load-slot__meta">Quick save slot</span>
+              </div>
+              <div class="load-slot__actions">
+                <button
+                  class="load-slot__btn load-slot__btn--load"
+                  data-testid="menu-load-button-auto"
+                  (click)="onContinue()"
+                >Load</button>
+                <button
+                  class="load-slot__btn load-slot__btn--online"
+                  data-testid="menu-load-button-auto-online"
+                  (click)="onContinueMultiplayer()"
+                >Online</button>
+                <button
+                  class="load-slot__btn load-slot__btn--delete"
+                  data-testid="menu-load-button-delete-auto"
+                  (click)="onDeleteAutoSave()"
+                >Del</button>
+              </div>
+            </div>
+          }
+          @for (slot of savedGames(); track slot.key) {
+            <div class="load-slot">
+              <div class="load-slot__info" (click)="onLoadSlot(slot)">
+                <span class="load-slot__name">{{ slot.data.saveName }}</span>
+                <span class="load-slot__meta">
+                  {{ getClassIcon(slot.data) }} {{ getClassName(slot.data) }}
+                  &middot; {{ slot.data.playerName }}
+                  &middot; Lv.{{ slot.data.level }}
+                  &middot; Floor {{ slot.data.floor }}
+                  &middot; {{ slot.data.inventory.gold }}g
+                </span>
+                <span class="load-slot__date">{{ formatDate(slot.data.timestamp) }}</span>
+              </div>
+              <div class="load-slot__actions">
+                <button
+                  class="load-slot__btn load-slot__btn--load"
+                  data-testid="menu-load-button-slot"
+                  (click)="onLoadSlot(slot)"
+                >Load</button>
+                <button
+                  class="load-slot__btn load-slot__btn--online"
+                  data-testid="menu-load-button-slot-online"
+                  (click)="onLoadSlotMultiplayer(slot)"
+                >Online</button>
+                <button
+                  class="load-slot__btn load-slot__btn--delete"
+                  [class.load-slot__btn--confirm]="confirmDeleteSlot() === slot.key"
+                  data-testid="menu-load-button-delete-slot"
+                  (click)="onDeleteSlot(slot)"
+                >{{ confirmDeleteSlot() === slot.key ? 'Sure?' : 'Del' }}</button>
+              </div>
+            </div>
+          }
+          @if (!hasAutoSave() && savedGames().length === 0) {
+            <p class="load-panel__empty">No saved games found.</p>
+          }
+        </div>
+      </div>
+    }
 
     @if (showHelp) {
       <div class="help-panel">

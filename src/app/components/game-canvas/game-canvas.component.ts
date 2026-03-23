@@ -17,6 +17,7 @@ import { CharacterClass, CharacterState, SKILLS, SkillDefinition, SkillType, Vfx
 import { DropType, QUICK_SLOT_ACTION_SET, SpecialDropType } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
+import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
 import { InputKeys } from '@shared/messages';
 import { KeyBindingsService } from '../../services/key-bindings.service';
 import { GameStateService } from '../../services/game-state.service';
@@ -77,6 +78,13 @@ export class GameCanvasComponent implements OnDestroy {
     afterNextRender((): void => {
       this.initEngine();
       this.bindInput();
+    });
+
+    effect((): void => {
+      const disabled: boolean = this.inputDisabled();
+      if (disabled) {
+        this.resetAllKeys();
+      }
     });
 
     effect((): void => {
@@ -160,8 +168,21 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> } | null {
+  promoteToHost(): void {
+    this.pendingMultiplayerClient = false;
+    this.pendingMultiplayerHost = true;
+    if (this.engine) {
+      this.engine.isMultiplayerClient = false;
+      this.engine.isMultiplayerHost = true;
+    }
+  }
+
+  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     return this.engine?.getStateSnapshot() ?? null;
+  }
+
+  applyRemoteProjectiles(spitterProjectiles: SpitterProjectile[], dragonProjectiles: DragonProjectile[]): void {
+    this.engine?.applyRemoteProjectiles(spitterProjectiles, dragonProjectiles);
   }
 
   applyRemoteZombies(zombies: import('@shared/game-entities').ZombieState[]): void {
@@ -257,6 +278,14 @@ export class GameCanvasComponent implements OnDestroy {
       this.playerDownExpired.emit();
   }
 
+  private resetAllKeys(): void {
+    const actions: GameAction[] = Object.keys(this.keys) as GameAction[];
+    for (const action of actions) {
+      this.keys[action] = false;
+    }
+    this.engine?.setKeys({ ...this.keys });
+  }
+
   private bindInput(): void {
     window.addEventListener('keydown', this.boundKeyDown);
     window.addEventListener('keyup', this.boundKeyUp);
@@ -265,6 +294,8 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onKeyDown(e: KeyboardEvent): void {
+    if (this.inputDisabled()) return;
+
     if (this.engine?.hasPendingSpecialDrop()) {
       const key: string = e.key.toLowerCase();
       if (key === 'y') {
@@ -299,8 +330,6 @@ export class GameCanvasComponent implements OnDestroy {
       return;
     }
 
-    if (this.inputDisabled()) return;
-
     if (QUICK_SLOT_ACTION_SET.has(action)) {
       this.quickSlotKeyPressed.emit(action);
       e.preventDefault();
@@ -317,8 +346,6 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onKeyUp(e: KeyboardEvent): void {
-    if (this.inputDisabled()) return;
-
     const action: GameAction | null = this.keyBindingsService.getActionForKey(e.key);
     if (!action) return;
 
@@ -333,7 +360,6 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onMouseUp(): void {
-    if (this.inputDisabled()) return;
     this.keys.attack = false;
     this.engine?.setKeys({ ...this.keys });
   }

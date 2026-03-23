@@ -25,6 +25,7 @@ import type {
   ServerShuttingDownPayload,
   ReconnectPayload,
   ReconnectResultPayload,
+  HostMigratedPayload,
 } from '../../shared/multiplayer.js';
 import type { CharacterState } from '../../shared/character.js';
 
@@ -244,6 +245,7 @@ export class GameWebSocketServer {
   private handleLeaveRoom(clientId: string): void {
     const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
     const wasInGame: boolean = room !== undefined && room.status === ('in-game' as string);
+    const wasHost: boolean = room !== undefined && room.hostId === clientId;
 
     if (wasInGame && room) {
       this.broadcastToRoom(room, 'player-left' as ServerMessageType, { playerId: clientId }, clientId);
@@ -258,6 +260,17 @@ export class GameWebSocketServer {
     this.send(clientId, 'room-left' as ServerMessageType, {});
 
     if (!result.wasEmpty) {
+      if (wasHost && wasInGame) {
+        const newHostId: string | null = result.room.hostId;
+        if (newHostId) {
+          const migrationPayload: HostMigratedPayload = {
+            newHostId,
+            previousHostId: clientId,
+          };
+          this.broadcastToRoom(result.room, 'host-migrated' as ServerMessageType, migrationPayload);
+          console.log(`[Room] Host migrated from ${clientId} to ${newHostId} in room "${result.room.name}"`);
+        }
+      }
       this.broadcastRoomUpdate(result.room);
     }
     this.broadcastRoomListToLobby();
@@ -559,6 +572,7 @@ export class GameWebSocketServer {
     }
 
     const wasInGame: boolean = room !== undefined && room.status === ('in-game' as string);
+    const wasHost: boolean = room !== undefined && room.hostId === clientId;
 
     if (wasInGame && room) {
       this.broadcastToRoom(room, 'player-left' as ServerMessageType, { playerId: clientId }, clientId);
@@ -566,6 +580,17 @@ export class GameWebSocketServer {
 
     const result = this.roomManager.leaveRoom(clientId);
     if (result && !result.wasEmpty) {
+      if (wasHost && wasInGame) {
+        const newHostId: string | null = result.room.hostId;
+        if (newHostId) {
+          const migrationPayload: HostMigratedPayload = {
+            newHostId,
+            previousHostId: clientId,
+          };
+          this.broadcastToRoom(result.room, 'host-migrated' as ServerMessageType, migrationPayload);
+          console.log(`[Room] Host migrated from ${clientId} to ${newHostId} in room "${result.room.name}"`);
+        }
+      }
       this.broadcastRoomUpdate(result.room);
     }
 

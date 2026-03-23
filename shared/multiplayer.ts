@@ -53,6 +53,7 @@ export enum ServerMessageType {
   ServerShuttingDown = 'server-shutting-down',
   ReconnectResult = 'reconnect-result',
   Welcome = 'welcome',
+  HostMigrated = 'host-migrated',
 }
 
 export enum ClientMessageType {
@@ -240,6 +241,11 @@ export interface ReconnectResultPayload {
   room: RoomInfo | null;
   playerId: string;
   reason?: string;
+}
+
+export interface HostMigratedPayload {
+  newHostId: string;
+  previousHostId: string;
 }
 
 export enum VfxEventType {

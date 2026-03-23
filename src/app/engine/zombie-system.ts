@@ -205,10 +205,12 @@ export class ZombieSystem {
 
         let bestZombieSurface: number | null = null;
         const climbRatio: number = GAME_CONSTANTS.ZOMBIE_CLIMB_WIDTH_RATIO;
+        const maxStack: number = GAME_CONSTANTS.ZOMBIE_MAX_STACK_HEIGHT;
         for (const other of this.e.zombies) {
           if (other === z || other.isDead || other.spawnTimer > 0) continue;
           if (other.type === ZombieType.DragonBoss) continue;
           if (!other.isGrounded) continue;
+          if (this.getZombieStackDepth(other) >= maxStack) continue;
           const oEffX: number = other.x + other.instanceWidth * (1 - climbRatio) / 2;
           const oEffW: number = other.instanceWidth * climbRatio;
           const surfaceY: number = other.y;
@@ -554,6 +556,35 @@ export class ZombieSystem {
       Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MAX - GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MIN));
   }
 
+  private getZombieStackDepth(z: ZombieState): number {
+    const footY: number = z.y + z.instanceHeight;
+    const tolerance: number = GAME_CONSTANTS.ZOMBIE_CLIMB_SNAP_TOLERANCE + 2;
+    for (const plat of this.e.platforms) {
+      if (
+        z.x + z.instanceWidth > plat.x &&
+        z.x < plat.x + plat.width &&
+        Math.abs(footY - plat.y) <= tolerance
+      ) {
+        return 0;
+      }
+    }
+    const climbRatio: number = GAME_CONSTANTS.ZOMBIE_CLIMB_WIDTH_RATIO;
+    for (const other of this.e.zombies) {
+      if (other === z || other.isDead || other.spawnTimer > 0) continue;
+      if (!other.isGrounded) continue;
+      const oEffX: number = other.x + other.instanceWidth * (1 - climbRatio) / 2;
+      const oEffW: number = other.instanceWidth * climbRatio;
+      if (
+        z.x + z.instanceWidth > oEffX &&
+        z.x < oEffX + oEffW &&
+        Math.abs(footY - other.y) <= tolerance
+      ) {
+        return 1 + this.getZombieStackDepth(other);
+      }
+    }
+    return 0;
+  }
+
   private resolveZombieCollisions(): void {
     const alive: ZombieState[] = this.e.zombies.filter(
       (z: ZombieState) => !z.isDead && z.spawnTimer <= 0 && z.type !== ZombieType.DragonBoss,
@@ -573,6 +604,19 @@ export class ZombieSystem {
           overlapCounts[i]++;
           overlapCounts[j]++;
         }
+      }
+    }
+
+    const pileThreshold: number = GAME_CONSTANTS.ZOMBIE_PILE_DENSITY_THRESHOLD;
+    const maxStack: number = GAME_CONSTANTS.ZOMBIE_MAX_STACK_HEIGHT;
+    for (let i: number = 0; i < count; i++) {
+      if (overlapCounts[i] < pileThreshold) continue;
+      const z: ZombieState = alive[i];
+      if (!z.isGrounded || z.knockbackFrames > 0 || z.attackAnimTimer > 0) continue;
+      if (this.getZombieStackDepth(z) >= maxStack) continue;
+      if (Math.random() < GAME_CONSTANTS.ZOMBIE_PILE_JUMP_CHANCE) {
+        z.velocityY = GAME_CONSTANTS.ZOMBIE_PILE_JUMP_FORCE;
+        z.isGrounded = false;
       }
     }
 

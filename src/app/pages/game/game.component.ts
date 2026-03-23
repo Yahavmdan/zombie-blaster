@@ -1,14 +1,16 @@
 import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inject, OnInit, OnDestroy, viewChild, effect, NgZone, DestroyRef, isDevMode, computed } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, VfxEvent } from '@shared/index';
+import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, VfxEvent, SaveGameData, SaveGameSlot, MAX_SAVE_SLOTS } from '@shared/index';
 import { SpecialDropType, SpecialDropDefinition } from '@shared/game-entities';
-import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload } from '@shared/multiplayer';
+import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload, HostMigratedPayload } from '@shared/multiplayer';
 import { ActiveSpecialEffect, ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
+import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
 import { AutoPotionChange } from '../../components/shop/shop.component';
 import { GameStateService } from '../../services/game-state.service';
+import { SaveGameService } from '../../services/save-game.service';
 import { WebSocketService, ConnectionStatus } from '../../services/websocket.service';
 import { GameCanvasComponent } from '../../components/game-canvas/game-canvas.component';
 import { HudComponent } from '../../components/hud/hud.component';
@@ -19,11 +21,12 @@ import { ShopComponent } from '../../components/shop/shop.component';
 import { InventoryComponent } from '../../components/inventory/inventory.component';
 import { QuickSlotsComponent } from '../../components/quick-slots/quick-slots.component';
 import { QuickSlotService } from '../../services/quick-slot.service';
+import { KeyBindingsService } from '../../services/key-bindings.service';
 
 @Component({
   selector: 'app-game',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule],
+  imports: [GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule, ReactiveFormsModule],
   host: {
     class: 'game-page',
   },
@@ -38,9 +41,12 @@ export class GameComponent implements OnInit, OnDestroy {
   private readonly zone: NgZone = inject(NgZone);
   private readonly destroyRef: DestroyRef = inject(DestroyRef);
   private readonly quickSlotService: QuickSlotService = inject(QuickSlotService);
+  private readonly saveGameService: SaveGameService = inject(SaveGameService);
+  private readonly keyBindingsService: KeyBindingsService = inject(KeyBindingsService);
   private readonly gameCanvas: Signal<GameCanvasComponent | undefined> = viewChild(GameCanvasComponent);
 
   private syncTimer: ReturnType<typeof setInterval> | null = null;
+  private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   protected isMultiplayer: boolean = false;
   private isHost: boolean = false;
   private roomId: string = '';
@@ -58,6 +64,17 @@ export class GameComponent implements OnInit, OnDestroy {
   readonly currentPlayerDisplay: WritableSignal<CharacterState> = signal<CharacterState>(null!);
   readonly availableSkills: Signal<SkillDefinition[]> = this.gameState.availableSkills;
   readonly shutdownWarning: WritableSignal<string> = signal<string>('');
+  readonly saveDialogOpen: WritableSignal<boolean> = signal<boolean>(false);
+  readonly saveNameControl: FormControl<string> = new FormControl<string>('', {
+    nonNullable: true,
+    validators: [Validators.required, Validators.minLength(1), Validators.maxLength(32)],
+  });
+  readonly saveConfirmMessage: WritableSignal<string> = signal<string>('');
+  readonly saveSlots: WritableSignal<SaveGameSlot[]> = signal<SaveGameSlot[]>([]);
+  readonly saveSlotCount: WritableSignal<number> = signal<number>(0);
+  readonly maxSaveSlots: number = MAX_SAVE_SLOTS;
+  readonly confirmDeleteSaveSlot: WritableSignal<string | null> = signal<string | null>(null);
+  private static readonly AUTO_SAVE_INTERVAL_MS: number = 30_000;
 
   constructor() {
     effect((): void => {
@@ -71,6 +88,7 @@ export class GameComponent implements OnInit, OnDestroy {
       if (canvas) {
         canvas.useHpPotionHandler = (): boolean => this.gameState.useHpPotion();
         canvas.useMpPotionHandler = (): boolean => this.gameState.useMpPotion();
+        this.applyLoadedFloorToEngine();
       }
     });
     effect((): void => {
@@ -105,6 +123,7 @@ export class GameComponent implements OnInit, OnDestroy {
     this.isMultiplayer = mode === GameMode.Multiplayer && this.roomId !== '';
     this.isHost = this.route.snapshot.queryParamMap.get('isHost') === '1';
 
+    this.applyLoadedSaveParams();
     this.syncPlayerDisplay();
 
     if (this.isMultiplayer) {
@@ -134,12 +153,18 @@ export class GameComponent implements OnInit, OnDestroy {
 
       this.setupMultiplayer();
     }
+
+    this.startAutoSave();
   }
 
   ngOnDestroy(): void {
     if (this.syncTimer) {
       clearInterval(this.syncTimer);
       this.syncTimer = null;
+    }
+    if (this.autoSaveTimer) {
+      clearInterval(this.autoSaveTimer);
+      this.autoSaveTimer = null;
     }
     if (this.isMultiplayer && this.roomId) {
       this.ws.send(ClientMessageType.LeaveRoom, { roomId: this.roomId });
@@ -150,8 +175,8 @@ export class GameComponent implements OnInit, OnDestroy {
     this.ws.onMessage(ServerMessageType.GameSync)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
-        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[] } =
-          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[] };
+        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] } =
+          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] };
 
         this.remotePlayerStates.set(payload.player.id, payload.player);
 
@@ -160,6 +185,7 @@ export class GameComponent implements OnInit, OnDestroy {
           this.gameCanvas()?.applyRemoteCorpses(payload.corpses ?? []);
           this.gameCanvas()?.syncRemoteFloor(payload.floor);
           this.gameCanvas()?.applyRemoteSpecialEffects(payload.activeSpecialEffects ?? []);
+          this.gameCanvas()?.applyRemoteProjectiles(payload.spitterProjectiles ?? [], payload.dragonProjectiles ?? []);
           this.floor.set(payload.floor);
 
           if (payload.attacks && payload.attacks.length > 0) {
@@ -248,6 +274,16 @@ export class GameComponent implements OnInit, OnDestroy {
         this.checkAllPlayersDead();
       });
 
+    this.ws.onMessage(ServerMessageType.HostMigrated)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((msg: ServerMessage): void => {
+        const payload: HostMigratedPayload = msg.payload as HostMigratedPayload;
+        const myId: string = this.gameState.player()?.id ?? '';
+        if (payload.newHostId === myId) {
+          this.promoteToHost();
+        }
+      });
+
     this.zone.runOutsideAngular((): void => {
       const SYNC_INTERVAL_MS: number = 50;
       this.syncTimer = setInterval((): void => {
@@ -255,7 +291,7 @@ export class GameComponent implements OnInit, OnDestroy {
         const canvas: GameCanvasComponent | undefined = this.gameCanvas();
         if (!canvas) return;
 
-        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> } | null =
+        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null =
           canvas.getStateSnapshot();
         if (!snapshot) return;
 
@@ -335,6 +371,7 @@ export class GameComponent implements OnInit, OnDestroy {
   onGameOver(): void {
     this.isGameOver.set(true);
     this.gameState.gameOver.set(true);
+    this.performAutoSave();
   }
 
   onStatPanelRequested(): void {
@@ -669,11 +706,166 @@ export class GameComponent implements OnInit, OnDestroy {
     void this.router.navigate(['/']);
   }
 
+  private applyLoadedFloorToEngine(): void {
+    const loadFloorStr: string | null = this.route.snapshot.queryParamMap.get('loadFloor');
+    if (!loadFloorStr) return;
+    const loadFloor: number = parseInt(loadFloorStr, 10);
+    if (isNaN(loadFloor) || loadFloor <= 1) return;
+    const canvas: GameCanvasComponent | undefined = this.gameCanvas();
+    if (!canvas) return;
+    canvas.setFloor(loadFloor);
+    const updated: CharacterState | null = this.gameState.player();
+    if (updated) {
+      canvas.syncProgression(updated);
+    }
+  }
+
+  private applyLoadedSaveParams(): void {
+    const loadFloorStr: string | null = this.route.snapshot.queryParamMap.get('loadFloor');
+    const loadScoreStr: string | null = this.route.snapshot.queryParamMap.get('loadScore');
+    if (loadFloorStr) {
+      const loadFloor: number = parseInt(loadFloorStr, 10);
+      if (!isNaN(loadFloor) && loadFloor >= 1) {
+        this.floor.set(loadFloor);
+        this.gameState.floor.set(loadFloor);
+      }
+    }
+    if (loadScoreStr) {
+      const loadScore: number = parseInt(loadScoreStr, 10);
+      if (!isNaN(loadScore)) {
+        this.score.set(loadScore);
+        this.gameState.score.set(loadScore);
+      }
+    }
+  }
+
+  private startAutoSave(): void {
+    this.zone.runOutsideAngular((): void => {
+      this.autoSaveTimer = setInterval((): void => {
+        this.performAutoSave();
+      }, GameComponent.AUTO_SAVE_INTERVAL_MS);
+    });
+  }
+
+  private performAutoSave(): void {
+    const data: SaveGameData | null = this.buildSaveData('__auto__');
+    if (!data) return;
+    this.saveGameService.autoSave(data);
+  }
+
+  private buildSaveData(saveName: string): SaveGameData | null {
+    const p: CharacterState | null = this.gameState.player();
+    if (!p) return null;
+    return {
+      saveName,
+      timestamp: Date.now(),
+      floor: this.floor(),
+      score: this.score(),
+      classId: p.classId,
+      playerName: p.name,
+      level: p.level,
+      xp: p.xp,
+      xpToNext: p.xpToNext,
+      allocatedStats: { ...p.allocatedStats },
+      unallocatedStatPoints: p.unallocatedStatPoints,
+      unallocatedSkillPoints: p.unallocatedSkillPoints,
+      skillLevels: { ...p.skillLevels },
+      inventory: {
+        potions: { ...p.inventory.potions },
+        gold: p.inventory.gold,
+        autoPotionHpId: p.inventory.autoPotionHpId,
+        autoPotionMpId: p.inventory.autoPotionMpId,
+      },
+      quickSlots: { ...this.quickSlotService.slots() },
+      keyBindings: { ...this.keyBindingsService.bindings() },
+    };
+  }
+
+  onSaveDialogRequested(): void {
+    if (this.saveDialogOpen()) {
+      this.saveDialogOpen.set(false);
+      return;
+    }
+    this.closeAllDialogs();
+    this.saveConfirmMessage.set('');
+    this.confirmDeleteSaveSlot.set(null);
+    this.refreshSaveSlots();
+    this.saveDialogOpen.set(true);
+  }
+
+  onSaveDialogClosed(): void {
+    this.saveDialogOpen.set(false);
+    this.saveConfirmMessage.set('');
+    this.confirmDeleteSaveSlot.set(null);
+  }
+
+  onSaveByName(): void {
+    if (!this.saveNameControl.valid) return;
+    const name: string = this.saveNameControl.value.trim();
+    if (!name) return;
+    const data: SaveGameData | null = this.buildSaveData(name);
+    if (!data) return;
+    const saved: boolean = this.saveGameService.save(data);
+    if (!saved) {
+      this.saveConfirmMessage.set(`All ${MAX_SAVE_SLOTS} slots full — delete or overwrite a save first`);
+      return;
+    }
+    this.saveConfirmMessage.set(`Saved as "${name}"`);
+    this.saveNameControl.reset();
+    this.refreshSaveSlots();
+  }
+
+  onOverwriteSlot(slot: SaveGameSlot): void {
+    const data: SaveGameData | null = this.buildSaveData(slot.data.saveName);
+    if (!data) return;
+    this.saveGameService.save(data);
+    this.saveConfirmMessage.set(`Overwrote "${slot.data.saveName}"`);
+    this.refreshSaveSlots();
+  }
+
+  onDeleteSaveSlot(slot: SaveGameSlot): void {
+    const current: string | null = this.confirmDeleteSaveSlot();
+    if (current === slot.key) {
+      this.saveGameService.deleteSlot(slot.data.saveName);
+      this.confirmDeleteSaveSlot.set(null);
+      this.saveConfirmMessage.set(`Deleted "${slot.data.saveName}"`);
+      this.refreshSaveSlots();
+    } else {
+      this.confirmDeleteSaveSlot.set(slot.key);
+    }
+  }
+
+  onManualAutoSave(): void {
+    this.performAutoSave();
+    this.saveConfirmMessage.set('Auto-save updated');
+  }
+
+  private refreshSaveSlots(): void {
+    this.saveSlots.set(this.saveGameService.listSaves());
+    this.saveSlotCount.set(this.saveGameService.saveSlotCount());
+  }
+
   private closeAllDialogs(): void {
     this.statPanelOpen.set(false);
     this.skillPanelOpen.set(false);
     this.shopOpen.set(false);
     this.inventoryOpen.set(false);
+    this.saveDialogOpen.set(false);
+  }
+
+  private promoteToHost(): void {
+    this.isHost = true;
+    this.gameCanvas()?.promoteToHost();
+
+    this.ws.onMessage(ServerMessageType.ZombieDamage)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((msg: ServerMessage): void => {
+        const payload: RemoteZombieDamagePayload =
+          msg.payload as RemoteZombieDamagePayload;
+        this.gameCanvas()?.applyRemoteDamage(payload.events);
+      });
+
+    console.log('[Game] This client has been promoted to host');
   }
 
   private syncPlayerDisplay(): void {

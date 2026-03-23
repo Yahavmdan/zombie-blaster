@@ -2,8 +2,6 @@ import { Injectable, WritableSignal, signal } from '@angular/core';
 import { GameAction, KeyBindings } from '@shared/messages';
 import { DEFAULT_KEY_BINDINGS } from '@shared/game-constants';
 
-const STORAGE_KEY: string = 'zombie-blaster-key-bindings';
-
 const KEY_DISPLAY_MAP: Record<string, string> = {
   ' ': 'Space',
   'arrowleft': '←',
@@ -33,34 +31,21 @@ export function formatKeyName(key: string): string {
 
 @Injectable({ providedIn: 'root' })
 export class KeyBindingsService {
-  readonly bindings: WritableSignal<KeyBindings> = signal<KeyBindings>(this.loadBindings());
+  readonly bindings: WritableSignal<KeyBindings> = signal<KeyBindings>(this.copyDefaults());
 
-  private loadBindings(): KeyBindings {
-    try {
-      const stored: string | null = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed: KeyBindings = JSON.parse(stored) as KeyBindings;
-        return this.mergeWithDefaults(parsed);
-      }
-    } catch {
-      /* corrupt data — fall through to defaults */
-    }
-    return this.copyDefaults();
+  loadFromSave(saved: KeyBindings): void {
+    this.bindings.set(this.mergeWithDefaults(saved));
   }
 
   rebind(action: GameAction, key: string): void {
     const normalizedKey: string = key.toLowerCase();
     this.bindings.update((b: KeyBindings): KeyBindings => {
-      const updated: KeyBindings = { ...b, [action]: [normalizedKey] };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      return updated;
+      return { ...b, [action]: [normalizedKey] };
     });
   }
 
   resetToDefaults(): void {
-    const defaults: KeyBindings = this.copyDefaults();
-    this.bindings.set(defaults);
-    localStorage.removeItem(STORAGE_KEY);
+    this.bindings.set(this.copyDefaults());
   }
 
   assignKeyToAction(key: string, action: GameAction): void {
@@ -72,7 +57,6 @@ export class KeyBindingsService {
         updated[act] = b[act].filter((k: string): boolean => k !== normalizedKey);
       }
       updated[action] = [...updated[action], normalizedKey];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       return updated;
     });
   }
@@ -85,7 +69,6 @@ export class KeyBindingsService {
       for (const act of actions) {
         updated[act] = b[act].filter((k: string): boolean => k !== normalizedKey);
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       return updated;
     });
   }

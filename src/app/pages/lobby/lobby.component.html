@@ -11,6 +11,12 @@
       <div class="shutdown-banner" data-testid="lobby-shutdown-warning">{{ warn }}</div>
     }
 
+    @if (fromSave()) {
+      <div class="save-badge" data-testid="lobby-save-badge">
+        Playing as saved character &middot; Lv.{{ savedLevel() }}
+      </div>
+    }
+
     @if (errorMessage(); as err) {
       <div class="error-banner">{{ err }}</div>
     }

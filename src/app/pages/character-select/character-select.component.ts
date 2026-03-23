@@ -12,6 +12,7 @@ import {
   GameMode,
 } from '@shared/index';
 import { GameStateService } from '../../services/game-state.service';
+import { KeyBindingsService } from '../../services/key-bindings.service';
 
 @Component({
   selector: 'app-character-select',
@@ -27,6 +28,7 @@ export class CharacterSelectComponent implements OnInit {
   private readonly router: Router = inject(Router);
   private readonly route: ActivatedRoute = inject(ActivatedRoute);
   private readonly gameState: GameStateService = inject(GameStateService);
+  private readonly keyBindingsService: KeyBindingsService = inject(KeyBindingsService);
 
   readonly gameMode: WritableSignal<GameMode> = signal<GameMode>(GameMode.SinglePlayer);
 
@@ -100,6 +102,8 @@ export class CharacterSelectComponent implements OnInit {
   startGame(): void {
     const classId: CharacterClass | null = this.selectedClass();
     if (!classId || !this.nameControl.valid) return;
+
+    this.keyBindingsService.resetToDefaults();
 
     if (this.gameMode() === GameMode.SinglePlayer) {
       this.gameState.createPlayer(this.nameControl.value, classId);

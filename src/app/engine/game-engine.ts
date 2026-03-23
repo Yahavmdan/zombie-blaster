@@ -423,6 +423,7 @@ export class GameEngine implements IGameEngine {
       this.zombieSystem.updateSpawning();
     } else {
       this.tickClientZombieVisuals();
+      this.projectileSystem.tickClientProjectileVisuals();
       this.projectileSystem.updatePoisonEffect();
       if (this.floorTransitionTimer > 0) this.floorTransitionTimer--;
     }
@@ -668,7 +669,7 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     if (!this.player) return null;
     const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
@@ -695,6 +696,12 @@ export class GameEngine implements IGameEngine {
       ),
       vfxEvents,
       pullEvents,
+      spitterProjectiles: this.spitterProjectiles.map(
+        (p: SpitterProjectile): SpitterProjectile => ({ ...p, trail: p.trail.map((t: { x: number; y: number; life: number }) => ({ ...t })) }),
+      ),
+      dragonProjectiles: this.dragonProjectiles.map(
+        (p: DragonProjectile): DragonProjectile => ({ ...p }),
+      ),
     };
   }
 
@@ -784,6 +791,12 @@ export class GameEngine implements IGameEngine {
       this.player.velocityY = 0;
       this.player.isGrounded = true;
     }
+  }
+
+  applyRemoteProjectiles(spitterProjectiles: SpitterProjectile[], dragonProjectiles: DragonProjectile[]): void {
+    if (!this.isMultiplayerClient) return;
+    this.spitterProjectiles = spitterProjectiles;
+    this.dragonProjectiles = dragonProjectiles;
   }
 
   applyRemoteSpecialEffects(effects: ActiveSpecialEffect[]): void {

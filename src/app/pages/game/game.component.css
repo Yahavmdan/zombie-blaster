@@ -461,6 +461,292 @@
   font-weight: 600;
 }
 
+/* ── Save Button ── */
+
+.save-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 201;
+  padding: 4px 14px;
+  background: rgba(30, 30, 50, 0.85);
+  color: #44cc88;
+  border: 2px solid #2a8855;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.save-btn:hover {
+  background: rgba(40, 60, 50, 0.95);
+  border-color: #44cc88;
+  box-shadow: 0 0 12px rgba(68, 204, 136, 0.25);
+}
+
+/* ── Save Dialog ── */
+
+.save-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 299;
+  background: rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+
+.save-dialog {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 300;
+  width: 380px;
+  max-width: calc(100% - 32px);
+  background: #12121c;
+  border: 2px solid #44cc88;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 40px rgba(68, 204, 136, 0.15);
+  pointer-events: auto;
+  animation: save-dialog-in 0.15s ease-out;
+}
+
+@keyframes save-dialog-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.save-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #2a2a3a;
+}
+
+.save-dialog__title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #44cc88;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.save-dialog__close {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: color 0.15s;
+}
+
+.save-dialog__close:hover {
+  color: #fff;
+}
+
+.save-dialog__body {
+  padding: 14px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.save-dialog__row {
+  display: flex;
+  gap: 8px;
+}
+
+.save-dialog__quick-save {
+  flex: 1;
+  padding: 8px 16px;
+  background: #44cc88;
+  color: #0a0a0f;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.save-dialog__quick-save:hover {
+  background: #66ddaa;
+}
+
+.save-dialog__divider {
+  height: 1px;
+  background: #2a2a3a;
+}
+
+.save-dialog__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0;
+}
+
+.save-dialog__name-row {
+  display: flex;
+  gap: 8px;
+}
+
+.save-dialog__input {
+  flex: 1;
+  padding: 7px 10px;
+  background: rgba(30, 30, 30, 0.9);
+  color: #fff;
+  border: 2px solid #444;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.save-dialog__input:focus {
+  outline: none;
+  border-color: #44cc88;
+}
+
+.save-dialog__save-btn {
+  padding: 7px 16px;
+  background: #2a8855;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.save-dialog__save-btn:hover:not(:disabled) {
+  background: #44cc88;
+}
+
+.save-dialog__save-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.save-dialog__confirm {
+  margin: 0;
+  font-size: 12px;
+  color: #44cc88;
+  font-weight: 600;
+}
+
+.save-dialog__slot-counter {
+  font-size: 12px;
+  font-weight: 700;
+  color: #888;
+  letter-spacing: 0.5px;
+}
+
+.save-dialog__slots {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.save-dialog__slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: rgba(30, 30, 50, 0.6);
+  border: 1px solid #333;
+  border-radius: 6px;
+  transition: border-color 0.15s;
+}
+
+.save-dialog__slot:hover {
+  border-color: #44cc88;
+}
+
+.save-dialog__slot-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.save-dialog__slot-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e0e0e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.save-dialog__slot-meta {
+  font-size: 10px;
+  color: #888;
+}
+
+.save-dialog__slot-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.save-dialog__slot-btn {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.save-dialog__slot-btn--overwrite {
+  background: #2a8855;
+  color: #fff;
+}
+
+.save-dialog__slot-btn--overwrite:hover {
+  background: #44cc88;
+}
+
+.save-dialog__slot-btn--delete {
+  background: rgba(255, 68, 68, 0.2);
+  color: #ff6666;
+}
+
+.save-dialog__slot-btn--delete:hover {
+  background: rgba(255, 68, 68, 0.4);
+}
+
+.save-dialog__slot-btn--confirm {
+  background: #ff4444;
+  color: #fff;
+}
+
+.save-dialog__slot-btn--confirm:hover {
+  background: #ff6666;
+}
+
+.save-dialog__slots-full {
+  margin: 0;
+  font-size: 12px;
+  color: #ff6666;
+  font-weight: 600;
+  text-align: center;
+  padding: 6px 0;
+}
+
 .no-player {
   width: 100%;
   height: 100%;

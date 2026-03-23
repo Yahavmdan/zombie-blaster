@@ -3,7 +3,7 @@ import {
   GAME_CONSTANTS,
 } from '@shared/index';
 import { ZombieState } from '@shared/game-entities';
-import { IGameEngine } from './engine-types';
+import { DragonProjectile, IGameEngine, SpitterProjectile } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 
@@ -244,6 +244,44 @@ export class ProjectileSystem {
 
     this.e.spitterProjectiles = this.e.spitterProjectiles.filter(
       (proj: { lifetime: number; x: number; y: number }) => proj.lifetime > 0 &&
+        proj.x > -50 && proj.x < GAME_CONSTANTS.CANVAS_WIDTH + 50 &&
+        proj.y > -50 && proj.y < GAME_CONSTANTS.CANVAS_HEIGHT + 50,
+    );
+  }
+
+  tickClientProjectileVisuals(): void {
+    for (const proj of this.e.spitterProjectiles as SpitterProjectile[]) {
+      proj.trail.push({ x: proj.x, y: proj.y, life: 15 });
+      if (proj.trail.length > 8) proj.trail.shift();
+      for (const t of proj.trail as Array<{ x: number; y: number; life: number }>) t.life--;
+      proj.trail = proj.trail.filter((t: { x: number; y: number; life: number }) => t.life > 0);
+
+      proj.x += proj.velocityX;
+      proj.y += proj.velocityY;
+      proj.velocityY += GAME_CONSTANTS.SPITTER_PROJECTILE_GRAVITY;
+      proj.lifetime--;
+    }
+
+    this.e.spitterProjectiles = this.e.spitterProjectiles.filter(
+      (proj: SpitterProjectile) => proj.lifetime > 0 &&
+        proj.x > -50 && proj.x < GAME_CONSTANTS.CANVAS_WIDTH + 50 &&
+        proj.y > -50 && proj.y < GAME_CONSTANTS.CANVAS_HEIGHT + 50,
+    );
+
+    for (const proj of this.e.dragonProjectiles as DragonProjectile[]) {
+      proj.x += proj.velocityX;
+      proj.y += proj.velocityY;
+      proj.lifetime--;
+
+      proj.tickCounter++;
+      if (proj.tickCounter >= 5) {
+        proj.tickCounter = 0;
+        proj.frame = (proj.frame + 1) % this.e.DRAGON_PROJ_FRAMES;
+      }
+    }
+
+    this.e.dragonProjectiles = this.e.dragonProjectiles.filter(
+      (proj: DragonProjectile) => proj.lifetime > 0 &&
         proj.x > -50 && proj.x < GAME_CONSTANTS.CANVAS_WIDTH + 50 &&
         proj.y > -50 && proj.y < GAME_CONSTANTS.CANVAS_HEIGHT + 50,
     );

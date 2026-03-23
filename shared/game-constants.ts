@@ -165,6 +165,12 @@ export const GAME_CONSTANTS = {
   // ─── Zombie-on-Zombie Climbing ───────────────
   ZOMBIE_CLIMB_SNAP_TOLERANCE: 10, // How close a zombie must be to another's top to climb on it
   ZOMBIE_CLIMB_WIDTH_RATIO: 0.7, // Fraction of a zombie's width used for climb collision checks
+  ZOMBIE_MAX_STACK_HEIGHT: 3, // Max zombie layers that can stack on top of each other
+
+  // ─── Zombie Pile-Up ────────────────────────────
+  ZOMBIE_PILE_DENSITY_THRESHOLD: 3, // Overlapping zombie count that triggers pile-up impulse
+  ZOMBIE_PILE_JUMP_CHANCE: 0.04, // Per-tick chance a crowded grounded zombie hops up to pile
+  ZOMBIE_PILE_JUMP_FORCE: -6, // Upward impulse for pile jump (negative = up, weaker than normal jump)
 
   // ─── Zombie Spawn Animation ────────────────────
   ZOMBIE_SPAWN_ANIM_TICKS: 50, // Duration of the rising-from-ground spawn animation in ticks
@@ -252,8 +258,8 @@ export const GAME_CONSTANTS = {
 
   SPECIAL_LOW_GRAVITY_DURATION_S: 30, // Duration in seconds for low gravity effect
   SPECIAL_LOW_GRAVITY_VALUE: 0.25, // Gravity value during effect (normal: 0.5)
-  SPECIAL_SUPER_SPEED_DURATION_S: 25, // Duration in seconds for super speed effect
-  SPECIAL_SUPER_SPEED_MULTIPLIER: 2.5, // Move speed multiplier during effect
+  SPECIAL_SUPER_SPEED_DURATION_S: 15, // Duration in seconds for super speed effect
+  SPECIAL_SUPER_SPEED_MULTIPLIER: 1.8, // Move speed multiplier during effect
   SPECIAL_SUPER_SPEED_TRAIL_COUNT: 5, // Number of afterimage copies trailing behind the player
   SPECIAL_SUPER_SPEED_TRAIL_SPACING: 14, // Pixel spacing between each afterimage copy
   SPECIAL_GIANT_SLAYER_DURATION_S: 20, // Duration in seconds for giant slayer effect
@@ -452,7 +458,7 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     damageMaxLow: 55, damageMaxHigh: 75,
     speedMin: 0.4, speedMax: 0.8,
     knockbackMin: 6, knockbackMax: 10,
-    hesitationMin: 70, hesitationMax: 110,
+    hesitationMin: 22, hesitationMax: 33,
     xpRewardMin: 4, xpRewardMax: 7,
     widthMin: 25, widthMax: 35,
     heightMin: 37, heightMax: 45,
@@ -467,7 +473,7 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     damageMaxLow: 58, damageMaxHigh: 80,
     speedMin: 1.4, speedMax: 2.3,
     knockbackMin: 4, knockbackMax: 8,
-    hesitationMin: 35, hesitationMax: 65,
+    hesitationMin: 15, hesitationMax: 22,
     xpRewardMin: 6, xpRewardMax: 11,
     widthMin: 22, widthMax: 35,
     heightMin: 33, heightMax: 45,
@@ -482,7 +488,7 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     damageMaxLow: 28, damageMaxHigh: 42,
     speedMin: 0.2, speedMax: 0.45,
     knockbackMin: 3, knockbackMax: 6,
-    hesitationMin: 85, hesitationMax: 130,
+    hesitationMin: 28, hesitationMax: 40,
     xpRewardMin: 12, xpRewardMax: 20,
     widthMin: 36, widthMax: 55,
     heightMin: 44, heightMax: 60,
@@ -497,7 +503,7 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     damageMaxLow: 24, damageMaxHigh: 36,
     speedMin: 0.65, speedMax: 1.2,
     knockbackMin: 5, knockbackMax: 9,
-    hesitationMin: 75, hesitationMax: 115,
+    hesitationMin: 20, hesitationMax: 30,
     xpRewardMin: 7, xpRewardMax: 14,
     widthMin: 23, widthMax: 35,
     heightMin: 35, heightMax: 44,
@@ -512,7 +518,7 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     damageMaxLow: 60, damageMaxHigh: 85,
     speedMin: 0.35, speedMax: 0.65,
     knockbackMin: 3, knockbackMax: 5,
-    hesitationMin: 45, hesitationMax: 80,
+    hesitationMin: 15, hesitationMax: 25,
     xpRewardMin: 80, xpRewardMax: 130,
     widthMin: 52, widthMax: 70,
     heightMin: 60, heightMax: 77,
@@ -527,7 +533,7 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     damageMaxLow: 110, damageMaxHigh: 155,
     speedMin: 0.5, speedMax: 0.9,
     knockbackMin: 3, knockbackMax: 5,
-    hesitationMin: 25, hesitationMax: 55,
+    hesitationMin: 15, hesitationMax: 20,
     xpRewardMin: 800, xpRewardMax: 1250,
     widthMin: 130, widthMax: 150,
     heightMin: 120, heightMax: 140,

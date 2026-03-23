@@ -17,6 +17,7 @@ import { UpperCasePipe } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   CharacterClass,
+  CharacterState,
   GameMode,
   RoomInfo,
   RoomPlayer,
@@ -70,6 +71,12 @@ export class LobbyComponent implements OnInit, OnDestroy {
 
   readonly playerName: WritableSignal<string> = signal<string>('');
   readonly playerClass: WritableSignal<CharacterClass> = signal<CharacterClass>(CharacterClass.Warrior);
+  readonly fromSave: WritableSignal<boolean> = signal<boolean>(false);
+  readonly savedLevel: Signal<number> = computed((): number => {
+    if (!this.fromSave()) return 0;
+    const p: CharacterState | null = this.gameState.player();
+    return p ? p.level : 0;
+  });
 
   readonly maxPlayers: number = MAX_PLAYERS_PER_ROOM;
 
@@ -95,8 +102,10 @@ export class LobbyComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const name: string = this.route.snapshot.queryParamMap.get('name') ?? 'Player';
     const classId: string = this.route.snapshot.queryParamMap.get('classId') ?? CharacterClass.Warrior;
+    const fromSaveParam: string | null = this.route.snapshot.queryParamMap.get('fromSave');
     this.playerName.set(name);
     this.playerClass.set(classId as CharacterClass);
+    this.fromSave.set(fromSaveParam === '1');
 
     this.ws.status$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((status: ConnectionStatus): void => {
       this.connectionStatus.set(status);
@@ -171,7 +180,14 @@ export class LobbyComponent implements OnInit, OnDestroy {
       .subscribe((msg: ServerMessage): void => {
         const payload: GameStartedPayload = msg.payload as GameStartedPayload;
         this.gameStarting = true;
-        this.gameState.createPlayer(this.playerName(), this.playerClass(), this.playerId());
+        if (this.fromSave() && this.gameState.player()) {
+          this.gameState.player.update((p: CharacterState | null): CharacterState | null => {
+            if (!p) return p;
+            return { ...p, id: this.playerId() };
+          });
+        } else {
+          this.gameState.createPlayer(this.playerName(), this.playerClass(), this.playerId());
+        }
         void this.router.navigate(['/game'], {
           queryParams: {
             roomId: payload.roomId,
@@ -283,9 +299,13 @@ export class LobbyComponent implements OnInit, OnDestroy {
 
   goBack(): void {
     this.ws.disconnect();
-    void this.router.navigate(['/character-select'], {
-      queryParams: { mode: GameMode.Multiplayer },
-    });
+    if (this.fromSave()) {
+      void this.router.navigate(['/']);
+    } else {
+      void this.router.navigate(['/character-select'], {
+        queryParams: { mode: GameMode.Multiplayer },
+      });
+    }
   }
 
   getClassIcon(classId: CharacterClass): string {
