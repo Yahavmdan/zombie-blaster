@@ -265,6 +265,20 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onKeyDown(e: KeyboardEvent): void {
+    if (this.engine?.hasPendingSpecialDrop()) {
+      const key: string = e.key.toLowerCase();
+      if (key === 'y') {
+        this.engine.confirmPendingDrop();
+        e.preventDefault();
+        return;
+      }
+      if (key === 'n') {
+        this.engine.declinePendingDrop();
+        e.preventDefault();
+        return;
+      }
+    }
+
     const action: GameAction | null = this.keyBindingsService.getActionForKey(e.key);
     if (!action) return;
 
