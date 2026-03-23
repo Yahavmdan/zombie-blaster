@@ -296,6 +296,13 @@ export class DropSystem {
   updatePendingSpecialDrop(): void {
     const pending: PendingSpecialDropConfirm | null = this.e.pendingSpecialDropConfirm;
     if (!pending) return;
+
+    const p: CharacterState | null = this.e.player;
+    if (!p || p.isDead || p.isDown) {
+      this.e.pendingSpecialDropConfirm = null;
+      return;
+    }
+
     pending.remainingTicks--;
     if (pending.remainingTicks <= 0) {
       this.e.pendingSpecialDropConfirm = null;
