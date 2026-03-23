@@ -2,14 +2,22 @@ import {
   CharacterState,
   GAME_CONSTANTS,
   SKILLS,
+  SPECIAL_DROP_DEFINITIONS,
   SkillDefinition,
   SkillType,
+  VfxEvent,
+  VfxEventType,
 } from '@shared/index';
 import {
+  ActiveSpecialEffect,
   DropType,
+  PendingSpecialDropConfirm,
+  SpecialDropDefinition,
+  SpecialDropType,
   WorldDrop,
   ZombieCorpse,
   ZombieState,
+  ZombieType,
 } from '@shared/game-entities';
 import { InputKeys } from '@shared/messages';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
@@ -78,6 +86,7 @@ export class GameEngine implements IGameEngine {
   invincibilityFrames: number = 0;
   potionCooldown: number = 0;
   jumpHeld: boolean = false;
+  jumpBufferTicks: number = 0;
   ropeJumpCooldown: number = 0;
   platformDropTimer: number = 0;
 
@@ -92,6 +101,7 @@ export class GameEngine implements IGameEngine {
   spawnTimer: number = 0;
   floorTransitionTimer: number = 0;
   exitPlatform: Platform = { x: 0, y: 0, width: 0, height: 0 };
+  exitRope: Rope | null = null;
 
   backgroundStars: BackgroundStar[] = [];
 
@@ -133,6 +143,7 @@ export class GameEngine implements IGameEngine {
   onGameOver: (() => void) | null = null;
   onGoldPickup: ((amount: number) => void) | null = null;
   onPotionPickup: ((type: DropType) => void) | null = null;
+  onSpecialDropPickup: ((type: SpecialDropType) => void) | null = null;
   onUseHpPotion: (() => boolean) | null = null;
   onUseMpPotion: (() => boolean) | null = null;
   onOpenShop: (() => void) | null = null;
@@ -141,10 +152,16 @@ export class GameEngine implements IGameEngine {
   onPlayerRevived: ((targetPlayerId: string) => void) | null = null;
   onPlayerDowned: (() => void) | null = null;
   onPlayerDownExpired: (() => void) | null = null;
+  doubleJumpUsed: boolean = false;
+  doubleJumpAnimTicks: number = 0;
+
   dashPhase: DashPhaseState | null = null;
 
   reviveTargetId: string | null = null;
   reviveProgressTicks: number = 0;
+
+  activeSpecialEffects: ActiveSpecialEffect[] = [];
+  pendingSpecialDropConfirm: PendingSpecialDropConfirm | null = null;
 
   godMode: boolean = false;
   showCollisionBoxes: boolean = false;
@@ -153,6 +170,9 @@ export class GameEngine implements IGameEngine {
   pendingLocalKills: Set<string> = new Set<string>();
   pendingRemoteAttacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [];
   pendingReviveTargetIds: string[] = [];
+  pendingSpecialDropActivations: SpecialDropType[] = [];
+  pendingVfxEvents: VfxEvent[] = [];
+  pendingPullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> = [];
   remotePlayerAnimators: Map<string, SpriteAnimator> = new Map<string, SpriteAnimator>();
   private previousZombieStates: Map<string, boolean> = new Map<string, boolean>();
   private previousZombieHp: Map<string, number> = new Map<string, number>();
@@ -175,7 +195,7 @@ export class GameEngine implements IGameEngine {
     this.dropSystem = new DropSystem(this, this.physicsSystem, this.vfxSystem);
     this.combatSystem = new CombatSystem(this, this.physicsSystem, this.vfxSystem, this.dropSystem);
     this.projectileSystem = new ProjectileSystem(this, this.physicsSystem, this.vfxSystem);
-    this.zombieSystem = new ZombieSystem(this, this.physicsSystem, this.combatSystem, this.projectileSystem);
+    this.zombieSystem = new ZombieSystem(this, this.physicsSystem, this.combatSystem, this.projectileSystem, this.dropSystem);
     this.renderSystem = new RenderSystem(this);
 
     this.initPlatforms();
@@ -202,13 +222,26 @@ export class GameEngine implements IGameEngine {
   }
 
   private initExitPlatform(): void {
-    const exitX: number = (GAME_CONSTANTS.CANVAS_WIDTH - GAME_CONSTANTS.EXIT_PLATFORM_WIDTH) / 2;
     this.exitPlatform = {
-      x: exitX,
+      x: 0,
       y: GAME_CONSTANTS.EXIT_PLATFORM_Y,
       width: GAME_CONSTANTS.EXIT_PLATFORM_WIDTH,
       height: GAME_CONSTANTS.EXIT_PLATFORM_HEIGHT,
     };
+  }
+
+  repositionExitPlatform(): void {
+    const margin: number = 100;
+    const platWidth: number = GAME_CONSTANTS.EXIT_PLATFORM_WIDTH;
+    const range: number = GAME_CONSTANTS.CANVAS_WIDTH - platWidth - margin * 2;
+    const t: number = Math.abs(Math.sin(this.floor * 127.1 + 311.7));
+    const exitX: number = margin + Math.floor(t * range);
+
+    this.exitPlatform.x = exitX;
+
+    if (this.exitRope) {
+      this.exitRope.x = exitX + platWidth / 2;
+    }
   }
 
   private initRopes(): void {
@@ -216,8 +249,9 @@ export class GameEngine implements IGameEngine {
       { x: 190, topY: 330, bottomY: 530 },
       { x: 910, topY: 340, bottomY: 530 },
       { x: 560, topY: 430, bottomY: GAME_CONSTANTS.GROUND_Y },
-      { x: 640, topY: GAME_CONSTANTS.EXIT_PLATFORM_Y, bottomY: 430 },
+      // { x: 640, topY: GAME_CONSTANTS.EXIT_PLATFORM_Y, bottomY: 430 },
     ];
+    this.exitRope = this.ropes.find((r: Rope): boolean => r.topY === GAME_CONSTANTS.EXIT_PLATFORM_Y) ?? null;
   }
 
   private initStars(): void {
@@ -225,7 +259,7 @@ export class GameEngine implements IGameEngine {
       this.backgroundStars.push({
         x: Math.random() * GAME_CONSTANTS.CANVAS_WIDTH,
         y: Math.random() * (GAME_CONSTANTS.GROUND_Y - 50),
-        size: Math.random() * 2 + 0.5,
+        size: Math.random() * 2 + 0.5 ,
         brightness: Math.random() * 0.5 + 0.3,
       });
     }
@@ -244,6 +278,9 @@ export class GameEngine implements IGameEngine {
     this.spitterProjectiles = [];
     this.poisonEffect = null;
     this.hitMarks = [];
+    this.activeSpecialEffects = [];
+    this.pendingVfxEvents = [];
+    this.pendingPullEvents = [];
     this.reviveTargetId = null;
     this.reviveProgressTicks = 0;
     this.pendingReviveTargetIds.length = 0;
@@ -260,6 +297,8 @@ export class GameEngine implements IGameEngine {
     this.playerStandingStillTicks = 0;
     this.playerStunTicks = 0;
     this.autoPotionCooldown = 0;
+    this.doubleJumpUsed = false;
+    this.doubleJumpAnimTicks = 0;
     this.zombieSystem.startFloor();
     this.lastTimestamp = performance.now();
     this.loop(this.lastTimestamp);
@@ -286,6 +325,11 @@ export class GameEngine implements IGameEngine {
   }
 
   setKeys(keys: InputKeys): void {
+    const jumpNow: boolean = keys.jump || keys.up;
+    const jumpBefore: boolean = this.keys.jump || this.keys.up;
+    if (jumpNow && !jumpBefore) {
+      this.jumpBufferTicks = GAME_CONSTANTS.JUMP_BUFFER_TICKS;
+    }
     this.keys = keys;
   }
 
@@ -318,6 +362,13 @@ export class GameEngine implements IGameEngine {
         oldLevel: prevCharLevel,
         newLevel: player.level,
       };
+
+      this.pendingVfxEvents.push({
+        type: VfxEventType.LevelUp,
+        playerId: this.player.id,
+        x: this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+        y: this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+      });
     }
     this.playerUsableSkills = SKILLS.filter(
       (s: SkillDefinition) =>
@@ -383,6 +434,8 @@ export class GameEngine implements IGameEngine {
     this.zombieSystem.updateZombieCorpses();
 
     this.dropSystem.updateDrops();
+    this.dropSystem.updateSpecialEffects();
+    this.dropSystem.updatePendingSpecialDrop();
     if (playerCanAct) {
       this.dropSystem.updatePotionUse();
     }
@@ -405,7 +458,14 @@ export class GameEngine implements IGameEngine {
     if (this.invincibilityFrames > 0) this.invincibilityFrames--;
     if (this.ropeJumpCooldown > 0) this.ropeJumpCooldown--;
     if (this.platformDropTimer > 0) this.platformDropTimer--;
+    if (this.jumpBufferTicks > 0) this.jumpBufferTicks--;
     if (this.playerStunTicks > 0) this.playerStunTicks--;
+    if (this.doubleJumpAnimTicks > 0) {
+      this.doubleJumpAnimTicks--;
+      if (this.doubleJumpAnimTicks <= 0 && this.player) {
+        this.player.isDoubleJumping = false;
+      }
+    }
     if (this.levelUpNotification) {
       this.levelUpNotification.life--;
       if (this.levelUpNotification.life <= 0) this.levelUpNotification = null;
@@ -481,6 +541,78 @@ export class GameEngine implements IGameEngine {
     }
   }
 
+  activateSpecialEffect(type: SpecialDropType): void {
+    const def: SpecialDropDefinition | undefined =
+      SPECIAL_DROP_DEFINITIONS.find(
+        (d: SpecialDropDefinition): boolean => d.type === type,
+      );
+    if (!def) return;
+
+    const existing: ActiveSpecialEffect | undefined = this.activeSpecialEffects.find(
+      (eff: ActiveSpecialEffect): boolean => eff.type === type,
+    );
+    if (existing) {
+      existing.remainingTicks = def.durationTicks;
+      existing.totalTicks = def.durationTicks;
+    } else {
+      this.activeSpecialEffects.push({
+        type,
+        remainingTicks: def.durationTicks,
+        totalTicks: def.durationTicks,
+      });
+    }
+
+    if (this.isMultiplayerClient) {
+      this.pendingSpecialDropActivations.push(type);
+    }
+
+    if (this.player) {
+      const cx: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+      const cy: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+      this.vfxSystem.spawnBuffActivationParticles(cx, cy, def.color);
+      this.vfxSystem.triggerScreenFlash(def.color, 8);
+      this.vfxSystem.triggerScreenShake(6, 4);
+
+      this.pendingVfxEvents.push({
+        type: VfxEventType.BuffActivation,
+        playerId: this.player.id,
+        x: cx,
+        y: cy,
+        color: def.color,
+      });
+      this.pendingVfxEvents.push({
+        type: VfxEventType.ScreenFlash,
+        playerId: this.player.id,
+        x: 0,
+        y: 0,
+        color: def.color,
+        frames: 8,
+      });
+      this.pendingVfxEvents.push({
+        type: VfxEventType.ScreenShake,
+        playerId: this.player.id,
+        x: 0,
+        y: 0,
+        frames: 6,
+        intensity: 4,
+      });
+    }
+  }
+
+  confirmPendingDrop(): void {
+    if (!this.pendingSpecialDropConfirm) return;
+    this.dropSystem.confirmPendingDrop();
+  }
+
+  declinePendingDrop(): void {
+    if (!this.pendingSpecialDropConfirm) return;
+    this.dropSystem.declinePendingDrop();
+  }
+
+  hasPendingSpecialDrop(): boolean {
+    return this.pendingSpecialDropConfirm !== null;
+  }
+
   applyRevive(): void {
     const p: CharacterState | null = this.player;
     if (!p || !p.isDown) return;
@@ -494,6 +626,23 @@ export class GameEngine implements IGameEngine {
     const cy: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
     this.vfxSystem.spawnBuffActivationParticles(cx, cy, '#44ff88');
     this.vfxSystem.spawnDamageNumber(cx, p.y - 10, p.hp, false, '#44ff44');
+
+    this.pendingVfxEvents.push({
+      type: VfxEventType.BuffActivation,
+      playerId: p.id,
+      x: cx,
+      y: cy,
+      color: '#44ff88',
+    });
+    this.pendingVfxEvents.push({
+      type: VfxEventType.DamageNumber,
+      playerId: p.id,
+      x: cx,
+      y: p.y - 10,
+      value: p.hp,
+      isCrit: false,
+      color: '#44ff44',
+    });
 
     this.onPlayerUpdate?.(p);
   }
@@ -519,12 +668,18 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> } | null {
     if (!this.player) return null;
     const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
     const revives: string[] = [...this.pendingReviveTargetIds];
     this.pendingReviveTargetIds.length = 0;
+    const specialDropActivations: SpecialDropType[] = [...this.pendingSpecialDropActivations];
+    this.pendingSpecialDropActivations.length = 0;
+    const vfxEvents: VfxEvent[] = [...this.pendingVfxEvents];
+    this.pendingVfxEvents.length = 0;
+    const pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> = [...this.pendingPullEvents];
+    this.pendingPullEvents.length = 0;
     return {
       player: { ...this.player },
       zombies: this.zombies
@@ -534,6 +689,12 @@ export class GameEngine implements IGameEngine {
       floor: this.floor,
       attacks,
       revives,
+      specialDropActivations,
+      activeSpecialEffects: this.activeSpecialEffects.map(
+        (eff: ActiveSpecialEffect): ActiveSpecialEffect => ({ ...eff }),
+      ),
+      vfxEvents,
+      pullEvents,
     };
   }
 
@@ -614,6 +775,7 @@ export class GameEngine implements IGameEngine {
     if (floor === this.floor) return;
     this.floor = floor;
     this.floorTransitionTimer = GAME_CONSTANTS.FLOOR_TRANSITION_TICKS;
+    this.repositionExitPlatform();
 
     if (this.player) {
       this.player.x = GAME_CONSTANTS.CANVAS_WIDTH / 2 - GAME_CONSTANTS.PLAYER_WIDTH / 2;
@@ -621,6 +783,44 @@ export class GameEngine implements IGameEngine {
       this.player.velocityX = 0;
       this.player.velocityY = 0;
       this.player.isGrounded = true;
+    }
+  }
+
+  applyRemoteSpecialEffects(effects: ActiveSpecialEffect[]): void {
+    if (!this.isMultiplayerClient) return;
+    this.activeSpecialEffects = effects;
+  }
+
+  replayRemoteVfxEvents(events: VfxEvent[]): void {
+    const myId: string = this.player?.id ?? '';
+    for (const evt of events) {
+      if (evt.playerId === myId) continue;
+
+      switch (evt.type) {
+        case VfxEventType.SkillAnimation:
+          this.vfxSystem.triggerSkillAnimation(
+            evt.animationKey!, evt.x, evt.y, evt.facing!, evt.level!,
+          );
+          break;
+        case VfxEventType.LevelUp:
+          this.vfxSystem.spawnLevelUpEffectAt(evt.x, evt.y);
+          break;
+        case VfxEventType.BuffActivation:
+          this.vfxSystem.spawnBuffActivationParticles(evt.x, evt.y, evt.color!);
+          break;
+        case VfxEventType.ScreenShake:
+          this.vfxSystem.triggerScreenShake(evt.frames!, evt.intensity!);
+          break;
+        case VfxEventType.ScreenFlash:
+          this.vfxSystem.triggerScreenFlash(evt.color!, evt.frames!);
+          break;
+        case VfxEventType.DashPortal:
+          this.vfxSystem.spawnPortalVortex(evt.x, evt.y, evt.inward!);
+          break;
+        case VfxEventType.DamageNumber:
+          this.vfxSystem.spawnDamageNumber(evt.x, evt.y, evt.value!, evt.isCrit!, evt.color!);
+          break;
+      }
     }
   }
 
@@ -709,6 +909,34 @@ export class GameEngine implements IGameEngine {
     this.zombies = this.zombies.filter((z: ZombieState) => !z.isDead);
   }
 
+  applyRemotePull(evt: { playerX: number; playerY: number; pullRange: number; skillColor: string }): void {
+    if (!this.isMultiplayerHost) return;
+
+    const playerCX: number = evt.playerX + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const playerCY: number = evt.playerY + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+    const spreadHalf: number = GAME_CONSTANTS.PLAYER_WIDTH * 2;
+
+    for (const z of this.zombies) {
+      if (z.isDead || z.spawnTimer > 0) continue;
+      if (z.type === ZombieType.Boss || z.type === ZombieType.DragonBoss) continue;
+
+      const zCX: number = z.x + z.instanceWidth / 2;
+      const zCY: number = z.y + z.instanceHeight / 2;
+      const dist: number = Math.sqrt((zCX - playerCX) ** 2 + (zCY - playerCY) ** 2);
+
+      if (dist <= evt.pullRange) {
+        const offsetX: number = (Math.random() - 0.5) * spreadHalf * 2;
+        z.x = evt.playerX + offsetX;
+        z.y = evt.playerY + GAME_CONSTANTS.PLAYER_HEIGHT - z.instanceHeight;
+        z.velocityX = 0;
+        z.velocityY = 0;
+        z.knockbackFrames = 0;
+
+        this.vfxSystem.spawnHitParticles(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, evt.skillColor);
+      }
+    }
+  }
+
   setRemotePlayers(players: CharacterState[]): void {
     const currentIds: Set<string> = new Set<string>(
       players.map((p: CharacterState) => p.id),
@@ -783,6 +1011,7 @@ export class GameEngine implements IGameEngine {
     if (p.isDead || p.isDown) return PlayerAnimState.Death;
     if (p.isAttacking) return PlayerAnimState.Attack;
     if (p.isClimbing) return PlayerAnimState.Climb;
+    if (p.isDoubleJumping && !p.isGrounded) return PlayerAnimState.DoubleJump;
     if (!p.isGrounded) return PlayerAnimState.Jump;
     if (Math.abs(p.velocityX) > 0.3) return PlayerAnimState.Run;
     return PlayerAnimState.Idle;

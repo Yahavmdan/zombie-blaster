@@ -79,6 +79,7 @@ export class GameStateService {
       facing: Direction.Right,
       isGrounded: true,
       isAttacking: false,
+      isDoubleJumping: false,
       isClimbing: false,
       isDead: false,
       isDown: false,

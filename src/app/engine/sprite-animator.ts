@@ -2,6 +2,7 @@ export enum PlayerAnimState {
   Idle = 'idle',
   Run = 'run',
   Jump = 'jump',
+  DoubleJump = 'doubleJump',
   Attack = 'attack',
   Death = 'death',
   Climb = 'climb',
@@ -61,6 +62,12 @@ const BIKER_SPRITE_CONFIGS: Record<PlayerAnimState, SpriteConfig> = {
     frameCount: 6,
     frameDurationTicks: 10,
     loop: true,
+  },
+  [PlayerAnimState.DoubleJump]: {
+    src: 'sprites/biker/Biker_doublejump.png',
+    frameCount: 6,
+    frameDurationTicks: 5,
+    loop: false,
   },
 };
 

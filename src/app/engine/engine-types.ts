@@ -2,9 +2,13 @@ import {
   CharacterState,
   Direction,
   SkillDefinition,
+  VfxEvent,
 } from '@shared/index';
 import {
+  ActiveSpecialEffect,
   DropType,
+  PendingSpecialDropConfirm,
+  SpecialDropType,
   WorldDrop,
   ZombieCorpse,
   ZombieState,
@@ -154,6 +158,7 @@ export interface IGameEngine {
   invincibilityFrames: number;
   potionCooldown: number;
   jumpHeld: boolean;
+  jumpBufferTicks: number;
   ropeJumpCooldown: number;
   platformDropTimer: number;
 
@@ -168,6 +173,7 @@ export interface IGameEngine {
   spawnTimer: number;
   floorTransitionTimer: number;
   exitPlatform: Platform;
+  exitRope: Rope | null;
 
   backgroundStars: BackgroundStar[];
 
@@ -201,10 +207,16 @@ export interface IGameEngine {
   readonly HIT_MARK_TICKS_PER_FRAME: number;
   readonly HIT_MARK_RENDER_SIZE: number;
 
+  doubleJumpUsed: boolean;
+  doubleJumpAnimTicks: number;
+
   dashPhase: DashPhaseState | null;
 
   reviveTargetId: string | null;
   reviveProgressTicks: number;
+
+  activeSpecialEffects: ActiveSpecialEffect[];
+  pendingSpecialDropConfirm: PendingSpecialDropConfirm | null;
 
   godMode: boolean;
   showCollisionBoxes: boolean;
@@ -213,6 +225,11 @@ export interface IGameEngine {
   pendingLocalKills: Set<string>;
   pendingRemoteAttacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>;
   pendingReviveTargetIds: string[];
+  pendingSpecialDropActivations: SpecialDropType[];
+  pendingVfxEvents: VfxEvent[];
+  pendingPullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>;
+
+  repositionExitPlatform(): void;
 
   onPlayerUpdate: ((player: CharacterState) => void) | null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null;
@@ -223,6 +240,7 @@ export interface IGameEngine {
   onGameOver: (() => void) | null;
   onGoldPickup: ((amount: number) => void) | null;
   onPotionPickup: ((type: DropType) => void) | null;
+  onSpecialDropPickup: ((type: SpecialDropType) => void) | null;
   onUseHpPotion: (() => boolean) | null;
   onUseMpPotion: (() => boolean) | null;
   onOpenShop: (() => void) | null;

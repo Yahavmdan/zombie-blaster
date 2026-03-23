@@ -1,9 +1,11 @@
-import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inject, OnInit, OnDestroy, viewChild, effect, NgZone, DestroyRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inject, OnInit, OnDestroy, viewChild, effect, NgZone, DestroyRef, isDevMode, computed } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType } from '@shared/index';
+import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, VfxEvent } from '@shared/index';
+import { SpecialDropType, SpecialDropDefinition } from '@shared/game-entities';
 import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload } from '@shared/multiplayer';
-import { ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
+import { ActiveSpecialEffect, ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { AutoPotionChange } from '../../components/shop/shop.component';
 import { GameStateService } from '../../services/game-state.service';
@@ -21,7 +23,7 @@ import { QuickSlotService } from '../../services/quick-slot.service';
 @Component({
   selector: 'app-game',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, ShopComponent, InventoryComponent, QuickSlotsComponent],
+  imports: [GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule],
   host: {
     class: 'game-page',
   },
@@ -29,7 +31,7 @@ import { QuickSlotService } from '../../services/quick-slot.service';
   styleUrl: './game.component.css',
 })
 export class GameComponent implements OnInit, OnDestroy {
-  private readonly gameState: GameStateService = inject(GameStateService);
+  protected readonly gameState: GameStateService = inject(GameStateService);
   private readonly router: Router = inject(Router);
   private readonly route: ActivatedRoute = inject(ActivatedRoute);
   private readonly ws: WebSocketService = inject(WebSocketService);
@@ -148,8 +150,8 @@ export class GameComponent implements OnInit, OnDestroy {
     this.ws.onMessage(ServerMessageType.GameSync)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
-        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[] } =
-          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[] };
+        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[] } =
+          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[] };
 
         this.remotePlayerStates.set(payload.player.id, payload.player);
 
@@ -157,6 +159,7 @@ export class GameComponent implements OnInit, OnDestroy {
           this.gameCanvas()?.applyRemoteZombies(payload.zombies);
           this.gameCanvas()?.applyRemoteCorpses(payload.corpses ?? []);
           this.gameCanvas()?.syncRemoteFloor(payload.floor);
+          this.gameCanvas()?.applyRemoteSpecialEffects(payload.activeSpecialEffects ?? []);
           this.floor.set(payload.floor);
 
           if (payload.attacks && payload.attacks.length > 0) {
@@ -169,6 +172,10 @@ export class GameComponent implements OnInit, OnDestroy {
           }
 
           this.processIncomingRevives(payload.revives);
+
+          if (payload.vfxEvents && payload.vfxEvents.length > 0) {
+            this.gameCanvas()?.replayRemoteVfxEvents(payload.vfxEvents);
+          }
         }
 
         this.updateRemotePlayersOnCanvas();
@@ -178,11 +185,23 @@ export class GameComponent implements OnInit, OnDestroy {
     this.ws.onMessage(ServerMessageType.PlayerStateBroadcast)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
-        const payload: { playerId: string; data: { player: CharacterState; revives?: string[] } } =
-          msg.payload as { playerId: string; data: { player: CharacterState; revives?: string[] } };
+        const payload: { playerId: string; data: { player: CharacterState; revives?: string[]; specialDropActivations?: SpecialDropType[]; vfxEvents?: VfxEvent[]; pullEvents?: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> } } =
+          msg.payload as { playerId: string; data: { player: CharacterState; revives?: string[]; specialDropActivations?: SpecialDropType[]; vfxEvents?: VfxEvent[]; pullEvents?: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> } };
 
         this.remotePlayerStates.set(payload.playerId, payload.data.player);
         this.processIncomingRevives(payload.data.revives);
+        this.processIncomingSpecialDropActivations(payload.data.specialDropActivations);
+
+        if (payload.data.vfxEvents && payload.data.vfxEvents.length > 0) {
+          this.gameCanvas()?.replayRemoteVfxEvents(payload.data.vfxEvents);
+        }
+
+        if (this.isHost && payload.data.pullEvents) {
+          for (const pullEvt of payload.data.pullEvents) {
+            this.gameCanvas()?.applyRemotePull(pullEvt);
+          }
+        }
+
         this.updateRemotePlayersOnCanvas();
         this.checkAllPlayersDead();
       });
@@ -236,14 +255,14 @@ export class GameComponent implements OnInit, OnDestroy {
         const canvas: GameCanvasComponent | undefined = this.gameCanvas();
         if (!canvas) return;
 
-        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[] } | null =
+        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> } | null =
           canvas.getStateSnapshot();
         if (!snapshot) return;
 
         if (this.isHost) {
           this.ws.send(ClientMessageType.GameSync, snapshot);
         } else {
-          this.ws.send(ClientMessageType.PlayerState, { player: snapshot.player, revives: snapshot.revives });
+          this.ws.send(ClientMessageType.PlayerState, { player: snapshot.player, revives: snapshot.revives, specialDropActivations: snapshot.specialDropActivations, vfxEvents: snapshot.vfxEvents, pullEvents: snapshot.pullEvents });
         }
       }, SYNC_INTERVAL_MS);
     });
@@ -507,6 +526,14 @@ export class GameComponent implements OnInit, OnDestroy {
     }
   }
 
+  private processIncomingSpecialDropActivations(activations: SpecialDropType[] | undefined): void {
+    if (!activations || activations.length === 0) return;
+    if (!this.isHost) return;
+    for (const type of activations) {
+      this.gameCanvas()?.activateSpecialEffect(type);
+    }
+  }
+
   private applyLocalRevive(): void {
     this.gameCanvas()?.applyRevive();
     const updated: CharacterState | null = this.gameState.player();
@@ -543,6 +570,23 @@ export class GameComponent implements OnInit, OnDestroy {
     this.gameState.gameOver.set(true);
   }
 
+  readonly isDev: boolean = isDevMode();
+  readonly devClassList: CharacterClassDefinition[] = Object.values(CHARACTER_CLASSES);
+  readonly devFloorInput: WritableSignal<number> = signal<number>(1);
+  readonly devDialogOpen: WritableSignal<boolean> = signal<boolean>(false);
+  readonly devPlayerLevel: Signal<number> = computed((): number => {
+    const p: CharacterState | null = this.gameState.player();
+    return p ? p.level : 0;
+  });
+  readonly godMode: WritableSignal<boolean> = this.gameState.godMode;
+  readonly showCollisionBoxes: WritableSignal<boolean> = this.gameState.showCollisionBoxes;
+
+  readonly specialDropDefs: SpecialDropDefinition[] = SPECIAL_DROP_DEFINITIONS;
+
+  activateSpecialDrop(type: SpecialDropType): void {
+    this.gameCanvas()?.activateSpecialEffect(type);
+  }
+
   setFloor(floor: number): void {
     this.floor.set(floor);
     this.gameState.floor.set(floor);
@@ -555,6 +599,51 @@ export class GameComponent implements OnInit, OnDestroy {
       this.gameCanvas()?.syncProgression(updated);
       this.currentPlayerDisplay.set({ ...updated });
     }
+  }
+
+  toggleDevDialog(): void {
+    this.devDialogOpen.update((v: boolean) => !v);
+  }
+
+  closeDevDialog(): void {
+    this.devDialogOpen.set(false);
+  }
+
+  devSelectClass(classId: CharacterClass): void {
+    const p: CharacterState | null = this.gameState.player();
+    if (!p) return;
+    this.gameState.createPlayer(p.name, classId, p.id);
+    this.syncCanvasProgression();
+  }
+
+  devLevelUp(): void {
+    const p: CharacterState | null = this.gameState.player();
+    if (!p) return;
+    this.gameState.addXp(p.xpToNext);
+    this.syncCanvasProgression();
+  }
+
+  devMaxAllSkills(): void {
+    this.gameState.maxAllSkills();
+    this.syncCanvasProgression();
+  }
+
+  devMaxOutPlayer(): void {
+    this.gameState.maxOutPlayer();
+    this.syncCanvasProgression();
+  }
+
+  devSetFloor(): void {
+    const floor: number = Math.max(1, this.devFloorInput());
+    this.setFloor(floor);
+  }
+
+  devToggleGodMode(): void {
+    this.gameState.godMode.update((v: boolean) => !v);
+  }
+
+  devToggleCollisionBoxes(): void {
+    this.gameState.showCollisionBoxes.update((v: boolean) => !v);
   }
 
   retry(): void {

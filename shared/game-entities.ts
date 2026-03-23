@@ -69,6 +69,14 @@ export enum DropType {
   HpPotion = 'hp-potion',
   MpPotion = 'mp-potion',
   Gold = 'gold',
+  Special = 'special',
+}
+
+export enum SpecialDropType {
+  LowGravity = 'low-gravity',
+  SuperSpeed = 'super-speed',
+  GiantSlayer = 'giant-slayer',
+  ZombieShock = 'zombie-shock',
 }
 
 export type PotionCategory = 'hp' | 'mp';
@@ -88,12 +96,38 @@ export interface PotionDefinition {
 export interface WorldDrop {
   id: string;
   type: DropType;
+  specialType?: SpecialDropType;
   x: number;
   y: number;
   velocityY: number;
   value: number;
   lifetime: number;
   isGrounded: boolean;
+}
+
+export interface SpecialDropDefinition {
+  type: SpecialDropType;
+  name: string;
+  description: string;
+  funnyDescription: string;
+  icon: string;
+  color: string;
+  highlightColor: string;
+  durationTicks: number;
+}
+
+export interface PendingSpecialDropConfirm {
+  type: SpecialDropType;
+  cx: number;
+  cy: number;
+  remainingTicks: number;
+  totalTicks: number;
+}
+
+export interface ActiveSpecialEffect {
+  type: SpecialDropType;
+  remainingTicks: number;
+  totalTicks: number;
 }
 
 export interface PlayerInventory {

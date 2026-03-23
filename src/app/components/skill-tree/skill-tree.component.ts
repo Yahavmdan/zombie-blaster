@@ -168,6 +168,13 @@ export class SkillTreeComponent {
       return `Lv.${level}: ${parts.join(', ')}`;
     }
 
+    if (skill.mechanic === 'doubleJump') {
+      const force: number = getSkillDamageMultiplier(skill, level);
+      const forcePct: number = Math.round(force * 100);
+      const parts: string[] = [`${forcePct}% force`, `${mp} MP`, `${cdSec}s CD`];
+      return `Lv.${level}: ${parts.join(', ')}`;
+    }
+
     const dmg: number = getSkillDamageMultiplier(skill, level);
     const dmgPct: number = Math.round(dmg * 100);
     const parts: string[] = [`${dmgPct}% dmg`, `${mp} MP`];

@@ -324,6 +324,7 @@ export class GameWebSocketServer {
       facing: 'right' as CharacterState['facing'],
       isGrounded: true,
       isAttacking: false,
+      isDoubleJumping: false,
       isClimbing: false,
       isDead: false,
       isDown: false,

@@ -11,6 +11,7 @@ import { IGameEngine, Platform } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { CombatSystem } from './combat-system';
+import { DropSystem } from './drop-system';
 import { ProjectileSystem } from './projectile-system';
 import { ZombieSystem } from './zombie-system';
 import { SpriteAnimator } from './sprite-animator';
@@ -51,6 +52,7 @@ function makePlayer(overrides: Partial<CharacterState> = {}): CharacterState {
     isDown: false,
     downTimer: 0,
     isAttacking: false,
+    isDoubleJumping: false,
     isClimbing: false,
     facing: Direction.Right,
     ...overrides,
@@ -124,6 +126,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     invincibilityFrames: 0,
     potionCooldown: 0,
     jumpHeld: false,
+    jumpBufferTicks: 0,
     ropeJumpCooldown: 0,
     platformDropTimer: 0,
     playerUsableSkills: [],
@@ -141,6 +144,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
       width: 250,
       height: 20,
     },
+    exitRope: null,
     backgroundStars: [],
     screenShakeFrames: 0,
     screenShakeIntensity: 0,
@@ -176,9 +180,12 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     hitMarks: [],
     HIT_MARK_TICKS_PER_FRAME: 3,
     HIT_MARK_RENDER_SIZE: 55,
+    doubleJumpUsed: false,
+    doubleJumpAnimTicks: 0,
     dashPhase: null,
     reviveTargetId: null,
     reviveProgressTicks: 0,
+    activeSpecialEffects: [],
     godMode: false,
     showCollisionBoxes: false,
     isMultiplayerHost: false,
@@ -186,8 +193,12 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     pendingLocalKills: new Set<string>(),
     pendingRemoteAttacks: [],
     pendingReviveTargetIds: [],
+    pendingSpecialDropActivations: [],
+    pendingVfxEvents: [],
+    pendingPullEvents: [],
     remotePlayers: [],
     remotePlayerAnimators: new Map<string, SpriteAnimator>(),
+    repositionExitPlatform: vi.fn(),
     onPlayerUpdate: null,
     onZombiesUpdate: null,
     onFloorUpdate: null,
@@ -197,6 +208,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     onGameOver: null,
     onGoldPickup: null,
     onPotionPickup: null,
+    onSpecialDropPickup: null,
     onUseHpPotion: null,
     onUseMpPotion: null,
     onOpenShop: null,
@@ -221,10 +233,11 @@ describe('ZombieSystem — hesitation attack timing', () => {
 
     const physics: PhysicsSystem = new PhysicsSystem(engine);
     const vfx: VfxSystem = new VfxSystem(engine);
-    const dropSystem = { rollDrops: vi.fn() } as never;
-    const combat: CombatSystem = new CombatSystem(engine, physics, vfx, dropSystem);
+    const dropSystemStub = { rollDrops: vi.fn() } as never;
+    const combat: CombatSystem = new CombatSystem(engine, physics, vfx, dropSystemStub);
     const projectileSystem: ProjectileSystem = new ProjectileSystem(engine, physics, vfx);
-    zombieSystem = new ZombieSystem(engine, physics, combat, projectileSystem);
+    const dropSystem: DropSystem = new DropSystem(engine, physics, vfx);
+    zombieSystem = new ZombieSystem(engine, physics, combat, projectileSystem, dropSystem);
   });
 
   it('zombie standing next to player should attack within 5 seconds (250 ticks)', () => {

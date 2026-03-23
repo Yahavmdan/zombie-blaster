@@ -13,8 +13,8 @@ import {
   inject,
   effect,
 } from '@angular/core';
-import { CharacterClass, CharacterState, SKILLS, SkillDefinition, SkillType } from '@shared/index';
-import { DropType, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
+import { CharacterClass, CharacterState, SKILLS, SkillDefinition, SkillType, VfxEvent } from '@shared/index';
+import { DropType, QUICK_SLOT_ACTION_SET, SpecialDropType } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { InputKeys } from '@shared/messages';
@@ -160,7 +160,7 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> } | null {
     return this.engine?.getStateSnapshot() ?? null;
   }
 
@@ -176,8 +176,16 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.syncRemoteFloor(floor);
   }
 
+  applyRemoteSpecialEffects(effects: import('@shared/game-entities').ActiveSpecialEffect[]): void {
+    this.engine?.applyRemoteSpecialEffects(effects);
+  }
+
   applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
     this.engine?.applyRemoteDamage(events);
+  }
+
+  applyRemotePull(evt: { playerX: number; playerY: number; pullRange: number; skillColor: string }): void {
+    this.engine?.applyRemotePull(evt);
   }
 
   applyIncomingZombieDamage(damage: number, knockbackDir: number, isPoisonAttack: boolean): void {
@@ -188,8 +196,16 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.setRemotePlayers(players);
   }
 
+  activateSpecialEffect(type: SpecialDropType): void {
+    this.engine?.activateSpecialEffect(type);
+  }
+
   applyRevive(): void {
     this.engine?.applyRevive();
+  }
+
+  replayRemoteVfxEvents(events: VfxEvent[]): void {
+    this.engine?.replayRemoteVfxEvents(events);
   }
 
   ngOnDestroy(): void {

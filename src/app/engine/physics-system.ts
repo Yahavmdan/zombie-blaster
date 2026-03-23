@@ -3,10 +3,28 @@ import {
   Direction,
   GAME_CONSTANTS,
 } from '@shared/index';
+import {
+  ActiveSpecialEffect,
+  SpecialDropType,
+} from '@shared/game-entities';
 import { IGameEngine, Platform, Rope } from './engine-types';
 
 export class PhysicsSystem {
   constructor(private readonly e: IGameEngine) {}
+
+  private getEffectiveGravity(): number {
+    const hasLowGrav: boolean = this.e.activeSpecialEffects.some(
+      (eff: ActiveSpecialEffect): boolean => eff.type === SpecialDropType.LowGravity,
+    );
+    return hasLowGrav ? GAME_CONSTANTS.SPECIAL_LOW_GRAVITY_VALUE : GAME_CONSTANTS.GRAVITY;
+  }
+
+  private getEffectiveMoveSpeed(baseSpeed: number): number {
+    const hasSuperSpeed: boolean = this.e.activeSpecialEffects.some(
+      (eff: ActiveSpecialEffect): boolean => eff.type === SpecialDropType.SuperSpeed,
+    );
+    return hasSuperSpeed ? baseSpeed * GAME_CONSTANTS.SPECIAL_SUPER_SPEED_MULTIPLIER : baseSpeed;
+  }
 
   rectsOverlap(
     x1: number, y1: number, w1: number, h1: number,
@@ -56,7 +74,7 @@ export class PhysicsSystem {
   private applyStunnedMovement(p: CharacterState): void {
     p.velocityX *= GAME_CONSTANTS.PLAYER_FRICTION;
     if (Math.abs(p.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) p.velocityX = 0;
-    p.velocityY += GAME_CONSTANTS.GRAVITY;
+    p.velocityY += this.getEffectiveGravity();
     if (p.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
       p.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
     }
@@ -168,7 +186,7 @@ export class PhysicsSystem {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
 
-    const speed: number = p.derived.speed * this.getCorpseSpeedMultiplier(p);
+    const speed: number = this.getEffectiveMoveSpeed(p.derived.speed);
     if (p.isGrounded) {
       if (this.e.keys.left) {
         p.velocityX = -speed;
@@ -190,8 +208,9 @@ export class PhysicsSystem {
       if (Math.abs(p.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) p.velocityX = 0;
     }
 
-    const jumpPressed: boolean = this.e.keys.up || this.e.keys.jump;
-    if (jumpPressed && !this.e.jumpHeld && p.isGrounded) {
+    const jumpKeyDown: boolean = this.e.keys.up || this.e.keys.jump;
+    const jumpRequested: boolean = jumpKeyDown || this.e.jumpBufferTicks > 0;
+    if (jumpRequested && !this.e.jumpHeld && p.isGrounded) {
       if (this.e.keys.down && p.y + GAME_CONSTANTS.PLAYER_HEIGHT < GAME_CONSTANTS.GROUND_Y) {
         this.e.platformDropTimer = GAME_CONSTANTS.PLATFORM_DROP_TICKS;
         p.y += GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE + 1;
@@ -200,8 +219,9 @@ export class PhysicsSystem {
         p.velocityY = GAME_CONSTANTS.PLAYER_JUMP_FORCE;
         p.isGrounded = false;
       }
+      this.e.jumpBufferTicks = 0;
     }
-    this.e.jumpHeld = jumpPressed;
+    this.e.jumpHeld = jumpKeyDown;
 
     if (this.e.keys.up && activeRope && !p.isGrounded && this.e.ropeJumpCooldown <= 0) {
       p.isClimbing = true;
@@ -217,7 +237,7 @@ export class PhysicsSystem {
       return;
     }
 
-    p.velocityY += GAME_CONSTANTS.GRAVITY;
+    p.velocityY += this.getEffectiveGravity();
     if (p.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
       p.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
     }
@@ -251,34 +271,10 @@ export class PhysicsSystem {
     }
 
     this.clampPlayerToGround(p);
-  }
 
-  private getCorpseSpeedMultiplier(p: CharacterState): number {
-    if (!p.isGrounded) return 1;
-    const count: number = this.countOverlappingCorpses(p);
-    if (count === 0) return 1;
-    const multiplier: number = Math.max(
-      GAME_CONSTANTS.ZOMBIE_CORPSE_MAX_SLOWDOWN,
-      1 - count * GAME_CONSTANTS.ZOMBIE_CORPSE_SPEED_PENALTY,
-    );
-    return multiplier;
-  }
-
-  private countOverlappingCorpses(p: CharacterState): number {
-    const px: number = p.x;
-    const pw: number = GAME_CONSTANTS.PLAYER_WIDTH;
-    const playerBottom: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT;
-    let count: number = 0;
-    for (const corpse of this.e.zombieCorpses) {
-      if (!corpse.isGrounded) continue;
-      const surfaceY: number = corpse.y + corpse.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
-      if (playerBottom < surfaceY - GAME_CONSTANTS.ZOMBIE_CORPSE_SNAP_TOLERANCE) continue;
-      if (p.y > surfaceY + corpse.height) continue;
-      if (px + pw > corpse.x && px < corpse.x + corpse.width) {
-        count++;
-      }
+    if (p.isGrounded) {
+      this.e.doubleJumpUsed = false;
     }
-    return count;
   }
 
   private findHighestCorpseSurface(

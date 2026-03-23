@@ -1,0 +1,36 @@
+---
+description: Every visual effect must be visible to all players in multiplayer sessions
+alwaysApply: true
+---
+
+# Multiplayer VFX Sync — Hard Gate
+
+Every visual effect MUST be seen by ALL online players, not just the player who triggers it. This applies to:
+
+- Skill animations and particles (`triggerSkillAnimation`)
+- Level-up effects (`spawnLevelUpEffect`)
+- Buff/debuff activation particles
+- Sprite effects (spriteEffectSystem.spawn)
+- Screen shake/flash from shared events (e.g., dragon roar)
+- Floor transition effects
+- Hit marks, damage numbers from remote combat
+- Any new particle, sprite, or overlay effect
+
+## Required Workflow
+
+Before writing or reviewing any VFX-related code:
+
+1. Read the skill `.cursor/skills/multiplayer-vfx-sync/SKILL.md` for the broadcast/replay pattern.
+2. Verify the effect is emitted as a `VfxEvent` so remote clients can replay it.
+3. Never fire a visual-only call (particles, sprite effects, screen flash) without also pushing a `VfxEvent` when in multiplayer.
+
+## Quick Check
+
+When you add or touch a visual effect, answer these:
+
+- [ ] Does this effect fire on the originating client? (local playback)
+- [ ] Is a `VfxEvent` pushed to `pendingVfxEvents` so other players receive it?
+- [ ] Does the receiving client replay the effect at the correct world position?
+- [ ] Is the originating client's own event filtered out to avoid double-play?
+
+If any box is unchecked, the feature is incomplete.

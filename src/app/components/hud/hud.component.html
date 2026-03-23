@@ -41,24 +41,6 @@
       <span class="stat-mini">DEF {{ playerData().derived.defense }}</span>
       <span class="stat-mini">CRIT {{ playerData().derived.critRate | number:'1.0-0' }}%</span>
     </div>
-    @if (isDevMode) {
-      <button
-        class="god-mode-toggle"
-        [class.god-mode-toggle--active]="godMode()"
-        (click)="onToggleGodMode()"
-        data-testid="hud-godmode-button-toggle"
-      >
-        {{ godMode() ? 'GOD ON' : 'GOD OFF' }}
-      </button>
-      <button
-        class="god-mode-toggle"
-        [class.god-mode-toggle--active]="showCollisionBoxes()"
-        (click)="onToggleCollisionBoxes()"
-        data-testid="hud-hitboxes-button-toggle"
-      >
-        {{ showCollisionBoxes() ? 'BOXES ON' : 'BOXES OFF' }}
-      </button>
-    }
     @if (hasStatPoints()) {
       <button
         class="sp-indicator"

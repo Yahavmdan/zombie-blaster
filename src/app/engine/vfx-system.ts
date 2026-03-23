@@ -123,6 +123,94 @@ export class VfxSystem {
     this.triggerScreenFlash('#ffcc44', 8);
   }
 
+  spawnLevelUpEffectAt(cx: number, cy: number): void {
+    const count: number = 20;
+    for (let i: number = 0; i < count; i++) {
+      const angle: number = (i / count) * Math.PI * 2;
+      const speed: number = 3 + Math.random() * 4;
+      this.addParticle({
+        x: cx, y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 2,
+        life: 40 + Math.floor(Math.random() * 20),
+        maxLife: 60,
+        color: Math.random() > 0.5 ? '#ffcc44' : '#ffffff',
+        size: Math.random() * 4 + 2,
+        shape: ParticleShape.Star,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.2,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: true,
+      });
+    }
+    this.triggerScreenFlash('#ffcc44', 8);
+  }
+
+  spawnPortalVortex(cx: number, cy: number, inward: boolean): void {
+    const spiralCount: number = 24;
+    for (let i: number = 0; i < spiralCount; i++) {
+      const angle: number = (i / spiralCount) * Math.PI * 2;
+      const radius: number = inward ? (50 + Math.random() * 40) : 4;
+      const tangentAngle: number = angle + (inward ? Math.PI / 2 : -Math.PI / 2);
+      const radialSpeed: number = inward ? -(3 + Math.random() * 3) : (5 + Math.random() * 4);
+      const tangentSpeed: number = 2 + Math.random() * 2;
+      this.addParticle({
+        x: cx + Math.cos(angle) * radius,
+        y: cy + Math.sin(angle) * radius,
+        vx: Math.cos(angle) * radialSpeed + Math.cos(tangentAngle) * tangentSpeed,
+        vy: Math.sin(angle) * radialSpeed + Math.sin(tangentAngle) * tangentSpeed,
+        life: 28 + Math.floor(Math.random() * 12),
+        maxLife: 40,
+        color: i % 4 === 0 ? '#ffffff' : i % 4 === 1 ? '#bb66ff' : i % 4 === 2 ? '#6644ff' : '#ff8844',
+        size: 5 + Math.random() * 5,
+        shape: ParticleShape.Star,
+        rotation: angle,
+        rotationSpeed: (inward ? 0.4 : -0.4) + (Math.random() - 0.5) * 0.1,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: true,
+      });
+    }
+    const vertSlitCount: number = 10;
+    for (let i: number = 0; i < vertSlitCount; i++) {
+      const yOff: number = (i / vertSlitCount - 0.5) * 80;
+      this.addParticle({
+        x: cx + (Math.random() - 0.5) * 6,
+        y: cy + yOff,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: inward ? -yOff * 0.08 : yOff * 0.06,
+        life: 18 + Math.floor(Math.random() * 8),
+        maxLife: 26,
+        color: '#ddaaff',
+        size: 3 + Math.random() * 3,
+        shape: ParticleShape.Line,
+        rotation: Math.PI / 2,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Quick,
+        scaleOverLife: true,
+      });
+    }
+    const ringCount: number = 16;
+    for (let i: number = 0; i < ringCount; i++) {
+      const angle: number = (i / ringCount) * Math.PI * 2;
+      const speed: number = inward ? 1.5 : (3 + Math.random() * 2.5);
+      this.addParticle({
+        x: cx + Math.cos(angle) * (inward ? 35 : 8),
+        y: cy + Math.sin(angle) * (inward ? 35 : 8),
+        vx: (inward ? -1 : 1) * Math.cos(angle) * speed,
+        vy: (inward ? -1 : 1) * Math.sin(angle) * speed * 0.5 - 1.2,
+        life: 22,
+        maxLife: 28,
+        color: '#cc88ff',
+        size: 5 + Math.random() * 4,
+        shape: ParticleShape.Ring,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: true,
+      });
+    }
+  }
+
   spawnBuffActivationParticles(x: number, y: number, color: string): void {
     if (this.e.particles.length >= GAME_CONSTANTS.MAX_PARTICLES) return;
     const count: number = 10;

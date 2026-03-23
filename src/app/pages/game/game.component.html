@@ -42,6 +42,147 @@
       [player]="currentPlayerDisplay()"
     />
 
+    @if (isDev) {
+      <button
+        class="dev-toggle-btn"
+        [class.dev-toggle-btn--active]="devDialogOpen()"
+        data-testid="game-dev-button-toggle-dialog"
+        (click)="toggleDevDialog()"
+      >
+        DEV
+      </button>
+    }
+
+    @if (isDev && devDialogOpen()) {
+      <div class="dev-backdrop" (click)="closeDevDialog()"></div>
+      <div class="dev-dialog">
+        <div class="dev-dialog__header">
+          <span class="dev-dialog__title">Dev Tools</span>
+          <button
+            class="dev-dialog__close"
+            data-testid="game-dev-button-close-dialog"
+            (click)="closeDevDialog()"
+          >
+            &times;
+          </button>
+        </div>
+
+        <div class="dev-dialog__body">
+          <!-- Debug Toggles -->
+          <section class="dev-section">
+            <h3 class="dev-section__title">Debug</h3>
+            <div class="dev-section__row">
+              <button
+                class="dev-toggle"
+                [class.dev-toggle--on]="godMode()"
+                data-testid="game-dev-button-god-mode"
+                (click)="devToggleGodMode()"
+              >
+                {{ godMode() ? 'GOD ON' : 'GOD OFF' }}
+              </button>
+              <button
+                class="dev-toggle"
+                [class.dev-toggle--on]="showCollisionBoxes()"
+                data-testid="game-dev-button-collision-boxes"
+                (click)="devToggleCollisionBoxes()"
+              >
+                {{ showCollisionBoxes() ? 'BOXES ON' : 'BOXES OFF' }}
+              </button>
+            </div>
+          </section>
+
+          <!-- Character Class -->
+          <section class="dev-section">
+            <h3 class="dev-section__title">Character Class</h3>
+            <div class="dev-section__row dev-section__row--wrap">
+              @for (cls of devClassList; track cls.id) {
+                <button
+                  class="dev-class-btn"
+                  [class.dev-class-btn--selected]="p.classId === cls.id"
+                  [style.--cls-color]="cls.color"
+                  [attr.data-testid]="'game-dev-class-btn-' + cls.id"
+                  (click)="devSelectClass(cls.id)"
+                >
+                  <span class="dev-class-btn__icon">{{ cls.icon }}</span>
+                  <span class="dev-class-btn__name">{{ cls.name }}</span>
+                </button>
+              }
+            </div>
+          </section>
+
+          <!-- Progression -->
+          <section class="dev-section">
+            <h3 class="dev-section__title">Progression</h3>
+            <div class="dev-section__row">
+              <button
+                class="dev-btn dev-btn--level"
+                data-testid="game-dev-button-level-up"
+                (click)="devLevelUp()"
+              >
+                Level Up ({{ devPlayerLevel() }})
+              </button>
+              <button
+                class="dev-btn dev-btn--skills"
+                data-testid="game-dev-button-max-skills"
+                (click)="devMaxAllSkills()"
+              >
+                Max All Skills
+              </button>
+              <button
+                class="dev-btn dev-btn--maxout"
+                data-testid="game-dev-button-max-out"
+                (click)="devMaxOutPlayer()"
+              >
+                Max Out
+              </button>
+            </div>
+          </section>
+
+          <!-- World -->
+          <section class="dev-section">
+            <h3 class="dev-section__title">World</h3>
+            <div class="dev-section__row">
+              <input
+                class="dev-floor-input"
+                type="number"
+                min="1"
+                data-testid="game-dev-input-floor"
+                [ngModel]="devFloorInput()"
+                (ngModelChange)="devFloorInput.set($event)"
+              />
+              <button
+                class="dev-btn dev-btn--floor"
+                data-testid="game-dev-button-set-floor"
+                (click)="devSetFloor()"
+              >
+                Set Floor
+              </button>
+            </div>
+          </section>
+
+          <!-- Special Drops -->
+          <section class="dev-section">
+            <h3 class="dev-section__title">Special Drops</h3>
+            <div class="dev-section__row dev-section__row--wrap">
+              @for (def of specialDropDefs; track def.type) {
+                <button
+                  class="dev-drop-btn"
+                  [style.border-color]="def.color"
+                  [style.box-shadow]="'0 0 6px ' + def.color + '66'"
+                  [title]="def.description + ' (' + (def.durationTicks / 50) + 's)'"
+                  data-testid="game-dev-button-special-drop"
+                  (click)="activateSpecialDrop(def.type)"
+                >
+                  <span class="dev-drop-btn__icon">{{ def.icon }}</span>
+                  <span class="dev-drop-btn__name">{{ def.name }}</span>
+                </button>
+              }
+            </div>
+          </section>
+        </div>
+      </div>
+    }
+
     @if (statPanelOpen()) {
       <app-stat-allocation
         [player]="currentPlayerDisplay()"

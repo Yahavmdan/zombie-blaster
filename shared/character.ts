@@ -60,6 +60,7 @@ export interface CharacterState {
   facing: Direction;
   isGrounded: boolean;
   isAttacking: boolean;
+  isDoubleJumping: boolean;
   isClimbing: boolean;
   isDead: boolean;
   isDown: boolean;

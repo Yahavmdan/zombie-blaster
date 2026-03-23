@@ -7,11 +7,18 @@ import {
   ZOMBIE_TYPES,
 } from '@shared/index';
 import {
+  ActiveSpecialEffect,
   DropType,
+  PendingSpecialDropConfirm,
+  SpecialDropDefinition,
+  SpecialDropType,
   ZombieDefinition,
   ZombieState,
   ZombieType,
 } from '@shared/game-entities';
+import {
+  getSpecialDropDefinition,
+} from '@shared/game-constants';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
 import { ZombieSpriteAnchor } from './zombie-sprite-animator';
@@ -62,6 +69,8 @@ export class RenderSystem {
     this.e.spriteEffectSystem.render(ctx);
     this.renderDamageNumbers(ctx);
     this.renderDropNotifications(ctx);
+    this.renderActiveSpecialEffects(ctx);
+    this.renderPendingSpecialDropDialog(ctx);
     this.renderLevelUpNotification(ctx);
     this.renderFloorInfo(ctx);
     if (this.e.showCollisionBoxes) {
@@ -161,7 +170,16 @@ export class RenderSystem {
     const drawX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2 - spriteSize * effectiveAnchorX;
     const drawY: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT - spriteSize * playerAnchorY;
 
+    const superSpeed: boolean = this.isSuperSpeedActive();
+    const isRunning: boolean = p.velocityX !== 0;
+
     if (this.e.spriteAnimator.isLoaded()) {
+      if (superSpeed && isRunning) {
+        this.renderSpeedTrail(ctx, p, drawX, drawY, spriteSize, flipX,
+          (trailCtx: CanvasRenderingContext2D, tx: number, ty: number, tw: number, th: number, tf: boolean): void => {
+            this.e.spriteAnimator.draw(trailCtx, tx, ty, tw, th, tf);
+          });
+      }
       this.e.spriteAnimator.draw(ctx, drawX, drawY, spriteSize, spriteSize, flipX);
     } else {
       ctx.save();
@@ -310,12 +328,21 @@ export class RenderSystem {
       ctx.save();
       ctx.globalAlpha = 0.85;
 
+      const superSpeed: boolean = this.isSuperSpeedActive();
+
       if (animator && animator.isLoaded()) {
         const playerAnchorX: number = 0.30;
         const playerAnchorY: number = 0.979;
         const effectiveAnchorX: number = flipX ? (1 - playerAnchorX) : playerAnchorX;
         const drawX: number = rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2 - spriteSize * effectiveAnchorX;
         const drawY: number = rp.y + GAME_CONSTANTS.PLAYER_HEIGHT - spriteSize * playerAnchorY;
+        const isRunning: boolean = rp.velocityX !== 0;
+        if (superSpeed && isRunning) {
+          this.renderSpeedTrail(ctx, rp, drawX, drawY, spriteSize, flipX,
+            (trailCtx: CanvasRenderingContext2D, tx: number, ty: number, tw: number, th: number, tf: boolean): void => {
+              animator.draw(trailCtx, tx, ty, tw, th, tf);
+            });
+        }
         animator.draw(ctx, drawX, drawY, spriteSize, spriteSize, flipX);
       } else {
         ctx.translate(rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2);
@@ -456,8 +483,86 @@ export class RenderSystem {
     ctx.restore();
   }
 
+  private isShockActive(): boolean {
+    return this.e.activeSpecialEffects.some(
+      (eff: ActiveSpecialEffect): boolean => eff.type === SpecialDropType.ZombieShock,
+    );
+  }
+
+  private isSuperSpeedActive(): boolean {
+    return this.e.activeSpecialEffects.some(
+      (eff: ActiveSpecialEffect): boolean => eff.type === SpecialDropType.SuperSpeed,
+    );
+  }
+
+  private renderSpeedTrail(
+    ctx: CanvasRenderingContext2D,
+    p: CharacterState,
+    drawX: number,
+    drawY: number,
+    spriteSize: number,
+    flipX: boolean,
+    drawFn: (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, flip: boolean) => void,
+  ): void {
+    const trailCount: number = GAME_CONSTANTS.SPECIAL_SUPER_SPEED_TRAIL_COUNT;
+    const spacing: number = GAME_CONSTANTS.SPECIAL_SUPER_SPEED_TRAIL_SPACING;
+    const dirSign: number = p.facing === Direction.Left ? 1 : -1;
+
+    for (let i: number = trailCount; i >= 1; i--) {
+      const t: number = i / trailCount;
+      const offsetX: number = dirSign * spacing * i;
+      const stretchW: number = spriteSize * (1 + t * 0.35);
+      const stretchH: number = spriteSize * (1 - t * 0.08);
+      const stretchOffsetX: number = (stretchW - spriteSize) / 2;
+      const stretchOffsetY: number = (spriteSize - stretchH);
+      const alpha: number = 0.08 + 0.1 * (trailCount - i);
+      const blur: number = 3 + i * 2;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.filter = `blur(${blur}px)`;
+      drawFn(ctx, drawX + offsetX - stretchOffsetX, drawY + stretchOffsetY, stretchW, stretchH, flipX);
+      ctx.restore();
+    }
+  }
+
+  private renderElectricArcs(
+    ctx: CanvasRenderingContext2D, cx: number, cy: number, w: number, h: number,
+  ): void {
+    const arcCount: number = GAME_CONSTANTS.SPECIAL_ZOMBIE_SHOCK_ARC_COUNT;
+    const segments: number = GAME_CONSTANTS.SPECIAL_ZOMBIE_SHOCK_ARC_SEGMENTS;
+
+    ctx.save();
+    for (let a: number = 0; a < arcCount; a++) {
+      const startX: number = cx + (Math.random() - 0.5) * w * 0.8;
+      const startY: number = cy - h * 0.1 + (Math.random() - 0.5) * h * 0.6;
+      const endX: number = cx + (Math.random() - 0.5) * w * 0.8;
+      const endY: number = cy - h * 0.1 + (Math.random() - 0.5) * h * 0.6;
+
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+
+      for (let s: number = 1; s <= segments; s++) {
+        const t: number = s / segments;
+        const px: number = startX + (endX - startX) * t + (Math.random() - 0.5) * 14;
+        const py: number = startY + (endY - startY) * t + (Math.random() - 0.5) * 14;
+        ctx.lineTo(px, py);
+      }
+
+      ctx.strokeStyle = Math.random() > 0.4 ? '#ffffff' : '#ccff00';
+      ctx.lineWidth = Math.random() > 0.5 ? 2 : 1;
+      ctx.shadowColor = '#ccff00';
+      ctx.shadowBlur = 10;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   private renderZombies(ctx: CanvasRenderingContext2D): void {
     this.renderZombieCorpses(ctx);
+
+    const shocked: boolean = this.isShockActive();
+    const vibrate: number = GAME_CONSTANTS.SPECIAL_ZOMBIE_SHOCK_VIBRATE_PX;
 
     const sorted: ZombieState[] = this.e.zombies
       .filter((z: ZombieState) => !z.isDead)
@@ -484,10 +589,21 @@ export class RenderSystem {
         const flipX: boolean = z.type === ZombieType.DragonBoss ? z.facing > 0 : z.facing < 0;
         const anchor: ZombieSpriteAnchor = this.e.zombieSpriteAnimator.getAnchor(spriteKey);
         const effectiveAnchorX: number = flipX ? (1 - anchor.anchorX) : anchor.anchorX;
-        const drawX: number = z.x + z.instanceWidth / 2 - renderW * effectiveAnchorX;
-        const drawY: number = z.y + z.instanceHeight - renderH * anchor.anchorY;
+        let drawX: number = z.x + z.instanceWidth / 2 - renderW * effectiveAnchorX;
+        let drawY: number = z.y + z.instanceHeight - renderH * anchor.anchorY;
+
+        if (shocked && !isSpawning) {
+          drawX += (Math.random() - 0.5) * vibrate * 2;
+          drawY += (Math.random() - 0.5) * vibrate * 2;
+        }
 
         this.e.zombieSpriteAnimator.draw(ctx, z.id, spriteKey, drawX, drawY, renderW, renderH, flipX);
+
+        if (shocked && !isSpawning) {
+          const arcCx: number = z.x + z.instanceWidth / 2;
+          const arcCy: number = z.y + z.instanceHeight / 2;
+          this.renderElectricArcs(ctx, arcCx, arcCy, renderW * 0.6, renderH * 0.7);
+        }
       } else {
         this.renderZombieFallback(ctx, z);
       }
@@ -847,18 +963,24 @@ export class RenderSystem {
 
   private renderDrops(ctx: CanvasRenderingContext2D): void {
     for (const drop of this.e.worldDrops) {
+      if (drop.type === DropType.Special && drop.specialType) {
+        this.renderSpecialDrop(ctx, drop.x, drop.y, drop.specialType, drop.lifetime);
+        continue;
+      }
+
       const size: number = GAME_CONSTANTS.DROP_SIZE;
       const cx: number = drop.x + size / 2;
       const cy: number = drop.y + size / 2;
       const pulse: number = 1 + Math.sin(drop.lifetime * 0.1) * 0.15;
       const r: number = (size / 2) * pulse;
 
-      const colors: Record<DropType, { main: string; highlight: string; label: string }> = {
+      const normalColors: Record<string, { main: string; highlight: string; label: string }> = {
         [DropType.HpPotion]: { main: '#ff4488', highlight: '#ff88aa', label: 'HP' },
         [DropType.MpPotion]: { main: '#4488ff', highlight: '#88ccff', label: 'MP' },
         [DropType.Gold]: { main: '#ffcc44', highlight: '#ffee88', label: `${drop.value}G` },
       };
-      const c: { main: string; highlight: string; label: string } = colors[drop.type];
+      const c: { main: string; highlight: string; label: string } | undefined = normalColors[drop.type];
+      if (!c) continue;
 
       ctx.save();
       ctx.shadowColor = c.main;
@@ -881,6 +1003,69 @@ export class RenderSystem {
       ctx.fillText(c.label, cx, cy + size + 6);
       ctx.restore();
     }
+  }
+
+  private renderSpecialDrop(
+    ctx: CanvasRenderingContext2D, x: number, y: number, type: SpecialDropType, lifetime: number,
+  ): void {
+    const def: ReturnType<typeof getSpecialDropDefinition> = getSpecialDropDefinition(type);
+    if (!def) return;
+
+    const size: number = GAME_CONSTANTS.SPECIAL_DROP_SIZE;
+    const cx: number = x + size / 2;
+    const cy: number = y + size / 2;
+    const pulse: number = 1 + Math.sin(lifetime * 0.15) * 0.25;
+    const r: number = (size / 2) * pulse;
+    const rotation: number = lifetime * 0.04;
+
+    ctx.save();
+
+    ctx.shadowColor = def.color;
+    ctx.shadowBlur = 20;
+
+    const outerGlow: CanvasGradient = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * 1.8);
+    outerGlow.addColorStop(0, def.color + 'cc');
+    outerGlow.addColorStop(0.5, def.color + '44');
+    outerGlow.addColorStop(1, def.color + '00');
+    ctx.fillStyle = outerGlow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 1.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowBlur = 14;
+    const points: number = 6;
+    const outerR: number = r;
+    const innerR: number = r * 0.5;
+    ctx.fillStyle = def.color;
+    ctx.beginPath();
+    for (let i: number = 0; i < points * 2; i++) {
+      const angle: number = rotation + (i * Math.PI) / points;
+      const radius: number = i % 2 === 0 ? outerR : innerR;
+      const px: number = cx + Math.cos(angle) * radius;
+      const py: number = cy + Math.sin(angle) * radius;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = def.highlightColor;
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.15, cy - r * 0.2, r * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${Math.round(size * 0.55)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(def.icon, cx, cy);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.fillText(def.name, cx, cy + size / 2 + 6);
+    ctx.restore();
   }
 
   private renderDamageNumbers(ctx: CanvasRenderingContext2D): void {
@@ -970,6 +1155,175 @@ export class RenderSystem {
     ctx.restore();
   }
 
+  private renderActiveSpecialEffects(ctx: CanvasRenderingContext2D): void {
+    const effects: ActiveSpecialEffect[] = this.e.activeSpecialEffects;
+    if (effects.length === 0) return;
+
+    const barWidth: number = 140;
+    const barHeight: number = 18;
+    const padding: number = 4;
+    const startX: number = GAME_CONSTANTS.CANVAS_WIDTH - barWidth - 10;
+    let startY: number = 10;
+
+    for (const eff of effects) {
+      const def: ReturnType<typeof getSpecialDropDefinition> = getSpecialDropDefinition(eff.type);
+      if (!def) continue;
+
+      const progress: number = eff.remainingTicks / eff.totalTicks;
+      const secondsLeft: number = Math.ceil(eff.remainingTicks / GAME_CONSTANTS.TICK_RATE);
+
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      const rr: number = barHeight / 2;
+      ctx.roundRect(startX, startY, barWidth, barHeight, rr);
+      ctx.fill();
+
+      ctx.fillStyle = def.color;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.roundRect(startX, startY, barWidth * progress, barHeight, rr);
+      ctx.fill();
+
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      const textY: number = startY + barHeight / 2;
+      ctx.fillText(`${def.icon} ${def.name}`, startX + padding + 2, textY);
+
+      ctx.textAlign = 'right';
+      ctx.fillText(`${secondsLeft}s`, startX + barWidth - padding - 2, textY);
+
+      ctx.restore();
+      startY += barHeight + 3;
+    }
+  }
+
+  private renderPendingSpecialDropDialog(ctx: CanvasRenderingContext2D): void {
+    const pending: PendingSpecialDropConfirm | null = this.e.pendingSpecialDropConfirm;
+    if (!pending) return;
+
+    const def: SpecialDropDefinition | undefined = getSpecialDropDefinition(pending.type);
+    if (!def) return;
+
+    const cw: number = GAME_CONSTANTS.CANVAS_WIDTH;
+    const ch: number = GAME_CONSTANTS.CANVAS_HEIGHT;
+    const boxW: number = 420;
+    const boxH: number = 200;
+    const boxX: number = (cw - boxW) / 2;
+    const boxY: number = (ch - boxH) / 2 - 40;
+    const cornerR: number = 14;
+    const timerProgress: number = pending.remainingTicks / pending.totalTicks;
+    const secondsLeft: number = Math.ceil(pending.remainingTicks / GAME_CONSTANTS.TICK_RATE);
+    const pulse: number = 0.9 + Math.sin(Date.now() / 200) * 0.1;
+
+    ctx.save();
+
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, cw, ch);
+
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = '#0c0c1a';
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxW, boxH, cornerR);
+    ctx.fill();
+
+    ctx.strokeStyle = def.color;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxW, boxH, cornerR);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.12;
+    const glow: CanvasGradient = ctx.createRadialGradient(
+      boxX + boxW / 2, boxY + 50, 10,
+      boxX + boxW / 2, boxY + 50, boxW / 2,
+    );
+    glow.addColorStop(0, def.color);
+    glow.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxW, boxH, cornerR);
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    const iconSize: number = 36;
+    ctx.font = `${iconSize}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(def.icon, boxX + boxW / 2, boxY + 34);
+
+    ctx.fillStyle = def.color;
+    ctx.font = 'bold 18px "Segoe UI", sans-serif';
+    ctx.fillText(def.name, boxX + boxW / 2, boxY + 62);
+
+    ctx.fillStyle = '#cccccc';
+    ctx.font = '12px "Segoe UI", sans-serif';
+    const maxTextW: number = boxW - 40;
+    const lines: string[] = this.wrapText(ctx, def.funnyDescription, maxTextW);
+    let textY: number = boxY + 86;
+    for (const line of lines) {
+      ctx.fillText(line, boxX + boxW / 2, textY);
+      textY += 16;
+    }
+
+    const barW: number = boxW - 60;
+    const barH: number = 8;
+    const barX: number = boxX + 30;
+    const barY: number = boxY + boxH - 52;
+
+    ctx.fillStyle = '#222222';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, barH / 2);
+    ctx.fill();
+
+    ctx.fillStyle = timerProgress > 0.4 ? def.color : timerProgress > 0.2 ? '#ff8800' : '#ff2222';
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW * timerProgress, barH, barH / 2);
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px "Segoe UI", sans-serif';
+    ctx.fillText(`${secondsLeft}s`, boxX + boxW / 2, barY + barH + 14);
+
+    ctx.font = 'bold 14px "Segoe UI", sans-serif';
+    const promptY: number = boxY + boxH - 14;
+
+    ctx.fillStyle = '#44ff66';
+    ctx.globalAlpha = pulse;
+    ctx.fillText('[Y] Activate', boxX + boxW / 2 - 70, promptY);
+
+    ctx.fillStyle = '#ff4466';
+    ctx.fillText('[N] Nope', boxX + boxW / 2 + 70, promptY);
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  private wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+    const words: string[] = text.split(' ');
+    const lines: string[] = [];
+    let current: string = '';
+    for (const word of words) {
+      const test: string = current ? current + ' ' + word : word;
+      if (ctx.measureText(test).width > maxWidth && current) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = test;
+      }
+    }
+    if (current) lines.push(current);
+    return lines;
+  }
+
   private renderFloorInfo(ctx: CanvasRenderingContext2D): void {
     const total: number = GAME_CONSTANTS.FLOOR_TRANSITION_TICKS;
     const timer: number = this.e.floorTransitionTimer;
@@ -1038,7 +1392,9 @@ export class RenderSystem {
 
     ctx.save();
 
-    if (!this.e.mapRenderer.isLoaded()) {
+    if (this.e.mapRenderer.isLoaded()) {
+      this.e.mapRenderer.drawDynamicPlatform(ctx, exit.x, exit.y, exit.width, exit.height);
+    } else {
       ctx.fillStyle = '#2a2a3a';
       ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
       ctx.fillStyle = '#3a3a5a';
@@ -1236,7 +1592,11 @@ export class RenderSystem {
     }
 
     if (!p.isGrounded) {
-      this.e.spriteAnimator.setState(PlayerAnimState.Jump);
+      if (this.e.doubleJumpAnimTicks > 0) {
+        this.e.spriteAnimator.setState(PlayerAnimState.DoubleJump);
+      } else {
+        this.e.spriteAnimator.setState(PlayerAnimState.Jump);
+      }
       return;
     }
 

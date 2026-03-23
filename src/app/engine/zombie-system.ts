@@ -4,14 +4,17 @@ import {
   ZOMBIE_TYPES,
 } from '@shared/index';
 import {
+  ActiveSpecialEffect,
+  SpecialDropType,
   ZombieDefinition,
   ZombieState,
   ZombieType,
+  ZombieCorpse,
 } from '@shared/game-entities';
-import { ZombieCorpse } from '@shared/game-entities';
 import { IGameEngine, Platform } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { CombatSystem } from './combat-system';
+import { DropSystem } from './drop-system';
 import { ProjectileSystem } from './projectile-system';
 import { ZombieAnimState } from './zombie-sprite-animator';
 
@@ -31,6 +34,7 @@ export class ZombieSystem {
     private readonly physics: PhysicsSystem,
     private readonly combat: CombatSystem,
     private readonly projectiles: ProjectileSystem,
+    private readonly drops: DropSystem,
   ) {}
 
   private getAllTargets(): TargetInfo[] {
@@ -78,8 +82,16 @@ export class ZombieSystem {
     return nearest;
   }
 
+  private isZombieShockActive(): boolean {
+    return this.e.activeSpecialEffects.some(
+      (eff: ActiveSpecialEffect): boolean => eff.type === SpecialDropType.ZombieShock,
+    );
+  }
+
   updateZombies(): void {
     if (this.getAllTargets().length === 0) return;
+
+    const shocked: boolean = this.isZombieShockActive();
 
     for (const z of this.e.zombies) {
       if (z.isDead) continue;
@@ -92,6 +104,17 @@ export class ZombieSystem {
         if (z.spawnTimer <= 0) {
           this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Idle);
         }
+        continue;
+      }
+
+      if (shocked) {
+        z.velocityX = 0;
+        z.velocityY = 0;
+        z.attackAnimTimer = 0;
+        z.attackHasHit = false;
+        const spriteKey: string = this.e.zombieSpriteAnimator.getSpriteKey(z.type);
+        this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Idle);
+        this.e.zombieSpriteAnimator.tick(z.id, spriteKey);
         continue;
       }
 
@@ -127,7 +150,7 @@ export class ZombieSystem {
         z.x += z.velocityX;
         z.y += z.velocityY;
       } else {
-        z.velocityY += GAME_CONSTANTS.GRAVITY;
+        z.velocityY += this.drops.getEffectiveGravity();
         if (z.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
           z.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
         }
@@ -775,6 +798,7 @@ export class ZombieSystem {
   startFloor(): void {
     this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead);
     this.e.spawnTimer = GAME_CONSTANTS.FLOOR_INITIAL_SPAWN_DELAY_TICKS;
+    this.e.repositionExitPlatform();
     this.e.onFloorUpdate?.(this.e.floor);
   }
 
@@ -790,7 +814,7 @@ export class ZombieSystem {
         corpse.velocityX *= 0.92;
         if (Math.abs(corpse.velocityX) < 0.1) corpse.velocityX = 0;
 
-        corpse.velocityY += GAME_CONSTANTS.GRAVITY;
+        corpse.velocityY += this.drops.getEffectiveGravity();
         if (corpse.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
           corpse.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
         }
@@ -862,7 +886,7 @@ export class ZombieSystem {
   private tickClientCorpseVisuals(): void {
     for (const corpse of this.e.zombieCorpses) {
       if (!corpse.isGrounded && this.e.pendingLocalKills.has(corpse.id)) {
-        corpse.velocityY += GAME_CONSTANTS.GRAVITY;
+        corpse.velocityY += this.drops.getEffectiveGravity();
         if (corpse.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
           corpse.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
         }

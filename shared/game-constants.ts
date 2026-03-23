@@ -9,6 +9,8 @@ import {
   ShopItemDefinition,
   PotionDefinition,
   PotionCategory,
+  SpecialDropType,
+  SpecialDropDefinition,
 } from './game-entities';
 import { KeyBindings } from './messages';
 import { SkillDefinition, SkillType } from './skill';
@@ -36,11 +38,17 @@ export const GAME_CONSTANTS = {
   // ─── Player Movement ────────────────────────────
   PLAYER_WIDTH: 32, // Player hitbox width in pixels
   PLAYER_HEIGHT: 48, // Player hitbox height in pixels
-  PLAYER_JUMP_FORCE: -10, // Upward velocity applied when jumping (negative = up)
+  PLAYER_JUMP_FORCE: -11, // Upward velocity applied when jumping (negative = up)
   PLAYER_MOVE_SPEED: 3, // Horizontal speed when walking
   PLAYER_FRICTION: .9, // Ground friction multiplier each tick (closer to 0 = more slippery)
-  PLAYER_AIR_DRAG: 0.98, // Air resistance multiplier each tick while airborne
+  PLAYER_AIR_DRAG: 0.99, // Air resistance multiplier each tick while airborne
   PLAYER_MIN_VELOCITY: 1, // Speeds below this are snapped to zero (stops sliding)
+  JUMP_BUFFER_TICKS: 6, // Ticks a jump press is remembered if it arrives between game ticks (~120ms at 50 tps)
+
+  // ─── Double Jump ─────────────────────────────
+  DOUBLE_JUMP_FORCE: -9, // Upward velocity applied during a double jump (negative = up)
+  DOUBLE_JUMP_HORIZONTAL_BURST: 7, // Horizontal speed burst during a double jump
+  DOUBLE_JUMP_ANIM_TICKS: 30, // Ticks the double jump animation plays
 
   // ─── Player Combat ─────────────────────────────
   PLAYER_BASE_ATTACK_RANGE: 50, // How far (pixels) the basic attack reaches beyond the player body
@@ -82,7 +90,7 @@ export const GAME_CONSTANTS = {
 
   // ─── Exit Platform (floor exit) ──────────────
   EXIT_PLATFORM_Y: 130, // Y position of the exit platform (pixels from top)
-  EXIT_PLATFORM_WIDTH: 1280, // Width of the exit platform in pixels (full canvas width)
+  EXIT_PLATFORM_WIDTH: 200, // Width of the exit platform in pixels
   EXIT_PLATFORM_HEIGHT: 20, // Height of the exit platform in pixels
 
   // ─── Zombie Spawning ───────────────────────────
@@ -170,8 +178,6 @@ export const GAME_CONSTANTS = {
   ZOMBIE_CORPSE_DEATH_SCATTER: 0.2, // Random horizontal scatter applied to corpses on death
   ZOMBIE_CORPSE_DIVERSE_CHANCE: 0.45, // Chance a corpse uses a different visual variant
   ZOMBIE_CORPSE_BLOOD_CHANCE: 0.3, // Chance a corpse shows a blood splatter
-  ZOMBIE_CORPSE_SPEED_PENALTY: 0.18, // Fraction of speed lost per overlapping corpse (0.18 = -18% each)
-  ZOMBIE_CORPSE_MAX_SLOWDOWN: 0.55, // Minimum speed multiplier when buried in corpses (0.55 = 45% max reduction)
 
   // ─── Ropes ──────────────────────────────────────
   ROPE_CLIMB_SPEED: 3, // How fast the player moves up/down on a rope
@@ -236,10 +242,81 @@ export const GAME_CONSTANTS = {
   REVIVE_RANGE: 60, // Pixels — reviver must be within this distance
   REVIVE_HP_PERCENT: 30, // Percent of max HP the revived player comes back with
 
+  // ─── Special Drops ────────────────────────────────
+  SPECIAL_DROP_CHANCE_NORMAL: 0.008, // Chance (0-1) a normal zombie drops a special item
+  SPECIAL_DROP_CHANCE_BOSS: 0.35, // Chance (0-1) a boss drops a special item
+  SPECIAL_DROP_CHANCE_DRAGON_BOSS: 0.60, // Chance (0-1) the dragon boss drops a special item
+  SPECIAL_DROP_LIFETIME: 900, // Ticks before an uncollected special drop disappears
+  SPECIAL_DROP_SIZE: 20, // Visual size of special drops in pixels
+  SPECIAL_DROP_POP_FORCE: -4, // Upward pop when a special drop spawns (negative = up)
+
+  SPECIAL_LOW_GRAVITY_DURATION_S: 30, // Duration in seconds for low gravity effect
+  SPECIAL_LOW_GRAVITY_VALUE: 0.25, // Gravity value during effect (normal: 0.5)
+  SPECIAL_SUPER_SPEED_DURATION_S: 25, // Duration in seconds for super speed effect
+  SPECIAL_SUPER_SPEED_MULTIPLIER: 2.5, // Move speed multiplier during effect
+  SPECIAL_SUPER_SPEED_TRAIL_COUNT: 5, // Number of afterimage copies trailing behind the player
+  SPECIAL_SUPER_SPEED_TRAIL_SPACING: 14, // Pixel spacing between each afterimage copy
+  SPECIAL_GIANT_SLAYER_DURATION_S: 20, // Duration in seconds for giant slayer effect
+  SPECIAL_GIANT_SLAYER_DAMAGE_MULTIPLIER: 2, // Damage multiplied by this during effect
+  SPECIAL_ZOMBIE_SHOCK_DURATION_S: 10, // Duration in seconds for zombie shock effect
+  SPECIAL_ZOMBIE_SHOCK_VIBRATE_PX: 3, // Max pixel offset for shock vibration
+  SPECIAL_ZOMBIE_SHOCK_ARC_SEGMENTS: 5, // Number of line segments per electric arc
+  SPECIAL_ZOMBIE_SHOCK_ARC_COUNT: 3, // Number of electric arcs per zombie
+  SPECIAL_DROP_CONFIRM_TICKS: 250, // Ticks (5 seconds at 50 tps) the player has to confirm a special drop
+
   // ─── Tick Rate ──────────────────────────────────
   TICK_RATE: 50, // Game loop runs at this many ticks per second
 
 } as const;
+
+// ─── Special Drop Definitions ─────────────────────
+
+export const SPECIAL_DROP_DEFINITIONS: SpecialDropDefinition[] = [
+  {
+    type: SpecialDropType.LowGravity,
+    name: 'Moon Walk',
+    description: 'Gravity weakens across the entire map — everything floats a little!',
+    funnyDescription: 'Houston, we have a problem... gravity just rage-quit! Everyone bounces around like a trampoline park for the undead. Your calves will thank you later.',
+    icon: '🌙',
+    color: '#aa88ff',
+    highlightColor: '#ddbbff',
+    durationTicks: GAME_CONSTANTS.SPECIAL_LOW_GRAVITY_DURATION_S * GAME_CONSTANTS.TICK_RATE,
+  },
+  {
+    type: SpecialDropType.SuperSpeed,
+    name: 'Nitro Boost',
+    description: 'Move at blazing speed!',
+    funnyDescription: 'NYOOOOM! Your legs are now fueled by pure caffeine and questionable life choices. Run so fast your shadow files a missing person report!',
+    icon: '⚡',
+    color: '#00ccff',
+    highlightColor: '#88eeff',
+    durationTicks: GAME_CONSTANTS.SPECIAL_SUPER_SPEED_DURATION_S * GAME_CONSTANTS.TICK_RATE,
+  },
+  {
+    type: SpecialDropType.GiantSlayer,
+    name: 'Giant Slayer',
+    description: 'All damage doubled — cleave through hordes!',
+    funnyDescription: 'Your weapons just ate their Wheaties. Every hit now packs the punch of an angry gorilla swinging a telephone pole. Zombies? More like confetti.',
+    icon: '💀',
+    color: '#ff2222',
+    highlightColor: '#ff6666',
+    durationTicks: GAME_CONSTANTS.SPECIAL_GIANT_SLAYER_DURATION_S * GAME_CONSTANTS.TICK_RATE,
+  },
+  {
+    type: SpecialDropType.ZombieShock,
+    name: 'Tesla Storm',
+    description: 'Lightning surges through all zombies — they convulse in place!',
+    funnyDescription: 'Bzzzzzt! Every zombie on the map is about to involuntarily breakdance. Sparks fly, limbs flail — dignity was never there to begin with.',
+    icon: '⚡',
+    color: '#ccff00',
+    highlightColor: '#eeff88',
+    durationTicks: GAME_CONSTANTS.SPECIAL_ZOMBIE_SHOCK_DURATION_S * GAME_CONSTANTS.TICK_RATE,
+  },
+];
+
+export function getSpecialDropDefinition(type: SpecialDropType): SpecialDropDefinition | undefined {
+  return SPECIAL_DROP_DEFINITIONS.find((d: SpecialDropDefinition): boolean => d.type === type);
+}
 
 // ─── Class Stat Weights (MapleStory-style) ──────
 
@@ -623,6 +700,43 @@ export const SKILLS: SkillDefinition[] = [
     passiveEffect: null,
     mechanic: 'dash',
     maxTargets: 10,
+    hpCostIsPercent: false,
+    minHpPercent: 0,
+  },
+
+  // ═══ WARRIOR ACTIVE (Double Jump) ═══
+  {
+    id: 'warrior-double-jump',
+    name: 'Double Jump',
+    classId: CharacterClass.Warrior,
+    type: SkillType.Active,
+    description: 'Leap a second time while airborne, launching forward with explosive force.',
+    maxLevel: 5,
+    requiredCharacterLevel: 8,
+    icon: '🦘',
+    color: '#ff8822',
+    scaling: {
+      baseDamage: 0.62, damagePerLevel: 0.095,
+      baseMpCost: 8, mpCostPerLevel: 0.5,
+      baseCooldown: 600, cooldownReductionPerLevel: 10,
+      baseRange: 0, rangePerLevel: 0,
+    },
+    levelData: [
+      { mpCost: 8,  hpCost: 0, damage: 0.62 },
+      { mpCost: 8,  hpCost: 0, damage: 0.72 },
+      { mpCost: 9,  hpCost: 0, damage: 0.81 },
+      { mpCost: 9,  hpCost: 0, damage: 0.91 },
+      { mpCost: 10, hpCost: 0, damage: 1.00 },
+    ],
+    prerequisite: { skillId: 'warrior-power-strike', level: 3 },
+    buffEffect: null,
+    buffDuration: null,
+    hitCount: 0,
+    aoeRadius: 0,
+    animationKey: 'warrior-double-jump',
+    passiveEffect: null,
+    mechanic: 'doubleJump',
+    maxTargets: 0,
     hpCostIsPercent: false,
     minHpPercent: 0,
   },

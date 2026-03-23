@@ -305,6 +305,53 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
     spriteEffect: 'sunburn',
   },
 
+  'warrior-double-jump': {
+    spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
+      const dir: number = facingSign(facing);
+      const particles: Particle[] = [];
+      const trailCount: number = 8 + Math.floor(level / 3);
+      for (let i: number = 0; i < trailCount; i++) {
+        particles.push(makeParticle({
+          x: x - dir * (i * 6),
+          y: y + 10 + (Math.random() - 0.5) * 12,
+          vx: -dir * (3 + Math.random() * 2),
+          vy: 1 + Math.random() * 2,
+          life: 18 + Math.floor(Math.random() * 10),
+          maxLife: 28,
+          color: i % 3 === 0 ? '#ffffff' : i % 3 === 1 ? '#ffaa44' : '#ff6622',
+          size: 4 + Math.random() * 3,
+          shape: ParticleShape.Circle,
+          rotation: 0,
+          rotationSpeed: 0,
+          fadeMode: FadeMode.Quick,
+          scaleOverLife: true,
+        }));
+      }
+      const burstCount: number = 5 + Math.floor(level / 5);
+      for (let i: number = 0; i < burstCount; i++) {
+        const angle: number = (i / burstCount) * Math.PI + Math.PI / 2;
+        const speed: number = 3 + Math.random() * 3;
+        particles.push(makeParticle({
+          x, y: y + 15,
+          vx: Math.cos(angle) * speed * 0.5,
+          vy: Math.sin(angle) * speed,
+          life: 15 + Math.floor(level / 4),
+          maxLife: 22,
+          color: '#ffcc66',
+          size: 3 + Math.random() * 2,
+          shape: ParticleShape.Star,
+          rotation: Math.random() * Math.PI * 2,
+          rotationSpeed: (Math.random() - 0.5) * 0.3,
+          fadeMode: FadeMode.Quick,
+          scaleOverLife: true,
+        }));
+      }
+      return particles;
+    },
+    screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: null,
+  },
+
   'warrior-power-dash': {
     spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] => {
       const particles: Particle[] = [];

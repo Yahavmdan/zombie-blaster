@@ -17,7 +17,7 @@ export interface PassiveEffect {
   mpThresholdPercent?: number;
 }
 
-export type SkillMechanic = 'damage' | 'pull' | 'dash';
+export type SkillMechanic = 'damage' | 'pull' | 'dash' | 'doubleJump';
 
 export interface SkillLevelData {
   mpCost: number;

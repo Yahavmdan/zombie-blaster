@@ -1,4 +1,4 @@
-import { CharacterClass, CharacterState } from './character';
+import { CharacterClass, CharacterState, Direction } from './character';
 
 export enum GameMode {
   SinglePlayer = 'single-player',
@@ -240,4 +240,30 @@ export interface ReconnectResultPayload {
   room: RoomInfo | null;
   playerId: string;
   reason?: string;
+}
+
+export enum VfxEventType {
+  SkillAnimation = 'skill-animation',
+  LevelUp = 'level-up',
+  BuffActivation = 'buff-activation',
+  ScreenShake = 'screen-shake',
+  ScreenFlash = 'screen-flash',
+  DashPortal = 'dash-portal',
+  DamageNumber = 'damage-number',
+}
+
+export interface VfxEvent {
+  type: VfxEventType;
+  playerId: string;
+  x: number;
+  y: number;
+  animationKey?: string;
+  facing?: Direction;
+  level?: number;
+  color?: string;
+  frames?: number;
+  intensity?: number;
+  inward?: boolean;
+  value?: number;
+  isCrit?: boolean;
 }

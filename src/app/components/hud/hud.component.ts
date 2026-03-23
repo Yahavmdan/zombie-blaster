@@ -1,8 +1,7 @@
-import { Component, ChangeDetectionStrategy, InputSignal, OutputEmitterRef, Signal, WritableSignal, input, output, computed, inject, isDevMode } from '@angular/core';
+import { Component, ChangeDetectionStrategy, InputSignal, OutputEmitterRef, Signal, input, output, computed, inject } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { ActiveBuff, CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost, getSkillHpCost, KeyBindings, GameAction, getTotalPotionsByCategory } from '@shared/index';
 import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
-import { GameStateService } from '../../services/game-state.service';
 
 export interface SkillSlot {
   id: string;
@@ -35,11 +34,6 @@ export interface ActiveBuffDisplay {
 })
 export class HudComponent {
   private readonly keyBindingsService: KeyBindingsService = inject(KeyBindingsService);
-  private readonly gameState: GameStateService = inject(GameStateService);
-
-  readonly isDevMode: boolean = isDevMode();
-  readonly godMode: WritableSignal<boolean> = this.gameState.godMode;
-  readonly showCollisionBoxes: WritableSignal<boolean> = this.gameState.showCollisionBoxes;
 
   readonly playerData: InputSignal<CharacterState> = input.required<CharacterState>();
   readonly floor: InputSignal<number> = input.required<number>();
@@ -178,14 +172,6 @@ export class HudComponent {
       ? (p.inventory.autoPotionHpId ?? 'hp-potion-1')
       : (p.inventory.autoPotionMpId ?? 'mp-potion-1');
     event.dataTransfer?.setData('application/json', JSON.stringify({ type: 'potion', id: potionId }));
-  }
-
-  onToggleGodMode(): void {
-    this.gameState.godMode.update((v: boolean) => !v);
-  }
-
-  onToggleCollisionBoxes(): void {
-    this.gameState.showCollisionBoxes.update((v: boolean) => !v);
   }
 
   private formatFirstKey(action: GameAction): string {
