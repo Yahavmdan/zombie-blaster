@@ -573,30 +573,6 @@ export class GameEngine implements IGameEngine {
       this.vfxSystem.spawnBuffActivationParticles(cx, cy, def.color);
       this.vfxSystem.triggerScreenFlash(def.color, 8);
       this.vfxSystem.triggerScreenShake(6, 4);
-
-      this.pendingVfxEvents.push({
-        type: VfxEventType.BuffActivation,
-        playerId: this.player.id,
-        x: cx,
-        y: cy,
-        color: def.color,
-      });
-      this.pendingVfxEvents.push({
-        type: VfxEventType.ScreenFlash,
-        playerId: this.player.id,
-        x: 0,
-        y: 0,
-        color: def.color,
-        frames: 8,
-      });
-      this.pendingVfxEvents.push({
-        type: VfxEventType.ScreenShake,
-        playerId: this.player.id,
-        x: 0,
-        y: 0,
-        frames: 6,
-        intensity: 4,
-      });
     }
   }
 
@@ -833,6 +809,21 @@ export class GameEngine implements IGameEngine {
         case VfxEventType.DamageNumber:
           this.vfxSystem.spawnDamageNumber(evt.x, evt.y, evt.value!, evt.isCrit!, evt.color!);
           break;
+        case VfxEventType.HitParticles:
+          this.vfxSystem.spawnHitParticles(evt.x, evt.y, evt.color!);
+          break;
+        case VfxEventType.HitMark:
+          this.vfxSystem.spawnHitMark(evt.x, evt.y);
+          break;
+        case VfxEventType.DashTrail:
+          this.vfxSystem.spawnDashTrailBurst(evt.x, evt.endX!, evt.y, evt.dir!);
+          break;
+        case VfxEventType.DragonImpact:
+          this.dragonImpacts.push({ x: evt.x, y: evt.y, frame: 0, tickCounter: 0 });
+          break;
+        case VfxEventType.PoisonTrigger:
+          this.vfxSystem.spawnPoisonBubblesAt(evt.x, evt.y);
+          break;
       }
     }
   }
@@ -868,6 +859,23 @@ export class GameEngine implements IGameEngine {
       '#ff4444',
     );
 
+    this.pendingVfxEvents.push({
+      type: VfxEventType.HitParticles,
+      playerId: p.id,
+      x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+      y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+      color: '#ffffff',
+    });
+    this.pendingVfxEvents.push({
+      type: VfxEventType.DamageNumber,
+      playerId: p.id,
+      x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+      y: p.y - 10,
+      value: damage,
+      isCrit: false,
+      color: '#ff4444',
+    });
+
     if (isPoisonAttack) {
       const damagePerTick: number = GAME_CONSTANTS.SPITTER_POISON_DAMAGE_PER_TICK +
         Math.floor(this.floor * GAME_CONSTANTS.SPITTER_POISON_DAMAGE_WAVE_SCALE);
@@ -877,6 +885,12 @@ export class GameEngine implements IGameEngine {
         tickTimer: GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL,
         damagePerTick,
       };
+      this.pendingVfxEvents.push({
+        type: VfxEventType.PoisonTrigger,
+        playerId: p.id,
+        x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+        y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+      });
     }
 
     if (p.hp <= 0) {

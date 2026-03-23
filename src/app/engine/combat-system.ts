@@ -464,6 +464,17 @@ export class CombatSystem {
         dash.phase = 'swishing';
         dash.ticksInPhase = 0;
         this.spawnSwishBurst(dash);
+        const dashPlayer: CharacterState | null = this.e.player;
+        if (dashPlayer) {
+          this.e.pendingVfxEvents.push({
+            type: VfxEventType.DashTrail,
+            playerId: dashPlayer.id,
+            x: dash.startCX,
+            y: dash.playerCY,
+            endX: dash.endCX,
+            dir: dash.dir,
+          });
+        }
       }
       return;
     }
@@ -873,11 +884,29 @@ export class CombatSystem {
           p.hp = Math.min(p.hp + value, p.derived.maxHp);
           const playerCX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
           this.vfx.spawnDamageNumber(playerCX, p.y - 10, value, false, '#44ff44');
+          this.e.pendingVfxEvents.push({
+            type: VfxEventType.DamageNumber,
+            playerId: p.id,
+            x: playerCX,
+            y: p.y - 10,
+            value,
+            isCrit: false,
+            color: '#44ff44',
+          });
           this.e.onPlayerUpdate?.(p);
         } else if (passive.type === 'mpRecovery' && p.mp < p.derived.maxMp) {
           p.mp = Math.min(p.mp + value, p.derived.maxMp);
           const playerCX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
           this.vfx.spawnDamageNumber(playerCX, p.y - 10, value, false, '#4488ff');
+          this.e.pendingVfxEvents.push({
+            type: VfxEventType.DamageNumber,
+            playerId: p.id,
+            x: playerCX,
+            y: p.y - 10,
+            value,
+            isCrit: false,
+            color: '#4488ff',
+          });
           this.e.onPlayerUpdate?.(p);
         }
       } else {
@@ -924,6 +953,22 @@ export class CombatSystem {
           this.e.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
           this.vfx.spawnHitParticles(playerCX, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, '#ff4488');
           this.vfx.spawnDamageNumber(playerCX, p.y - 10, restoreAmount, false, '#44ff44');
+          this.e.pendingVfxEvents.push({
+            type: VfxEventType.HitParticles,
+            playerId: p.id,
+            x: playerCX,
+            y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+            color: '#ff4488',
+          });
+          this.e.pendingVfxEvents.push({
+            type: VfxEventType.DamageNumber,
+            playerId: p.id,
+            x: playerCX,
+            y: p.y - 10,
+            value: restoreAmount,
+            isCrit: false,
+            color: '#44ff44',
+          });
           this.e.onPlayerUpdate?.(p);
           return;
         }
@@ -944,6 +989,22 @@ export class CombatSystem {
           this.e.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
           this.vfx.spawnHitParticles(playerCX, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, '#4488ff');
           this.vfx.spawnDamageNumber(playerCX, p.y - 10, restoreAmount, false, '#4488ff');
+          this.e.pendingVfxEvents.push({
+            type: VfxEventType.HitParticles,
+            playerId: p.id,
+            x: playerCX,
+            y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+            color: '#4488ff',
+          });
+          this.e.pendingVfxEvents.push({
+            type: VfxEventType.DamageNumber,
+            playerId: p.id,
+            x: playerCX,
+            y: p.y - 10,
+            value: restoreAmount,
+            isCrit: false,
+            color: '#4488ff',
+          });
           this.e.onPlayerUpdate?.(p);
           return;
         }
@@ -1012,6 +1073,22 @@ export class CombatSystem {
 
     this.vfx.spawnHitParticles(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, '#ffffff');
     this.vfx.spawnDamageNumber(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 10, damage, false, '#ff4444');
+    this.e.pendingVfxEvents.push({
+      type: VfxEventType.HitParticles,
+      playerId: p.id,
+      x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+      y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+      color: '#ffffff',
+    });
+    this.e.pendingVfxEvents.push({
+      type: VfxEventType.DamageNumber,
+      playerId: p.id,
+      x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+      y: p.y - 10,
+      value: damage,
+      isCrit: false,
+      color: '#ff4444',
+    });
 
     if (p.hp <= 0) {
       p.hp = 0;

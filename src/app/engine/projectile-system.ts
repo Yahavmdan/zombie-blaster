@@ -1,6 +1,7 @@
 import {
   CharacterState,
   GAME_CONSTANTS,
+  VfxEventType,
 } from '@shared/index';
 import { ZombieState } from '@shared/game-entities';
 import { DragonProjectile, IGameEngine, SpitterProjectile } from './engine-types';
@@ -96,6 +97,13 @@ export class ProjectileSystem {
     });
 
     this.vfx.spawnHitParticles(startX, startY, '#88ccff');
+    this.e.pendingVfxEvents.push({
+      type: VfxEventType.HitParticles,
+      playerId: '',
+      x: startX,
+      y: startY,
+      color: '#88ccff',
+    });
   }
 
   spawnSpitterProjectile(z: ZombieState): void {
@@ -124,6 +132,13 @@ export class ProjectileSystem {
     });
 
     this.vfx.spawnHitParticles(startX, startY, '#44ff44');
+    this.e.pendingVfxEvents.push({
+      type: VfxEventType.HitParticles,
+      playerId: '',
+      x: startX,
+      y: startY,
+      color: '#44ff44',
+    });
   }
 
   updateDragonProjectiles(): void {
@@ -150,6 +165,28 @@ export class ProjectileSystem {
         this.e.dragonImpacts.push({ x: proj.x, y: proj.y, frame: 0, tickCounter: 0 });
         this.vfx.spawnHitParticles(proj.x, proj.y, '#88ccff');
         this.vfx.spawnDamageNumber(proj.x, proj.y - 10, rawDamage, false, '#88ccff');
+        this.e.pendingVfxEvents.push({
+          type: VfxEventType.DragonImpact,
+          playerId: '',
+          x: proj.x,
+          y: proj.y,
+        });
+        this.e.pendingVfxEvents.push({
+          type: VfxEventType.HitParticles,
+          playerId: '',
+          x: proj.x,
+          y: proj.y,
+          color: '#88ccff',
+        });
+        this.e.pendingVfxEvents.push({
+          type: VfxEventType.DamageNumber,
+          playerId: '',
+          x: proj.x,
+          y: proj.y - 10,
+          value: rawDamage,
+          isCrit: false,
+          color: '#88ccff',
+        });
         const knockDir: number = proj.velocityX > 0 ? 1 : -1;
 
         if (target.isLocal) {
@@ -210,6 +247,22 @@ export class ProjectileSystem {
         const rawDamage: number = Math.max(1, proj.damage - target.defense);
         this.vfx.spawnHitParticles(proj.x, proj.y, '#44ff44');
         this.vfx.spawnDamageNumber(proj.x, proj.y - 10, rawDamage, false, '#44ff44');
+        this.e.pendingVfxEvents.push({
+          type: VfxEventType.HitParticles,
+          playerId: '',
+          x: proj.x,
+          y: proj.y,
+          color: '#44ff44',
+        });
+        this.e.pendingVfxEvents.push({
+          type: VfxEventType.DamageNumber,
+          playerId: '',
+          x: proj.x,
+          y: proj.y - 10,
+          value: rawDamage,
+          isCrit: false,
+          color: '#44ff44',
+        });
         const knockDir: number = proj.velocityX > 0 ? 1 : -1;
 
         if (target.isLocal) {
@@ -222,6 +275,12 @@ export class ProjectileSystem {
             p.isGrounded = false;
 
             this.applyPoisonToPlayer();
+            this.e.pendingVfxEvents.push({
+              type: VfxEventType.PoisonTrigger,
+              playerId: p.id,
+              x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+              y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+            });
 
             if (p.hp <= 0) {
               p.hp = 0;

@@ -167,6 +167,7 @@ export interface MultiplayerSyncPayload {
   players: CharacterState[];
   zombies: import('./game-entities').ZombieState[];
   floor: number;
+  vfxEvents?: VfxEvent[];
 }
 
 export interface PlayerStateBroadcast {
@@ -256,6 +257,11 @@ export enum VfxEventType {
   ScreenFlash = 'screen-flash',
   DashPortal = 'dash-portal',
   DamageNumber = 'damage-number',
+  HitParticles = 'hit-particles',
+  HitMark = 'hit-mark',
+  DashTrail = 'dash-trail',
+  DragonImpact = 'dragon-impact',
+  PoisonTrigger = 'poison-trigger',
 }
 
 export interface VfxEvent {
@@ -272,4 +278,6 @@ export interface VfxEvent {
   inward?: boolean;
   value?: number;
   isCrit?: boolean;
+  dir?: number;
+  endX?: number;
 }

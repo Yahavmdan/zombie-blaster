@@ -5,6 +5,7 @@ import {
   getPotionRestoreAmount,
   resolveAutoPotionId,
   SPECIAL_DROP_DEFINITIONS,
+  VfxEventType,
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
@@ -222,18 +223,39 @@ export class DropSystem {
       this.e.onGoldPickup?.(drop.value);
       this.vfx.spawnHitParticles(cx, cy, '#ffcc44');
       this.vfx.addDropNotification(DropType.Gold, `+${drop.value}G`, '#ffcc44', '💰');
+      this.e.pendingVfxEvents.push({
+        type: VfxEventType.HitParticles,
+        playerId: p.id,
+        x: cx,
+        y: cy,
+        color: '#ffcc44',
+      });
     } else if (drop.type === DropType.HpPotion) {
       const potionId: string = 'hp-potion-1';
       p.inventory.potions[potionId] = (p.inventory.potions[potionId] ?? 0) + 1;
       this.e.onPotionPickup?.(DropType.HpPotion);
       this.vfx.spawnHitParticles(cx, cy, '#ff4488');
       this.vfx.addDropNotification(DropType.HpPotion, '+1 HP Potion', '#ff4488', '❤️');
+      this.e.pendingVfxEvents.push({
+        type: VfxEventType.HitParticles,
+        playerId: p.id,
+        x: cx,
+        y: cy,
+        color: '#ff4488',
+      });
     } else if (drop.type === DropType.MpPotion) {
       const potionId: string = 'mp-potion-1';
       p.inventory.potions[potionId] = (p.inventory.potions[potionId] ?? 0) + 1;
       this.e.onPotionPickup?.(DropType.MpPotion);
       this.vfx.spawnHitParticles(cx, cy, '#4488ff');
       this.vfx.addDropNotification(DropType.MpPotion, '+1 MP Potion', '#4488ff', '💧');
+      this.e.pendingVfxEvents.push({
+        type: VfxEventType.HitParticles,
+        playerId: p.id,
+        x: cx,
+        y: cy,
+        color: '#4488ff',
+      });
     }
 
     this.e.onPlayerUpdate?.(p);
@@ -268,6 +290,33 @@ export class DropSystem {
 
     this.vfx.triggerScreenFlash(def.color, 8);
     this.vfx.triggerScreenShake(6, 4);
+
+    const collectPlayer: CharacterState | null = this.e.player;
+    if (collectPlayer) {
+      this.e.pendingVfxEvents.push({
+        type: VfxEventType.BuffActivation,
+        playerId: collectPlayer.id,
+        x: cx,
+        y: cy,
+        color: def.color,
+      });
+      this.e.pendingVfxEvents.push({
+        type: VfxEventType.ScreenFlash,
+        playerId: collectPlayer.id,
+        x: 0,
+        y: 0,
+        color: def.color,
+        frames: 8,
+      });
+      this.e.pendingVfxEvents.push({
+        type: VfxEventType.ScreenShake,
+        playerId: collectPlayer.id,
+        x: 0,
+        y: 0,
+        frames: 6,
+        intensity: 4,
+      });
+    }
   }
 
   private setPendingSpecialDrop(type: SpecialDropType, cx: number, cy: number): void {
@@ -341,6 +390,22 @@ export class DropSystem {
             '#ff4488',
           );
           this.vfx.spawnDamageNumber(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 10, restoreAmount, false, '#44ff44');
+          this.e.pendingVfxEvents.push({
+            type: VfxEventType.HitParticles,
+            playerId: p.id,
+            x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+            y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+            color: '#ff4488',
+          });
+          this.e.pendingVfxEvents.push({
+            type: VfxEventType.DamageNumber,
+            playerId: p.id,
+            x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+            y: p.y - 10,
+            value: restoreAmount,
+            isCrit: false,
+            color: '#44ff44',
+          });
           this.e.onPlayerUpdate?.(p);
         }
       }
@@ -361,6 +426,22 @@ export class DropSystem {
             '#4488ff',
           );
           this.vfx.spawnDamageNumber(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 10, restoreAmount, false, '#4488ff');
+          this.e.pendingVfxEvents.push({
+            type: VfxEventType.HitParticles,
+            playerId: p.id,
+            x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+            y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+            color: '#4488ff',
+          });
+          this.e.pendingVfxEvents.push({
+            type: VfxEventType.DamageNumber,
+            playerId: p.id,
+            x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+            y: p.y - 10,
+            value: restoreAmount,
+            isCrit: false,
+            color: '#4488ff',
+          });
           this.e.onPlayerUpdate?.(p);
         }
       }

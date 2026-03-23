@@ -258,6 +258,74 @@ export class VfxSystem {
     }
   }
 
+  spawnPoisonBubblesAt(cx: number, cy: number): void {
+    for (let i: number = 0; i < 3; i++) {
+      this.e.particles.push({
+        x: cx + (Math.random() - 0.5) * GAME_CONSTANTS.PLAYER_WIDTH,
+        y: cy + (Math.random() - 0.5) * GAME_CONSTANTS.PLAYER_HEIGHT,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: -Math.random() * 2 - 1,
+        life: 20 + Math.floor(Math.random() * 10),
+        maxLife: 30,
+        color: Math.random() > 0.5 ? '#44ff44' : '#00cc44',
+        size: 3 + Math.random() * 3,
+        shape: ParticleShape.Circle,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Quick,
+        scaleOverLife: true,
+      });
+    }
+  }
+
+  spawnDashTrailBurst(startCX: number, endCX: number, playerCY: number, dir: number): void {
+    const cometCount: number = 16;
+    for (let i: number = 0; i < cometCount; i++) {
+      const t: number = i / cometCount;
+      const x: number = startCX + (endCX - startCX) * t;
+      this.addParticle({
+        x,
+        y: playerCY + (Math.random() - 0.5) * 8,
+        vx: dir * (14 + Math.random() * 6),
+        vy: (Math.random() - 0.5) * 1.2,
+        life: 16 + Math.floor(t * 6),
+        maxLife: 22,
+        color: '#ffffff',
+        size: 7 + Math.random() * 4,
+        shape: ParticleShape.Line,
+        rotation: dir > 0 ? 0 : Math.PI,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Linear,
+        scaleOverLife: true,
+      });
+    }
+    const pathLen: number = Math.abs(endCX - startCX);
+    const ringSegments: number = Math.max(3, Math.floor(pathLen / 80));
+    for (let s: number = 0; s < ringSegments; s++) {
+      const t: number = (s + 0.5) / ringSegments;
+      const rx: number = startCX + (endCX - startCX) * t;
+      const expandCount: number = 8;
+      for (let i: number = 0; i < expandCount; i++) {
+        const angle: number = (i / expandCount) * Math.PI * 2;
+        this.addParticle({
+          x: rx,
+          y: playerCY,
+          vx: Math.cos(angle) * 2.5,
+          vy: Math.sin(angle) * 2.5,
+          life: 12 + Math.floor(Math.random() * 6),
+          maxLife: 18,
+          color: s % 2 === 0 ? '#ff8844' : '#bb66ff',
+          size: 4 + Math.random() * 3,
+          shape: ParticleShape.Ring,
+          rotation: 0,
+          rotationSpeed: 0,
+          fadeMode: FadeMode.Quick,
+          scaleOverLife: true,
+        });
+      }
+    }
+  }
+
   spawnHitMark(x: number, y: number): void {
     this.e.hitMarks.push({ x, y, frame: 0, tickCounter: 0 });
   }
