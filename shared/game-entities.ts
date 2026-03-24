@@ -19,7 +19,6 @@ export interface ZombieDefinition {
   damageMaxHigh: number;
   speedMin: number;
   speedMax: number;
-
   knockbackMin: number;
   knockbackMax: number;
   hesitationMin: number;
