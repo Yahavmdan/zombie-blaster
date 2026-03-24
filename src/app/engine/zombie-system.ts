@@ -120,6 +120,10 @@ export class ZombieSystem {
 
       if (z.knockbackFrames > 0) {
         z.knockbackFrames--;
+        if (z.eatingTimer > 0) {
+          z.eatingTimer = 0;
+          z.eatingTargetId = null;
+        }
       } else if (z.reactionDelay > 0) {
         z.reactionDelay--;
       } else {
@@ -251,7 +255,7 @@ export class ZombieSystem {
 
   private tickHesitation(z: ZombieState, target: TargetInfo): void {
     if (z.attackHesitation <= 0 || z.attackCooldown > 0 || z.attackAnimTimer > 0 || z.knockbackFrames > 0) return;
-    if (z.type === ZombieType.DragonBoss || z.type === ZombieType.Spitter) return;
+    if (z.type === ZombieType.DragonBoss || z.type === ZombieType.Spitter || z.type === ZombieType.Eater) return;
 
     const zCx: number = z.x + z.instanceWidth / 2;
     const zCy: number = z.y + z.instanceHeight / 2;
@@ -269,6 +273,7 @@ export class ZombieSystem {
   }
 
   private updateZombieAttack(z: ZombieState, zDef: ZombieDefinition): void {
+    if (z.type === ZombieType.Eater) return;
     if (z.attackAnimTimer > 0) {
       z.attackAnimTimer--;
 
@@ -353,6 +358,11 @@ export class ZombieSystem {
   }
 
   private updateZombieAI(z: ZombieState, zDef: ZombieDefinition): void {
+    if (z.type === ZombieType.Eater) {
+      this.updateEaterAI(z);
+      return;
+    }
+
     const zCx: number = z.x + z.instanceWidth / 2;
     const zCy: number = z.y + z.instanceHeight / 2;
     const target: TargetInfo | null = this.findNearestTarget(zCx, zCy);
@@ -490,6 +500,99 @@ export class ZombieSystem {
     }
   }
 
+  private findNearestCorpse(zx: number, zy: number): ZombieCorpse | null {
+    let best: ZombieCorpse | null = null;
+    let bestDist: number = Infinity;
+    for (const corpse of this.e.zombieCorpses) {
+      if (!corpse.isGrounded) continue;
+      const claimed: boolean = this.e.zombies.some(
+        (other: ZombieState) => !other.isDead && other.eatingTargetId === corpse.id && other.id !== corpse.id,
+      );
+      if (claimed) continue;
+      const cx: number = corpse.x + corpse.width / 2;
+      const cy: number = corpse.y + corpse.height / 2;
+      const dx: number = cx - zx;
+      const dy: number = cy - zy;
+      const dist: number = dx * dx + dy * dy;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = corpse;
+      }
+    }
+    return best;
+  }
+
+  private updateEaterAI(z: ZombieState): void {
+    if (z.eatingTimer > 0) {
+      z.velocityX = 0;
+      z.eatingTimer--;
+      if (z.eatingTimer <= 0) {
+        this.consumeCorpse(z);
+      }
+      return;
+    }
+
+    const zCx: number = z.x + z.instanceWidth / 2;
+    const zCy: number = z.y + z.instanceHeight / 2;
+    const corpse: ZombieCorpse | null = this.findNearestCorpse(zCx, zCy);
+
+    if (!corpse) {
+      const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
+      this.updateZombieIdleWander(z, zDef);
+      return;
+    }
+
+    const corpseCx: number = corpse.x + corpse.width / 2;
+    const corpseCy: number = corpse.y + corpse.height / 2;
+    const dx: number = corpseCx - zCx;
+    const dy: number = corpseCy - zCy;
+    const distSq: number = dx * dx + dy * dy;
+    const detectRange: number = GAME_CONSTANTS.ZOMBIE_EATER_DETECT_RANGE;
+
+    if (distSq > detectRange * detectRange) {
+      const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
+      this.updateZombieIdleWander(z, zDef);
+      return;
+    }
+
+    z.facing = dx > 0 ? 1 : -1;
+
+    const arriveThreshold: number = GAME_CONSTANTS.ZOMBIE_EATER_ARRIVE_THRESHOLD;
+    if (Math.abs(dx) < arriveThreshold && Math.abs(dy) < z.instanceHeight) {
+      z.velocityX = 0;
+      z.eatingTargetId = corpse.id;
+      z.eatingTimer = GAME_CONSTANTS.ZOMBIE_EATER_EATING_TICKS;
+      return;
+    }
+
+    z.velocityX = dx > 0 ? z.instanceSpeed : -z.instanceSpeed;
+
+    if (!z.isGrounded || z.jumpCooldown > 0) return;
+    const targetIsAbove: boolean = dy < -z.instanceHeight;
+    const targetIsBelow: boolean = dy > z.instanceHeight;
+
+    if (targetIsBelow && z.y + z.instanceHeight < GAME_CONSTANTS.GROUND_Y && Math.random() < GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_CHANCE) {
+      z.platformDropTimer = GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_TICKS;
+      z.y += GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE + 1;
+      z.isGrounded = false;
+    } else if (targetIsAbove && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_PLATFORM_CHASE_CHANCE) {
+      this.zombieJump(z);
+    }
+  }
+
+  private consumeCorpse(z: ZombieState): void {
+    const targetId: string | null = z.eatingTargetId;
+    z.eatingTargetId = null;
+    if (!targetId) return;
+
+    const idx: number = this.e.zombieCorpses.findIndex((c: ZombieCorpse) => c.id === targetId);
+    if (idx === -1) return;
+
+    const corpse: ZombieCorpse = this.e.zombieCorpses[idx];
+    this.e.zombieSpriteAnimator.removeInstance(corpse.id);
+    this.e.zombieCorpses.splice(idx, 1);
+  }
+
   private updateZombieIdleWander(z: ZombieState, zDef: ZombieDefinition): void {
     const isStanding: boolean = Math.abs(z.velocityX) < 0.01;
 
@@ -516,7 +619,7 @@ export class ZombieSystem {
       z.velocityX = -z.instanceSpeed * GAME_CONSTANTS.ZOMBIE_IDLE_WANDER_SPEED_MULT;
     }
 
-    if (z.attackAnimTimer <= 0 && z.attackCooldown <= 0 && Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_ATTACK_CHANCE) {
+    if (z.type !== ZombieType.Eater && z.attackAnimTimer <= 0 && z.attackCooldown <= 0 && Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_ATTACK_CHANCE) {
       z.attackAnimTimer = zDef.attackAnimTicks;
       z.attackHasHit = true;
       z.attackCooldown = GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN +
@@ -531,6 +634,21 @@ export class ZombieSystem {
       return;
     }
 
+    if (z.type === ZombieType.Eater && z.eatingTimer > 0) {
+      const phaseTicks: number = 12;
+      const phase: number = z.eatingTimer % (phaseTicks * 4);
+      if (phase < phaseTicks) {
+        this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Eating);
+      } else if (phase < phaseTicks * 2) {
+        this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Attack);
+      } else if (phase < phaseTicks * 3) {
+        this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.AttackAlt1);
+      } else {
+        this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.AttackAlt2);
+      }
+      return;
+    }
+
     if (z.attackAnimTimer > 0) {
       this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Attack);
       return;
@@ -538,6 +656,16 @@ export class ZombieSystem {
 
     if (z.knockbackFrames > 0) {
       this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Hurt);
+      return;
+    }
+
+    if (z.type === ZombieType.Eater && !z.isGrounded) {
+      this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Jump);
+      return;
+    }
+
+    if (z.type === ZombieType.Eater && Math.abs(z.velocityX) > z.instanceSpeed * 0.9) {
+      this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Run);
       return;
     }
 
@@ -695,6 +823,7 @@ export class ZombieSystem {
     if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_TANK_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_TANK_ROLL_THRESHOLD) type = ZombieType.Tank;
     else if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_RUNNER_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_RUNNER_ROLL_THRESHOLD) type = ZombieType.Runner;
     else if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_SPITTER_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_SPITTER_ROLL_THRESHOLD) type = ZombieType.Spitter;
+    else if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_EATER_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_EATER_ROLL_THRESHOLD) type = ZombieType.Eater;
     const hasBoss: boolean = this.e.zombies.some(
       (z: ZombieState) => !z.isDead && (z.type === ZombieType.DragonBoss || z.type === ZombieType.Boss),
     );
@@ -762,6 +891,8 @@ export class ZombieSystem {
       spawnTimer: 0,
       reactionDelay: GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS +
         Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MAX_TICKS - GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS)),
+      eatingTargetId: null,
+      eatingTimer: 0,
     };
 
     const spriteKey: string = this.e.zombieSpriteAnimator.getSpriteKey(type);

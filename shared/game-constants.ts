@@ -113,6 +113,11 @@ export const GAME_CONSTANTS = {
   ZOMBIE_BOSS_WAVE_INTERVAL: 5, // A Boss spawns every N waves
   ZOMBIE_DRAGON_BOSS_MIN_WAVE: 10, // First wave the Dragon Boss can spawn
   ZOMBIE_DRAGON_BOSS_WAVE_INTERVAL: 10, // Dragon Boss spawns every N waves
+  ZOMBIE_EATER_MIN_WAVE: 11, // First wave that Eater zombies can appear
+  ZOMBIE_EATER_ROLL_THRESHOLD: 0.82, // Chance (0-1) a spawn is NOT an Eater when eligible
+  ZOMBIE_EATER_EATING_TICKS: 180, // Ticks it takes an Eater to consume a corpse
+  ZOMBIE_EATER_DETECT_RANGE: 600, // Distance (px) at which an Eater detects a corpse
+  ZOMBIE_EATER_ARRIVE_THRESHOLD: 8, // Distance (px) at which an Eater starts eating
 
   // ─── Dragon Boss ─────────────────────────────
   DRAGON_HOVER_Y_OFFSET: 140, // How high above the ground the dragon hovers
@@ -550,6 +555,21 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     heightMin: 120, heightMax: 140,
     attackAnimTicks: 36,
     attackHitTick: 18,
+  },
+  [ZombieType.Eater]: {
+    type: ZombieType.Eater,
+    name: 'Eater',
+    hpMin: 35, hpMax: 60,
+    damageMinLow: 0, damageMinHigh: 0,
+    damageMaxLow: 0, damageMaxHigh: 0,
+    speedMin: 0.5, speedMax: 0.9,
+    knockbackMin: 5, knockbackMax: 9,
+    hesitationMin: 999, hesitationMax: 999,
+    xpRewardMin: 8, xpRewardMax: 15,
+    widthMin: 24, widthMax: 34,
+    heightMin: 36, heightMax: 44,
+    attackAnimTicks: 20,
+    attackHitTick: 10,
   },
 };
 

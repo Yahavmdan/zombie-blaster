@@ -5,6 +5,7 @@ export enum ZombieType {
   Spitter = 'spitter',
   Boss = 'boss',
   DragonBoss = 'dragon-boss',
+  Eater = 'eater',
 }
 
 export interface ZombieDefinition {
@@ -63,6 +64,8 @@ export interface ZombieState {
   platformDropTimer: number;
   spawnTimer: number;
   reactionDelay: number;
+  eatingTargetId: string | null;
+  eatingTimer: number;
 }
 
 export enum DropType {

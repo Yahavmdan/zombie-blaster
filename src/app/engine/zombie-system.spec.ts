@@ -92,6 +92,8 @@ function makeZombie(overrides: Partial<ZombieState> = {}): ZombieState {
     platformDropTimer: 0,
     spawnTimer: 0,
     reactionDelay: 0,
+    eatingTargetId: null,
+    eatingTimer: 0,
     ...overrides,
   };
 }

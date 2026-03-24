@@ -3,9 +3,14 @@ import { ZombieType } from '@shared/game-entities';
 export enum ZombieAnimState {
   Idle = 'idle',
   Walk = 'walk',
+  Run = 'run',
+  Jump = 'jump',
   Attack = 'attack',
+  AttackAlt1 = 'attack-alt-1',
+  AttackAlt2 = 'attack-alt-2',
   Dead = 'dead',
   Hurt = 'hurt',
+  Eating = 'eating',
 }
 
 interface ZombieSpriteAnimation {
@@ -28,7 +33,17 @@ interface ZombieSpriteConfig {
   srcY?: number;
 }
 
-type ZombieAnimConfigs = Record<ZombieAnimState, ZombieSpriteConfig>;
+type ZombieAnimConfigs = Record<ZombieAnimState, ZombieSpriteConfig | undefined> & {
+  [ZombieAnimState.Idle]: ZombieSpriteConfig;
+  [ZombieAnimState.Walk]: ZombieSpriteConfig;
+  [ZombieAnimState.Run]?: ZombieSpriteConfig;
+  [ZombieAnimState.Jump]?: ZombieSpriteConfig;
+  [ZombieAnimState.Attack]: ZombieSpriteConfig;
+  [ZombieAnimState.AttackAlt1]?: ZombieSpriteConfig;
+  [ZombieAnimState.AttackAlt2]?: ZombieSpriteConfig;
+  [ZombieAnimState.Dead]: ZombieSpriteConfig;
+  [ZombieAnimState.Hurt]: ZombieSpriteConfig;
+};
 
 const ZOMBIE_FRAME_SIZE: number = 128;
 
@@ -45,6 +60,7 @@ const ZOMBIE_SPRITE_ANCHORS: Record<string, ZombieSpriteAnchor> = {
   zombie_3: { anchorX: 0.47, anchorY: 0.992 },
   zombie_4: { anchorX: 0.49, anchorY: 0.992 },
   dragon_boss: { anchorX: 0.50, anchorY: 0.994 },
+  wild_zombie: { anchorX: 0.50, anchorY: 0.992 },
 };
 
 const ZOMBIE_SPRITE_KEY_MAP: Record<ZombieType, string> = {
@@ -54,6 +70,7 @@ const ZOMBIE_SPRITE_KEY_MAP: Record<ZombieType, string> = {
   [ZombieType.Tank]: 'zombie_4',
   [ZombieType.Boss]: 'zombie_3',
   [ZombieType.DragonBoss]: 'dragon_boss',
+  [ZombieType.Eater]: 'wild_zombie',
 };
 
 const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
@@ -63,6 +80,11 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Attack]: { src: 'sprites/zombies/zombie_1/Attack.png', frameCount: 5, frameDurationTicks: 4, loop: false },
     [ZombieAnimState.Dead]: { src: 'sprites/zombies/zombie_1/Dead.png', frameCount: 5, frameDurationTicks: 8, loop: false },
     [ZombieAnimState.Hurt]: { src: 'sprites/zombies/zombie_1/Hurt.png', frameCount: 4, frameDurationTicks: 6, loop: false },
+    [ZombieAnimState.Run]: undefined,
+    [ZombieAnimState.Jump]: undefined,
+    [ZombieAnimState.AttackAlt1]: undefined,
+    [ZombieAnimState.AttackAlt2]: undefined,
+    [ZombieAnimState.Eating]: undefined,
   },
   zombie_2: {
     [ZombieAnimState.Idle]: { src: 'sprites/zombies/zombie_2/Idle.png', frameCount: 6, frameDurationTicks: 10, loop: true },
@@ -70,6 +92,11 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Attack]: { src: 'sprites/zombies/zombie_2/Attack.png', frameCount: 5, frameDurationTicks: 4, loop: false },
     [ZombieAnimState.Dead]: { src: 'sprites/zombies/zombie_2/Dead.png', frameCount: 5, frameDurationTicks: 8, loop: false },
     [ZombieAnimState.Hurt]: { src: 'sprites/zombies/zombie_2/Hurt.png', frameCount: 4, frameDurationTicks: 6, loop: false },
+    [ZombieAnimState.Run]: undefined,
+    [ZombieAnimState.Jump]: undefined,
+    [ZombieAnimState.AttackAlt1]: undefined,
+    [ZombieAnimState.AttackAlt2]: undefined,
+    [ZombieAnimState.Eating]: undefined,
   },
   zombie_3: {
     [ZombieAnimState.Idle]: { src: 'sprites/zombies/zombie_3/Idle.png', frameCount: 6, frameDurationTicks: 10, loop: true },
@@ -77,6 +104,11 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Attack]: { src: 'sprites/zombies/zombie_3/Attack.png', frameCount: 4, frameDurationTicks: 5, loop: false },
     [ZombieAnimState.Dead]: { src: 'sprites/zombies/zombie_3/Dead.png', frameCount: 5, frameDurationTicks: 8, loop: false },
     [ZombieAnimState.Hurt]: { src: 'sprites/zombies/zombie_3/Hurt.png', frameCount: 4, frameDurationTicks: 6, loop: false },
+    [ZombieAnimState.Run]: undefined,
+    [ZombieAnimState.Jump]: undefined,
+    [ZombieAnimState.AttackAlt1]: undefined,
+    [ZombieAnimState.AttackAlt2]: undefined,
+    [ZombieAnimState.Eating]: undefined,
   },
   zombie_4: {
     [ZombieAnimState.Idle]: { src: 'sprites/zombies/zombie_4/Idle.png', frameCount: 7, frameDurationTicks: 9, loop: true },
@@ -84,6 +116,11 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Attack]: { src: 'sprites/zombies/zombie_4/Attack.png', frameCount: 10, frameDurationTicks: 3, loop: false },
     [ZombieAnimState.Dead]: { src: 'sprites/zombies/zombie_4/Dead.png', frameCount: 5, frameDurationTicks: 8, loop: false },
     [ZombieAnimState.Hurt]: { src: 'sprites/zombies/zombie_4/Hurt.png', frameCount: 4, frameDurationTicks: 6, loop: false },
+    [ZombieAnimState.Run]: undefined,
+    [ZombieAnimState.Jump]: undefined,
+    [ZombieAnimState.AttackAlt1]: undefined,
+    [ZombieAnimState.AttackAlt2]: undefined,
+    [ZombieAnimState.Eating]: undefined,
   },
   dragon_boss: {
     [ZombieAnimState.Idle]: { src: 'sprites/zombies/dragon_boss/Flying.png', frameCount: 6, frameDurationTicks: 8, loop: true, frameWidth: 172, frameHeight: 159 },
@@ -91,6 +128,23 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Attack]: { src: 'sprites/zombies/dragon_boss/SpiralAttack.png', frameCount: 6, frameDurationTicks: 6, loop: false, frameWidth: 218, frameHeight: 169 },
     [ZombieAnimState.Dead]: { src: 'sprites/zombies/dragon_boss/Dead.png', frameCount: 5, frameDurationTicks: 10, loop: false, frameWidth: 172, frameHeight: 177 },
     [ZombieAnimState.Hurt]: { src: 'sprites/zombies/dragon_boss/Hurt.png', frameCount: 1, frameDurationTicks: 8, loop: false, frameWidth: 170, frameHeight: 168 },
+    [ZombieAnimState.Run]: undefined,
+    [ZombieAnimState.Jump]: undefined,
+    [ZombieAnimState.AttackAlt1]: undefined,
+    [ZombieAnimState.AttackAlt2]: undefined,
+    [ZombieAnimState.Eating]: undefined,
+  },
+  wild_zombie: {
+    [ZombieAnimState.Idle]: { src: 'sprites/zombies/wild_zombie/Idle.png', frameCount: 9, frameDurationTicks: 8, loop: true, frameWidth: 96, frameHeight: 96 },
+    [ZombieAnimState.Walk]: { src: 'sprites/zombies/wild_zombie/Walk.png', frameCount: 10, frameDurationTicks: 6, loop: true, frameWidth: 96, frameHeight: 96 },
+    [ZombieAnimState.Run]: { src: 'sprites/zombies/wild_zombie/Run.png', frameCount: 8, frameDurationTicks: 5, loop: true, frameWidth: 96, frameHeight: 96 },
+    [ZombieAnimState.Jump]: { src: 'sprites/zombies/wild_zombie/Jump.png', frameCount: 6, frameDurationTicks: 6, loop: false, frameWidth: 96, frameHeight: 96 },
+    [ZombieAnimState.Attack]: { src: 'sprites/zombies/wild_zombie/Attack_1.png', frameCount: 4, frameDurationTicks: 5, loop: false, frameWidth: 96, frameHeight: 96 },
+    [ZombieAnimState.AttackAlt1]: { src: 'sprites/zombies/wild_zombie/Attack_2.png', frameCount: 4, frameDurationTicks: 5, loop: false, frameWidth: 96, frameHeight: 96 },
+    [ZombieAnimState.AttackAlt2]: { src: 'sprites/zombies/wild_zombie/Attack_3.png', frameCount: 4, frameDurationTicks: 5, loop: false, frameWidth: 96, frameHeight: 96 },
+    [ZombieAnimState.Dead]: { src: 'sprites/zombies/wild_zombie/Dead.png', frameCount: 5, frameDurationTicks: 8, loop: false, frameWidth: 96, frameHeight: 96 },
+    [ZombieAnimState.Hurt]: { src: 'sprites/zombies/wild_zombie/Hurt.png', frameCount: 5, frameDurationTicks: 6, loop: false, frameWidth: 96, frameHeight: 96 },
+    [ZombieAnimState.Eating]: { src: 'sprites/zombies/wild_zombie/Eating.png', frameCount: 11, frameDurationTicks: 6, loop: true, frameWidth: 96, frameHeight: 96 },
   },
 };
 
@@ -113,8 +167,8 @@ export class ZombieSpriteAnimator {
     const allKeys: string[] = Object.keys(ZOMBIE_ANIM_CONFIGS);
     for (const key of allKeys) {
       const configs: ZombieAnimConfigs = ZOMBIE_ANIM_CONFIGS[key];
-      const stateEntries: [string, ZombieSpriteConfig][] = Object.entries(configs);
-      this.totalCount += stateEntries.length;
+      const stateEntries: [string, ZombieSpriteConfig | undefined][] = Object.entries(configs);
+      this.totalCount += stateEntries.filter(([, c]: [string, ZombieSpriteConfig | undefined]) => c !== undefined).length;
     }
 
     for (const key of allKeys) {
@@ -122,8 +176,9 @@ export class ZombieSpriteAnimator {
       const animMap: Map<ZombieAnimState, ZombieSpriteAnimation> = new Map();
       this.spriteCache.set(key, animMap);
 
-      const stateEntries: [string, ZombieSpriteConfig][] = Object.entries(configs);
+      const stateEntries: [string, ZombieSpriteConfig | undefined][] = Object.entries(configs);
       for (const [stateKey, config] of stateEntries) {
+        if (!config) continue;
         const state: ZombieAnimState = stateKey as ZombieAnimState;
         const img: HTMLImageElement = new Image();
         img.src = config.src;
