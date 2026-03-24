@@ -262,6 +262,8 @@ export enum VfxEventType {
   DashTrail = 'dash-trail',
   DragonImpact = 'dragon-impact',
   PoisonTrigger = 'poison-trigger',
+  ThrowingStar = 'throwing-star',
+  MagicTwinSpawn = 'magic-twin-spawn',
 }
 
 export interface VfxEvent {
@@ -280,4 +282,6 @@ export interface VfxEvent {
   isCrit?: boolean;
   dir?: number;
   endX?: number;
+  targetX?: number;
+  targetY?: number;
 }

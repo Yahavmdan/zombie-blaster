@@ -1,11 +1,13 @@
 import {
   ActiveBuff,
+  CharacterClass,
   CharacterState,
   Direction,
   GAME_CONSTANTS,
   SKILLS,
   SkillDefinition,
   SkillType,
+  VfxEvent,
   VfxEventType,
   getSkillDamageMultiplier,
   getSkillMpCost,
@@ -15,6 +17,7 @@ import {
   getSkillStunDurationMs,
   getBuffEffectValue,
   getBuffDurationMs,
+  getSecondaryBuffEffectValue,
   getPassiveEffectValue,
   getAutoPotionSuccessChance,
   PassiveEffect,
@@ -23,7 +26,7 @@ import {
 } from '@shared/index';
 import { ZombieState, ZombieType } from '@shared/game-entities';
 import { ZombieCorpse } from '@shared/game-entities';
-import { DashPhaseState, IGameEngine } from './engine-types';
+import { DashPhaseState, IGameEngine, PlayerProjectile } from './engine-types';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
@@ -39,6 +42,45 @@ export class CombatSystem {
     private readonly vfx: VfxSystem,
     private readonly drops: DropSystem,
   ) {}
+
+  hasDarkSight(): boolean {
+    const p: CharacterState | null = this.e.player;
+    if (!p) return false;
+    return p.activeBuffs.some(
+      (b: ActiveBuff): boolean => b.stat === 'darkSight' && b.remainingMs > 0,
+    );
+  }
+
+  private cancelDarkSight(): void {
+    const p: CharacterState | null = this.e.player;
+    if (!p) return;
+    p.activeBuffs = p.activeBuffs.filter(
+      (b: ActiveBuff): boolean => b.skillId !== 'assassin-dark-sight',
+    );
+    this.e.onPlayerUpdate?.(p);
+  }
+
+  getMagicTwinMimicPercent(): number {
+    const p: CharacterState | null = this.e.player;
+    if (!p) return 0;
+    const twinBuff: ActiveBuff | undefined = p.activeBuffs.find(
+      (b: ActiveBuff): boolean => b.stat === 'twinMimicPercent' && b.remainingMs > 0,
+    );
+    return twinBuff ? twinBuff.value : 0;
+  }
+
+  filterDeadZombies(): void {
+    const lockedTargets: Set<string> = new Set<string>();
+    for (const proj of this.e.playerProjectiles) {
+      if (proj.targetZombieId) {
+        lockedTargets.add(proj.targetZombieId);
+      }
+    }
+    this.e.zombies = this.e.zombies.filter(
+      (z: ZombieState): boolean => !z.isDead || lockedTargets.has(z.id),
+    );
+    this.e.onZombiesUpdate?.(this.e.zombies);
+  }
 
   updateAttackTiming(): void {
     const p: CharacterState | null = this.e.player;
@@ -64,6 +106,10 @@ export class CombatSystem {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
 
+    if (this.hasDarkSight()) {
+      this.cancelDarkSight();
+    }
+
     p.isAttacking = true;
     this.e.attackAnimTicks = Math.ceil(GAME_CONSTANTS.PLAYER_ATTACK_ANIM_MS / this.e.fixedDt);
     this.e.attackHitDelay = Math.ceil(GAME_CONSTANTS.PLAYER_ATTACK_HIT_DELAY_MS / this.e.fixedDt);
@@ -74,6 +120,11 @@ export class CombatSystem {
   private resolveAttackHit(): void {
     const p: CharacterState | null = this.e.player;
     if (!p || p.isDead) return;
+
+    if (p.classId === CharacterClass.Assassin) {
+      this.spawnAssassinProjectiles(1, 1.0);
+      return;
+    }
 
     const attackRange: number = GAME_CONSTANTS.PLAYER_BASE_ATTACK_RANGE;
     const attackW: number = GAME_CONSTANTS.PLAYER_WIDTH + attackRange;
@@ -105,18 +156,253 @@ export class CombatSystem {
       closest.hp -= damage;
       this.collectDamageEvent(closest.id, damage, closest.hp <= 0);
       this.applyZombieKnockback(closest);
-      this.vfx.spawnHitParticles(closest.x + closest.instanceWidth / 2, closest.y + closest.instanceHeight / 2, '#ff4444');
-      this.vfx.spawnDamageNumber(closest.x + closest.instanceWidth / 2, closest.y - 10, damage, isCrit, isCrit ? '#ffaa00' : '#ffffff');
-      this.vfx.spawnHitMark(closest.x + closest.instanceWidth / 2, closest.y + closest.instanceHeight / 2);
+
+      const hitCx: number = closest.x + closest.instanceWidth / 2;
+      const hitCy: number = closest.y + closest.instanceHeight / 2;
+      const dmgColor: string = isCrit ? '#ffaa00' : '#ffffff';
+      this.vfx.spawnHitParticles(hitCx, hitCy, '#ff4444');
+      this.vfx.spawnDamageNumber(hitCx, closest.y - 10, damage, isCrit, dmgColor);
+      this.vfx.spawnHitMark(hitCx, hitCy);
+      this.pushZombieDamageVfx(hitCx, hitCy, closest.y - 10, damage, isCrit, dmgColor, '#ff4444');
+
+      this.applyTwinMeleeDamage(closest, damage, '#aa66ff');
 
       if (closest.hp <= 0) {
         this.handleZombieDeath(closest);
       }
     }
 
-    this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead);
-    this.e.onZombiesUpdate?.(this.e.zombies);
+    this.filterDeadZombies();
     this.flushDamageEvents();
+  }
+
+  private spawnAssassinProjectiles(count: number, damageMultiplier: number): void {
+    const p: CharacterState | null = this.e.player;
+    if (!p) return;
+
+    const playerCx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const playerCy: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+    const dir: number = p.facing === Direction.Right ? 1 : -1;
+    const speed: number = 14;
+    const specialDmgMult: number = this.drops.getEffectiveDamageMultiplier();
+    const delayBetween: number = 6;
+
+    let lockedTargetId: string | null = null;
+    if (count > 1) {
+      lockedTargetId = this.findAssassinTarget(playerCx, playerCy, dir);
+    }
+
+    for (let i: number = 0; i < count; i++) {
+      const isCrit: boolean = Math.random() * 100 < p.derived.critRate;
+      let damage: number = Math.max(1, Math.floor((p.derived.attack * damageMultiplier + Math.floor(Math.random() * 5)) * specialDmgMult));
+      if (isCrit) damage = Math.max(1, Math.floor(damage * p.derived.critDamage / 100));
+      const dmgColor: string = isCrit ? '#ffaa00' : '#cc44cc';
+      const startX: number = playerCx + dir * 10;
+      const startY: number = playerCy;
+
+      const proj: PlayerProjectile = {
+        x: startX,
+        y: startY,
+        velocityX: dir * speed,
+        velocityY: 0,
+        damage,
+        isCrit,
+        damageColor: dmgColor,
+        particleColor: '#cc44cc',
+        lifetime: 40,
+        rotation: 0,
+        size: 10,
+        delay: i * delayBetween,
+        targetZombieId: lockedTargetId,
+      };
+      this.e.playerProjectiles.push(proj);
+
+      this.e.pendingVfxEvents.push({
+        type: VfxEventType.ThrowingStar,
+        playerId: p.id,
+        x: startX,
+        y: startY,
+        targetX: startX + dir * GAME_CONSTANTS.ASSASSIN_ATTACK_RANGE,
+        targetY: startY,
+        color: '#cc44cc',
+      });
+    }
+
+    const twinPercent: number = this.getMagicTwinMimicPercent();
+    if (twinPercent > 0) {
+      const twinOffsetX: number = -dir * GAME_CONSTANTS.MAGIC_TWIN_OFFSET_X;
+      const twinCx: number = playerCx + twinOffsetX;
+      const twinCy: number = playerCy;
+      const twinDelayBase: number = 4;
+
+      for (let i: number = 0; i < count; i++) {
+        const isCrit: boolean = Math.random() * 100 < p.derived.critRate;
+        let damage: number = Math.max(1, Math.floor((p.derived.attack * damageMultiplier * (twinPercent / 100) + Math.floor(Math.random() * 3)) * specialDmgMult));
+        if (isCrit) damage = Math.max(1, Math.floor(damage * p.derived.critDamage / 100));
+        const dmgColor: string = isCrit ? '#ffaa00' : '#aa66ff';
+        const startX: number = twinCx + dir * 10;
+        const startY: number = twinCy;
+
+        const proj: PlayerProjectile = {
+          x: startX,
+          y: startY,
+          velocityX: dir * speed,
+          velocityY: 0,
+          damage,
+          isCrit,
+          damageColor: dmgColor,
+          particleColor: '#aa66ff',
+          lifetime: 40,
+          rotation: 0,
+          size: 8,
+          delay: twinDelayBase + i * delayBetween,
+          targetZombieId: lockedTargetId,
+        };
+        this.e.playerProjectiles.push(proj);
+
+        this.e.pendingVfxEvents.push({
+          type: VfxEventType.ThrowingStar,
+          playerId: p.id,
+          x: startX,
+          y: startY,
+          targetX: startX + dir * GAME_CONSTANTS.ASSASSIN_ATTACK_RANGE,
+          targetY: startY,
+          color: '#aa66ff',
+        });
+      }
+    }
+  }
+
+  private findAssassinTarget(px: number, py: number, dir: number): string | null {
+    const maxVertical: number = 80;
+    let bestId: string | null = null;
+    let bestDist: number = Infinity;
+
+    for (const z of this.e.zombies) {
+      if (z.isDead || z.spawnTimer > 0) continue;
+      const zCx: number = z.x + z.instanceWidth / 2;
+      const zCy: number = z.y + z.instanceHeight / 2;
+      const dx: number = zCx - px;
+      const dy: number = Math.abs(zCy - py);
+      const inFront: boolean = dir > 0 ? dx > 0 : dx < 0;
+      if (!inFront) continue;
+      if (dy > maxVertical) continue;
+      const dist: number = dx * dx + (zCy - py) * (zCy - py);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestId = z.id;
+      }
+    }
+    return bestId;
+  }
+
+  updatePlayerProjectiles(): void {
+    const toRemove: Set<number> = new Set<number>();
+    const speed: number = 14;
+    const homingVertical: number = 80;
+
+    for (let i: number = 0; i < this.e.playerProjectiles.length; i++) {
+      const proj: PlayerProjectile = this.e.playerProjectiles[i];
+
+      if (proj.delay > 0) {
+        proj.delay--;
+        continue;
+      }
+
+      let target: ZombieState | null = null;
+
+      if (proj.targetZombieId) {
+        target = this.e.zombies.find(
+          (z: ZombieState): boolean => z.id === proj.targetZombieId,
+        ) ?? null;
+      }
+
+      if (!target) {
+        const projDir: number = proj.velocityX >= 0 ? 1 : -1;
+        let bestDist: number = Infinity;
+        for (const z of this.e.zombies) {
+          if (z.isDead || z.spawnTimer > 0) continue;
+          const zCx: number = z.x + z.instanceWidth / 2;
+          const zCy: number = z.y + z.instanceHeight / 2;
+          const dx: number = zCx - proj.x;
+          const inFront: boolean = projDir > 0 ? dx > 0 : dx < 0;
+          if (!inFront) continue;
+          if (Math.abs(zCy - proj.y) > homingVertical) continue;
+          const dist: number = dx * dx + (zCy - proj.y) * (zCy - proj.y);
+          if (dist < bestDist) {
+            bestDist = dist;
+            target = z;
+          }
+        }
+      }
+
+      if (target) {
+        const tx: number = target.x + target.instanceWidth / 2;
+        const ty: number = target.y + target.instanceHeight / 2;
+        const dx: number = tx - proj.x;
+        const dy: number = ty - proj.y;
+        const dist: number = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 0) {
+          proj.velocityX = (dx / dist) * speed;
+          proj.velocityY = (dy / dist) * speed;
+        }
+      }
+
+      proj.x += proj.velocityX;
+      proj.y += proj.velocityY;
+      proj.rotation += 0.4;
+      proj.lifetime--;
+
+      if (proj.lifetime <= 0 || proj.x < -50 || proj.x > GAME_CONSTANTS.CANVAS_WIDTH + 50) {
+        toRemove.add(i);
+        continue;
+      }
+
+      const halfSize: number = proj.size / 2;
+      let hitZombie: ZombieState | null = null;
+      for (const z of this.e.zombies) {
+        if (z.spawnTimer > 0) continue;
+        const isLockedTarget: boolean = proj.targetZombieId !== null && z.id === proj.targetZombieId;
+        if (z.isDead && !isLockedTarget) continue;
+        if (this.physics.rectsOverlap(
+          proj.x - halfSize, proj.y - halfSize, proj.size, proj.size,
+          z.x, z.y, z.instanceWidth, z.instanceHeight,
+        )) {
+          hitZombie = z;
+          break;
+        }
+      }
+
+      if (hitZombie) {
+        const wasAlive: boolean = !hitZombie.isDead;
+        hitZombie.hp -= proj.damage;
+
+        const hitCx: number = hitZombie.x + hitZombie.instanceWidth / 2;
+        const hitCy: number = hitZombie.y + hitZombie.instanceHeight / 2;
+        this.vfx.spawnHitParticles(hitCx, hitCy, proj.particleColor);
+        this.vfx.spawnDamageNumber(hitCx, hitZombie.y - 10, proj.damage, proj.isCrit, proj.damageColor);
+        this.vfx.spawnHitMark(hitCx, hitCy);
+        this.pushZombieDamageVfx(hitCx, hitCy, hitZombie.y - 10, proj.damage, proj.isCrit, proj.damageColor, proj.particleColor);
+
+        if (wasAlive) {
+          this.collectDamageEvent(hitZombie.id, proj.damage, hitZombie.hp <= 0);
+          this.applyZombieKnockback(hitZombie);
+          if (hitZombie.hp <= 0) {
+            this.handleZombieDeath(hitZombie);
+          }
+        }
+
+        toRemove.add(i);
+      }
+    }
+
+    if (toRemove.size > 0) {
+      this.e.playerProjectiles = this.e.playerProjectiles.filter(
+        (_proj: PlayerProjectile, idx: number): boolean => !toRemove.has(idx),
+      );
+      this.filterDeadZombies();
+      this.flushDamageEvents();
+    }
   }
 
   tryPerformSkill(slotIndex: number): void {
@@ -152,6 +438,10 @@ export class CombatSystem {
       if (hpCost > 0) p.hp -= hpCost;
     }
     this.e.skillCooldowns.set(skill.id, Math.floor(cooldownMs / this.e.fixedDt));
+
+    if (this.hasDarkSight() && skill.id !== 'assassin-dark-sight') {
+      this.cancelDarkSight();
+    }
 
     const playerCX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
     const playerCY: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
@@ -198,6 +488,16 @@ export class CombatSystem {
         isCrit: false,
         color: '#44ff44',
       });
+      this.e.onPlayerUpdate?.(p);
+      return;
+    }
+
+    if (p.classId === CharacterClass.Assassin && skill.hitCount > 0 && skill.aoeRadius <= 0) {
+      p.isAttacking = true;
+      setTimeout((): void => {
+        if (this.e.player) this.e.player.isAttacking = false;
+      }, GAME_CONSTANTS.PLAYER_SKILL_ANIM_MS);
+      this.spawnAssassinProjectiles(skill.hitCount, damageMultiplier);
       this.e.onPlayerUpdate?.(p);
       return;
     }
@@ -261,8 +561,7 @@ export class CombatSystem {
       this.e.playerStunTicks = Math.floor(stunMs / this.e.fixedDt);
     }
 
-    this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead);
-    this.e.onZombiesUpdate?.(this.e.zombies);
+    this.filterDeadZombies();
     this.flushDamageEvents();
   }
 
@@ -277,9 +576,45 @@ export class CombatSystem {
     z.hp -= damage;
     this.collectDamageEvent(z.id, damage, z.hp <= 0);
     this.applyZombieKnockback(z);
-    this.vfx.spawnHitParticles(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, skillColor);
-    this.vfx.spawnDamageNumber(z.x + z.instanceWidth / 2, z.y - 10, damage, isCrit, isCrit ? '#ffaa00' : skillColor);
-    this.vfx.spawnHitMark(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);
+
+    const hitCx: number = z.x + z.instanceWidth / 2;
+    const hitCy: number = z.y + z.instanceHeight / 2;
+    const dmgColor: string = isCrit ? '#ffaa00' : skillColor;
+    this.vfx.spawnHitParticles(hitCx, hitCy, skillColor);
+    this.vfx.spawnDamageNumber(hitCx, z.y - 10, damage, isCrit, dmgColor);
+    this.vfx.spawnHitMark(hitCx, hitCy);
+    this.pushZombieDamageVfx(hitCx, hitCy, z.y - 10, damage, isCrit, dmgColor, skillColor);
+
+    this.applyTwinMeleeDamage(z, damage, '#aa66ff');
+
+    if (z.hp <= 0) {
+      this.handleZombieDeath(z);
+    }
+  }
+
+  private applyTwinMeleeDamage(z: ZombieState, baseDamage: number, twinColor: string): void {
+    if (z.isDead || z.hp <= 0) return;
+    const twinPercent: number = this.getMagicTwinMimicPercent();
+    if (twinPercent <= 0) return;
+
+    const p: CharacterState | null = this.e.player;
+    if (!p) return;
+
+    const twinDamage: number = Math.max(1, Math.floor(baseDamage * twinPercent / 100));
+    const twinCrit: boolean = Math.random() * 100 < p.derived.critRate;
+    const finalDamage: number = twinCrit
+      ? Math.max(1, Math.floor(twinDamage * p.derived.critDamage / 100))
+      : twinDamage;
+
+    z.hp -= finalDamage;
+    this.collectDamageEvent(z.id, finalDamage, z.hp <= 0);
+
+    const hitCx: number = z.x + z.instanceWidth / 2;
+    const hitCy: number = z.y + z.instanceHeight / 2;
+    const dmgColor: string = twinCrit ? '#ffaa00' : twinColor;
+    this.vfx.spawnDamageNumber(hitCx, z.y - 20, finalDamage, twinCrit, dmgColor);
+    this.vfx.spawnHitParticles(hitCx, hitCy, twinColor);
+    this.pushZombieDamageVfx(hitCx, hitCy, z.y - 20, finalDamage, twinCrit, dmgColor, twinColor);
 
     if (z.hp <= 0) {
       this.handleZombieDeath(z);
@@ -542,6 +877,19 @@ export class CombatSystem {
     });
   }
 
+  private pushZombieDamageVfx(hitCx: number, hitCy: number, dmgY: number, damage: number, isCrit: boolean, dmgColor: string, particleColor: string): void {
+    const p: CharacterState | null = this.e.player;
+    if (!p) return;
+    const events: VfxEvent[] = [
+      { type: VfxEventType.HitParticles, playerId: p.id, x: hitCx, y: hitCy, color: particleColor },
+      { type: VfxEventType.DamageNumber, playerId: p.id, x: hitCx, y: dmgY, value: damage, isCrit, color: dmgColor },
+      { type: VfxEventType.HitMark, playerId: p.id, x: hitCx, y: hitCy },
+    ];
+    for (const evt of events) {
+      this.e.pendingVfxEvents.push(evt);
+    }
+  }
+
   private spawnVanishTickParticles(dash: DashPhaseState): void {
     const progress: number = dash.ticksInPhase / dash.vanishTicks;
     const swirlCount: number = 4;
@@ -772,17 +1120,20 @@ export class CombatSystem {
       z.isGrounded = false;
       z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES * 2;
 
-      this.vfx.spawnHitParticles(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, dash.skill.color);
-      this.vfx.spawnDamageNumber(z.x + z.instanceWidth / 2, z.y - z.instanceHeight / 2, damage, isCrit, isCrit ? '#ffaa00' : dash.skill.color);
-      this.vfx.spawnHitMark(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);
+      const hitCx: number = z.x + z.instanceWidth / 2;
+      const hitCy: number = z.y + z.instanceHeight / 2;
+      const dmgColor: string = isCrit ? '#ffaa00' : dash.skill.color;
+      this.vfx.spawnHitParticles(hitCx, hitCy, dash.skill.color);
+      this.vfx.spawnDamageNumber(hitCx, z.y - z.instanceHeight / 2, damage, isCrit, dmgColor);
+      this.vfx.spawnHitMark(hitCx, hitCy);
+      this.pushZombieDamageVfx(hitCx, hitCy, z.y - z.instanceHeight / 2, damage, isCrit, dmgColor, dash.skill.color);
 
       if (z.hp <= 0) {
         this.handleZombieDeath(z);
       }
     }
 
-    this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead);
-    this.e.onZombiesUpdate?.(this.e.zombies);
+    this.filterDeadZombies();
     this.flushDamageEvents();
   }
 
@@ -793,22 +1144,27 @@ export class CombatSystem {
     const durationMs: number = getBuffDurationMs(skill, level);
     const effectValue: number = getBuffEffectValue(skill, level);
 
-    const existingIdx: number = p.activeBuffs.findIndex(
-      (b: ActiveBuff) => b.skillId === skill.id,
+    p.activeBuffs = p.activeBuffs.filter(
+      (b: ActiveBuff): boolean => b.skillId !== skill.id,
     );
 
-    const newBuff: ActiveBuff = {
+    p.activeBuffs.push({
       skillId: skill.id,
       remainingMs: durationMs,
       totalDurationMs: durationMs,
       stat: skill.buffEffect.stat,
       value: effectValue,
-    };
+    });
 
-    if (existingIdx >= 0) {
-      p.activeBuffs[existingIdx] = newBuff;
-    } else {
-      p.activeBuffs.push(newBuff);
+    if (skill.secondaryBuffEffect) {
+      const secondaryValue: number = getSecondaryBuffEffectValue(skill, level);
+      p.activeBuffs.push({
+        skillId: skill.id,
+        remainingMs: durationMs,
+        totalDurationMs: durationMs,
+        stat: skill.secondaryBuffEffect.stat,
+        value: secondaryValue,
+      });
     }
 
     const playerCX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
@@ -822,6 +1178,19 @@ export class CombatSystem {
       y: buffCY,
       color: skill.color,
     });
+
+    if (skill.buffEffect.stat === 'twinMimicPercent') {
+      const dir: number = p.facing === Direction.Right ? 1 : -1;
+      const twinX: number = playerCX - dir * GAME_CONSTANTS.MAGIC_TWIN_OFFSET_X;
+      this.vfx.spawnBuffActivationParticles(twinX, buffCY, '#aa66ff');
+      this.e.pendingVfxEvents.push({
+        type: VfxEventType.MagicTwinSpawn,
+        playerId: p.id,
+        x: twinX,
+        y: buffCY,
+        color: '#aa66ff',
+      });
+    }
   }
 
   updateActiveBuffs(): void {
@@ -1050,6 +1419,7 @@ export class CombatSystem {
     if (!p || p.isDown || this.e.invincibilityFrames > 0) return;
     if (this.e.dashPhase) return;
     if (this.e.godMode) return;
+    if (this.hasDarkSight()) return;
 
     p.hp -= damage;
     this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
@@ -1140,7 +1510,7 @@ export class CombatSystem {
       facing: z.facing,
       velocityX: scatter + (grounded ? 0 : z.velocityX),
       velocityY: grounded ? 0 : z.velocityY,
-      isGrounded: grounded,
+      isGrounded: false,
       frozen: false,
       landProcessed: false,
       fadeTimer: lingerTicks,

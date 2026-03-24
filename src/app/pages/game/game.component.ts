@@ -238,7 +238,7 @@ export class GameComponent implements OnInit, OnDestroy {
         .subscribe((msg: ServerMessage): void => {
           const payload: RemoteZombieDamagePayload =
             msg.payload as RemoteZombieDamagePayload;
-          this.gameCanvas()?.applyRemoteDamage(payload.events);
+          this.gameCanvas()?.applyRemoteDamage(payload.playerId, payload.events);
         });
     }
 
@@ -687,6 +687,8 @@ export class GameComponent implements OnInit, OnDestroy {
     const p: CharacterState | null = this.gameState.player();
     if (!p) return;
     this.gameState.createPlayer(p.name, p.classId);
+    this.keyBindingsService.resetToDefaults();
+    this.quickSlotService.resetToDefaults();
     this.isGameOver.set(false);
     this.statPanelOpen.set(false);
     this.skillPanelOpen.set(false);
@@ -862,7 +864,7 @@ export class GameComponent implements OnInit, OnDestroy {
       .subscribe((msg: ServerMessage): void => {
         const payload: RemoteZombieDamagePayload =
           msg.payload as RemoteZombieDamagePayload;
-        this.gameCanvas()?.applyRemoteDamage(payload.events);
+        this.gameCanvas()?.applyRemoteDamage(payload.playerId, payload.events);
       });
 
     console.log('[Game] This client has been promoted to host');

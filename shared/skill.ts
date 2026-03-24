@@ -1,4 +1,4 @@
-import { CharacterClass, CharacterDerived } from './character';
+import { BuffStat, CharacterClass } from './character';
 
 export enum SkillType {
   Active = 'active',
@@ -44,7 +44,7 @@ export interface SkillScaling {
 }
 
 export interface BuffEffect {
-  stat: keyof CharacterDerived | 'allDamagePercent' | 'knockbackResist' | 'maxHpMaxMpPercent';
+  stat: BuffStat;
   baseValue: number;
   valuePerLevel: number;
 }
@@ -72,6 +72,7 @@ export interface SkillDefinition {
   hitCount: number;
   aoeRadius: number;
   animationKey: string;
+  secondaryBuffEffect: BuffEffect | null;
   passiveEffect: PassiveEffect | null;
   mechanic: SkillMechanic;
   maxTargets: number;

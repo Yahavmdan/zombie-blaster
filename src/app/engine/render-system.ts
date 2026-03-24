@@ -1,4 +1,5 @@
 import {
+  ActiveBuff,
   CharacterClassDefinition,
   CharacterState,
   CHARACTER_CLASSES,
@@ -29,10 +30,24 @@ import {
   DropNotification,
   IGameEngine,
   LevelUpNotification,
+  PlayerProjectile,
 } from './engine-types';
 
 export class RenderSystem {
   constructor(private readonly e: IGameEngine) {}
+
+  private getTwinMimicPercent(p: CharacterState): number {
+    const twinBuff: ActiveBuff | undefined = p.activeBuffs.find(
+      (b: ActiveBuff): boolean => b.stat === 'twinMimicPercent' && b.remainingMs > 0,
+    );
+    return twinBuff ? twinBuff.value : 0;
+  }
+
+  private hasDarkSight(p: CharacterState): boolean {
+    return p.activeBuffs.some(
+      (b: ActiveBuff): boolean => b.stat === 'darkSight' && b.remainingMs > 0,
+    );
+  }
 
   render(): void {
     const ctx: CanvasRenderingContext2D = this.e.ctx;
@@ -62,6 +77,7 @@ export class RenderSystem {
     this.renderDrops(ctx);
     this.renderRemotePlayers(ctx);
     this.renderPlayer(ctx);
+    this.renderPlayerProjectiles(ctx);
     this.renderReviveProgress(ctx);
     this.renderPoisonOverlay(ctx);
     this.renderParticles(ctx);
@@ -155,10 +171,12 @@ export class RenderSystem {
     }
     if (dashAlpha <= 0) return;
 
-    const needsAlpha: boolean = dashAlpha < 1;
+    const darkSightAlpha: number = this.hasDarkSight(p) ? GAME_CONSTANTS.DARK_SIGHT_ALPHA : 1;
+    const combinedAlpha: number = dashAlpha * darkSightAlpha;
+    const needsAlpha: boolean = combinedAlpha < 1;
     if (needsAlpha) {
       ctx.save();
-      ctx.globalAlpha = dashAlpha;
+      ctx.globalAlpha = combinedAlpha;
     }
 
     const classColor: string = CHARACTER_CLASSES[p.classId].color;
@@ -172,6 +190,11 @@ export class RenderSystem {
 
     const superSpeed: boolean = this.isSuperSpeedActive();
     const isRunning: boolean = p.velocityX !== 0;
+
+    const twinPercent: number = this.getTwinMimicPercent(p);
+    if (twinPercent > 0) {
+      this.renderMagicTwin(ctx, p, drawX, drawY, spriteSize, flipX, dashAlpha, true);
+    }
 
     if (this.e.spriteAnimator.isLoaded()) {
       if (superSpeed && isRunning) {
@@ -326,7 +349,8 @@ export class RenderSystem {
         this.e.remotePlayerAnimators.get(rp.id);
 
       ctx.save();
-      ctx.globalAlpha = 0.85;
+      const remoteDarkSightAlpha: number = this.hasDarkSight(rp) ? GAME_CONSTANTS.DARK_SIGHT_ALPHA : 1;
+      ctx.globalAlpha = 0.85 * remoteDarkSightAlpha;
 
       const superSpeed: boolean = this.isSuperSpeedActive();
 
@@ -336,6 +360,12 @@ export class RenderSystem {
         const effectiveAnchorX: number = flipX ? (1 - playerAnchorX) : playerAnchorX;
         const drawX: number = rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2 - spriteSize * effectiveAnchorX;
         const drawY: number = rp.y + GAME_CONSTANTS.PLAYER_HEIGHT - spriteSize * playerAnchorY;
+
+        const remoteTwinPercent: number = this.getTwinMimicPercent(rp);
+        if (remoteTwinPercent > 0) {
+          this.renderMagicTwinRemote(ctx, rp, drawX, drawY, spriteSize, flipX, animator);
+        }
+
         const isRunning: boolean = rp.velocityX !== 0;
         if (superSpeed && isRunning) {
           this.renderSpeedTrail(ctx, rp, drawX, drawY, spriteSize, flipX,
@@ -493,6 +523,66 @@ export class RenderSystem {
     return this.e.activeSpecialEffects.some(
       (eff: ActiveSpecialEffect): boolean => eff.type === SpecialDropType.SuperSpeed,
     );
+  }
+
+  private renderMagicTwin(
+    ctx: CanvasRenderingContext2D,
+    p: CharacterState,
+    drawX: number,
+    drawY: number,
+    spriteSize: number,
+    flipX: boolean,
+    dashAlpha: number,
+    isLocal: boolean,
+  ): void {
+    const dir: number = p.facing === Direction.Right ? 1 : -1;
+    const twinOffsetX: number = -dir * GAME_CONSTANTS.MAGIC_TWIN_OFFSET_X;
+    const twinDrawX: number = drawX + twinOffsetX;
+    const twinDrawY: number = drawY;
+    const twinAlpha: number = GAME_CONSTANTS.MAGIC_TWIN_ALPHA * dashAlpha;
+
+    ctx.save();
+    ctx.globalAlpha = twinAlpha;
+
+    if (isLocal && this.e.spriteAnimator.isLoaded()) {
+      this.e.spriteAnimator.draw(ctx, twinDrawX, twinDrawY, spriteSize, spriteSize, flipX);
+    } else {
+      const classColor: string = CHARACTER_CLASSES[p.classId].color;
+      ctx.translate(
+        p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2 + twinOffsetX,
+        p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+      );
+      if (flipX) ctx.scale(-1, 1);
+      ctx.fillStyle = classColor;
+      ctx.fillRect(
+        -GAME_CONSTANTS.PLAYER_WIDTH / 2,
+        -GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+        GAME_CONSTANTS.PLAYER_WIDTH,
+        GAME_CONSTANTS.PLAYER_HEIGHT,
+      );
+    }
+
+    ctx.restore();
+  }
+
+  private renderMagicTwinRemote(
+    ctx: CanvasRenderingContext2D,
+    rp: CharacterState,
+    drawX: number,
+    drawY: number,
+    spriteSize: number,
+    flipX: boolean,
+    animator: SpriteAnimator,
+  ): void {
+    const dir: number = rp.facing === Direction.Right ? 1 : -1;
+    const twinOffsetX: number = -dir * GAME_CONSTANTS.MAGIC_TWIN_OFFSET_X;
+    const twinDrawX: number = drawX + twinOffsetX;
+    const twinDrawY: number = drawY;
+
+    ctx.save();
+    ctx.globalAlpha = GAME_CONSTANTS.MAGIC_TWIN_ALPHA * 0.85;
+    animator.draw(ctx, twinDrawX, twinDrawY, spriteSize, spriteSize, flipX);
+    ctx.restore();
   }
 
   private renderSpeedTrail(
@@ -799,6 +889,56 @@ export class RenderSystem {
       const lookDir: number = this.e.player.x > z.x ? 1 : -1;
       ctx.fillRect(z.x + z.instanceWidth / 2 - 6 + lookDir * 2, eyeY, 4, 4);
       ctx.fillRect(z.x + z.instanceWidth / 2 + 2 + lookDir * 2, eyeY, 4, 4);
+    }
+  }
+
+  private renderPlayerProjectiles(ctx: CanvasRenderingContext2D): void {
+    for (const proj of this.e.playerProjectiles) {
+      if (proj.delay > 0) continue;
+      ctx.save();
+      ctx.translate(proj.x, proj.y);
+      ctx.rotate(proj.rotation);
+
+      const size: number = proj.size;
+      const outerR: number = size;
+      const innerR: number = size * 0.35;
+      const spikes: number = 4;
+
+      ctx.fillStyle = proj.particleColor;
+      ctx.beginPath();
+      for (let i: number = 0; i < spikes * 2; i++) {
+        const r: number = i % 2 === 0 ? outerR : innerR;
+        const angle: number = (i * Math.PI) / spikes - Math.PI / 2;
+        const px: number = Math.cos(angle) * r;
+        const py: number = Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, size * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha = 0.4;
+      ctx.fillStyle = proj.particleColor;
+      const trailDir: number = proj.velocityX > 0 ? -1 : 1;
+      for (let t: number = 1; t <= 3; t++) {
+        const trailSize: number = size * (1 - t * 0.2);
+        const tx: number = proj.x + trailDir * t * 8;
+        const ty: number = proj.y;
+        ctx.globalAlpha = 0.3 / t;
+        ctx.beginPath();
+        ctx.arc(tx, ty, trailSize * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
     }
   }
 

@@ -66,6 +66,11 @@ export function getPassiveEffectValue(skill: SkillDefinition, level: number): nu
   return skill.scaling.baseDamage + skill.scaling.damagePerLevel * (level - 1);
 }
 
+export function getSecondaryBuffEffectValue(skill: SkillDefinition, level: number): number {
+  if (level <= 0 || !skill.secondaryBuffEffect) return 0;
+  return skill.secondaryBuffEffect.baseValue + skill.secondaryBuffEffect.valuePerLevel * (level - 1);
+}
+
 export function getAutoPotionSuccessChance(skill: SkillDefinition, level: number): number {
   if (level <= 0 || !skill.passiveEffect || skill.passiveEffect.type !== 'autoPotion') return 0;
   if (skill.levelData && level <= skill.levelData.length) {

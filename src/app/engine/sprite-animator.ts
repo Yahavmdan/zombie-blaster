@@ -1,3 +1,14 @@
+import { CharacterClass } from '@shared/character';
+
+export function classToSpriteSet(classId: CharacterClass): SpriteSet {
+  switch (classId) {
+    case CharacterClass.Assassin:
+      return 'punk';
+    default:
+      return 'biker';
+  }
+}
+
 export enum PlayerAnimState {
   Idle = 'idle',
   Run = 'run',
@@ -7,6 +18,8 @@ export enum PlayerAnimState {
   Death = 'death',
   Climb = 'climb',
 }
+
+export type SpriteSet = 'biker' | 'punk';
 
 interface SpriteAnimation {
   image: HTMLImageElement;
@@ -71,6 +84,56 @@ const BIKER_SPRITE_CONFIGS: Record<PlayerAnimState, SpriteConfig> = {
   },
 };
 
+const PUNK_SPRITE_CONFIGS: Record<PlayerAnimState, SpriteConfig> = {
+  [PlayerAnimState.Idle]: {
+    src: 'sprites/punk/Punk_idle.png',
+    frameCount: 4,
+    frameDurationTicks: 12,
+    loop: true,
+  },
+  [PlayerAnimState.Run]: {
+    src: 'sprites/punk/Punk_run.png',
+    frameCount: 6,
+    frameDurationTicks: 8,
+    loop: true,
+  },
+  [PlayerAnimState.Jump]: {
+    src: 'sprites/punk/Punk_jump.png',
+    frameCount: 4,
+    frameDurationTicks: 10,
+    loop: false,
+  },
+  [PlayerAnimState.Attack]: {
+    src: 'sprites/punk/Punk_attack3.png',
+    frameCount: 8,
+    frameDurationTicks: 3,
+    loop: false,
+  },
+  [PlayerAnimState.Death]: {
+    src: 'sprites/punk/Punk_death.png',
+    frameCount: 6,
+    frameDurationTicks: 12,
+    loop: false,
+  },
+  [PlayerAnimState.Climb]: {
+    src: 'sprites/punk/Punk_climb.png',
+    frameCount: 6,
+    frameDurationTicks: 10,
+    loop: true,
+  },
+  [PlayerAnimState.DoubleJump]: {
+    src: 'sprites/punk/Punk_doublejump.png',
+    frameCount: 6,
+    frameDurationTicks: 5,
+    loop: false,
+  },
+};
+
+const SPRITE_SET_CONFIGS: Record<SpriteSet, Record<PlayerAnimState, SpriteConfig>> = {
+  biker: BIKER_SPRITE_CONFIGS,
+  punk: PUNK_SPRITE_CONFIGS,
+};
+
 export class SpriteAnimator {
   private animations: Map<PlayerAnimState, SpriteAnimation> = new Map();
   private currentState: PlayerAnimState = PlayerAnimState.Idle;
@@ -78,10 +141,15 @@ export class SpriteAnimator {
   private tickCounter: number = 0;
   private loaded: boolean = false;
   private loadCount: number = 0;
-  private readonly totalCount: number = Object.keys(BIKER_SPRITE_CONFIGS).length;
+  private totalCount: number = 0;
 
-  load(): void {
-    const entries: [string, SpriteConfig][] = Object.entries(BIKER_SPRITE_CONFIGS);
+  load(spriteSet: SpriteSet = 'biker'): void {
+    const configs: Record<PlayerAnimState, SpriteConfig> = SPRITE_SET_CONFIGS[spriteSet];
+    const entries: [string, SpriteConfig][] = Object.entries(configs);
+    this.totalCount = entries.length;
+    this.loadCount = 0;
+    this.loaded = false;
+    this.animations.clear();
     for (const [stateKey, config] of entries) {
       const state: PlayerAnimState = stateKey as PlayerAnimState;
       const img: HTMLImageElement = new Image();

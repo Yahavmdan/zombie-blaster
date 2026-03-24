@@ -11,6 +11,9 @@ import {
   PotionCategory,
   SpecialDropType,
   SpecialDropDefinition,
+  QuickSlotEntry,
+  QuickSlotAction,
+  QUICK_SLOT_ACTIONS,
 } from './game-entities';
 import { KeyBindings } from './messages';
 import { SkillDefinition, SkillType } from './skill';
@@ -52,9 +55,10 @@ export const GAME_CONSTANTS = {
 
   // ─── Player Combat ─────────────────────────────
   PLAYER_BASE_ATTACK_RANGE: 50, // How far (pixels) the basic attack reaches beyond the player body
-  PLAYER_ATTACK_COOLDOWN_TICKS: 24, // Minimum ticks between basic attacks
-  PLAYER_ATTACK_ANIM_MS: 480, // How long the attack animation plays in milliseconds
-  PLAYER_ATTACK_HIT_DELAY_MS: 240, // Delay after pressing attack before damage is actually dealt
+  ASSASSIN_ATTACK_RANGE: 160, // Assassin throws stars — ranged basic attack reach in pixels
+  PLAYER_ATTACK_COOLDOWN_TICKS: 36, // Minimum ticks between basic attacks
+  PLAYER_ATTACK_ANIM_MS: 720, // How long the attack animation plays in milliseconds
+  PLAYER_ATTACK_HIT_DELAY_MS: 360, // Delay after pressing attack before damage is actually dealt
   PLAYER_SKILL_ANIM_MS: 480, // How long skill attack animations play in milliseconds
   INVINCIBILITY_FRAMES: 90, // Ticks of invincibility after the player takes damage
   INVINCIBILITY_BLINK_RATE: 3, // Player blinks every N ticks during invincibility
@@ -177,10 +181,10 @@ export const GAME_CONSTANTS = {
 
   // ─── Zombie Corpse ─────────────────────────────
   ZOMBIE_CORPSE_LINGER_TICKS: 999_999, // How long a corpse stays on screen before fading (very large = nearly forever)
-  ZOMBIE_CORPSE_PLATFORM_HEIGHT: 12, // Height of the invisible platform a corpse becomes
-  ZOMBIE_CORPSE_SNAP_TOLERANCE: 16, // How close something must be to snap onto a corpse platform
+  ZOMBIE_CORPSE_PLATFORM_HEIGHT: 5, // Height of the invisible platform a corpse becomes (lower = denser piles)
+  ZOMBIE_CORPSE_SNAP_TOLERANCE: 10, // How close something must be to snap onto a corpse platform
   ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO: 0.55, // Fraction of corpse width used as a walkable platform
-  ZOMBIE_CORPSE_SLIDE_OFFSET: 4, // Small horizontal offset applied to corpses so they don't stack perfectly
+  ZOMBIE_CORPSE_SLIDE_OFFSET: 1, // Small horizontal offset applied to corpses so they don't stack perfectly
   ZOMBIE_CORPSE_DEATH_SCATTER: 0.2, // Random horizontal scatter applied to corpses on death
   ZOMBIE_CORPSE_DIVERSE_CHANCE: 0.45, // Chance a corpse uses a different visual variant
   ZOMBIE_CORPSE_BLOOD_CHANCE: 0.3, // Chance a corpse shows a blood splatter
@@ -269,6 +273,13 @@ export const GAME_CONSTANTS = {
   SPECIAL_ZOMBIE_SHOCK_ARC_SEGMENTS: 5, // Number of line segments per electric arc
   SPECIAL_ZOMBIE_SHOCK_ARC_COUNT: 3, // Number of electric arcs per zombie
   SPECIAL_DROP_CONFIRM_TICKS: 250, // Ticks (5 seconds at 50 tps) the player has to confirm a special drop
+
+  // ─── Magic Twin ─────────────────────────────────
+  MAGIC_TWIN_OFFSET_X: 25, // Horizontal offset behind the player in pixels
+  MAGIC_TWIN_ALPHA: 0.4, // Opacity of the twin sprite
+
+  // ─── Dark Sight ─────────────────────────────────
+  DARK_SIGHT_ALPHA: 0.5, // Player opacity while Dark Sight is active
 
   // ─── Tick Rate ──────────────────────────────────
   TICK_RATE: 50, // Game loop runs at this many ticks per second
@@ -591,6 +602,7 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 1,
     aoeRadius: 0,
     animationKey: 'warrior-power-strike',
+    secondaryBuffEffect: null,
     passiveEffect: null,
     mechanic: 'damage',
     maxTargets: 1,
@@ -641,6 +653,7 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 1,
     aoeRadius: 80,
     animationKey: 'warrior-slash-blast',
+    secondaryBuffEffect: null,
     passiveEffect: null,
     mechanic: 'damage',
     maxTargets: 6,
@@ -703,46 +716,10 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 1,
     aoeRadius: 0,
     animationKey: 'warrior-power-dash',
+    secondaryBuffEffect: null,
     passiveEffect: null,
     mechanic: 'dash',
     maxTargets: 10,
-    hpCostIsPercent: false,
-    minHpPercent: 0,
-  },
-
-  // ═══ WARRIOR ACTIVE (Double Jump) ═══
-  {
-    id: 'warrior-double-jump',
-    name: 'Double Jump',
-    classId: CharacterClass.Warrior,
-    type: SkillType.Active,
-    description: 'Leap a second time while airborne, launching forward with explosive force.',
-    maxLevel: 5,
-    requiredCharacterLevel: 8,
-    icon: '🦘',
-    color: '#ff8822',
-    scaling: {
-      baseDamage: 0.62, damagePerLevel: 0.095,
-      baseMpCost: 8, mpCostPerLevel: 0.5,
-      baseCooldown: 600, cooldownReductionPerLevel: 10,
-      baseRange: 0, rangePerLevel: 0,
-    },
-    levelData: [
-      { mpCost: 8,  hpCost: 0, damage: 0.62 },
-      { mpCost: 8,  hpCost: 0, damage: 0.72 },
-      { mpCost: 9,  hpCost: 0, damage: 0.81 },
-      { mpCost: 9,  hpCost: 0, damage: 0.91 },
-      { mpCost: 10, hpCost: 0, damage: 1.00 },
-    ],
-    prerequisite: { skillId: 'warrior-power-strike', level: 3 },
-    buffEffect: null,
-    buffDuration: null,
-    hitCount: 0,
-    aoeRadius: 0,
-    animationKey: 'warrior-double-jump',
-    passiveEffect: null,
-    mechanic: 'doubleJump',
-    maxTargets: 0,
     hpCostIsPercent: false,
     minHpPercent: 0,
   },
@@ -788,6 +765,7 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 0,
     aoeRadius: 0,
     animationKey: '',
+    secondaryBuffEffect: null,
     passiveEffect: {
       type: 'hpRecovery',
       intervalMs: 10_000,
@@ -854,6 +832,7 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 0,
     aoeRadius: 0,
     animationKey: 'warrior-power-stance',
+    secondaryBuffEffect: null,
     passiveEffect: null,
     mechanic: 'damage',
     maxTargets: 0,
@@ -916,6 +895,7 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 0,
     aoeRadius: 0,
     animationKey: 'warrior-hyper-body',
+    secondaryBuffEffect: null,
     passiveEffect: null,
     mechanic: 'damage',
     maxTargets: 0,
@@ -978,6 +958,7 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 0,
     aoeRadius: 0,
     animationKey: 'warrior-monster-magnet',
+    secondaryBuffEffect: null,
     passiveEffect: null,
     mechanic: 'pull',
     maxTargets: 0,
@@ -1040,6 +1021,7 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 1,
     aoeRadius: 200,
     animationKey: 'warrior-dragon-roar',
+    secondaryBuffEffect: null,
     passiveEffect: null,
     mechanic: 'damage',
     maxTargets: 15,
@@ -1083,6 +1065,7 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 0,
     aoeRadius: 0,
     animationKey: '',
+    secondaryBuffEffect: null,
     passiveEffect: {
       type: 'autoPotion',
       intervalMs: 0,
@@ -1129,6 +1112,7 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 0,
     aoeRadius: 0,
     animationKey: '',
+    secondaryBuffEffect: null,
     passiveEffect: {
       type: 'autoPotion',
       intervalMs: 0,
@@ -1175,6 +1159,7 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 0,
     aoeRadius: 0,
     animationKey: '',
+    secondaryBuffEffect: null,
     passiveEffect: {
       type: 'autoPotion',
       intervalMs: 0,
@@ -1221,6 +1206,7 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 0,
     aoeRadius: 0,
     animationKey: '',
+    secondaryBuffEffect: null,
     passiveEffect: {
       type: 'autoPotion',
       intervalMs: 0,
@@ -1267,6 +1253,7 @@ export const SKILLS: SkillDefinition[] = [
     hitCount: 0,
     aoeRadius: 0,
     animationKey: '',
+    secondaryBuffEffect: null,
     passiveEffect: {
       type: 'autoPotion',
       intervalMs: 0,
@@ -1274,6 +1261,236 @@ export const SKILLS: SkillDefinition[] = [
       hpThresholdPercent: 50,
       mpThresholdPercent: 30,
     },
+    mechanic: 'damage',
+    maxTargets: 0,
+    hpCostIsPercent: false,
+    minHpPercent: 0,
+  },
+
+  // ═══ ASSASSIN ═══
+  {
+    id: 'assassin-lucky-seven',
+    name: 'Lucky Seven',
+    classId: CharacterClass.Assassin,
+    type: SkillType.Active,
+    description: 'Throws 2 throwing stars based on LUK, regardless of Claw Mastery.',
+    maxLevel: 20,
+    requiredCharacterLevel: 3,
+    icon: '🌟',
+    color: '#cc44cc',
+    scaling: {
+      baseDamage: 0.94, damagePerLevel: 0.04,
+      baseMpCost: 8, mpCostPerLevel: 0.32,
+      baseCooldown: 800, cooldownReductionPerLevel: 15,
+      baseRange: 55, rangePerLevel: 1,
+    },
+    levelData: [
+      { mpCost: 8,  hpCost: 0, damage: 0.94 },
+      { mpCost: 8,  hpCost: 0, damage: 0.98 },
+      { mpCost: 8,  hpCost: 0, damage: 1.02 },
+      { mpCost: 8,  hpCost: 0, damage: 1.06 },
+      { mpCost: 8,  hpCost: 0, damage: 1.10 },
+      { mpCost: 10, hpCost: 0, damage: 1.14 },
+      { mpCost: 10, hpCost: 0, damage: 1.18 },
+      { mpCost: 10, hpCost: 0, damage: 1.22 },
+      { mpCost: 10, hpCost: 0, damage: 1.26 },
+      { mpCost: 10, hpCost: 0, damage: 1.30 },
+      { mpCost: 10, hpCost: 0, damage: 1.34 },
+      { mpCost: 12, hpCost: 0, damage: 1.38 },
+      { mpCost: 12, hpCost: 0, damage: 1.42 },
+      { mpCost: 12, hpCost: 0, damage: 1.46 },
+      { mpCost: 12, hpCost: 0, damage: 1.50 },
+      { mpCost: 12, hpCost: 0, damage: 1.54 },
+      { mpCost: 12, hpCost: 0, damage: 1.58 },
+      { mpCost: 14, hpCost: 0, damage: 1.62 },
+      { mpCost: 14, hpCost: 0, damage: 1.66 },
+      { mpCost: 14, hpCost: 0, damage: 1.70 },
+    ],
+    prerequisite: null,
+    buffEffect: null,
+    buffDuration: null,
+    hitCount: 2,
+    aoeRadius: 0,
+    animationKey: 'assassin-lucky-seven',
+    secondaryBuffEffect: null,
+    passiveEffect: null,
+    mechanic: 'damage',
+    maxTargets: 1,
+    hpCostIsPercent: false,
+    minHpPercent: 0,
+  },
+
+  // ═══ ASSASSIN ACTIVE (Double Jump) ═══
+  {
+    id: 'assassin-double-jump',
+    name: 'Double Jump',
+    classId: CharacterClass.Assassin,
+    type: SkillType.Active,
+    description: 'Leap a second time while airborne, launching forward with explosive force.',
+    maxLevel: 5,
+    requiredCharacterLevel: 8,
+    icon: '🦘',
+    color: '#bb44dd',
+    scaling: {
+      baseDamage: 0.62, damagePerLevel: 0.095,
+      baseMpCost: 8, mpCostPerLevel: 0.5,
+      baseCooldown: 600, cooldownReductionPerLevel: 10,
+      baseRange: 0, rangePerLevel: 0,
+    },
+    levelData: [
+      { mpCost: 8,  hpCost: 0, damage: 0.62 },
+      { mpCost: 8,  hpCost: 0, damage: 0.72 },
+      { mpCost: 9,  hpCost: 0, damage: 0.81 },
+      { mpCost: 9,  hpCost: 0, damage: 0.91 },
+      { mpCost: 10, hpCost: 0, damage: 1.00 },
+    ],
+    prerequisite: { skillId: 'assassin-lucky-seven', level: 3 },
+    buffEffect: null,
+    buffDuration: null,
+    hitCount: 0,
+    aoeRadius: 0,
+    animationKey: 'assassin-double-jump',
+    secondaryBuffEffect: null,
+    passiveEffect: null,
+    mechanic: 'doubleJump',
+    maxTargets: 0,
+    hpCostIsPercent: false,
+    minHpPercent: 0,
+  },
+
+  // ═══ ASSASSIN BUFF (Claw Mastery) ═══
+  {
+    id: 'assassin-claw-mastery',
+    name: 'Claw Mastery',
+    classId: CharacterClass.Assassin,
+    type: SkillType.Buff,
+    description: 'Increases the weapon mastery and accuracy of Throwing Stars, enhancing attack speed and critical hit chance.',
+    maxLevel: 10,
+    requiredCharacterLevel: 5,
+    icon: '🐾',
+    color: '#dd66ff',
+    scaling: {
+      baseDamage: 10, damagePerLevel: 3.33,
+      baseMpCost: 10, mpCostPerLevel: 1.11,
+      baseCooldown: 1000, cooldownReductionPerLevel: 0,
+      baseRange: 0, rangePerLevel: 0,
+    },
+    levelData: [
+      { mpCost: 10, hpCost: 0, damage: 10 },
+      { mpCost: 11, hpCost: 0, damage: 13 },
+      { mpCost: 12, hpCost: 0, damage: 17 },
+      { mpCost: 13, hpCost: 0, damage: 20 },
+      { mpCost: 14, hpCost: 0, damage: 23 },
+      { mpCost: 15, hpCost: 0, damage: 27 },
+      { mpCost: 16, hpCost: 0, damage: 30 },
+      { mpCost: 17, hpCost: 0, damage: 33 },
+      { mpCost: 18, hpCost: 0, damage: 37 },
+      { mpCost: 20, hpCost: 0, damage: 40 },
+    ],
+    prerequisite: null,
+    buffEffect: { stat: 'critRate', baseValue: 10, valuePerLevel: 3.33 },
+    buffDuration: { baseDurationMs: 60_000, durationPerLevelMs: 20_000 },
+    hitCount: 0,
+    aoeRadius: 0,
+    animationKey: 'assassin-claw-mastery',
+    secondaryBuffEffect: { stat: 'attackSpeed', baseValue: 12, valuePerLevel: 4.44 },
+    passiveEffect: null,
+    mechanic: 'damage',
+    maxTargets: 0,
+    hpCostIsPercent: false,
+    minHpPercent: 0,
+  },
+
+  // ═══ ASSASSIN BUFF (Magic Twin) ═══
+  {
+    id: 'assassin-magic-twin',
+    name: 'Magic Twin',
+    classId: CharacterClass.Assassin,
+    type: SkillType.Buff,
+    description: 'A magic twin that mimics the summoner appears. It does not have its own HP and disappears after a fixed period of time.',
+    maxLevel: 20,
+    requiredCharacterLevel: 10,
+    icon: '👥',
+    color: '#aa66ff',
+    scaling: {
+      baseDamage: 12, damagePerLevel: 2.53,
+      baseMpCost: 10, mpCostPerLevel: 2.11,
+      baseCooldown: 1000, cooldownReductionPerLevel: 0,
+      baseRange: 0, rangePerLevel: 0,
+    },
+    levelData: [
+      { mpCost: 10, hpCost: 0, damage: 12 },
+      { mpCost: 12, hpCost: 0, damage: 15 },
+      { mpCost: 14, hpCost: 0, damage: 17 },
+      { mpCost: 16, hpCost: 0, damage: 20 },
+      { mpCost: 18, hpCost: 0, damage: 22 },
+      { mpCost: 20, hpCost: 0, damage: 25 },
+      { mpCost: 22, hpCost: 0, damage: 27 },
+      { mpCost: 24, hpCost: 0, damage: 30 },
+      { mpCost: 26, hpCost: 0, damage: 32 },
+      { mpCost: 28, hpCost: 0, damage: 35 },
+      { mpCost: 30, hpCost: 0, damage: 37 },
+      { mpCost: 32, hpCost: 0, damage: 40 },
+      { mpCost: 34, hpCost: 0, damage: 42 },
+      { mpCost: 36, hpCost: 0, damage: 45 },
+      { mpCost: 38, hpCost: 0, damage: 47 },
+      { mpCost: 40, hpCost: 0, damage: 50 },
+      { mpCost: 42, hpCost: 0, damage: 52 },
+      { mpCost: 44, hpCost: 0, damage: 55 },
+      { mpCost: 46, hpCost: 0, damage: 57 },
+      { mpCost: 50, hpCost: 0, damage: 60 },
+    ],
+    prerequisite: { skillId: 'assassin-lucky-seven', level: 5 },
+    buffEffect: { stat: 'twinMimicPercent', baseValue: 12, valuePerLevel: 2.53 },
+    buffDuration: { baseDurationMs: 60_000, durationPerLevelMs: 6_316 },
+    hitCount: 0,
+    aoeRadius: 0,
+    animationKey: 'assassin-magic-twin',
+    secondaryBuffEffect: null,
+    passiveEffect: null,
+    mechanic: 'damage',
+    maxTargets: 0,
+    hpCostIsPercent: false,
+    minHpPercent: 0,
+  },
+
+  // ═══ ASSASSIN BUFF (Dark Sight) ═══
+  {
+    id: 'assassin-dark-sight',
+    name: 'Dark Sight',
+    classId: CharacterClass.Assassin,
+    type: SkillType.Buff,
+    description: 'Hides in the shadows for a certain period of time. With Dark Sight activated, you can neither attack nor be attacked.',
+    maxLevel: 10,
+    requiredCharacterLevel: 3,
+    icon: '🌑',
+    color: '#6633aa',
+    scaling: {
+      baseDamage: 1, damagePerLevel: 0,
+      baseMpCost: 23, mpCostPerLevel: -2,
+      baseCooldown: 1000, cooldownReductionPerLevel: 0,
+      baseRange: 0, rangePerLevel: 0,
+    },
+    levelData: [
+      { mpCost: 23, hpCost: 0, damage: 1 },
+      { mpCost: 21, hpCost: 0, damage: 1 },
+      { mpCost: 19, hpCost: 0, damage: 1 },
+      { mpCost: 17, hpCost: 0, damage: 1 },
+      { mpCost: 15, hpCost: 0, damage: 1 },
+      { mpCost: 13, hpCost: 0, damage: 1 },
+      { mpCost: 11, hpCost: 0, damage: 1 },
+      { mpCost: 9,  hpCost: 0, damage: 1 },
+      { mpCost: 7,  hpCost: 0, damage: 1 },
+      { mpCost: 5,  hpCost: 0, damage: 1 },
+    ],
+    prerequisite: null,
+    buffEffect: { stat: 'darkSight', baseValue: 1, valuePerLevel: 0 },
+    buffDuration: { baseDurationMs: 20_000, durationPerLevelMs: 20_000 },
+    hitCount: 0,
+    aoeRadius: 0,
+    animationKey: 'assassin-dark-sight',
+    secondaryBuffEffect: { stat: 'darkSightSpeedPenalty', baseValue: 27, valuePerLevel: -3 },
+    passiveEffect: null,
     mechanic: 'damage',
     maxTargets: 0,
     hpCostIsPercent: false,
@@ -1289,7 +1506,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   up: ['w', 'arrowup'],
   down: ['s', 'arrowdown'],
   jump: [' '],
-  attack: ['j'],
+  attack: ['control'],
   skill1: ['1'],
   skill2: ['2'],
   skill3: ['3'],
@@ -1307,11 +1524,35 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   quickSlot2: ['insert'],
   quickSlot3: ['home'],
   quickSlot4: ['pageup'],
-  quickSlot5: ['control'],
+  quickSlot5: ['alt'],
   quickSlot6: ['delete'],
   quickSlot7: ['end'],
   quickSlot8: ['pagedown'],
 };
+
+// ─── Default Quick Slot Assignments ─────────────
+
+const DEFAULT_ENTRIES: [QuickSlotAction, QuickSlotEntry][] = [
+  ['quickSlot1', { type: 'keybind', id: 'attack' }],
+  ['quickSlot2', { type: 'keybind', id: 'skill1' }],
+  ['quickSlot3', { type: 'keybind', id: 'skill2' }],
+  ['quickSlot4', { type: 'keybind', id: 'skill3' }],
+  ['quickSlot5', { type: 'keybind', id: 'useHpPotion' }],
+  ['quickSlot6', { type: 'keybind', id: 'useMpPotion' }],
+  ['quickSlot7', { type: 'keybind', id: 'skill4' }],
+  ['quickSlot8', { type: 'keybind', id: 'skill5' }],
+];
+
+export const DEFAULT_QUICK_SLOTS: Record<string, QuickSlotEntry | null> = (() => {
+  const result: Record<string, QuickSlotEntry | null> = {};
+  for (const action of QUICK_SLOT_ACTIONS) {
+    result[action] = null;
+  }
+  for (const [action, entry] of DEFAULT_ENTRIES) {
+    result[action] = entry;
+  }
+  return result;
+})();
 
 // ─── Potion Definitions ─────────────────────────
 

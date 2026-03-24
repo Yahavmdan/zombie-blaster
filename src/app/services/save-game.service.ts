@@ -4,8 +4,19 @@ import { SaveGameData, SaveGameSlot, MAX_SAVE_SLOTS } from '@shared/save-game';
 const STORAGE_PREFIX: string = 'zombie-blaster-save-';
 const AUTO_SAVE_KEY: string = `${STORAGE_PREFIX}__auto__`;
 
+const LEGACY_KEYS: string[] = [
+  'zombie-blaster-quick-slots',
+  'zombie-blaster-key-bindings',
+];
+
 @Injectable({ providedIn: 'root' })
 export class SaveGameService {
+
+  clearLegacyStorage(): void {
+    for (const key of LEGACY_KEYS) {
+      localStorage.removeItem(key);
+    }
+  }
 
   save(data: SaveGameData): boolean {
     const key: string = this.buildKey(data.saveName);

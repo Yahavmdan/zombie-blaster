@@ -326,6 +326,80 @@ export class VfxSystem {
     }
   }
 
+  spawnThrowingStarTrail(fromX: number, fromY: number, toX: number, toY: number, color: string): void {
+    const dx: number = toX - fromX;
+    const dy: number = toY - fromY;
+    const dist: number = Math.sqrt(dx * dx + dy * dy);
+    const nx: number = dist > 0 ? dx / dist : 1;
+    const ny: number = dist > 0 ? dy / dist : 0;
+    const gravity: number = GAME_CONSTANTS.PARTICLE_GRAVITY;
+    const speed: number = 14;
+
+    for (let s: number = 0; s < 3; s++) {
+      const spread: number = (s - 1) * 6;
+      const life: number = 30;
+      this.addParticle({
+        x: fromX,
+        y: fromY + spread,
+        vx: nx * speed + (Math.random() - 0.5) * 2,
+        vy: ny * speed - gravity * life * 0.5 + (Math.random() - 0.5) * 2,
+        life,
+        maxLife: life,
+        color: s === 1 ? '#ffffff' : color,
+        size: 10 + Math.random() * 4,
+        shape: ParticleShape.Star,
+        rotation: 0,
+        rotationSpeed: 0.8,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: false,
+      });
+    }
+
+    const trailCount: number = 10;
+    for (let i: number = 0; i < trailCount; i++) {
+      const t: number = (i + 1) / (trailCount + 1);
+      const delay: number = t * 0.4;
+      const trailLife: number = 22;
+      this.addParticle({
+        x: fromX + dx * delay,
+        y: fromY + dy * delay + (Math.random() - 0.5) * 10,
+        vx: nx * speed * 0.3 + (Math.random() - 0.5) * 2,
+        vy: ny * speed * 0.3 - gravity * trailLife * 0.5,
+        life: trailLife,
+        maxLife: trailLife,
+        color: i % 2 === 0 ? color : '#ff88ff',
+        size: 5 + Math.random() * 3,
+        shape: ParticleShape.Circle,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Quick,
+        scaleOverLife: true,
+      });
+    }
+
+    const burstCount: number = 8;
+    for (let i: number = 0; i < burstCount; i++) {
+      const angle: number = (i / burstCount) * Math.PI * 2;
+      const burstSpeed: number = 3 + Math.random() * 3;
+      const burstLife: number = 18;
+      this.addParticle({
+        x: toX,
+        y: toY,
+        vx: Math.cos(angle) * burstSpeed,
+        vy: Math.sin(angle) * burstSpeed - gravity * burstLife * 0.5,
+        life: burstLife,
+        maxLife: burstLife,
+        color: i % 2 === 0 ? '#ffffff' : color,
+        size: 6 + Math.random() * 3,
+        shape: ParticleShape.Star,
+        rotation: angle,
+        rotationSpeed: 0.4,
+        fadeMode: FadeMode.Quick,
+        scaleOverLife: true,
+      });
+    }
+  }
+
   spawnHitMark(x: number, y: number): void {
     this.e.hitMarks.push({ x, y, frame: 0, tickCounter: 0 });
   }

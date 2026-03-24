@@ -7,6 +7,7 @@ import { CharacterClass, CharacterClassDefinition, CharacterState } from '@share
 import { SaveGameService } from '../../services/save-game.service';
 import { GameStateService } from '../../services/game-state.service';
 import { KeyBindingsService } from '../../services/key-bindings.service';
+import { QuickSlotService } from '../../services/quick-slot.service';
 
 interface FloatingZombie {
   id: number;
@@ -31,6 +32,7 @@ export class MainMenuComponent {
   private readonly saveGameService: SaveGameService = inject(SaveGameService);
   private readonly gameState: GameStateService = inject(GameStateService);
   private readonly keyBindingsService: KeyBindingsService = inject(KeyBindingsService);
+  private readonly quickSlotService: QuickSlotService = inject(QuickSlotService);
 
   showHelp: boolean = false;
   readonly loadPanelOpen: WritableSignal<boolean> = signal<boolean>(false);
@@ -55,6 +57,7 @@ export class MainMenuComponent {
   }));
 
   constructor() {
+    this.saveGameService.clearLegacyStorage();
     this.refreshSaveState();
   }
 
@@ -198,6 +201,12 @@ export class MainMenuComponent {
       this.keyBindingsService.loadFromSave(data.keyBindings);
     } else {
       this.keyBindingsService.resetToDefaults();
+    }
+
+    if (data.quickSlots) {
+      this.quickSlotService.loadFromSave(data.quickSlots);
+    } else {
+      this.quickSlotService.resetToDefaults();
     }
   }
 

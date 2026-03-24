@@ -1,4 +1,5 @@
 import {
+  ActiveBuff,
   CharacterState,
   GAME_CONSTANTS,
   VfxEventType,
@@ -24,6 +25,14 @@ export class ProjectileSystem {
     private readonly physics: PhysicsSystem,
     private readonly vfx: VfxSystem,
   ) {}
+
+  private isLocalPlayerDarkSighted(): boolean {
+    const p: CharacterState | null = this.e.player;
+    if (!p) return false;
+    return p.activeBuffs.some(
+      (b: ActiveBuff): boolean => b.stat === 'darkSight' && b.remainingMs > 0,
+    );
+  }
 
   private getAllTargets(): ProjectileTarget[] {
     const targets: ProjectileTarget[] = [];
@@ -190,6 +199,10 @@ export class ProjectileSystem {
         const knockDir: number = proj.velocityX > 0 ? 1 : -1;
 
         if (target.isLocal) {
+          if (this.isLocalPlayerDarkSighted()) {
+            proj.lifetime = 0;
+            break;
+          }
           const p: CharacterState | null = this.e.player;
           if (p && this.e.invincibilityFrames <= 0) {
             p.hp -= rawDamage;
@@ -266,6 +279,10 @@ export class ProjectileSystem {
         const knockDir: number = proj.velocityX > 0 ? 1 : -1;
 
         if (target.isLocal) {
+          if (this.isLocalPlayerDarkSighted()) {
+            proj.lifetime = 0;
+            break;
+          }
           const p: CharacterState | null = this.e.player;
           if (p && this.e.invincibilityFrames <= 0) {
             p.hp -= rawDamage;
@@ -365,7 +382,7 @@ export class ProjectileSystem {
 
     if (this.e.poisonEffect.tickTimer <= 0) {
       this.e.poisonEffect.tickTimer = this.e.poisonEffect.tickInterval;
-      if (!this.e.godMode) {
+      if (!this.e.godMode && !this.isLocalPlayerDarkSighted()) {
         this.e.player.hp -= this.e.poisonEffect.damagePerTick;
         this.vfx.spawnDamageNumber(
           this.e.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,

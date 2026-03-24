@@ -126,11 +126,37 @@ export interface HitMark {
   tickCounter: number;
 }
 
+export interface PlayerProjectile {
+  x: number;
+  y: number;
+  velocityX: number;
+  velocityY: number;
+  damage: number;
+  isCrit: boolean;
+  damageColor: string;
+  particleColor: string;
+  lifetime: number;
+  rotation: number;
+  size: number;
+  delay: number;
+  targetZombieId: string | null;
+}
+
 export interface LevelUpNotification {
   life: number;
   maxLife: number;
   oldLevel: number;
   newLevel: number;
+}
+
+export interface EntityInterpolation {
+  prevX: number;
+  prevY: number;
+  targetX: number;
+  targetY: number;
+  targetVelocityX: number;
+  targetVelocityY: number;
+  syncAge: number;
 }
 
 export interface IGameEngine {
@@ -204,6 +230,7 @@ export interface IGameEngine {
   readonly DRAGON_IMPACT_FRAMES: number;
 
   hitMarks: HitMark[];
+  playerProjectiles: PlayerProjectile[];
   readonly HIT_MARK_TICKS_PER_FRAME: number;
   readonly HIT_MARK_RENDER_SIZE: number;
 
@@ -228,6 +255,9 @@ export interface IGameEngine {
   pendingSpecialDropActivations: SpecialDropType[];
   pendingVfxEvents: VfxEvent[];
   pendingPullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>;
+
+  zombieInterpolation: Map<string, EntityInterpolation>;
+  remotePlayerInterpolation: Map<string, EntityInterpolation>;
 
   repositionExitPlatform(): void;
 

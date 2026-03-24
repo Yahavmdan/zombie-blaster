@@ -34,11 +34,13 @@ export interface CharacterClassDefinition {
   icon: string;
 }
 
+export type BuffStat = keyof CharacterDerived | 'allDamagePercent' | 'knockbackResist' | 'maxHpMaxMpPercent' | 'attackSpeed' | 'twinMimicPercent' | 'darkSight' | 'darkSightSpeedPenalty';
+
 export interface ActiveBuff {
   skillId: string;
   remainingMs: number;
   totalDurationMs: number;
-  stat: keyof CharacterDerived | 'allDamagePercent' | 'knockbackResist' | 'maxHpMaxMpPercent';
+  stat: BuffStat;
   value: number;
 }
 

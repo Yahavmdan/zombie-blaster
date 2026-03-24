@@ -852,6 +852,8 @@ export class ZombieSystem {
       return;
     }
 
+    this.revalidateGroundedCorpses();
+
     for (const corpse of this.e.zombieCorpses) {
       if (!corpse.isGrounded) {
         corpse.x += corpse.velocityX;
@@ -868,14 +870,15 @@ export class ZombieSystem {
         const maxCX: number = GAME_CONSTANTS.CANVAS_WIDTH - corpse.width;
         if (corpse.x > maxCX) { corpse.x = maxCX; corpse.velocityX = 0; }
 
+        const fallBottom: number = corpse.y + corpse.height;
+        const fallPrevBottom: number = fallBottom - corpse.velocityY;
+
         for (const plat of this.e.platforms) {
-          const bottom: number = corpse.y + corpse.height;
-          const prevBottom: number = bottom - corpse.velocityY;
           if (
             corpse.x + corpse.width > plat.x &&
             corpse.x < plat.x + plat.width &&
-            bottom >= plat.y &&
-            prevBottom <= plat.y + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
+            fallBottom >= plat.y &&
+            fallPrevBottom <= plat.y + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
             corpse.velocityY >= 0
           ) {
             corpse.y = plat.y - corpse.height;
@@ -886,33 +889,36 @@ export class ZombieSystem {
           }
         }
 
-        if (!corpse.isGrounded) {
-          const ratio: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
-          for (const other of this.e.zombieCorpses) {
-            if (other === corpse || !other.isGrounded) continue;
-            const effectiveX: number = other.x + other.width * (1 - ratio) / 2;
-            const effectiveW: number = other.width * ratio;
-            const surfaceY: number = other.y + other.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
-            const bottom: number = corpse.y + corpse.height;
-            const prevBottom: number = bottom - corpse.velocityY;
-            if (
-              corpse.x + corpse.width > effectiveX &&
-              corpse.x < effectiveX + effectiveW &&
-              bottom >= surfaceY &&
-              prevBottom <= surfaceY + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
-              corpse.velocityY >= 0
-            ) {
-              corpse.y = surfaceY - corpse.height;
-              corpse.velocityY = 0;
-              corpse.isGrounded = true;
-              const corpseCx: number = corpse.x + corpse.width / 2;
-              const otherCx: number = other.x + other.width / 2;
-              const slideDir: number = corpseCx > otherCx ? 1 : -1;
-              corpse.x += slideDir * Math.random() * GAME_CONSTANTS.ZOMBIE_CORPSE_SLIDE_OFFSET;
-              this.e.zombieSpriteAnimator.setState(corpse.id, ZombieAnimState.Dead);
-              break;
+        let bestCorpseSurface: number | null = null;
+        let bestCorpseOther: ZombieCorpse | null = null;
+        const wRatioFall: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
+        for (const other of this.e.zombieCorpses) {
+          if (other === corpse || !other.isGrounded) continue;
+          const effectiveX: number = other.x + other.width * (1 - wRatioFall) / 2;
+          const effectiveW: number = other.width * wRatioFall;
+          const surfaceY: number = other.y + other.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+          if (
+            corpse.x + corpse.width > effectiveX &&
+            corpse.x < effectiveX + effectiveW &&
+            fallBottom >= surfaceY &&
+            fallPrevBottom <= surfaceY + GAME_CONSTANTS.ZOMBIE_CORPSE_SNAP_TOLERANCE &&
+            corpse.velocityY >= 0
+          ) {
+            if (bestCorpseSurface === null || surfaceY < bestCorpseSurface) {
+              bestCorpseSurface = surfaceY;
+              bestCorpseOther = other;
             }
           }
+        }
+        if (bestCorpseSurface !== null && bestCorpseOther !== null) {
+          corpse.y = bestCorpseSurface - corpse.height;
+          corpse.velocityY = 0;
+          corpse.isGrounded = true;
+          const corpseCx: number = corpse.x + corpse.width / 2;
+          const otherCx: number = bestCorpseOther.x + bestCorpseOther.width / 2;
+          const slideDir: number = corpseCx > otherCx ? 1 : -1;
+          corpse.x += slideDir * Math.random() * GAME_CONSTANTS.ZOMBIE_CORPSE_SLIDE_OFFSET;
+          this.e.zombieSpriteAnimator.setState(corpse.id, ZombieAnimState.Dead);
         }
       }
 
@@ -959,6 +965,52 @@ export class ZombieSystem {
 
       if (!corpse.frozen) {
         this.e.zombieSpriteAnimator.tick(corpse.id, corpse.spriteKey);
+      }
+    }
+  }
+
+  private revalidateGroundedCorpses(): void {
+    const wRatio: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
+    const tolerance: number = GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE;
+
+    for (const corpse of this.e.zombieCorpses) {
+      if (!corpse.isGrounded) continue;
+
+      const bottom: number = corpse.y + corpse.height;
+      let supported: boolean = false;
+
+      for (const plat of this.e.platforms) {
+        if (
+          corpse.x + corpse.width > plat.x &&
+          corpse.x < plat.x + plat.width &&
+          Math.abs(bottom - plat.y) <= tolerance
+        ) {
+          supported = true;
+          break;
+        }
+      }
+
+      if (!supported) {
+        for (const other of this.e.zombieCorpses) {
+          if (other === corpse || !other.isGrounded) continue;
+          const effectiveX: number = other.x + other.width * (1 - wRatio) / 2;
+          const effectiveW: number = other.width * wRatio;
+          const surfaceY: number = other.y + other.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+          if (
+            corpse.x + corpse.width > effectiveX &&
+            corpse.x < effectiveX + effectiveW &&
+            Math.abs(bottom - surfaceY) <= tolerance
+          ) {
+            supported = true;
+            break;
+          }
+        }
+      }
+
+      if (!supported) {
+        corpse.isGrounded = false;
+        corpse.landProcessed = false;
+        corpse.frozen = false;
       }
     }
   }

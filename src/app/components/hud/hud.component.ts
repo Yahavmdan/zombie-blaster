@@ -126,16 +126,23 @@ export class HudComponent {
 
   readonly activeBuffs: Signal<ActiveBuffDisplay[]> = computed((): ActiveBuffDisplay[] => {
     const p: CharacterState = this.playerData();
-    return p.activeBuffs.map((buff: ActiveBuff): ActiveBuffDisplay => {
-      const skill: SkillDefinition | undefined = SKILLS.find((s: SkillDefinition) => s.id === buff.skillId);
-      return {
-        skillName: skill?.name ?? 'Buff',
-        icon: skill?.icon ?? '✨',
-        color: skill?.color ?? '#ffffff',
-        remainingPercent: (buff.remainingMs / buff.totalDurationMs) * 100,
-        remainingSec: Math.ceil(buff.remainingMs / 1000),
-      };
-    });
+    const seen: Set<string> = new Set<string>();
+    return p.activeBuffs
+      .filter((buff: ActiveBuff): boolean => {
+        if (seen.has(buff.skillId)) return false;
+        seen.add(buff.skillId);
+        return true;
+      })
+      .map((buff: ActiveBuff): ActiveBuffDisplay => {
+        const skill: SkillDefinition | undefined = SKILLS.find((s: SkillDefinition) => s.id === buff.skillId);
+        return {
+          skillName: skill?.name ?? 'Buff',
+          icon: skill?.icon ?? '✨',
+          color: skill?.color ?? '#ffffff',
+          remainingPercent: (buff.remainingMs / buff.totalDurationMs) * 100,
+          remainingSec: Math.ceil(buff.remainingMs / 1000),
+        };
+      });
   });
 
   readonly hpPotions: Signal<number> = computed((): number =>

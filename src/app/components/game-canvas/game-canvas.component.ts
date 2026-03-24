@@ -14,13 +14,16 @@ import {
   effect,
 } from '@angular/core';
 import { CharacterClass, CharacterState, SKILLS, SkillDefinition, SkillType, VfxEvent } from '@shared/index';
-import { DropType, QUICK_SLOT_ACTION_SET, SpecialDropType } from '@shared/game-entities';
+import { DropType, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
 import { InputKeys } from '@shared/messages';
 import { KeyBindingsService } from '../../services/key-bindings.service';
 import { GameStateService } from '../../services/game-state.service';
+import { QuickSlotService } from '../../services/quick-slot.service';
+
+const UI_ACTIONS: Set<string> = new Set<string>(['openStats', 'openSkills', 'openShop', 'openInventory']);
 
 @Component({
   selector: 'app-game-canvas',
@@ -34,6 +37,7 @@ import { GameStateService } from '../../services/game-state.service';
 export class GameCanvasComponent implements OnDestroy {
   private readonly keyBindingsService: KeyBindingsService = inject(KeyBindingsService);
   private readonly gameState: GameStateService = inject(GameStateService);
+  private readonly quickSlotService: QuickSlotService = inject(QuickSlotService);
 
   readonly player: InputSignal<CharacterState> = input.required<CharacterState>();
   readonly inputDisabled: InputSignal<boolean> = input<boolean>(false);
@@ -73,6 +77,7 @@ export class GameCanvasComponent implements OnDestroy {
   private readonly boundKeyUp: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyUp(e);
   private readonly boundMouseDown: () => void = (): void => this.onMouseDown();
   private readonly boundMouseUp: () => void = (): void => this.onMouseUp();
+  private readonly heldQuickSlotActions: Map<string, GameAction> = new Map<string, GameAction>();
 
   constructor() {
     afterNextRender((): void => {
@@ -201,8 +206,8 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.applyRemoteSpecialEffects(effects);
   }
 
-  applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
-    this.engine?.applyRemoteDamage(events);
+  applyRemoteDamage(playerId: string, events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
+    this.engine?.applyRemoteDamage(playerId, events);
   }
 
   applyRemotePull(evt: { playerX: number; playerY: number; pullRange: number; skillColor: string }): void {
@@ -283,6 +288,7 @@ export class GameCanvasComponent implements OnDestroy {
     for (const action of actions) {
       this.keys[action] = false;
     }
+    this.heldQuickSlotActions.clear();
     this.engine?.setKeys({ ...this.keys });
   }
 
@@ -313,41 +319,63 @@ export class GameCanvasComponent implements OnDestroy {
     const action: GameAction | null = this.keyBindingsService.getActionForKey(e.key);
     if (!action) return;
 
-    if (action === 'openStats') {
-      this.openStatsRequested.emit();
-      return;
-    }
-    if (action === 'openSkills') {
-      this.openSkillsRequested.emit();
-      return;
-    }
-    if (action === 'openShop') {
-      this.openShopRequested.emit();
-      return;
-    }
-    if (action === 'openInventory') {
-      this.openInventoryRequested.emit();
+    if (UI_ACTIONS.has(action)) {
+      this.emitUiAction(action);
       return;
     }
 
     if (QUICK_SLOT_ACTION_SET.has(action)) {
-      this.quickSlotKeyPressed.emit(action);
+      this.handleQuickSlotKeyDown(action);
       e.preventDefault();
       return;
     }
 
     this.keys[action] = true;
 
-    if (action === 'up' || action === 'down' || action === 'jump') {
+    if (action === 'up' || action === 'down' || action === 'jump' || action === 'attack') {
       e.preventDefault();
     }
 
     this.engine?.setKeys({ ...this.keys });
   }
 
+  private emitUiAction(action: GameAction): void {
+    if (action === 'openStats') this.openStatsRequested.emit();
+    else if (action === 'openSkills') this.openSkillsRequested.emit();
+    else if (action === 'openShop') this.openShopRequested.emit();
+    else if (action === 'openInventory') this.openInventoryRequested.emit();
+  }
+
+  private handleQuickSlotKeyDown(action: GameAction): void {
+    const entry: QuickSlotEntry | null = this.quickSlotService.getEntry(action);
+    if (!entry) return;
+
+    if (entry.type === 'keybind' && !QUICK_SLOT_ACTION_SET.has(entry.id)) {
+      const mappedAction: GameAction = entry.id as GameAction;
+      if (UI_ACTIONS.has(mappedAction)) {
+        this.emitUiAction(mappedAction);
+        return;
+      }
+      this.keys[mappedAction] = true;
+      this.heldQuickSlotActions.set(action, mappedAction);
+      this.engine?.setKeys({ ...this.keys });
+      return;
+    }
+
+    this.quickSlotKeyPressed.emit(action);
+  }
+
   private onKeyUp(e: KeyboardEvent): void {
     const action: GameAction | null = this.keyBindingsService.getActionForKey(e.key);
     if (!action) return;
+
+    if (QUICK_SLOT_ACTION_SET.has(action)) {
+      const mappedAction: GameAction | undefined = this.heldQuickSlotActions.get(action);
+      if (mappedAction) {
+        this.keys[mappedAction] = false;
+        this.heldQuickSlotActions.delete(action);
+      }
+    }
 
     this.keys[action] = false;
     this.engine?.setKeys({ ...this.keys });

@@ -1,4 +1,5 @@
 import {
+  ActiveBuff,
   CharacterState,
   Direction,
   GAME_CONSTANTS,
@@ -23,7 +24,19 @@ export class PhysicsSystem {
     const hasSuperSpeed: boolean = this.e.activeSpecialEffects.some(
       (eff: ActiveSpecialEffect): boolean => eff.type === SpecialDropType.SuperSpeed,
     );
-    return hasSuperSpeed ? baseSpeed * GAME_CONSTANTS.SPECIAL_SUPER_SPEED_MULTIPLIER : baseSpeed;
+    let speed: number = hasSuperSpeed ? baseSpeed * GAME_CONSTANTS.SPECIAL_SUPER_SPEED_MULTIPLIER : baseSpeed;
+
+    const p: CharacterState | null = this.e.player;
+    if (p) {
+      const darkSightPenalty: ActiveBuff | undefined = p.activeBuffs.find(
+        (b: ActiveBuff): boolean => b.stat === 'darkSightSpeedPenalty' && b.remainingMs > 0,
+      );
+      if (darkSightPenalty) {
+        speed *= (1 - darkSightPenalty.value / 100);
+      }
+    }
+
+    return speed;
   }
 
   rectsOverlap(

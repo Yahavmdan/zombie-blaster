@@ -22,6 +22,7 @@ import {
   getSkillStunDurationMs,
   getBuffEffectValue,
   getBuffDurationMs,
+  getSecondaryBuffEffectValue,
   getPassiveEffectValue,
   getAutoPotionSuccessChance,
 } from '@shared/index';
@@ -200,15 +201,20 @@ export class SkillTreeComponent {
     const mp: number = getSkillMpCost(skill, level);
     const statLabel: string = this.getStatLabel(skill.buffEffect.stat);
 
+    let primary: string = `+${value.toFixed(1)} ${statLabel}`;
     if (skill.buffEffect.stat === 'knockbackResist') {
-      return `Lv.${level}: ${mp} MP, ${Math.round(value)}% ${statLabel} for ${durationSec}s`;
+      primary = `${Math.round(value)}% ${statLabel}`;
+    } else if (skill.buffEffect.stat === 'maxHpMaxMpPercent') {
+      primary = `+${Math.round(value)}% ${statLabel}`;
     }
 
-    if (skill.buffEffect.stat === 'maxHpMaxMpPercent') {
-      return `Lv.${level}: ${mp} MP, +${Math.round(value)}% ${statLabel} for ${durationSec}s`;
+    if (skill.secondaryBuffEffect) {
+      const secondaryValue: number = getSecondaryBuffEffectValue(skill, level);
+      const secondaryLabel: string = this.getStatLabel(skill.secondaryBuffEffect.stat);
+      return `Lv.${level}: ${mp} MP, ${primary}, +${Math.round(secondaryValue)}% ${secondaryLabel} for ${durationSec}s`;
     }
 
-    return `Lv.${level}: +${value.toFixed(1)} ${statLabel} for ${durationSec}s`;
+    return `Lv.${level}: ${mp} MP, ${primary} for ${durationSec}s`;
   }
 
   private describePassiveEffect(skill: SkillDefinition, level: number): string {
@@ -239,6 +245,7 @@ export class SkillTreeComponent {
       allDamagePercent: '% All DMG',
       knockbackResist: 'KB Resist',
       maxHpMaxMpPercent: 'Max HP & MP',
+      attackSpeed: 'ATK Speed',
     };
     return labels[stat] ?? stat;
   }

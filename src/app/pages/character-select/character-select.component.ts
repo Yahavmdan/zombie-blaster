@@ -13,6 +13,7 @@ import {
 } from '@shared/index';
 import { GameStateService } from '../../services/game-state.service';
 import { KeyBindingsService } from '../../services/key-bindings.service';
+import { QuickSlotService } from '../../services/quick-slot.service';
 
 @Component({
   selector: 'app-character-select',
@@ -29,6 +30,7 @@ export class CharacterSelectComponent implements OnInit {
   private readonly route: ActivatedRoute = inject(ActivatedRoute);
   private readonly gameState: GameStateService = inject(GameStateService);
   private readonly keyBindingsService: KeyBindingsService = inject(KeyBindingsService);
+  private readonly quickSlotService: QuickSlotService = inject(QuickSlotService);
 
   readonly gameMode: WritableSignal<GameMode> = signal<GameMode>(GameMode.SinglePlayer);
 
@@ -104,6 +106,7 @@ export class CharacterSelectComponent implements OnInit {
     if (!classId || !this.nameControl.valid) return;
 
     this.keyBindingsService.resetToDefaults();
+    this.quickSlotService.resetToDefaults();
 
     if (this.gameMode() === GameMode.SinglePlayer) {
       this.gameState.createPlayer(this.nameControl.value, classId);

@@ -5,12 +5,15 @@ import {
   CharacterState,
   CharacterClass,
   Direction,
+  VfxEvent,
+  VfxEventType,
 } from '@shared/index';
 import { ZombieState, ZombieType } from '@shared/game-entities';
-import { IGameEngine, Platform } from './engine-types';
+import { DamageNumber, EntityInterpolation, IGameEngine, Platform } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { CombatSystem } from './combat-system';
+import { DropSystem } from './drop-system';
 import { ProjectileSystem } from './projectile-system';
 import { SpriteAnimator } from './sprite-animator';
 import { ZombieAnimState } from './zombie-sprite-animator';
@@ -139,7 +142,7 @@ function createMockCanvas(): HTMLCanvasElement {
   return canvas;
 }
 
-describe('Bug 1: non-host should see host damage on zombies', () => {
+describe('Damage numbers synced via VfxEvents (not HP-delta fallback)', () => {
   let engine: GameEngine;
 
   beforeEach(() => {
@@ -149,54 +152,162 @@ describe('Bug 1: non-host should see host damage on zombies', () => {
     engine.player = makePlayer();
   });
 
-  it('should show damage number when zombie disappears from sync (killed by host)', () => {
-    const zombie: ZombieState = makeZombie({ id: 'z1', hp: 30 });
-
+  it('applyRemoteZombies should NOT spawn damage numbers from HP deltas', () => {
+    const zombie: ZombieState = makeZombie({ id: 'z1', hp: 100 });
     engine.applyRemoteZombies([{ ...zombie }]);
+
+    const damagedZombie: ZombieState = { ...zombie, hp: 70 };
+    engine.applyRemoteZombies([damagedZombie]);
+
     expect(engine.damageNumbers.length).toBe(0);
-
-    engine.applyRemoteZombies([]);
-
-    const killDamageNumber: boolean = engine.damageNumbers.some(
-      (dn: { value: number }) => dn.value === 30,
-    );
-    expect(killDamageNumber).toBe(true);
   });
 
-  it('should spawn hit mark when HP delta detected in applyRemoteZombies', () => {
+  it('applyRemoteZombies should NOT spawn hit marks from HP deltas', () => {
     const zombie: ZombieState = makeZombie({ id: 'z1', hp: 100 });
-
     engine.applyRemoteZombies([{ ...zombie }]);
+
+    const damagedZombie: ZombieState = { ...zombie, hp: 70 };
+    engine.applyRemoteZombies([damagedZombie]);
+
     expect(engine.hitMarks.length).toBe(0);
-
-    const damagedZombie: ZombieState = { ...zombie, hp: 70 };
-    engine.applyRemoteZombies([damagedZombie]);
-
-    expect(engine.hitMarks.length).toBeGreaterThan(0);
   });
 
-  it('should spawn damage number when HP delta detected', () => {
-    const zombie: ZombieState = makeZombie({ id: 'z1', hp: 100 });
+  it('replayRemoteVfxEvents should spawn crit damage number with correct isCrit and color', () => {
+    const events: VfxEvent[] = [{
+      type: VfxEventType.DamageNumber,
+      playerId: 'remote-player',
+      x: 500,
+      y: 400,
+      value: 150,
+      isCrit: true,
+      color: '#ffaa00',
+    }];
 
-    engine.applyRemoteZombies([{ ...zombie }]);
+    engine.replayRemoteVfxEvents(events);
 
-    const damagedZombie: ZombieState = { ...zombie, hp: 70 };
-    engine.applyRemoteZombies([damagedZombie]);
+    expect(engine.damageNumbers.length).toBe(1);
+    const dn: DamageNumber = engine.damageNumbers[0];
+    expect(dn.value).toBe(150);
+    expect(dn.isCrit).toBe(true);
+    expect(dn.color).toBe('#ffaa00');
+  });
 
-    const deltaDamageNumber: boolean = engine.damageNumbers.some(
-      (dn: { value: number }) => dn.value === 30,
+  it('replayRemoteVfxEvents should spawn non-crit damage number correctly', () => {
+    const events: VfxEvent[] = [{
+      type: VfxEventType.DamageNumber,
+      playerId: 'remote-player',
+      x: 500,
+      y: 400,
+      value: 42,
+      isCrit: false,
+      color: '#ffffff',
+    }];
+
+    engine.replayRemoteVfxEvents(events);
+
+    expect(engine.damageNumbers.length).toBe(1);
+    const dn: DamageNumber = engine.damageNumbers[0];
+    expect(dn.value).toBe(42);
+    expect(dn.isCrit).toBe(false);
+    expect(dn.color).toBe('#ffffff');
+  });
+
+  it('replayRemoteVfxEvents should skip events from own player', () => {
+    const events: VfxEvent[] = [{
+      type: VfxEventType.DamageNumber,
+      playerId: 'player-1',
+      x: 500,
+      y: 400,
+      value: 100,
+      isCrit: true,
+      color: '#ffaa00',
+    }];
+
+    engine.replayRemoteVfxEvents(events);
+
+    expect(engine.damageNumbers.length).toBe(0);
+  });
+
+  it('replayRemoteVfxEvents should replay hit marks from remote events', () => {
+    const events: VfxEvent[] = [{
+      type: VfxEventType.HitMark,
+      playerId: 'remote-player',
+      x: 500,
+      y: 400,
+    }];
+
+    engine.replayRemoteVfxEvents(events);
+
+    expect(engine.hitMarks.length).toBe(1);
+  });
+});
+
+describe('Combat system pushes VfxEvents with crit info for zombie damage', () => {
+  let engine: IGameEngine;
+  let combat: CombatSystem;
+
+  beforeEach(() => {
+    const player: CharacterState = makePlayer({ derived: { maxHp: 200, maxMp: 50, attack: 20, defense: 5, speed: 3, critRate: 100, critDamage: 200 } });
+    const zombie: ZombieState = makeZombie({
+      id: 'z1',
+      hp: 9999,
+      x: player.x + GAME_CONSTANTS.PLAYER_WIDTH + 2,
+      y: player.y,
+    });
+    engine = makeMockEngine(player, [zombie]);
+
+    const physics: PhysicsSystem = new PhysicsSystem(engine);
+    const vfx: VfxSystem = new VfxSystem(engine);
+    const dropSystem: DropSystem = new DropSystem(engine, physics, vfx);
+    combat = new CombatSystem(engine, physics, vfx, dropSystem);
+  });
+
+  it('should push DamageNumber VfxEvent with isCrit=true when basic attack crits', () => {
+    combat.performAttack();
+    engine.attackHitDelay = 0;
+    combat.updateAttackTiming();
+
+    const dmgEvents: VfxEvent[] = engine.pendingVfxEvents.filter(
+      (e: VfxEvent) => e.type === VfxEventType.DamageNumber,
     );
-    expect(deltaDamageNumber).toBe(true);
+    expect(dmgEvents.length).toBeGreaterThan(0);
+
+    const critEvent: VfxEvent | undefined = dmgEvents.find((e: VfxEvent) => e.isCrit === true);
+    expect(critEvent).toBeDefined();
+    expect(critEvent!.color).toBe('#ffaa00');
   });
 
-  it('should spawn hit mark when zombie disappears from sync', () => {
-    const zombie: ZombieState = makeZombie({ id: 'z1', hp: 50 });
+  it('should push HitParticles and HitMark VfxEvents for basic attack', () => {
+    combat.performAttack();
+    engine.attackHitDelay = 0;
+    combat.updateAttackTiming();
 
-    engine.applyRemoteZombies([{ ...zombie }]);
+    const hitParticles: VfxEvent[] = engine.pendingVfxEvents.filter(
+      (e: VfxEvent) => e.type === VfxEventType.HitParticles,
+    );
+    const hitMarks: VfxEvent[] = engine.pendingVfxEvents.filter(
+      (e: VfxEvent) => e.type === VfxEventType.HitMark,
+    );
 
-    engine.applyRemoteZombies([]);
+    expect(hitParticles.length).toBeGreaterThan(0);
+    expect(hitMarks.length).toBeGreaterThan(0);
+  });
 
-    expect(engine.hitMarks.length).toBeGreaterThan(0);
+  it('should push DamageNumber VfxEvent with isCrit=false when attack does not crit', () => {
+    engine.player!.derived.critRate = 0;
+
+    combat.performAttack();
+    engine.attackHitDelay = 0;
+    combat.updateAttackTiming();
+
+    const dmgEvents: VfxEvent[] = engine.pendingVfxEvents.filter(
+      (e: VfxEvent) => e.type === VfxEventType.DamageNumber,
+    );
+    expect(dmgEvents.length).toBeGreaterThan(0);
+
+    const nonCritEvent: VfxEvent | undefined = dmgEvents.find((e: VfxEvent) => e.isCrit === false);
+    expect(nonCritEvent).toBeDefined();
+    expect(nonCritEvent!.color).toBe('#ffffff');
   });
 });
 
@@ -284,6 +395,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     DRAGON_IMPACT_FRAME_H: 131,
     DRAGON_IMPACT_FRAMES: 4,
     hitMarks: [],
+    playerProjectiles: [],
     HIT_MARK_TICKS_PER_FRAME: 3,
     HIT_MARK_RENDER_SIZE: 55,
     doubleJumpUsed: false,
@@ -292,6 +404,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     reviveTargetId: null,
     reviveProgressTicks: 0,
     activeSpecialEffects: [],
+    pendingSpecialDropConfirm: null,
     godMode: false,
     showCollisionBoxes: false,
     isMultiplayerHost: false,
@@ -304,6 +417,8 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     pendingPullEvents: [],
     remotePlayers: [],
     remotePlayerAnimators: new Map<string, SpriteAnimator>(),
+    zombieInterpolation: new Map<string, EntityInterpolation>(),
+    remotePlayerInterpolation: new Map<string, EntityInterpolation>(),
     repositionExitPlatform: vi.fn(),
     onPlayerUpdate: null,
     onZombiesUpdate: null,

@@ -1,13 +1,24 @@
 import { Injectable, WritableSignal, signal } from '@angular/core';
-import { QuickSlotEntry, QUICK_SLOT_ACTIONS, QuickSlotAction } from '@shared/game-entities';
-
-const STORAGE_KEY: string = 'zombie-blaster-quick-slots';
+import { QuickSlotEntry, QuickSlotAction, QUICK_SLOT_ACTIONS } from '@shared/game-entities';
+import { DEFAULT_QUICK_SLOTS } from '@shared/game-constants';
 
 @Injectable({ providedIn: 'root' })
 export class QuickSlotService {
   readonly slots: WritableSignal<Record<string, QuickSlotEntry | null>> = signal<Record<string, QuickSlotEntry | null>>(
-    this.load(),
+    this.copyDefaults(),
   );
+
+  loadFromSave(saved: Record<string, QuickSlotEntry | null>): void {
+    const result: Record<string, QuickSlotEntry | null> = {};
+    for (const action of QUICK_SLOT_ACTIONS) {
+      result[action] = saved[action] ?? null;
+    }
+    this.slots.set(result);
+  }
+
+  resetToDefaults(): void {
+    this.slots.set(this.copyDefaults());
+  }
 
   assign(action: QuickSlotAction, entry: QuickSlotEntry): void {
     this.slots.update((s: Record<string, QuickSlotEntry | null>): Record<string, QuickSlotEntry | null> => {
@@ -24,16 +35,13 @@ export class QuickSlotService {
         }
       }
       updated[action] = entry;
-      this.save(updated);
       return updated;
     });
   }
 
   clear(action: QuickSlotAction): void {
     this.slots.update((s: Record<string, QuickSlotEntry | null>): Record<string, QuickSlotEntry | null> => {
-      const updated: Record<string, QuickSlotEntry | null> = { ...s, [action]: null };
-      this.save(updated);
-      return updated;
+      return { ...s, [action]: null };
     });
   }
 
@@ -41,32 +49,12 @@ export class QuickSlotService {
     return this.slots()[action] ?? null;
   }
 
-  private load(): Record<string, QuickSlotEntry | null> {
-    try {
-      const stored: string | null = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed: Record<string, QuickSlotEntry | null> = JSON.parse(stored) as Record<string, QuickSlotEntry | null>;
-        const result: Record<string, QuickSlotEntry | null> = {};
-        for (const action of QUICK_SLOT_ACTIONS) {
-          result[action] = parsed[action] ?? null;
-        }
-        return result;
-      }
-    } catch {
-      /* corrupt data */
-    }
-    return this.defaults();
-  }
-
-  private defaults(): Record<string, QuickSlotEntry | null> {
+  private copyDefaults(): Record<string, QuickSlotEntry | null> {
     const result: Record<string, QuickSlotEntry | null> = {};
     for (const action of QUICK_SLOT_ACTIONS) {
-      result[action] = null;
+      const defaultEntry: QuickSlotEntry | null = DEFAULT_QUICK_SLOTS[action] ?? null;
+      result[action] = defaultEntry ? { ...defaultEntry } : null;
     }
     return result;
-  }
-
-  private save(data: Record<string, QuickSlotEntry | null>): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }
 }

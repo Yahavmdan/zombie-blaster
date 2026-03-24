@@ -6,8 +6,8 @@ import {
   CharacterClass,
   Direction,
 } from '@shared/index';
-import { ZombieState, ZombieType } from '@shared/game-entities';
-import { IGameEngine, Platform } from './engine-types';
+import { ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
+import { EntityInterpolation, IGameEngine, Platform } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { CombatSystem } from './combat-system';
@@ -157,7 +157,9 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
       tick: vi.fn(),
       setState: vi.fn(),
       setStateReversed: vi.fn(),
+      setStateAtFrame: vi.fn(),
       removeInstance: vi.fn(),
+      getFrameCount: vi.fn().mockReturnValue(5),
       load: vi.fn(),
       isLoaded: vi.fn().mockReturnValue(false),
       draw: vi.fn(),
@@ -178,6 +180,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     DRAGON_IMPACT_FRAME_H: 131,
     DRAGON_IMPACT_FRAMES: 4,
     hitMarks: [],
+    playerProjectiles: [],
     HIT_MARK_TICKS_PER_FRAME: 3,
     HIT_MARK_RENDER_SIZE: 55,
     doubleJumpUsed: false,
@@ -186,6 +189,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     reviveTargetId: null,
     reviveProgressTicks: 0,
     activeSpecialEffects: [],
+    pendingSpecialDropConfirm: null,
     godMode: false,
     showCollisionBoxes: false,
     isMultiplayerHost: false,
@@ -198,6 +202,8 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     pendingPullEvents: [],
     remotePlayers: [],
     remotePlayerAnimators: new Map<string, SpriteAnimator>(),
+    zombieInterpolation: new Map<string, EntityInterpolation>(),
+    remotePlayerInterpolation: new Map<string, EntityInterpolation>(),
     repositionExitPlatform: vi.fn(),
     onPlayerUpdate: null,
     onZombiesUpdate: null,
@@ -219,6 +225,125 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     onPlayerDownExpired: null,
   };
 }
+
+function makeCorpse(overrides: Partial<ZombieCorpse> = {}): ZombieCorpse {
+  return {
+    id: 'corpse-1',
+    type: ZombieType.Walker,
+    x: 400,
+    y: 200,
+    width: 40,
+    height: 50,
+    spriteKey: 'walker',
+    facing: 1,
+    velocityX: 0,
+    velocityY: 0,
+    isGrounded: false,
+    frozen: false,
+    landProcessed: false,
+    fadeTimer: 999_999,
+    maxFadeTimer: 999_999,
+    showBlood: false,
+    ...overrides,
+  };
+}
+
+describe('ZombieSystem — corpse falling physics', () => {
+  let engine: IGameEngine;
+  let zombieSystem: ZombieSystem;
+
+  beforeEach(() => {
+    const player: CharacterState = makePlayer();
+    engine = makeMockEngine(player, []);
+
+    const physics: PhysicsSystem = new PhysicsSystem(engine);
+    const vfx: VfxSystem = new VfxSystem(engine);
+    const dropSystemStub = { rollDrops: vi.fn() } as never;
+    const combat: CombatSystem = new CombatSystem(engine, physics, vfx, dropSystemStub);
+    const projectileSystem: ProjectileSystem = new ProjectileSystem(engine, physics, vfx);
+    const dropSystem: DropSystem = new DropSystem(engine, physics, vfx);
+    zombieSystem = new ZombieSystem(engine, physics, combat, projectileSystem, dropSystem);
+  });
+
+  it('airborne corpse should fall and land on the ground platform', () => {
+    const corpse: ZombieCorpse = makeCorpse({
+      id: 'fall-1',
+      y: 200,
+      isGrounded: false,
+      velocityY: 0,
+    });
+    engine.zombieCorpses = [corpse];
+
+    const maxTicks: number = 300;
+    for (let tick: number = 0; tick < maxTicks; tick++) {
+      zombieSystem.updateZombieCorpses();
+      if (corpse.isGrounded) break;
+    }
+
+    expect(corpse.isGrounded).toBe(true);
+    expect(corpse.y + corpse.height).toBeCloseTo(GAME_CONSTANTS.GROUND_Y, 0);
+  });
+
+  it('grounded corpse with no platform or corpse beneath it should un-ground and fall', () => {
+    const floatingCorpse: ZombieCorpse = makeCorpse({
+      id: 'floating-1',
+      y: 100,
+      isGrounded: true,
+      velocityY: 0,
+    });
+    engine.zombieCorpses = [floatingCorpse];
+
+    zombieSystem.updateZombieCorpses();
+
+    expect(floatingCorpse.isGrounded).toBe(false);
+  });
+
+  it('floating corpse should eventually reach the ground after re-validation', () => {
+    const floatingCorpse: ZombieCorpse = makeCorpse({
+      id: 'floating-2',
+      y: 100,
+      isGrounded: true,
+      velocityY: 0,
+    });
+    engine.zombieCorpses = [floatingCorpse];
+
+    const maxTicks: number = 300;
+    for (let tick: number = 0; tick < maxTicks; tick++) {
+      zombieSystem.updateZombieCorpses();
+      if (floatingCorpse.isGrounded && floatingCorpse.y + floatingCorpse.height >= GAME_CONSTANTS.GROUND_Y - 1) break;
+    }
+
+    expect(floatingCorpse.isGrounded).toBe(true);
+    expect(floatingCorpse.y + floatingCorpse.height).toBeCloseTo(GAME_CONSTANTS.GROUND_Y, 0);
+  });
+
+  it('airborne corpse should land on a grounded corpse below it', () => {
+    const bottomCorpse: ZombieCorpse = makeCorpse({
+      id: 'bottom-1',
+      x: 400,
+      y: GAME_CONSTANTS.GROUND_Y - 50,
+      isGrounded: true,
+      velocityY: 0,
+    });
+    const topCorpse: ZombieCorpse = makeCorpse({
+      id: 'top-1',
+      x: 400,
+      y: 200,
+      isGrounded: false,
+      velocityY: 0,
+    });
+    engine.zombieCorpses = [bottomCorpse, topCorpse];
+
+    const maxTicks: number = 300;
+    for (let tick: number = 0; tick < maxTicks; tick++) {
+      zombieSystem.updateZombieCorpses();
+      if (topCorpse.isGrounded) break;
+    }
+
+    expect(topCorpse.isGrounded).toBe(true);
+    expect(topCorpse.y).toBeLessThan(bottomCorpse.y);
+  });
+});
 
 describe('ZombieSystem — hesitation attack timing', () => {
   let engine: IGameEngine;

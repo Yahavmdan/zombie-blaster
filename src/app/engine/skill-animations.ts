@@ -305,7 +305,7 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
     spriteEffect: 'sunburn',
   },
 
-  'warrior-double-jump': {
+  'assassin-double-jump': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => {
       const dir: number = facingSign(facing);
       const particles: Particle[] = [];
@@ -350,6 +350,53 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
     },
     screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
     spriteEffect: null,
+  },
+
+  'assassin-dark-sight': {
+    spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] => {
+      const particles: Particle[] = [];
+      const shadowCount: number = 12 + Math.floor(level / 2);
+      for (let i: number = 0; i < shadowCount; i++) {
+        const angle: number = (i / shadowCount) * Math.PI * 2;
+        const radius: number = 35 + Math.random() * 20;
+        particles.push(makeParticle({
+          x: x + Math.cos(angle) * radius,
+          y: y + Math.sin(angle) * radius * 0.7,
+          vx: -Math.cos(angle) * (2 + Math.random() * 2),
+          vy: -Math.sin(angle) * (2 + Math.random() * 2),
+          life: 30 + Math.floor(level / 2),
+          maxLife: 40,
+          color: i % 3 === 0 ? '#6633aa' : i % 3 === 1 ? '#331166' : '#220044',
+          size: 5 + Math.random() * 4,
+          shape: ParticleShape.Circle,
+          rotation: 0,
+          rotationSpeed: 0,
+          fadeMode: FadeMode.Quick,
+          scaleOverLife: true,
+        }));
+      }
+      const mistCount: number = 6;
+      for (let i: number = 0; i < mistCount; i++) {
+        particles.push(makeParticle({
+          x: x + (Math.random() - 0.5) * 20,
+          y: y + 10 + Math.random() * 10,
+          vx: (Math.random() - 0.5) * 1.5,
+          vy: -(1 + Math.random() * 2),
+          life: 35,
+          maxLife: 40,
+          color: '#442288',
+          size: 8 + Math.random() * 6,
+          shape: ParticleShape.Ring,
+          rotation: 0,
+          rotationSpeed: 0,
+          fadeMode: FadeMode.Late,
+          scaleOverLife: true,
+        }));
+      }
+      return particles;
+    },
+    screenShake: 0, screenShakeIntensity: 0, flashColor: '#331166', flashFrames: 4,
+    spriteEffect: 'phantom',
   },
 
   'warrior-power-dash': {

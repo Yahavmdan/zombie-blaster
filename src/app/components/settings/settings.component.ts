@@ -286,6 +286,7 @@ export class SettingsComponent implements OnDestroy {
 
   resetDefaults(): void {
     this.keyBindingsService.resetToDefaults();
+    this.quickSlotService.resetToDefaults();
     this.selectedKey.set(null);
     this.sidePanelTab.set(null);
     this.cancelRebind();
