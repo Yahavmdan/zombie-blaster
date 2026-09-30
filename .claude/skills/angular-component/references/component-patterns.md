@@ -1,6 +1,6 @@
 # Angular Component Patterns
 
-> Snippets use inline `template` for brevity only. In this repo, real components always use `templateUrl` + `styleUrl` and full explicit types (see `.claude/rules/angular-components.md`, `.claude/rules/explicit-types.md`).
+Every snippet follows the repo hard rules (explicit types, `templateUrl` + `styleUrl`, OnPush). `@Component` metadata is trimmed to what each pattern needs; real components also set `changeDetection: ChangeDetectionStrategy.OnPush`.
 
 ## Table of Contents
 - [Model Inputs (Two-Way Binding)](#model-inputs-two-way-binding)
@@ -8,38 +8,29 @@
 - [Content Queries](#content-queries)
 - [Dependency Injection in Components](#dependency-injection-in-components)
 - [Component Communication Patterns](#component-communication-patterns)
-- [Dynamic Components](#dynamic-components)
+- [Deferred Loading](#deferred-loading)
+- [Attribute Directives on Components](#attribute-directives-on-components)
 
 ## Model Inputs (Two-Way Binding)
 
 For two-way binding with `[(value)]` syntax:
 
 ```typescript
-import { Component, model } from '@angular/core';
+import { Component, input, InputSignal, model, ModelSignal } from '@angular/core';
 
 @Component({
   selector: 'app-slider',
-  host: {
-    '(input)': 'onInput($event)',
-  },
-  template: `
-    <input 
-      type="range" 
-      [value]="value()" 
-      [min]="min()" 
-      [max]="max()" 
-    />
-    <span>{{ value() }}</span>
-  `,
+  templateUrl: './slider.component.html',
+  styleUrl: './slider.component.css',
 })
 export class SliderComponent {
   // Model creates both input and output
-  value = model(0);
-  min = input(0);
-  max = input(100);
-  
-  onInput(event: Event) {
-    const target = event.target as HTMLInputElement;
+  readonly value: ModelSignal<number> = model<number>(0);
+  readonly min: InputSignal<number> = input<number>(0);
+  readonly max: InputSignal<number> = input<number>(100);
+
+  onInput(event: Event): void {
+    const target: HTMLInputElement = event.target as HTMLInputElement;
     this.value.set(Number(target.value));
   }
 }
@@ -47,131 +38,145 @@ export class SliderComponent {
 // Usage: <app-slider [(value)]="sliderValue" />
 ```
 
+```html
+<!-- slider.component.html -->
+<input type="range" [value]="value()" [min]="min()" [max]="max()" (input)="onInput($event)" />
+<span>{{ value() }}</span>
+```
+
 Required model:
 
 ```typescript
-value = model.required<number>();
+readonly value: ModelSignal<number> = model.required<number>();
 ```
 
 ## View Queries
 
-Query elements and components in the template:
-
 ```typescript
-import { Component, viewChild, viewChildren, ElementRef } from '@angular/core';
+import { Component, ElementRef, input, InputSignal, Signal, viewChild, viewChildren } from '@angular/core';
 
 @Component({
   selector: 'app-gallery',
-  template: `
-    <div #container class="gallery">
-      @for (image of images(); track image.id) {
-        <app-image-card [image]="image" />
-      }
-    </div>
-  `,
+  templateUrl: './gallery.component.html',
+  styleUrl: './gallery.component.css',
 })
 export class GalleryComponent {
-  images = input.required<Image[]>();
+  readonly images: InputSignal<Image[]> = input.required<Image[]>();
 
   // Query single element
-  container = viewChild.required<ElementRef<HTMLDivElement>>('container');
+  readonly container: Signal<ElementRef<HTMLDivElement>> =
+    viewChild.required<ElementRef<HTMLDivElement>>('container');
 
   // Query single component (optional)
-  firstCard = viewChild(ImageCardComponent);
+  readonly firstCard: Signal<ImageCardComponent | undefined> = viewChild(ImageCardComponent);
 
   // Query all matching components
-  allCards = viewChildren(ImageCardComponent);
+  readonly allCards: Signal<readonly ImageCardComponent[]> = viewChildren(ImageCardComponent);
 }
+```
+
+```html
+<!-- gallery.component.html -->
+<div #container class="gallery">
+  @for (image of images(); track image.id) {
+    <app-image-card [image]="image" />
+  }
+</div>
 ```
 
 ## Content Queries
 
-Query projected content:
-
 ```typescript
-import { Component, contentChild, contentChildren, effect, signal } from '@angular/core';
-
-@Component({
-  selector: 'app-tabs',
-  template: `
-    <div class="tab-headers">
-      @for (tab of tabs(); track tab.label()) {
-        <button
-          [class.active]="tab === activeTab()"
-          (click)="selectTab(tab)"
-        >
-          {{ tab.label() }}
-        </button>
-      }
-    </div>
-    <div class="tab-content">
-      <ng-content />
-    </div>
-  `,
-})
-export class TabsComponent {
-  // Query all projected TabComponent children
-  tabs = contentChildren(TabComponent);
-
-  // Query single projected element
-  header = contentChild('tabHeader');
-
-  activeTab = signal<TabComponent | undefined>(undefined);
-
-  constructor() {
-    // Set first tab as active when tabs are available
-    effect(() => {
-      const firstTab = this.tabs()[0];
-      if (firstTab && !this.activeTab()) {
-        this.activeTab.set(firstTab);
-      }
-    });
-  }
-
-  selectTab(tab: TabComponent) {
-    this.activeTab.set(tab);
-  }
-}
+import {
+  Component,
+  contentChildren,
+  effect,
+  input,
+  InputSignal,
+  Signal,
+  signal,
+  WritableSignal,
+} from '@angular/core';
 
 @Component({
   selector: 'app-tab',
-  template: `<ng-content />`,
   host: {
     '[class.active]': 'isActive()',
-    '[style.display]': 'isActive() ? "block" : "none"',
   },
+  templateUrl: './tab.component.html',
+  styleUrl: './tab.component.css',
 })
 export class TabComponent {
-  label = input.required<string>();
-  isActive = input(false);
+  readonly label: InputSignal<string> = input.required<string>();
+  readonly isActive: InputSignal<boolean> = input<boolean>(false);
 }
+
+@Component({
+  selector: 'app-tabs',
+  templateUrl: './tabs.component.html',
+  styleUrl: './tabs.component.css',
+})
+export class TabsComponent {
+  // Query all projected TabComponent children
+  readonly tabs: Signal<readonly TabComponent[]> = contentChildren(TabComponent);
+
+  readonly activeTab: WritableSignal<TabComponent | undefined> = signal<TabComponent | undefined>(undefined);
+
+  constructor() {
+    effect((): void => {
+      this.selectFirstTabIfNone();
+    });
+  }
+
+  selectTab(tab: TabComponent): void {
+    this.activeTab.set(tab);
+  }
+
+  private selectFirstTabIfNone(): void {
+    const firstTab: TabComponent | undefined = this.tabs()[0];
+    if (firstTab && !this.activeTab()) {
+      this.activeTab.set(firstTab);
+    }
+  }
+}
+```
+
+```html
+<!-- tabs.component.html -->
+<div class="tab-headers">
+  @for (tab of tabs(); track tab.label()) {
+    <button [class.active]="tab === activeTab()" (click)="selectTab(tab)">
+      {{ tab.label() }}
+    </button>
+  }
+</div>
+<div class="tab-content">
+  <ng-content />
+</div>
 ```
 
 ## Dependency Injection in Components
 
-Use `inject()` function instead of constructor injection:
+Use `inject()` instead of constructor injection:
 
 ```typescript
 import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 
 @Component({
-  selector: 'app-dashboard',
-  template: `...`,
+  selector: 'app-lobby',
+  templateUrl: './lobby.component.html',
+  styleUrl: './lobby.component.css',
 })
-export class DashboardComponent {
-  private router = inject(Router);
-  private userService = inject(UserService);
-  private config = inject(APP_CONFIG);
-  
+export class LobbyComponent {
+  private readonly router: Router = inject(Router);
+  private readonly ws: WebSocketService = inject(WebSocketService);
+
   // Optional injection
-  private analytics = inject(AnalyticsService, { optional: true });
-  
-  // Self-only injection
-  private localService = inject(LocalService, { self: true });
-  
-  navigateToProfile() {
-    void this.router.navigate(['/profile']);
+  private readonly saves: SaveGameService | null = inject(SaveGameService, { optional: true });
+
+  goToGame(): void {
+    void this.router.navigate(['/game']);
   }
 }
 ```
@@ -181,136 +186,92 @@ export class DashboardComponent {
 ### Parent to Child (Inputs)
 
 ```typescript
-// Parent
-@Component({
-  template: `<app-child [data]="parentData()" [config]="config" />`,
-})
+// Parent — template: <app-child [data]="parentData()" />
 export class ParentComponent {
-  parentData = signal({ name: 'Test' });
-  config = { theme: 'dark' };
+  readonly parentData: WritableSignal<Data> = signal<Data>({ name: 'Test' });
 }
 
 // Child
-@Component({ selector: 'app-child' })
 export class ChildComponent {
-  data = input.required<Data>();
-  config = input<Config>();
+  readonly data: InputSignal<Data> = input.required<Data>();
+  readonly config: InputSignal<Config | undefined> = input<Config>();
 }
 ```
 
 ### Child to Parent (Outputs)
 
 ```typescript
-// Child
-@Component({
-  selector: 'app-child',
-  template: `<button (click)="save()">Save</button>`,
-})
+// Child — template: <button (click)="save()">Save</button>
 export class ChildComponent {
-  saved = output<Data>();
-  
-  save() {
+  readonly saved: OutputEmitterRef<Data> = output<Data>();
+
+  save(): void {
     this.saved.emit({ id: 1, name: 'Item' });
   }
 }
 
-// Parent
-@Component({
-  template: `<app-child (saved)="onSaved($event)" />`,
-})
+// Parent — template: <app-child (saved)="onSaved($event)" />
 export class ParentComponent {
-  onSaved(data: Data) {
-    console.log('Saved:', data);
+  readonly lastSaved: WritableSignal<Data | undefined> = signal<Data | undefined>(undefined);
+
+  onSaved(data: Data): void {
+    this.lastSaved.set(data);
   }
 }
 ```
 
 ### Shared Service Pattern
 
+State lives in services (no NgRx).
+
 ```typescript
-// Shared state service
 @Injectable({ providedIn: 'root' })
-export class CartService {
-  private items = signal<CartItem[]>([]);
-  
-  readonly items$ = this.items.asReadonly();
-  readonly total = computed(() => 
-    this.items().reduce((sum, item) => sum + item.price, 0)
+export class InventoryService {
+  private readonly items: WritableSignal<InventoryItem[]> = signal<InventoryItem[]>([]);
+
+  readonly items$: Signal<InventoryItem[]> = this.items.asReadonly();
+  readonly totalWeight: Signal<number> = computed((): number =>
+    this.items().reduce((sum: number, item: InventoryItem): number => sum + item.weight, 0),
   );
-  
-  addItem(item: CartItem) {
-    this.items.update(items => [...items, item]);
-  }
-  
-  removeItem(id: string) {
-    this.items.update(items => items.filter(i => i.id !== id));
-  }
-}
 
-// Component A
-@Component({ template: `<button (click)="add()">Add</button>` })
-export class ProductComponent {
-  private cart = inject(CartService);
-  product = input.required<Product>();
-  
-  add() {
-    this.cart.addItem({ ...this.product(), quantity: 1 });
+  addItem(item: InventoryItem): void {
+    this.items.update((items: InventoryItem[]): InventoryItem[] => [...items, item]);
+  }
+
+  removeItem(id: string): void {
+    this.items.update((items: InventoryItem[]): InventoryItem[] =>
+      items.filter((i: InventoryItem): boolean => i.id !== id),
+    );
   }
 }
 
-// Component B
-@Component({ template: `<span>Total: {{ cart.total() }}</span>` })
-export class CartSummaryComponent {
-  cart = inject(CartService);
+// Consumer
+export class InventorySummaryComponent {
+  readonly inventory: InventoryService = inject(InventoryService);
 }
 ```
 
-## Dynamic Components
+## Deferred Loading
 
-Using `@defer` for lazy loading:
+```html
+@defer (on viewport) {
+  <app-heavy-chart [data]="chartData()" />
+} @placeholder {
+  <div class="chart-placeholder">Loading chart...</div>
+} @loading (minimum 500ms) {
+  <app-spinner />
+} @error {
+  <p>Failed to load chart</p>
+}
 
-```typescript
-@Component({
-  template: `
-    @defer (on viewport) {
-      <app-heavy-chart [data]="chartData()" />
-    } @placeholder {
-      <div class="chart-placeholder">Loading chart...</div>
-    } @loading (minimum 500ms) {
-      <app-spinner />
-    } @error {
-      <p>Failed to load chart</p>
-    }
-  `,
-})
-export class DashboardComponent {
-  chartData = input.required<ChartData>();
+@defer (on interaction; prefetch on idle) {
+  <app-comments [postId]="postId()" />
+} @placeholder {
+  <button>Load Comments</button>
 }
 ```
 
-Defer triggers:
-- `on viewport` - When element enters viewport
-- `on idle` - When browser is idle
-- `on interaction` - On user interaction (click, focus)
-- `on hover` - On mouse hover
-- `on immediate` - Immediately after non-deferred content
-- `on timer(500ms)` - After specified delay
-- `when condition` - When expression becomes true
-
-```typescript
-@Component({
-  template: `
-    @defer (on interaction; prefetch on idle) {
-      <app-comments [postId]="postId()" />
-    } @placeholder {
-      <button>Load Comments</button>
-    }
-  `,
-})
-export class PostComponent {
-  postId = input.required<string>();
-}
-```
+Triggers: `on viewport`, `on idle`, `on interaction`, `on hover`, `on immediate`, `on timer(500ms)`, `when condition`.
 
 ## Attribute Directives on Components
 
@@ -322,39 +283,8 @@ export class PostComponent {
   },
 })
 export class HighlightDirective {
-  color = input('yellow', { alias: 'appHighlight' });
+  readonly color: InputSignal<string> = input<string>('yellow', { alias: 'appHighlight' });
 }
 
-// Usage on component
-@Component({
-  imports: [HighlightDirective],
-  template: `<app-card appHighlight="lightblue" />`,
-})
-export class PageComponent {}
-```
-
-## Error Boundaries
-
-```typescript
-@Component({
-  selector: 'app-error-boundary',
-  template: `
-    @if (hasError()) {
-      <div class="error">
-        <h3>Something went wrong</h3>
-        <button (click)="retry()">Retry</button>
-      </div>
-    } @else {
-      <ng-content />
-    }
-  `,
-})
-export class ErrorBoundaryComponent {
-  hasError = signal(false);
-  private errorHandler = inject(ErrorHandler);
-  
-  retry() {
-    this.hasError.set(false);
-  }
-}
+// Usage: add HighlightDirective to `imports`, then <app-card appHighlight="lightblue" />
 ```
