@@ -1,6 +1,8 @@
 import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, computed, inject, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { ReactiveFormsModule, FormControl, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormControl, FormControlStatus, Validators } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
 import {
   CharacterClass,
   CharacterClassDefinition,
@@ -39,6 +41,12 @@ export class CharacterSelectComponent implements OnInit {
     validators: [Validators.required, Validators.minLength(2), Validators.maxLength(16)],
   });
 
+  /** Signal mirror of the form's validity so computed() re-runs while typing. */
+  private readonly nameValid: Signal<boolean> = toSignal(
+    this.nameControl.statusChanges.pipe(map((status: FormControlStatus): boolean => status === 'VALID')),
+    { initialValue: this.nameControl.valid },
+  );
+
   readonly classList: CharacterClassDefinition[] = Object.values(CHARACTER_CLASSES);
 
   readonly selectedClass: WritableSignal<CharacterClass | null> = signal<CharacterClass | null>(null);
@@ -73,7 +81,7 @@ export class CharacterSelectComponent implements OnInit {
   });
 
   readonly canStart: Signal<boolean> = computed((): boolean => {
-    return this.selectedClass() !== null && this.nameControl.valid;
+    return this.selectedClass() !== null && this.nameValid();
   });
 
   readonly isMultiplayer: Signal<boolean> = computed((): boolean => {
