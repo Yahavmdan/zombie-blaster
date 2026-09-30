@@ -1109,7 +1109,12 @@ export class GameEngine implements IGameEngine {
     }
 
     for (const c of corpses) {
-      this.zombieSpriteAnimator.setState(c.id, ZombieAnimState.Dead);
+      if (c.frozen) {
+        // The host froze this corpse in its final pose; show the same pose here.
+        this.zombieSpriteAnimator.setFinalFrame(c.id, c.spriteKey, ZombieAnimState.Dead);
+      } else {
+        this.zombieSpriteAnimator.setState(c.id, ZombieAnimState.Dead);
+      }
     }
     for (const c of pendingLocalCorpses) {
       this.zombieSpriteAnimator.setState(c.id, ZombieAnimState.Dead);

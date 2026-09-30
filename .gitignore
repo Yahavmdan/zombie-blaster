@@ -50,3 +50,4 @@ Thumbs.db
 # E2E (Playwright)
 /e2e/.results
 /e2e/.report
+/e2e/.report-lab

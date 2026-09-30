@@ -1,9 +1,12 @@
 import { CharacterState, SkillDefinition, VfxEvent } from '@shared/index';
-import { ActiveSpecialEffect, ZombieState } from '@shared/game-entities';
+import { ActiveSpecialEffect, WorldDrop, ZombieCorpse, ZombieState } from '@shared/game-entities';
+import { ZombieAnimState } from '../engine/zombie-sprite-animator';
 import { GameEngine } from '../engine/game-engine';
 import { SpriteAnimator } from '../engine/sprite-animator';
 import {
   E2eControls,
+  E2eCorpseView,
+  E2eDropView,
   E2eEngineControls,
   E2ePlayerView,
   E2eRemotePlayerView,
@@ -78,6 +81,8 @@ function toPlayerView(p: CharacterState): E2ePlayerView {
     isDown: p.isDown,
     unallocatedStatPoints: p.unallocatedStatPoints,
     unallocatedSkillPoints: p.unallocatedSkillPoints,
+    xp: p.xp,
+    xpToNext: p.xpToNext,
     skillLevels: { ...p.skillLevels },
     gold: p.inventory.gold,
     potions: { ...p.inventory.potions },
@@ -96,6 +101,9 @@ function toZombieView(z: ZombieState): E2eZombieView {
     maxHp: z.maxHp,
     isDead: z.isDead,
     spawnTimer: z.spawnTimer,
+    facing: z.facing,
+    isAttacking: z.attackAnimTimer > 0,
+    attackCooldown: z.attackCooldown,
   };
 }
 
@@ -147,7 +155,28 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
     remotePlayers,
     zombies: engine.zombies.map(toZombieView),
     corpses: engine.zombieCorpses.length,
+    corpseViews: engine.zombieCorpses.map((c: ZombieCorpse): E2eCorpseView => {
+      const anim: { state: ZombieAnimState; frame: number } | null =
+        engine.zombieSpriteAnimator.getInstanceFrame(c.id);
+      return {
+        id: c.id,
+        x: c.x,
+        y: c.y,
+        isGrounded: c.isGrounded,
+        frozen: c.frozen,
+        facing: c.facing,
+        animState: anim ? anim.state : null,
+        frame: anim ? anim.frame : null,
+        lastFrame: engine.zombieSpriteAnimator.getFrameCount(c.spriteKey, ZombieAnimState.Dead) - 1,
+      };
+    }),
     worldDrops: engine.worldDrops.length,
+    exit: { x: engine.exitPlatform.x, y: engine.exitPlatform.y, width: engine.exitPlatform.width },
+    drops: engine.worldDrops.map(
+      (d: WorldDrop): E2eDropView => ({ id: d.id, type: d.type, x: d.x, y: d.y, value: d.value }),
+    ),
+    potionCooldownTicks: engine.potionCooldown,
+    invincibilityFrames: engine.invincibilityFrames,
     vfx: {
       particles: engine.particles.length,
       damageNumbers: engine.damageNumbers.length,

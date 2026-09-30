@@ -252,6 +252,19 @@ export class ZombieSpriteAnimator {
     }
   }
 
+  /** Shows the last frame of the given state (no-op when already there). */
+  setFinalFrame(zombieId: string, spriteKey: string, state: ZombieAnimState): void {
+    const last: number = this.getFrameCount(spriteKey, state) - 1;
+    const instance: ZombieAnimInstance | undefined = this.instances.get(zombieId);
+    if (instance && instance.state === state && instance.currentFrame === last && !instance.reverse) return;
+    this.setStateAtFrame(zombieId, state, last);
+  }
+
+  getInstanceFrame(zombieId: string): { state: ZombieAnimState; frame: number } | null {
+    const instance: ZombieAnimInstance | undefined = this.instances.get(zombieId);
+    return instance ? { state: instance.state, frame: instance.currentFrame } : null;
+  }
+
   getFrameCount(spriteKey: string, state: ZombieAnimState): number {
     const animMap: Map<ZombieAnimState, ZombieSpriteAnimation> | undefined = this.spriteCache.get(spriteKey);
     const anim: ZombieSpriteAnimation | undefined = animMap?.get(state);

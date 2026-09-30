@@ -30,6 +30,8 @@ export interface E2ePlayerView {
   isDown: boolean;
   unallocatedStatPoints: number;
   unallocatedSkillPoints: number;
+  xp: number;
+  xpToNext: number;
   skillLevels: Record<string, number>;
   gold: number;
   potions: Record<string, number>;
@@ -51,6 +53,34 @@ export interface E2eZombieView {
   maxHp: number;
   isDead: boolean;
   spawnTimer: number;
+  /** 1 = facing right, -1 = facing left. */
+  facing: number;
+  /** True during the attack animation (the hit lands mid-animation). */
+  isAttacking: boolean;
+  /** Ticks until this zombie can start its next attack. */
+  attackCooldown: number;
+}
+
+export interface E2eCorpseView {
+  id: string;
+  x: number;
+  y: number;
+  isGrounded: boolean;
+  frozen: boolean;
+  facing: number;
+  /** Sprite animation this client renders for the corpse (`dead` once it falls). */
+  animState: string | null;
+  frame: number | null;
+  /** Last frame of the death animation = fully lying down. */
+  lastFrame: number;
+}
+
+export interface E2eDropView {
+  id: string;
+  type: string;
+  x: number;
+  y: number;
+  value: number;
 }
 
 export interface E2eSkillView {
@@ -122,7 +152,15 @@ export interface E2eSnapshot {
   remotePlayers: E2eRemotePlayerView[];
   zombies: E2eZombieView[];
   corpses: number;
+  corpseViews: E2eCorpseView[];
   worldDrops: number;
+  /** Floor exit: stand on it (grounded) to finish the floor. */
+  exit: { x: number; y: number; width: number };
+  drops: E2eDropView[];
+  /** Ticks until the potion keys work again. */
+  potionCooldownTicks: number;
+  /** Ticks of post-hit invincibility left for the local player. */
+  invincibilityFrames: number;
   vfx: E2eVfxCounts;
   pending: E2ePendingQueues;
   usableSkills: E2eSkillView[];

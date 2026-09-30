@@ -330,6 +330,10 @@ export class GameCanvasComponent implements OnDestroy {
     const action: GameAction | null = this.keyBindingsService.getActionForKey(e.key);
     if (!action) return;
 
+    // Attack is on Control by default, so attacking while moving would otherwise fire
+    // browser shortcuts (Ctrl+A select-all, Ctrl+D bookmark, Ctrl+P print, ...).
+    e.preventDefault();
+
     if (UI_ACTIONS.has(action)) {
       this.emitUiAction(action);
       return;
@@ -337,16 +341,10 @@ export class GameCanvasComponent implements OnDestroy {
 
     if (QUICK_SLOT_ACTION_SET.has(action)) {
       this.handleQuickSlotKeyDown(action);
-      e.preventDefault();
       return;
     }
 
     this.keys[action] = true;
-
-    if (action === 'up' || action === 'down' || action === 'jump' || action === 'attack') {
-      e.preventDefault();
-    }
-
     this.engine?.setKeys({ ...this.keys });
   }
 

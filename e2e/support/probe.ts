@@ -3,6 +3,8 @@ import type { E2eSnapshot, E2eVfxEventView, E2eVfxLogEntry } from '../../src/app
 
 export type { E2eSnapshot, E2eVfxEventView, E2eVfxLogEntry };
 export type {
+  E2eCorpseView,
+  E2eDropView,
   E2ePlayerView,
   E2eRemotePlayerView,
   E2eSkillView,

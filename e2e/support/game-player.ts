@@ -1,6 +1,7 @@
 import {
   Browser,
   BrowserContext,
+  CDPSession,
   ConsoleMessage,
   Locator,
   Page,
@@ -76,6 +77,17 @@ const IGNORED_CONSOLE_ERRORS: RegExp[] = [
 export interface OpenPlayerOptions {
   name: string;
   classId: ClassId;
+  /** Frontend origin for this player (e.g. a second dev server port). Defaults to config baseURL. */
+  baseUrl?: string;
+  /** null = follow the window size (headed demo windows). */
+  viewport?: { width: number; height: number } | null;
+}
+
+export interface WindowBounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }
 
 /**
@@ -109,7 +121,8 @@ export class GamePlayer {
 
   static async open(browser: Browser, options: OpenPlayerOptions): Promise<GamePlayer> {
     const context: BrowserContext = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
+      viewport: options.viewport === undefined ? { width: 1280, height: 800 } : options.viewport,
+      ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
     });
     await context.addInitScript(trackSocketsInitScript);
     const page: Page = await context.newPage();
@@ -120,6 +133,7 @@ export class GamePlayer {
 
   async gotoMenu(): Promise<void> {
     await this.page.goto('/');
+    await this.failOnDevServerError();
     await expect(this.page.getByTestId('menu-main-button-singleplayer')).toBeVisible();
   }
 
@@ -127,6 +141,21 @@ export class GamePlayer {
     await this.page.getByTestId('charselect-name-input-name').fill(this.name);
     await this.page.getByTestId(`charselect-class-button-${this.classId}`).click();
     await this.page.getByTestId('charselect-nav-button-start').click();
+  }
+
+  /**
+   * A dev server that caught a half-saved edit shows a compile-error overlay that swallows
+   * every click. Fail fast with the error text instead of hanging (fix: re-save/touch the file).
+   */
+  async failOnDevServerError(): Promise<void> {
+    await this.page.waitForLoadState('domcontentloaded');
+    await this.page.waitForTimeout(300);
+    const overlay: string | null = await this.page.evaluate((): string | null => {
+      const el: Element | null = document.querySelector('vite-error-overlay');
+      return el ? (el.shadowRoot?.textContent ?? 'compile error').trim().slice(0, 400) : null;
+    });
+    if (overlay)
+      throw new Error(`${this.name}: dev server shows a compile error overlay: ${overlay}`);
   }
 
   /** Menu → New Game → character select → game page with the probe ready. */
@@ -183,6 +212,10 @@ export class GamePlayer {
     if (!this.heldKeys.has(key)) return;
     this.heldKeys.delete(key);
     await this.page.keyboard.up(key);
+  }
+
+  isHolding(key: string): boolean {
+    return this.heldKeys.has(key);
   }
 
   async releaseAll(): Promise<void> {
@@ -267,6 +300,21 @@ export class GamePlayer {
       body: JSON.stringify(this.net.summary(), null, 2),
       contentType: 'application/json',
     });
+  }
+
+  /** Headed runs only: moves/resizes this player's browser window (Chromium CDP) and raises it. */
+  async placeWindow(bounds: WindowBounds): Promise<void> {
+    const session: CDPSession = await this.context.newCDPSession(this.page);
+    const target: { windowId: number } = (await session.send('Browser.getWindowForTarget')) as {
+      windowId: number;
+    };
+    await session.send('Browser.setWindowBounds', {
+      windowId: target.windowId,
+      bounds: { windowState: 'normal' },
+    });
+    await session.send('Browser.setWindowBounds', { windowId: target.windowId, bounds });
+    await session.detach();
+    await this.page.bringToFront();
   }
 
   async close(): Promise<void> {

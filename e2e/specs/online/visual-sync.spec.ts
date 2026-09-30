@@ -4,6 +4,7 @@ import { ClassId, GamePlayer, KEYS } from '../../support/game-player';
 import { RoomSession } from '../../support/room';
 import { runBot } from '../../support/bot';
 import { CapturedFrame } from '../../support/net-monitor';
+import { corpseDifferences, groundedInBoth } from '../../support/world-compare';
 import {
   E2eRemotePlayerView,
   E2eSkillView,
@@ -342,5 +343,48 @@ test.describe('everyone sees everyone', { tag: ['@online', '@visual'] }, (): voi
     }
     expect(applied, 'host simulation applies the guest pickup').toBe(true);
     expect(maxHostFlash, 'host does not flash its own screen for a remote pickup').toBe(0);
+  });
+
+  test('corpses rest fully fallen and look the same on every screen', async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }, testInfo: TestInfo): Promise<void> => {
+    test.setTimeout(150_000);
+    const session: RoomSession = await room(
+      [
+        { name: 'Host', classId: 'warrior' },
+        { name: 'Guest', classId: 'warrior' },
+      ],
+      'corpses',
+    );
+    const [host, guest]: GamePlayer[] = session.players;
+    for (const p of session.players) {
+      await p.probe.maxOutPlayer();
+      await p.probe.setGodMode(true);
+    }
+    await Promise.all([
+      runBot(host, {
+        durationMs: 40_000,
+        useSkills: true,
+        onTick: (s: E2eSnapshot): boolean => s.corpses < 12,
+      }),
+      runBot(guest, { durationMs: 40_000, useSkills: true }),
+    ]);
+
+    const [h0, g0]: E2eSnapshot[] = await Promise.all([host.probe.state(), guest.probe.state()]);
+    const settled: Set<string> = groundedInBoth(h0, g0);
+    await host.wait(1_500);
+    const [h1, g1]: E2eSnapshot[] = await Promise.all([host.probe.state(), guest.probe.state()]);
+    const diffs: string[] = corpseDifferences(h1, g1, settled, ['host', 'guest']);
+
+    await host.attachCanvas(testInfo, 'host corpses');
+    await guest.attachCanvas(testInfo, 'guest corpses');
+    await testInfo.attach('corpse differences', {
+      body: diffs.join('\n') || 'none',
+      contentType: 'text/plain',
+    });
+    expect(settled.size, 'enough settled corpses to compare').toBeGreaterThanOrEqual(5);
+    expect(diffs).toEqual([]);
   });
 });

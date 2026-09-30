@@ -1156,10 +1156,10 @@ export class ZombieSystem {
     if (!nearPile) return;
     if (Math.random() >= GAME_CONSTANTS.ZOMBIE_CORPSE_DIVERSE_CHANCE) return;
 
-    const frameCount: number = this.e.zombieSpriteAnimator.getFrameCount(corpse.spriteKey, ZombieAnimState.Dead);
-    const firstDiverseFrame: number = Math.max(0, frameCount - 3);
-    const frame: number = firstDiverseFrame + Math.floor(Math.random() * (frameCount - firstDiverseFrame));
-    this.e.zombieSpriteAnimator.setStateAtFrame(corpse.id, ZombieAnimState.Dead, frame);
+    // Variety comes from the facing flip only: a frozen corpse always shows the last
+    // (fully lying) death frame. Mid-fall frames looked like zombies half standing, and
+    // clients reproduce this pose from the synced `frozen` + `facing` fields.
+    this.e.zombieSpriteAnimator.setFinalFrame(corpse.id, corpse.spriteKey, ZombieAnimState.Dead);
     if (Math.random() > 0.5) corpse.facing = -corpse.facing;
     corpse.frozen = true;
   }

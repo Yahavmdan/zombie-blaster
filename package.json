@@ -18,7 +18,9 @@
     "e2e:bugs": "playwright test --grep @bug",
     "e2e:headed": "playwright test --headed --workers=1",
     "e2e:report": "playwright show-report e2e/.report",
-    "e2e:typecheck": "tsc -p e2e/tsconfig.json"
+    "e2e:typecheck": "tsc -p e2e/tsconfig.json",
+    "e2e:demo": "playwright test --config e2e/demo/playwright.demo.config.ts",
+    "e2e:lab": "playwright test --config e2e/lab/playwright.lab.config.ts"
   },
   "private": true,
   "packageManager": "npm@10.9.4",
