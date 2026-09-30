@@ -7,29 +7,36 @@ Browser multiplayer zombie platformer RPG (MapleStory-inspired). Up to 4 players
 - `src/app/` — Angular 21 frontend (standalone components, signals, Tailwind 4)
   - `engine/` — canvas game engine, split into systems (see `.claude/rules/engine-architecture.md`)
   - `components/`, `pages/`, `services/` — UI, HUD, menus, WebSocket client
-- `shared/` — types and constants used by both client and server, imported as `@shared/*`
-- `zombie-blaster-api/` — Node.js `ws` game server (separate `package.json`)
+- `shared/` — types and constants used by both client and server. Frontend imports `@shared/*`; server imports relative `../../shared/*.js` (tsc doesn't rewrite aliases)
+- `zombie-blaster-api/` — Node.js `ws` server (separate `package.json`): lobby, rooms, message relay
 - `public/` — sprites, tiles, effects. Root sprite-pack folders are raw source art.
+
+## Multiplayer model
+
+Host-client. The host player's browser runs the full simulation (`GameEngine`: zombies, damage, drops) and sends `game-sync` snapshots every 50 ms. Other clients render those snapshots and send only their own player state (`player-state`) plus requests like `zombie-damage` (sync loop in `src/app/pages/game/game.component.ts`). The server validates and relays messages (e.g. forwards `zombie-damage` to the host) and manages rooms and host migration. It runs no game loop.
 
 ## Commands
 
 | What | Command (repo root unless noted) |
 |---|---|
 | Frontend dev server | `npm start` |
-| Tests (Vitest via `@angular/build:unit-test`) | `npm test` |
+| Tests (Vitest via `@angular/build:unit-test`) | `npm test -- --watch=false` |
+| Single spec | `npm test -- --watch=false --include src/app/engine/zombie-system.spec.ts` |
 | Frontend build | `npm run build` |
 | Server dev (watch) | `cd zombie-blaster-api && npm run dev` |
 | Server build | `cd zombie-blaster-api && npm run build` |
 
-No ESLint and no lint script. Prettier is installed (`npx prettier --write <file>`).
+No ESLint and no lint script. Prettier is installed, but most existing files aren't formatted yet. Run `npx prettier --write <file>` only on files you create, so diffs stay reviewable. Server has no tests.
+
+Changed `shared/`? It compiles into both apps: run the frontend build and the server build.
 
 ## Hard rules
 
-- **Explicit types everywhere.** Every `const`/`let`, parameter, return type, class field, callback parameter and loop variable gets an annotation. Signals: `readonly x: WritableSignal<T> = signal<T>(...)`. Details: `.claude/rules/explicit-types.md`.
+- **Explicit types everywhere.** Every `const`/`let`, parameter, return type, class field and callback parameter gets an annotation (`for...of` variables can't; type the iterable). Signals: `readonly x: WritableSignal<T> = signal<T>(...)`. Details: `.claude/rules/explicit-types.md`.
 - **No unused** variables, imports or parameters. Remove them; don't keep dead code.
 - **Shared types live in `shared/`.** Never duplicate a type between client and server.
 - **Multiplayer VFX gate.** Every visual effect must be seen by all players. Push a `VfxEvent` to `pendingVfxEvents` alongside every local VFX call. Use the `multiplayer-vfx-sync` skill before touching any effect.
-- **Server authority.** Never trust client-computed damage, loot or position.
+- **Host authority.** Zombie state, damage and loot are decided by the host's simulation. Non-host clients own only their own player state; for the shared world they send requests, never results. The server validates every incoming message and never trusts its shape.
 - **Repro bugs with tests first.** When asked to repro, change only tests (a failing test that documents the bug). Fix production code only after the repro is agreed.
 - **Components use `templateUrl` + `styleUrl`**, with co-located `.component.html` and `.component.css`. No inline `template`/`styles`.
 - **No new `console.*`** in production code. Existing uses are legacy; don't add more.

@@ -5,7 +5,7 @@ description: Write and update unit tests with Vitest (Angular `@angular/build:un
 
 # Angular + Vitest Testing
 
-Runner: `npm test` (repo root). Specs live next to the code as `*.spec.ts`. Examples: `src/app/engine/zombie-system.spec.ts`, `src/app/engine/multiplayer-sync.spec.ts`.
+Runner: `npm test -- --watch=false` (repo root); one file: add `--include <path-to-spec>`. Specs live next to the code as `*.spec.ts`. Examples: `src/app/engine/zombie-system.spec.ts`, `src/app/engine/multiplayer-sync.spec.ts`.
 
 ## Core rules
 - Import test APIs explicitly: `import { describe, it, expect, beforeEach, vi } from 'vitest';`

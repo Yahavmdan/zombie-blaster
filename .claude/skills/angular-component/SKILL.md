@@ -7,15 +7,26 @@ description: Create modern Angular standalone components following v20+ best pra
 
 Create standalone components for Angular v20+. Components are standalone by default—do NOT set `standalone: true`.
 
+Every snippet here follows the repo hard rules: explicit types on every declaration, `templateUrl` + `styleUrl`, no `console.*`. Copy them as-is.
+
 ## Component Structure
 
-Every component must use `ChangeDetectionStrategy.OnPush`. Signal inputs, outputs, computed values, and host bindings are covered in dedicated sections below.
-
-**Always use separate files for templates and styles** — never inline `template` or `styles`. Use `templateUrl` and `styleUrl` pointing to co-located `.component.html` and `.component.css` files.
+Every component must use `ChangeDetectionStrategy.OnPush`. Always use separate `.component.html` and `.component.css` files—never inline `template` or `styles`.
 
 ```typescript
 // user-card.component.ts
-import { Component, ChangeDetectionStrategy, input, output, computed } from '@angular/core';
+import {
+  booleanAttribute,
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  input,
+  InputSignal,
+  InputSignalWithTransform,
+  output,
+  OutputEmitterRef,
+  Signal,
+} from '@angular/core';
 
 @Component({
   selector: 'app-user-card',
@@ -29,16 +40,18 @@ import { Component, ChangeDetectionStrategy, input, output, computed } from '@an
   styleUrl: './user-card.component.css',
 })
 export class UserCardComponent {
-  name = input.required<string>();
-  email = input<string>('');
-  showEmail = input(false);
-  isActive = input(false, { transform: booleanAttribute });
+  readonly name: InputSignal<string> = input.required<string>();
+  readonly email: InputSignal<string> = input<string>('');
+  readonly showEmail: InputSignal<boolean> = input<boolean>(false);
+  readonly isActive: InputSignalWithTransform<boolean, unknown> = input<boolean, unknown>(false, {
+    transform: booleanAttribute,
+  });
 
-  avatarUrl = computed(() => `https://api.example.com/avatar/${this.name()}`);
+  readonly avatarUrl: Signal<string> = computed((): string => `/avatars/${this.name()}.png`);
 
-  selected = output<string>();
+  readonly selected: OutputEmitterRef<string> = output<string>();
 
-  handleClick() {
+  handleClick(): void {
     this.selected.emit(this.name());
   }
 }
@@ -62,25 +75,30 @@ export class UserCardComponent {
 ## Signal Inputs
 
 ```typescript
-name = input.required<string>();
-count = input(0);
-label = input<string>();
-size = input('medium', { alias: 'buttonSize' });
-disabled = input(false, { transform: booleanAttribute });
-value = input(0, { transform: numberAttribute });
+readonly name: InputSignal<string> = input.required<string>();
+readonly count: InputSignal<number> = input<number>(0);
+readonly label: InputSignal<string | undefined> = input<string>();
+readonly size: InputSignal<string> = input<string>('medium', { alias: 'buttonSize' });
+readonly disabled: InputSignalWithTransform<boolean, unknown> = input<boolean, unknown>(false, {
+  transform: booleanAttribute,
+});
+readonly value: InputSignalWithTransform<number, unknown> = input<number, unknown>(0, {
+  transform: numberAttribute,
+});
 ```
 
 ## Signal Outputs
 
 ```typescript
-import { output, outputFromObservable } from '@angular/core';
+import { output, OutputEmitterRef, OutputRef, outputFromObservable } from '@angular/core';
+import { Subject } from 'rxjs';
 
-clicked = output<void>();
-selected = output<Item>();
-valueChange = output<number>({ alias: 'change' });
+readonly clicked: OutputEmitterRef<void> = output<void>();
+readonly selected: OutputEmitterRef<Item> = output<Item>();
+readonly valueChange: OutputEmitterRef<number> = output<number>({ alias: 'change' });
 
-scroll$ = new Subject<number>();
-scrolled = outputFromObservable(this.scroll$);
+private readonly scroll$: Subject<number> = new Subject<number>();
+readonly scrolled: OutputRef<number> = outputFromObservable<number>(this.scroll$);
 
 this.clicked.emit();
 this.selected.emit(item);
@@ -93,6 +111,7 @@ Use the `host` object in `@Component`—do NOT use `@HostBinding` or `@HostListe
 ```typescript
 @Component({
   selector: 'app-button',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     'role': 'button',
     '[class.primary]': 'variant() === "primary"',
@@ -100,20 +119,22 @@ Use the `host` object in `@Component`—do NOT use `@HostBinding` or `@HostListe
     '[style.--btn-color]': 'color()',
     '[attr.aria-disabled]': 'disabled()',
     '[attr.tabindex]': 'disabled() ? -1 : 0',
-    '(click)': 'onClick($event)',
-    '(keydown.enter)': 'onClick($event)',
-    '(keydown.space)': 'onClick($event)',
+    '(click)': 'onClick()',
+    '(keydown.enter)': 'onClick()',
+    '(keydown.space)': 'onClick()',
   },
   templateUrl: './button.component.html',
   styleUrl: './button.component.css',
 })
 export class ButtonComponent {
-  variant = input<'primary' | 'secondary'>('primary');
-  disabled = input(false, { transform: booleanAttribute });
-  color = input('#007bff');
-  clicked = output<void>();
+  readonly variant: InputSignal<'primary' | 'secondary'> = input<'primary' | 'secondary'>('primary');
+  readonly disabled: InputSignalWithTransform<boolean, unknown> = input<boolean, unknown>(false, {
+    transform: booleanAttribute,
+  });
+  readonly color: InputSignal<string> = input<string>('#007bff');
+  readonly clicked: OutputEmitterRef<void> = output<void>();
 
-  onClick(event: Event) {
+  onClick(): void {
     if (!this.disabled()) {
       this.clicked.emit();
     }
@@ -126,6 +147,7 @@ export class ButtonComponent {
 ```typescript
 @Component({
   selector: 'app-card',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './card.component.html',
   styleUrl: './card.component.css',
 })
@@ -148,21 +170,33 @@ export class CardComponent {}
 ## Lifecycle Hooks API
 
 ```typescript
-import { OnDestroy, OnInit, afterNextRender, afterRender } from '@angular/core';
+import { afterEveryRender, afterNextRender, OnDestroy, OnInit } from '@angular/core';
 
 export class MyComponent implements OnInit, OnDestroy {
   constructor() {
-    afterNextRender(() => {
+    afterNextRender((): void => {
       // Runs once after first render — use for canvas init, WebGL setup, etc.
     });
 
-    afterRender(() => {
+    afterEveryRender((): void => {
       // Runs after every render
     });
   }
 
-  ngOnInit() { /* Component initialized */ }
-  ngOnDestroy() { /* Cleanup */ }
+  ngOnInit(): void { /* Component initialized */ }
+  ngOnDestroy(): void { /* Cleanup */ }
+}
+```
+
+## Lifecycle Hooks — Declarative Call List
+
+Lifecycle methods (`ngOnInit`, etc.) must read like a table of contents. Each line should be a single, named method call — no inline logic.
+
+```typescript
+ngOnInit(): void {
+  this.initGameState();
+  this.loadCharacterData();
+  this.subscribeToServerEvents();
 }
 ```
 
@@ -176,6 +210,7 @@ Components MUST:
 ```typescript
 @Component({
   selector: 'app-toggle',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     'role': 'switch',
     '[attr.aria-checked]': 'checked()',
@@ -189,11 +224,13 @@ Components MUST:
   styleUrl: './toggle.component.css',
 })
 export class ToggleComponent {
-  label = input.required<string>();
-  checked = input(false, { transform: booleanAttribute });
-  checkedChange = output<boolean>();
+  readonly label: InputSignal<string> = input.required<string>();
+  readonly checked: InputSignalWithTransform<boolean, unknown> = input<boolean, unknown>(false, {
+    transform: booleanAttribute,
+  });
+  readonly checkedChange: OutputEmitterRef<boolean> = output<boolean>();
 
-  toggle() {
+  toggle(): void {
     this.checkedChange.emit(!this.checked());
   }
 }
@@ -236,30 +273,6 @@ Do NOT use `ngClass` or `ngStyle`. Use direct bindings:
 <div [style.width.px]="width()">With unit</div>
 ```
 
-## Strict Typing — Mandatory
-
-Every `const`, `let`, variable, parameter, return type, property, signal, computed, input, output, and local must have an explicit type annotation. No inference allowed.
-
-```typescript
-// BAD — relies on type inference
-const name = signal('');
-const count = signal(0);
-const items = computed(() => this.list().filter(i => i.active));
-const data = input.required<Item>();
-const clicked = output<void>();
-let result = this.http.get('/api/items');
-private readonly svc = inject(MyService);
-
-// GOOD — every declaration explicitly typed
-const name: WritableSignal<string> = signal<string>('');
-const count: WritableSignal<number> = signal<number>(0);
-const items: Signal<Item[]> = computed((): Item[] => this.list().filter((i: Item) => i.active));
-const data: InputSignal<Item> = input.required<Item>();
-const clicked: OutputEmitterRef<void> = output<void>();
-let result: Observable<Item[]> = this.http.get<Item[]>('/api/items');
-private readonly svc: MyService = inject(MyService);
-```
-
 ## Reactive Forms Only — No `ngModel`
 
 Never use `[(ngModel)]`. Always use Angular Reactive Forms (`FormControl`, `FormGroup`, `FormArray`) with `[formControl]`, `[formGroup]`, or `formControlName`.
@@ -268,21 +281,13 @@ Never use `[(ngModel)]`. Always use Angular Reactive Forms (`FormControl`, `Form
 
 Every function must do one thing. If a function does more than one thing, break it into smaller, well-named functions.
 
-## Lifecycle Hooks — Declarative Call List
-
-Lifecycle methods (`ngOnInit`, etc.) must read like a table of contents. Each line should be a single, named method call — no inline logic.
-
-```typescript
-ngOnInit(): void {
-  this.initGameState();
-  this.loadCharacterData();
-  this.subscribeToServerEvents();
-}
-```
-
 ## CSS Basics
 
 1. Always follow class name conventions: `kebab-case`.
 2. Never use `::ng-deep` for nested components.
 3. Never use inline styles — use class names.
 4. Always check there are no unused CSS classes or styles.
+
+## More patterns
+
+Model inputs, view/content queries, DI, services, `@defer`: see `references/component-patterns.md`.
