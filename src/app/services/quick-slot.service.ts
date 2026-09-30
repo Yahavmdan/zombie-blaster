@@ -8,14 +8,6 @@ export class QuickSlotService {
     this.copyDefaults(),
   );
 
-  loadFromSave(saved: Record<string, QuickSlotEntry | null>): void {
-    const result: Record<string, QuickSlotEntry | null> = {};
-    for (const action of QUICK_SLOT_ACTIONS) {
-      result[action] = saved[action] ?? null;
-    }
-    this.slots.set(result);
-  }
-
   resetToDefaults(): void {
     this.slots.set(this.copyDefaults());
   }
