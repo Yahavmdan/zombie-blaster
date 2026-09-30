@@ -63,6 +63,7 @@ VFX Multiplayer Sync:
 - [ ] replayRemoteVfxEvents has a case for the type
 - [ ] Replay doesn't read local player state for the originator's position
 - [ ] Test in multiplayer-sync.spec.ts covering the replay case
+- [ ] E2E: solo vfxQueuedBy() shows the event queued; online spec shows the observer replayed AND rendered it (game-e2e skill, e2e/specs/online/visual-sync.spec.ts)
 - [ ] Tested with 2+ players: effect visible on all screens
 ```
 

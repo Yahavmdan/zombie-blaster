@@ -17,6 +17,7 @@ description: Zombie Blaster review checklist for diffs, branches and PRs (Angula
 - No new `console.*` in production code.
 - No hardcoded secrets. Consider OWASP Top 10.
 - Tests present and meaningful for frontend/engine behavior changes (Vitest, `*.spec.ts` next to code).
+- Gameplay/netcode/server changes have E2E coverage in `e2e/` (online test when other players should see it). Missing coverage is **High**. Known bugs pinned with `test.fail` + `@bug`.
 
 ## Frontend / engine (`src/app/**`)
 - Components: `templateUrl` + `styleUrl`, OnPush, signal inputs/outputs, `@for` with `track`.

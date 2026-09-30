@@ -12,6 +12,7 @@ import {
   input,
   inject,
   effect,
+  isDevMode,
 } from '@angular/core';
 import { CharacterClass, CharacterState, SKILLS, SkillDefinition, SkillType, VfxEvent } from '@shared/index';
 import { DropType, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
@@ -22,6 +23,7 @@ import { InputKeys } from '@shared/messages';
 import { KeyBindingsService } from '../../services/key-bindings.service';
 import { GameStateService } from '../../services/game-state.service';
 import { QuickSlotService } from '../../services/quick-slot.service';
+import { attachEngineProbe } from '../../testing/e2e-hooks';
 
 const UI_ACTIONS: Set<string> = new Set<string>(['openStats', 'openSkills', 'openShop', 'openInventory']);
 
@@ -69,6 +71,7 @@ export class GameCanvasComponent implements OnDestroy {
   readonly canvasRef: Signal<ElementRef<HTMLCanvasElement>> = viewChild.required<ElementRef<HTMLCanvasElement>>('gameCanvas');
 
   private engine: GameEngine | null = null;
+  private detachE2eProbe: (() => void) | null = null;
   private currentClassId: CharacterClass | null = null;
   private pendingMultiplayerHost: boolean = false;
   private pendingMultiplayerClient: boolean = false;
@@ -206,8 +209,8 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.applyRemoteSpecialEffects(effects);
   }
 
-  applyRemoteDamage(playerId: string, events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
-    this.engine?.applyRemoteDamage(playerId, events);
+  applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
+    this.engine?.applyRemoteDamage(events);
   }
 
   applyRemotePull(evt: { playerX: number; playerY: number; pullRange: number; skillColor: string }): void {
@@ -226,6 +229,10 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.activateSpecialEffect(type);
   }
 
+  applyRemoteSpecialEffect(type: SpecialDropType): void {
+    this.engine?.applyRemoteSpecialEffect(type);
+  }
+
   applyRevive(): void {
     this.engine?.applyRevive();
   }
@@ -236,6 +243,7 @@ export class GameCanvasComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.engine?.stop();
+    this.detachE2eProbe?.();
     window.removeEventListener('keydown', this.boundKeyDown);
     window.removeEventListener('keyup', this.boundKeyUp);
     this.canvasRef().nativeElement.removeEventListener('mousedown', this.boundMouseDown);
@@ -248,6 +256,9 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine = new GameEngine(canvas);
     this.engine.isMultiplayerHost = this.pendingMultiplayerHost;
     this.engine.isMultiplayerClient = this.pendingMultiplayerClient;
+    if (isDevMode()) {
+      this.detachE2eProbe = attachEngineProbe(this.engine);
+    }
     this.bindEngineCallbacks();
     this.currentClassId = p.classId;
     this.engine.start({ ...p });

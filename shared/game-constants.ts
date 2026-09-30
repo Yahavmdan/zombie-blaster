@@ -202,6 +202,7 @@ export const GAME_CONSTANTS = {
 
   // ─── Particles ──────────────────────────────────
   MAX_PARTICLES: 400, // Maximum particles alive at once (oldest removed when exceeded)
+  MAX_PENDING_VFX_EVENTS: 300, // Outbound VFX events kept while the socket is down (oldest dropped beyond this)
   PARTICLE_LIFETIME_MS: 600, // Default particle lifetime in milliseconds
   HIT_PARTICLE_COUNT: 6, // Number of particles spawned per hit
   HIT_PARTICLE_VELOCITY: 6, // Speed of hit particles flying outward

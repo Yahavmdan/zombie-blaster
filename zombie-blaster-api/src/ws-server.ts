@@ -3,8 +3,21 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { RoomManager } from './room-manager.js';
 import { Room } from './room.js';
+import {
+  isChatPayload,
+  isClientMessage,
+  isCreateRoomPayload,
+  isJoinRoomPayload,
+  isKickPlayerPayload,
+  isPlayerInputPayload,
+  isReconnectPayload,
+  isRevivePlayerPayload,
+  isRoomIdPayload,
+  isStateSnapshotPayload,
+  isZombieAttackPlayerPayload,
+  isZombieDamagePayload,
+} from './validation.js';
 import type {
-  ClientMessage,
   ServerMessage,
   ServerMessageType,
   CreateRoomPayload,
@@ -26,6 +39,10 @@ import type {
   ReconnectPayload,
   ReconnectResultPayload,
   HostMigratedPayload,
+  RemoteZombieDamagePayload,
+  RevivePlayerPayload,
+  ZombieAttackPlayerPayload,
+  ZombieDamagePayload,
 } from '../../shared/multiplayer.js';
 import type { CharacterState } from '../../shared/character.js';
 
@@ -116,22 +133,36 @@ export class GameWebSocketServer {
   }
 
   private handleMessage(clientId: string, raw: Buffer): void {
-    let msg: ClientMessage;
+    let parsed: unknown;
     try {
-      msg = JSON.parse(raw.toString()) as ClientMessage;
+      parsed = JSON.parse(raw.toString());
     } catch {
       this.sendError(clientId, 'INVALID_JSON', 'Could not parse message');
       return;
     }
 
-    const type: string = msg.type;
+    if (!isClientMessage(parsed)) {
+      this.sendError(clientId, 'INVALID_MESSAGE', 'Message must be an object with a string "type"');
+      return;
+    }
 
+    // A handler that throws must never break this socket's message loop.
+    try {
+      this.dispatch(clientId, parsed.type, parsed.payload);
+    } catch {
+      this.sendError(clientId, 'INTERNAL_ERROR', `Could not handle "${parsed.type}"`);
+    }
+  }
+
+  private dispatch(clientId: string, type: string, payload: unknown): void {
     switch (type) {
       case 'create-room':
-        this.handleCreateRoom(clientId, msg.payload as CreateRoomPayload);
+        if (!isCreateRoomPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handleCreateRoom(clientId, payload);
         break;
       case 'join-room':
-        this.handleJoinRoom(clientId, msg.payload as JoinRoomPayload);
+        if (!isJoinRoomPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handleJoinRoom(clientId, payload);
         break;
       case 'leave-room':
         this.handleLeaveRoom(clientId);
@@ -140,37 +171,48 @@ export class GameWebSocketServer {
         this.handleListRooms(clientId);
         break;
       case 'toggle-ready':
-        this.handleToggleReady(clientId, msg.payload as ToggleReadyPayload);
+        if (!isRoomIdPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handleToggleReady(clientId, payload);
         break;
       case 'start-game':
-        this.handleStartGame(clientId, msg.payload as StartGamePayload);
+        if (!isRoomIdPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handleStartGame(clientId, payload);
         break;
       case 'player-input':
-        this.handlePlayerInput(clientId, msg.payload as LobbyPlayerInputPayload);
+        if (!isPlayerInputPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handlePlayerInput(clientId, payload);
         break;
       case 'game-sync':
-        this.handleGameSync(clientId, msg.payload);
+        if (!isStateSnapshotPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handleGameSync(clientId, payload);
         break;
       case 'player-state':
-        this.handlePlayerState(clientId, msg.payload);
+        if (!isStateSnapshotPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handlePlayerState(clientId, payload);
         break;
       case 'kick-player':
-        this.handleKickPlayer(clientId, msg.payload as KickPlayerPayload);
+        if (!isKickPlayerPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handleKickPlayer(clientId, payload);
         break;
       case 'chat-message':
-        this.handleChatMessage(clientId, msg.payload as LobbyChatPayload);
+        if (!isChatPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handleChatMessage(clientId, payload);
         break;
       case 'zombie-damage':
-        this.handleZombieDamage(clientId, msg.payload);
+        if (!isZombieDamagePayload(payload)) return this.rejectPayload(clientId, type);
+        this.handleZombieDamage(clientId, payload);
         break;
       case 'zombie-attack-player':
-        this.handleZombieAttackPlayer(clientId, msg.payload);
+        if (!isZombieAttackPlayerPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handleZombieAttackPlayer(clientId, payload);
         break;
       case 'revive-player':
-        this.handleRevivePlayer(clientId, msg.payload);
+        if (!isRevivePlayerPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handleRevivePlayer(clientId, payload);
         break;
       case 'reconnect':
-        this.handleReconnect(clientId, msg.payload as ReconnectPayload);
+        if (!isReconnectPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handleReconnect(clientId, payload);
         break;
       case 'ping':
         this.send(clientId, 'pong' as ServerMessageType, {});
@@ -178,6 +220,10 @@ export class GameWebSocketServer {
       default:
         this.sendError(clientId, 'UNKNOWN_TYPE', `Unknown message type: ${type}`);
     }
+  }
+
+  private rejectPayload(clientId: string, type: string): void {
+    this.sendError(clientId, 'INVALID_PAYLOAD', `Invalid payload for "${type}"`);
   }
 
   private handleCreateRoom(clientId: string, payload: CreateRoomPayload): void {
@@ -383,8 +429,18 @@ export class GameWebSocketServer {
       return;
     }
 
-    room.removePlayer(payload.playerId);
+    if (!room.getPlayer(payload.playerId)) {
+      this.sendError(clientId, 'NOT_IN_ROOM', 'That player is not in this room');
+      return;
+    }
+
+    const wasInGame: boolean = room.status === ('in-game' as string);
+    // Leave through the RoomManager so the player-to-room mapping is released too.
+    this.roomManager.leaveRoom(payload.playerId);
     this.send(payload.playerId, 'player-kicked' as ServerMessageType, { roomId: room.id });
+    if (wasInGame) {
+      this.broadcastToRoom(room, 'player-left' as ServerMessageType, { playerId: payload.playerId });
+    }
     this.broadcastRoomUpdate(room);
     this.broadcastRoomListToLobby();
   }
@@ -405,7 +461,7 @@ export class GameWebSocketServer {
     this.broadcastToRoom(room, 'chat-message' as ServerMessageType, chatPayload);
   }
 
-  private handleZombieDamage(clientId: string, payload: unknown): void {
+  private handleZombieDamage(clientId: string, payload: Pick<ZombieDamagePayload, 'events'>): void {
     const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
     if (!room) return;
     if (room.hostId === clientId) return;
@@ -413,32 +469,29 @@ export class GameWebSocketServer {
     const hostId: string | null = room.hostId;
     if (!hostId) return;
 
-    const wrapped: { playerId: string; events: unknown } = {
+    const wrapped: RemoteZombieDamagePayload = {
       playerId: clientId,
-      events: (payload as { events: unknown }).events,
+      events: payload.events,
     };
     this.send(hostId, 'zombie-damage' as ServerMessageType, wrapped);
   }
 
-  private handleZombieAttackPlayer(clientId: string, payload: unknown): void {
+  private handleZombieAttackPlayer(clientId: string, payload: ZombieAttackPlayerPayload): void {
     const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
     if (!room) return;
     if (room.hostId !== clientId) return;
 
-    const typed: { targetPlayerId: string } = payload as { targetPlayerId: string };
-    const targetId: string = typed.targetPlayerId;
+    const targetId: string = payload.targetPlayerId;
     if (!room.getPlayer(targetId)) return;
 
     this.send(targetId, 'zombie-attack-player' as ServerMessageType, payload);
   }
 
-  private handleRevivePlayer(clientId: string, payload: unknown): void {
+  private handleRevivePlayer(clientId: string, payload: Pick<RevivePlayerPayload, 'targetPlayerId'>): void {
     const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
     if (!room) return;
 
-    const typed: { targetPlayerId: string; roomId: string } =
-      payload as { targetPlayerId: string; roomId: string };
-    const targetId: string = typed.targetPlayerId;
+    const targetId: string = payload.targetPlayerId;
     if (!room.getPlayer(targetId)) return;
 
     this.send(targetId, 'player-revived' as ServerMessageType, {

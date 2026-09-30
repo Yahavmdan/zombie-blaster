@@ -15,7 +15,13 @@
       "PowerShell(git status*)",
       "PowerShell(git diff*)",
       "PowerShell(git log*)",
-      "PowerShell(git show*)"
+      "PowerShell(git show*)",
+      "Bash(npm run e2e*)",
+      "Bash(npx playwright test*)",
+      "Bash(npx playwright show-report*)",
+      "Bash(npx tsc -p e2e/tsconfig.json*)",
+      "PowerShell(npm run e2e*)",
+      "PowerShell(npx playwright test*)"
     ]
   }
 }

@@ -54,6 +54,11 @@ export class WebSocketService {
     return this._currentStatus;
   }
 
+  /** True only while the socket can actually send (not while closing or reconnecting). */
+  get isOpen(): boolean {
+    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+  }
+
   setSessionInfo(info: SessionInfo | null): void {
     this.sessionInfo = info;
   }

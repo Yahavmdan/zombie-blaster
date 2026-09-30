@@ -21,6 +21,8 @@ import { InventoryComponent } from '../../components/inventory/inventory.compone
 import { QuickSlotsComponent } from '../../components/quick-slots/quick-slots.component';
 import { QuickSlotService } from '../../services/quick-slot.service';
 import { KeyBindingsService } from '../../services/key-bindings.service';
+import { attachGameControls } from '../../testing/e2e-hooks';
+import { E2eControls } from '../../testing/e2e-api';
 
 @Component({
   selector: 'app-game',
@@ -44,6 +46,7 @@ export class GameComponent implements OnInit, OnDestroy {
   private readonly gameCanvas: Signal<GameCanvasComponent | undefined> = viewChild(GameCanvasComponent);
 
   private syncTimer: ReturnType<typeof setInterval> | null = null;
+  private detachE2eControls: (() => void) | null = null;
   protected isMultiplayer: boolean = false;
   private isHost: boolean = false;
   private roomId: string = '';
@@ -110,6 +113,10 @@ export class GameComponent implements OnInit, OnDestroy {
 
     this.syncPlayerDisplay();
 
+    if (this.isDev) {
+      this.detachE2eControls = attachGameControls(this.buildE2eControls());
+    }
+
     if (this.isMultiplayer) {
       const player: CharacterState | null = this.gameState.player();
       if (player) {
@@ -140,6 +147,7 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.detachE2eControls?.();
     if (this.syncTimer) {
       clearInterval(this.syncTimer);
       this.syncTimer = null;
@@ -216,7 +224,7 @@ export class GameComponent implements OnInit, OnDestroy {
         .subscribe((msg: ServerMessage): void => {
           const payload: RemoteZombieDamagePayload =
             msg.payload as RemoteZombieDamagePayload;
-          this.gameCanvas()?.applyRemoteDamage(payload.playerId, payload.events);
+          this.gameCanvas()?.applyRemoteDamage(payload.events);
         });
     }
 
@@ -266,6 +274,10 @@ export class GameComponent implements OnInit, OnDestroy {
       const SYNC_INTERVAL_MS: number = 50;
       this.syncTimer = setInterval((): void => {
         if (!this.isMultiplayer) return;
+        // Don't drain the outbound queues while the socket is down: the snapshot
+        // would be dropped and its attacks, revives and effects lost. They go out
+        // with the first snapshot after reconnecting.
+        if (!this.ws.isOpen) return;
         const canvas: GameCanvasComponent | undefined = this.gameCanvas();
         if (!canvas) return;
 
@@ -544,7 +556,7 @@ export class GameComponent implements OnInit, OnDestroy {
     if (!activations || activations.length === 0) return;
     if (!this.isHost) return;
     for (const type of activations) {
-      this.gameCanvas()?.activateSpecialEffect(type);
+      this.gameCanvas()?.applyRemoteSpecialEffect(type);
     }
   }
 
@@ -701,10 +713,27 @@ export class GameComponent implements OnInit, OnDestroy {
       .subscribe((msg: ServerMessage): void => {
         const payload: RemoteZombieDamagePayload =
           msg.payload as RemoteZombieDamagePayload;
-        this.gameCanvas()?.applyRemoteDamage(payload.playerId, payload.events);
+        this.gameCanvas()?.applyRemoteDamage(payload.events);
       });
 
     console.log('[Game] This client has been promoted to host');
+  }
+
+  private buildE2eControls(): E2eControls {
+    return {
+      setGodMode: (enabled: boolean): void => this.gameState.godMode.set(enabled),
+      setFloor: (floor: number): void => this.setFloor(floor),
+      levelUp: (times: number): void => {
+        for (let i: number = 0; i < times; i++) {
+          this.devLevelUp();
+        }
+      },
+      maxAllSkills: (): void => this.devMaxAllSkills(),
+      maxOutPlayer: (): void => this.devMaxOutPlayer(),
+      selectClass: (classId: string): void => this.devSelectClass(classId as CharacterClass),
+      activateSpecialDrop: (type: string): void => this.activateSpecialDrop(type as SpecialDropType),
+      isGameOver: (): boolean => this.isGameOver(),
+    };
   }
 
   private syncPlayerDisplay(): void {

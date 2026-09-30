@@ -73,6 +73,10 @@ export class SpriteEffectSystem {
     return this.loaded;
   }
 
+  getActiveEffectIds(): string[] {
+    return this.activeEffects.map((e: ActiveSpriteEffect): string => e.configId);
+  }
+
   spawn(configId: string, x: number, y: number, flipX: boolean): void {
     const config: SpriteEffectConfig | undefined = EFFECT_CONFIGS[configId];
     const image: HTMLImageElement | undefined = this.images.get(configId);

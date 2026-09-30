@@ -486,6 +486,21 @@ export class GameEngine implements IGameEngine {
       this.levelUpNotification.life--;
       if (this.levelUpNotification.life <= 0) this.levelUpNotification = null;
     }
+
+    if (!isMultiplayer) {
+      this.discardOutboundEvents();
+    } else if (this.pendingVfxEvents.length > GAME_CONSTANTS.MAX_PENDING_VFX_EVENTS) {
+      this.pendingVfxEvents.splice(0, this.pendingVfxEvents.length - GAME_CONSTANTS.MAX_PENDING_VFX_EVENTS);
+    }
+  }
+
+  /** Single player has nobody to send to: drop what the systems queued for other players. */
+  discardOutboundEvents(): void {
+    this.pendingVfxEvents.length = 0;
+    this.pendingPullEvents.length = 0;
+    this.pendingRemoteAttacks.length = 0;
+    this.pendingReviveTargetIds.length = 0;
+    this.pendingSpecialDropActivations.length = 0;
   }
 
   private updateDownedState(): void {
@@ -558,11 +573,35 @@ export class GameEngine implements IGameEngine {
   }
 
   activateSpecialEffect(type: SpecialDropType): void {
-    const def: SpecialDropDefinition | undefined =
-      SPECIAL_DROP_DEFINITIONS.find(
-        (d: SpecialDropDefinition): boolean => d.type === type,
-      );
+    const def: SpecialDropDefinition | undefined = this.applySpecialEffectState(type);
     if (!def) return;
+
+    if (this.isMultiplayerClient) {
+      this.pendingSpecialDropActivations.push(type);
+    }
+
+    if (this.player) {
+      const cx: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+      const cy: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+      this.vfxSystem.spawnBuffActivationParticles(cx, cy, def.color);
+      this.vfxSystem.triggerScreenFlash(def.color, 8);
+      this.vfxSystem.triggerScreenShake(6, 4);
+    }
+  }
+
+  /**
+   * Host applying a special drop another player picked up. The picker already
+   * broadcast the pickup VFX at their own position, so only the state changes here.
+   */
+  applyRemoteSpecialEffect(type: SpecialDropType): void {
+    this.applySpecialEffectState(type);
+  }
+
+  private applySpecialEffectState(type: SpecialDropType): SpecialDropDefinition | undefined {
+    const def: SpecialDropDefinition | undefined = SPECIAL_DROP_DEFINITIONS.find(
+      (d: SpecialDropDefinition): boolean => d.type === type,
+    );
+    if (!def) return undefined;
 
     const existing: ActiveSpecialEffect | undefined = this.activeSpecialEffects.find(
       (eff: ActiveSpecialEffect): boolean => eff.type === type,
@@ -577,18 +616,7 @@ export class GameEngine implements IGameEngine {
         totalTicks: def.durationTicks,
       });
     }
-
-    if (this.isMultiplayerClient) {
-      this.pendingSpecialDropActivations.push(type);
-    }
-
-    if (this.player) {
-      const cx: number = this.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
-      const cy: number = this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
-      this.vfxSystem.spawnBuffActivationParticles(cx, cy, def.color);
-      this.vfxSystem.triggerScreenFlash(def.color, 8);
-      this.vfxSystem.triggerScreenShake(6, 4);
-    }
+    return def;
   }
 
   confirmPendingDrop(): void {
@@ -964,7 +992,7 @@ export class GameEngine implements IGameEngine {
     this.onPlayerUpdate?.(p);
   }
 
-  applyRemoteDamage(playerId: string, events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
+  applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
     if (!this.isMultiplayerHost) return;
 
     for (const evt of events) {
@@ -973,18 +1001,9 @@ export class GameEngine implements IGameEngine {
       );
       if (!z || z.isDead) continue;
 
+      // No hit VFX here: the attacker already broadcast its own
+      // hit-particles / damage-number / hit-mark events to every player.
       z.hp -= evt.damage;
-
-      const cx: number = z.x + z.instanceWidth / 2;
-      const cy: number = z.y + z.instanceHeight / 2;
-      this.vfxSystem.spawnHitParticles(cx, cy, '#6699cc');
-      this.vfxSystem.spawnDamageNumber(cx, z.y - 10, evt.damage, false, '#aaccff');
-      this.vfxSystem.spawnHitMark(cx, cy);
-      this.pendingVfxEvents.push(
-        { type: VfxEventType.HitParticles, playerId, x: cx, y: cy, color: '#6699cc' },
-        { type: VfxEventType.DamageNumber, playerId, x: cx, y: z.y - 10, value: evt.damage, isCrit: false, color: '#aaccff' },
-        { type: VfxEventType.HitMark, playerId, x: cx, y: cy },
-      );
 
       if (z.hp <= 0) {
         this.combatSystem.handleZombieDeath(z, false);

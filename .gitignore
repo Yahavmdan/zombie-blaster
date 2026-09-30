@@ -46,3 +46,7 @@ zombie-blaster-api/dist
 # System files
 .DS_Store
 Thumbs.db
+
+# E2E (Playwright)
+/e2e/.results
+/e2e/.report

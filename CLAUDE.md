@@ -26,7 +26,7 @@ Host-client. The host player's browser runs the full simulation (`GameEngine`: z
 | Server dev (watch) | `cd zombie-blaster-api && npm run dev` |
 | Server build | `cd zombie-blaster-api && npm run build` |
 
-No ESLint and no lint script. Prettier is installed, but most existing files aren't formatted yet. Run `npx prettier --write <file>` only on files you create, so diffs stay reviewable. Server has no tests.
+No ESLint and no lint script. Prettier is installed, but most existing files aren't formatted yet. Run `npx prettier --write <file>` only on files you create, so diffs stay reviewable. Server has no unit tests; `e2e/specs/protocol` covers it end to end.
 
 Changed `shared/`? It compiles into both apps: run the frontend build and the server build.
 
@@ -37,7 +37,8 @@ Changed `shared/`? It compiles into both apps: run the frontend build and the se
 - **Shared types live in `shared/`.** Never duplicate a type between client and server.
 - **Multiplayer VFX gate.** Every visual effect must be seen by all players. Push a `VfxEvent` to `pendingVfxEvents` alongside every local VFX call. Use the `multiplayer-vfx-sync` skill before touching any effect.
 - **Host authority.** Zombie state, damage and loot are decided by the host's simulation. Non-host clients own only their own player state; for the shared world they send requests, never results. The server validates every incoming message and never trusts its shape.
-- **Repro bugs with tests first.** When asked to repro, change only tests (a failing test that documents the bug). Fix production code only after the repro is agreed.
+- **Every gameplay feature gets E2E coverage.** New or changed mechanics, skills, VFX, dialogs, sync or server messages ship with a spec in `e2e/` in the same change; anything other players should see gets an online test proving they see it. Use the `game-e2e` skill. Details: `.claude/rules/e2e.md`.
+- **Repro bugs with tests first.** When asked to repro, change only tests (a failing test that documents the bug; for gameplay, an `e2e/` spec tagged `@bug` and pinned with `test.fail`). Fix production code only after the repro is agreed.
 - **Components use `templateUrl` + `styleUrl`**, with co-located `.component.html` and `.component.css`. No inline `template`/`styles`.
 - **No new `console.*`** in production code. Existing uses are legacy; don't add more.
 - **Rules beat nearby code.** If surrounding code violates a rule, follow the rule, not the local pattern. Before finishing, re-check edited files against these rules.

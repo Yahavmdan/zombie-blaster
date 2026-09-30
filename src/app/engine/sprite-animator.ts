@@ -175,6 +175,10 @@ export class SpriteAnimator {
     return this.loaded;
   }
 
+  getState(): PlayerAnimState {
+    return this.currentState;
+  }
+
   setState(newState: PlayerAnimState): void {
     if (newState === this.currentState) return;
     this.currentState = newState;
