@@ -33,10 +33,6 @@ export function formatKeyName(key: string): string {
 export class KeyBindingsService {
   readonly bindings: WritableSignal<KeyBindings> = signal<KeyBindings>(this.copyDefaults());
 
-  loadFromSave(saved: KeyBindings): void {
-    this.bindings.set(this.mergeWithDefaults(saved));
-  }
-
   rebind(action: GameAction, key: string): void {
     const normalizedKey: string = key.toLowerCase();
     this.bindings.update((b: KeyBindings): KeyBindings => {
@@ -92,16 +88,5 @@ export class KeyBindingsService {
       copy[action] = [...DEFAULT_KEY_BINDINGS[action]];
     }
     return copy;
-  }
-
-  private mergeWithDefaults(stored: Partial<KeyBindings>): KeyBindings {
-    const merged: KeyBindings = this.copyDefaults();
-    const actions: GameAction[] = Object.keys(DEFAULT_KEY_BINDINGS) as GameAction[];
-    for (const action of actions) {
-      if (stored[action] && Array.isArray(stored[action]) && stored[action].length > 0) {
-        merged[action] = [...stored[action]];
-      }
-    }
-    return merged;
   }
 }
