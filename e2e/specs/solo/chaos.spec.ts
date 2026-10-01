@@ -71,11 +71,21 @@ test.describe('chaos: try to break the game', { tag: ['@solo', '@chaos'] }, (): 
     await player.page.keyboard.press('Escape');
     await player.page.keyboard.press('Escape');
     const before: E2eSnapshot = await player.probe.state();
-    await player.moveLeft(400);
+    // Walk toward open space: chaos can leave the player pressed against a wall.
+    if (before.player!.x > 640) await player.moveLeft(400);
+    else await player.moveRight(400);
     const after: E2eSnapshot = await player.probe.state();
     expect(
       Math.abs(after.player!.x - before.player!.x),
-      'controls still respond after the storm',
+      `controls still respond after the storm: ${JSON.stringify({
+        x: Math.round(before.player!.x),
+        attacking: after.player!.isAttacking,
+        climbing: after.player!.isClimbing,
+        grounded: after.player!.isGrounded,
+        down: after.player!.isDown,
+        vx: after.player!.velocityX,
+        hp: after.player!.hp,
+      })}`,
     ).toBeGreaterThan(5);
   });
 

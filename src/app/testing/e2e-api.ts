@@ -28,6 +28,8 @@ export interface E2ePlayerView {
   isDoubleJumping: boolean;
   isDead: boolean;
   isDown: boolean;
+  /** Ticks left before a downed player dies. */
+  downTimer: number;
   unallocatedStatPoints: number;
   unallocatedSkillPoints: number;
   xp: number;
@@ -57,6 +59,8 @@ export interface E2eZombieView {
   facing: number;
   /** True during the attack animation (the hit lands mid-animation). */
   isAttacking: boolean;
+  /** True while telegraphing a melee swing (wind-up before the attack animation). */
+  windingUp: boolean;
   /** Ticks until this zombie can start its next attack. */
   attackCooldown: number;
 }
@@ -67,12 +71,34 @@ export interface E2eCorpseView {
   y: number;
   isGrounded: boolean;
   frozen: boolean;
+  /** Part of the exit stack. */
+  anchored: boolean;
+  /** Walkable foothold on top of this corpse. */
+  footX: number;
+  footWidth: number;
+  footY: number;
   facing: number;
   /** Sprite animation this client renders for the corpse (`dead` once it falls). */
   animState: string | null;
   frame: number | null;
   /** Last frame of the death animation = fully lying down. */
   lastFrame: number;
+}
+
+export interface E2eExitStack {
+  columnLeft: number;
+  columnRight: number;
+  centerX: number;
+  baseY: number;
+  topY: number;
+  reachY: number;
+  step: number;
+  steps: number;
+  stepsNeeded: number;
+  progress: number;
+  reachable: boolean;
+  /** The local player is steadied by the beam (no knockback on or between stack steps). */
+  playerSteadied: boolean;
 }
 
 export interface E2eDropView {
@@ -156,6 +182,8 @@ export interface E2eSnapshot {
   worldDrops: number;
   /** Floor exit: stand on it (grounded) to finish the floor. */
   exit: { x: number; y: number; width: number };
+  /** Corpse stack under the exit (zombies slain in the exit beam). */
+  exitStack: E2eExitStack;
   drops: E2eDropView[];
   /** Ticks until the potion keys work again. */
   potionCooldownTicks: number;
@@ -184,6 +212,8 @@ export interface E2eEngineControls {
   /** Moves the local player (client-owned state, safe in multiplayer). */
   teleport(x: number, y: number): void;
   peekPendingVfx(): E2eVfxEventView[];
+  /** Setup only: stack N corpses in the exit beam (as if slain there). */
+  buildExitStack(steps: number): void;
 }
 
 export interface ZbE2eApi {

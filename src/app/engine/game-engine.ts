@@ -8,6 +8,7 @@ import {
   SkillType,
   VfxEvent,
   VfxEventType,
+  isZombieWindingUp,
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
@@ -36,6 +37,7 @@ import {
   HitMark,
   IGameEngine,
   DashPhaseState,
+  ExitStackState,
   LevelUpNotification,
   Platform,
   PlayerProjectile,
@@ -186,6 +188,11 @@ export class GameEngine implements IGameEngine {
   private previousZombieStates: Map<string, boolean> = new Map<string, boolean>();
   private previousZombieHp: Map<string, number> = new Map<string, number>();
 
+  private hitStopTicks: number = 0;
+  private menuOpen: boolean = false;
+  private menuOpenTicks: number = 0;
+  private hitStopCooldown: number = 0;
+
   private readonly physicsSystem: PhysicsSystem;
   private readonly vfxSystem: VfxSystem;
   private readonly dropSystem: DropSystem;
@@ -239,18 +246,102 @@ export class GameEngine implements IGameEngine {
     };
   }
 
+  /**
+   * The exit hangs over one of the open corridors (cycling by floor) so its beam reaches the
+   * ground, where the zombies are: players slay them under the exit and climb the dead.
+   */
   repositionExitPlatform(): void {
-    const margin: number = 100;
     const platWidth: number = GAME_CONSTANTS.EXIT_PLATFORM_WIDTH;
-    const range: number = GAME_CONSTANTS.CANVAS_WIDTH - platWidth - margin * 2;
-    const t: number = Math.abs(Math.sin(this.floor * 127.1 + 311.7));
-    const exitX: number = margin + Math.floor(t * range);
+    const corridorCenters: number[] = [1160, 750, 385];
+    const center: number = corridorCenters[(this.floor - 1) % corridorCenters.length];
+    const centered: number = center - platWidth / 2;
+    const exitX: number = Math.max(20, Math.min(GAME_CONSTANTS.CANVAS_WIDTH - platWidth - 20, centered));
 
     this.exitPlatform.x = exitX;
 
     if (this.exitRope) {
       this.exitRope.x = exitX + platWidth / 2;
     }
+  }
+
+  /** Height each stacked corpse adds on the current floor. */
+  /** Height one beam kill adds. Co-op teams kill (and spawn) faster, so each kill adds less. */
+  exitStackStep(): number {
+    const players: number = 1 + this.remotePlayers.length;
+    const soloStep: number =
+      GAME_CONSTANTS.EXIT_STACK_STEP_PX - (this.floor - 1) * GAME_CONSTANTS.EXIT_STACK_STEP_DECAY_PER_FLOOR;
+    return Math.max(GAME_CONSTANTS.EXIT_STACK_STEP_MIN_PX, soloStep / players);
+  }
+
+  getExitStack(): ExitStackState {
+    const exit: Platform = this.exitPlatform;
+    const centerX: number = exit.x + exit.width / 2;
+    const baseY: number = GAME_CONSTANTS.GROUND_Y;
+    const halfBeam: number = GAME_CONSTANTS.EXIT_BEAM_WIDTH / 2;
+    const stacked: ZombieCorpse[] = this.zombieCorpses.filter((c: ZombieCorpse): boolean => c.anchored && c.isGrounded);
+    const topY: number = stacked.length > 0
+      ? Math.min(...stacked.map((c: ZombieCorpse): number => c.y + c.height - c.platformHeight))
+      : baseY;
+    const reachY: number = exit.y + GAME_CONSTANTS.EXIT_REACH_PX;
+    const step: number = this.exitStackStep();
+    const needed: number = Math.max(1, baseY - reachY);
+    return {
+      columnLeft: centerX - halfBeam,
+      columnRight: centerX + halfBeam,
+      centerX,
+      baseY,
+      topY,
+      reachY,
+      step,
+      steps: stacked.length,
+      stepsNeeded: Math.ceil(needed / step),
+      progress: Math.max(0, Math.min(1, (baseY - topY) / needed)),
+      reachable: topY <= reachY,
+    };
+  }
+
+  /** Called by the canvas whenever a menu opens or closes (menus don't pause the game). */
+  setMenuOpen(open: boolean): void {
+    this.menuOpen = open;
+    if (!open) this.menuOpenTicks = 0;
+  }
+
+  /** The beam steadies climbers: no knockback while on the stack or jumping between its steps. */
+  isOnExitStack(): boolean {
+    const p: CharacterState | null = this.player;
+    if (!p) return false;
+    const stack: ExitStackState = this.getExitStack();
+    if (stack.steps === 0) return false;
+    const feet: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT;
+    const centerX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    return feet < stack.baseY - 2 && centerX >= stack.columnLeft && centerX <= stack.columnRight;
+  }
+
+  incomingDamageScale(): number {
+    return this.menuOpen && this.menuOpenTicks <= GAME_CONSTANTS.MENU_SHIELD_TICKS
+      ? GAME_CONSTANTS.MENU_SHIELD_DAMAGE_MULT
+      : 1;
+  }
+
+  requestHitStop(ticks: number): void {
+    // Freezing the host's simulation would stutter every other player: solo only.
+    if (this.isMultiplayerHost || this.isMultiplayerClient) return;
+    if (this.hitStopCooldown > 0) return;
+    this.hitStopTicks = Math.max(this.hitStopTicks, ticks);
+    this.hitStopCooldown = ticks + GAME_CONSTANTS.HITSTOP_COOLDOWN_TICKS;
+  }
+
+  /** Soul wisp where a corpse joins the exit stack (local + broadcast). */
+  spawnExitStackEffect(x: number, y: number): void {
+    const color: string = '#44ddff';
+    this.vfxSystem.spawnBuffActivationParticles(x, y, color);
+    this.pendingVfxEvents.push({
+      type: VfxEventType.BuffActivation,
+      playerId: this.player?.id ?? '',
+      x,
+      y,
+      color,
+    });
   }
 
   private initRopes(): void {
@@ -407,6 +498,13 @@ export class GameEngine implements IGameEngine {
   private update(): void {
     if (!this.player) return;
 
+    if (this.hitStopCooldown > 0) this.hitStopCooldown--;
+    if (this.menuOpen) this.menuOpenTicks++;
+    if (this.hitStopTicks > 0) {
+      this.hitStopTicks--;
+      return;
+    }
+
     this.renderSystem.updatePlayerAnimState();
     this.spriteAnimator.tick();
 
@@ -507,7 +605,11 @@ export class GameEngine implements IGameEngine {
     const p: CharacterState | null = this.player;
     if (!p || !p.isDown) return;
 
-    p.downTimer--;
+    // A teammate channeling a revive on us pauses the bleed-out.
+    const beingRevived: boolean = this.remotePlayers.some(
+      (rp: CharacterState): boolean => rp.revivingPlayerId === p.id && !rp.isDown && !rp.isDead,
+    );
+    if (!beingRevived) p.downTimer--;
     p.velocityX = 0;
     p.velocityY = 0;
 
@@ -526,6 +628,7 @@ export class GameEngine implements IGameEngine {
     const isMultiplayer: boolean = this.isMultiplayerHost || this.isMultiplayerClient;
     if (!isMultiplayer) return;
 
+    p.revivingPlayerId = this.keys.revive ? this.reviveTargetId : null;
     if (!this.keys.revive) {
       if (this.reviveTargetId !== null) {
         this.reviveTargetId = null;
@@ -859,6 +962,7 @@ export class GameEngine implements IGameEngine {
     const myId: string = this.player?.id ?? '';
     for (const evt of events) {
       if (evt.playerId === myId) continue;
+      const particlesBefore: number = this.particles.length;
 
       switch (evt.type) {
         case VfxEventType.SkillAnimation:
@@ -906,6 +1010,10 @@ export class GameEngine implements IGameEngine {
           this.vfxSystem.spawnBuffActivationParticles(evt.x, evt.y, evt.color!);
           break;
       }
+      // Other players' effects render a bit softer so your own read first.
+      for (let i: number = particlesBefore; i < this.particles.length; i++) {
+        this.particles[i].alphaScale = GAME_CONSTANTS.ALLY_VFX_ALPHA;
+      }
     }
   }
 
@@ -915,16 +1023,19 @@ export class GameEngine implements IGameEngine {
     if (this.godMode) return;
     if (this.invincibilityFrames > 0) return;
 
+    damage = Math.max(1, Math.round(damage * this.incomingDamageScale()));
     p.hp -= damage;
     this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
 
     this.combatSystem.interruptReviveChannel();
 
-    p.velocityX = knockbackDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
-    p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
-    p.isGrounded = false;
-    if (p.isClimbing) {
-      p.isClimbing = false;
+    if (!this.isOnExitStack()) {
+      p.velocityX = knockbackDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
+      p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
+      p.isGrounded = false;
+      if (p.isClimbing) {
+        p.isClimbing = false;
+      }
     }
 
     this.vfxSystem.spawnHitParticles(
@@ -992,8 +1103,13 @@ export class GameEngine implements IGameEngine {
     this.onPlayerUpdate?.(p);
   }
 
-  applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
+  applyRemoteDamage(
+    events: Array<{ zombieId: string; damage: number; killed: boolean }>,
+    attackerId: string,
+  ): void {
     if (!this.isMultiplayerHost) return;
+    const attacker: CharacterState | null =
+      this.remotePlayers.find((rp: CharacterState): boolean => rp.id === attackerId) ?? null;
 
     for (const evt of events) {
       const z: ZombieState | undefined = this.zombies.find(
@@ -1006,7 +1122,7 @@ export class GameEngine implements IGameEngine {
       z.hp -= evt.damage;
 
       if (z.hp <= 0) {
-        this.combatSystem.handleZombieDeath(z, false);
+        this.combatSystem.handleZombieDeath(z, false, attacker);
       }
     }
 
@@ -1202,6 +1318,7 @@ export class GameEngine implements IGameEngine {
 
   private deriveZombieAnimState(z: ZombieState): ZombieAnimState {
     if (z.isDead) return ZombieAnimState.Dead;
+    if (isZombieWindingUp(z)) return ZombieAnimState.Idle;
     if (z.attackAnimTimer > 0) return ZombieAnimState.Attack;
     if (z.knockbackFrames > 0) return ZombieAnimState.Hurt;
     if (Math.abs(z.velocityX) > 0.1) return ZombieAnimState.Walk;

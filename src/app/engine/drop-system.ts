@@ -18,6 +18,7 @@ import {
 import { IGameEngine } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
+import { corpseSurface, CorpseSurface } from './corpse-surface';
 
 export class DropSystem {
   constructor(
@@ -169,12 +170,12 @@ export class DropSystem {
         }
 
         if (!drop.isGrounded) {
-          const widthRatio: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
           for (const corpse of this.e.zombieCorpses) {
             if (!corpse.isGrounded) continue;
-            const effectiveX: number = corpse.x + corpse.width * (1 - widthRatio) / 2;
-            const effectiveW: number = corpse.width * widthRatio;
-            const surfaceY: number = corpse.y + corpse.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+            const corpseFoothold: CorpseSurface = corpseSurface(corpse);
+            const effectiveX: number = corpseFoothold.x;
+            const effectiveW: number = corpseFoothold.width;
+            const surfaceY: number = corpseFoothold.y;
             const dropBottom: number = drop.y + size;
             const prevBottom: number = dropBottom - drop.velocityY;
             if (

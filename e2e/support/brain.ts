@@ -1,6 +1,7 @@
 import { Locator } from '@playwright/test';
 import { GamePlayer, KEYS } from './game-player';
 import {
+  E2eCorpseView,
   E2eDropView,
   E2eRemotePlayerView,
   E2eSkillView,
@@ -8,6 +9,7 @@ import {
   E2eZombieView,
 } from './probe';
 import { WORLD } from './invariants';
+import { LevelPlatform, currentPlatform, platformUnder, stepToward } from './navigation';
 
 /**
  * A player that tries to play well, through real key presses only.
@@ -26,6 +28,13 @@ export interface BrainOptions {
   deadline: number;
   /** Buy potions from the shop when calm (default true). */
   shop?: boolean;
+  /**
+   * 'exit' (default): hold the platform under the exit, slay zombies in the beam to build the
+   * corpse stack, then climb it to the next floor. 'fight': just fight wherever zombies are.
+   */
+  goal?: 'exit' | 'fight';
+  /** Stop early when this returns true. */
+  stopWhen?: (s: E2eSnapshot) => boolean;
   log?: (message: string) => void;
 }
 
@@ -63,6 +72,7 @@ const RANGED_COMFORT_PX: number = 110;
 const HP_POTION_ID: string = 'hp-potion-1';
 const MP_POTION_ID: string = 'mp-potion-1';
 const HP_POTION_PRICE: number = 30;
+const MP_POTION_PRICE: number = 20;
 const DRINK_HP_BELOW: number = 0.55;
 /** Assumed damage per adjacent zombie hit, for "can the next burst kill me?" (floor-1 zombies hit 24–85). */
 const BURST_PER_ZOMBIE: number = 70;
@@ -70,6 +80,8 @@ const FLEE_HP_BELOW: number = 0.3;
 /** Stop fleeing once back above this (hysteresis, so it does not flip every tick). */
 const RESUME_HP_ABOVE: number = 0.45;
 const POTION_STOCK_TARGET: number = 10;
+/** Classes with MP-costing skills keep this many MP potions (the game has no MP regen). */
+const MP_POTION_STOCK_TARGET: number = 5;
 /** Skill-point order by id keyword: auto-potion first (drinks for you), then damage, then buffs. */
 const SKILL_PRIORITY: string[] = [
   'power-strike',
@@ -89,6 +101,16 @@ const SKILL_PRIORITY: string[] = [
 ];
 const PASSIVE_KEYWORDS: string[] = ['auto-potion', 'hp-recovery', 'mastery'];
 const DAMAGE_KEYWORDS: string[] = ['power-strike', 'lucky-seven', 'slash-blast', 'dragon-roar'];
+/** Highest foothold one jump reaches (single jump ~116 px). */
+const CLIMB_REACH_PX: number = 105;
+
+interface Foothold {
+  /** Center x. */
+  x: number;
+  y: number;
+  width: number;
+}
+
 const RANGED_CLASSES: Set<string> = new Set<string>(['assassin']);
 
 export function newBrainStats(): BrainStats {
@@ -132,6 +154,8 @@ export class Brain {
   private retreating: boolean = false;
   private readonly everSeen: Set<string> = new Set<string>();
   private lastDrinkAt: number = 0;
+  private climbing: boolean = false;
+  private lastClimbLogAt: number = 0;
 
   constructor(
     private readonly me: GamePlayer,
@@ -143,6 +167,7 @@ export class Brain {
       if (await this.me.probe.isGameOver()) break;
       const s: E2eSnapshot = await this.me.probe.state();
       this.countKills(s);
+      if (this.options.stopWhen?.(s)) break;
       await this.decide(s);
       await this.me.wait(TICK_MS);
     }
@@ -211,12 +236,16 @@ export class Brain {
     }
 
     if (await this.reviveIfSafe(s, threats)) return;
-    if (await this.escapeSurround(s, near)) return;
+    // A finished stack is the way out: the beam steadies climbers, so don't run from the crowd.
+    const climbOut: boolean = (this.options.goal ?? 'exit') === 'exit' && s.exitStack.reachable;
+    if (!climbOut && (await this.escapeSurround(s, near))) return;
 
     // Menus don't pause the game: only open them with nobody in striking distance.
     const calm: boolean = threats.length === 0 || threats[0].dist > 200;
     if (calm && (await this.spendPoints(s))) return;
     if (calm && (await this.shop(s, false))) return;
+
+    if ((this.options.goal ?? 'exit') === 'exit' && (await this.pursueExit(s, threats))) return;
 
     if (threats.length > 0 && threats[0].dist < 420) {
       await this.fight(s, threats);
@@ -371,6 +400,199 @@ export class Brain {
     await this.setMove(mate.x > p.x ? 1 : -1);
   }
 
+  // ── Exit (corpse stack in the beam) ──────────────────────
+
+  /**
+   * Go to the platform under the exit and fight there so kills land in the beam; once the
+   * stack reaches the target line, climb it. Returns false when fighting elsewhere is better.
+   */
+  private async pursueExit(s: E2eSnapshot, threats: Threat[]): Promise<boolean> {
+    const p: NonNullable<E2eSnapshot['player']> = s.player!;
+    const stack: E2eSnapshot['exitStack'] = s.exitStack;
+    const base: LevelPlatform = platformUnder(stack.centerX, stack.baseY);
+    const here: LevelPlatform | null = currentPlatform(s);
+    const cx: number = p.x + WORLD.playerWidth / 2;
+    const closeThreat: Threat | undefined = threats.find(
+      (t: Threat): boolean => t.sameLevel && Math.abs(t.dx) < 70,
+    );
+    const inColumn: boolean = cx > stack.columnLeft + 6 && cx < stack.columnRight - 6;
+
+    if (stack.reachable) {
+      if (!this.climbing) {
+        this.climbing = true;
+        this.log(`stack ready (${stack.steps} steps) — climbing to the exit`);
+        this.log(
+          `footholds: ${s.corpseViews
+            .filter((c: E2eCorpseView): boolean => c.anchored)
+            .map((c: E2eCorpseView): string => `[${Math.round(c.footX)}+${Math.round(c.footWidth)} @${Math.round(c.footY)}${c.isGrounded ? '' : ' air'}]`)
+            .join(' ')}`,
+        );
+      }
+      // Don't fight the crowd at the base: fighting and aligning pull opposite ways. Jumping onto
+      // the stack is the escape (the beam steadies climbers).
+      await this.climbStack(s, cx);
+      return true;
+    }
+    this.climbing = false;
+
+    if (closeThreat && !inColumn) {
+      // Cut through a zombie that blocks the way to the beam; walk away from ones behind
+      // (handing over to fight() kited the bot away from the beam for minutes).
+      const blocking: boolean = Math.sign(closeThreat.dx) === Math.sign(stack.centerX - cx);
+      if (blocking) {
+        await this.setMove(0);
+        const want: string = closeThreat.dx >= 0 ? 'right' : 'left';
+        if (p.facing !== want) await this.me.face(want === 'left' ? 'left' : 'right');
+        await this.setAttack(true);
+        this.stats.attacks++;
+        await this.castSkills(s, threats, true);
+        return true;
+      }
+    }
+    if (!here || here.name !== base.name) {
+      await this.setAttack(false);
+      this.move = 0;
+      await stepToward(this.me, s, base, stack.centerX);
+      return true;
+    }
+    // On the base: every kill made from inside the light joins the stack (and so does every
+    // zombie that dies in it). Hold the column and fight whatever comes; ranged classes shoot far.
+    const sameLevel: Threat[] = threats.filter((t: Threat): boolean => t.sameLevel);
+    const leftCount: number = sameLevel.filter(
+      (t: Threat): boolean => t.z.x + t.z.width / 2 < stack.centerX,
+    ).length;
+    const hordeFromLeft: boolean = leftCount >= sameLevel.length - leftCount;
+    // Melee: the far wall facing the horde, so zombies walk deep into the light before dying.
+    const anchorX: number = RANGED_CLASSES.has(p.classId)
+      ? stack.centerX
+      : hordeFromLeft
+        ? stack.columnRight - 22
+        : stack.columnLeft + 22;
+    const reach: number = RANGED_CLASSES.has(p.classId) ? 380 : 160;
+    const target: Threat | undefined = inColumn
+      ? sameLevel.find((t: Threat): boolean => Math.abs(t.dx) < reach)
+      : sameLevel.find((t: Threat): boolean => Math.abs(t.dx) < 45);
+    if (target) {
+      await this.setMove(0);
+      const want: string = target.dx >= 0 ? 'right' : 'left';
+      if (p.facing !== want) await this.me.face(want === 'left' ? 'left' : 'right');
+      await this.setAttack(true);
+      this.stats.attacks++;
+      await this.castSkills(s, threats, true);
+      return true;
+    }
+    await this.setAttack(false);
+    const dx: number = anchorX - cx;
+    if (Math.abs(dx) > 10) {
+      await this.setMove(dx > 0 ? 1 : -1);
+      return true;
+    }
+    await this.setMove(0);
+    const facing: string = hordeFromLeft ? 'left' : 'right';
+    if (p.facing !== facing) await this.me.face(facing === 'left' ? 'left' : 'right');
+    return true;
+  }
+
+  /**
+   * Climb the corpse stack like stairs: aim for the highest foothold (a stack step or the exit
+   * itself) that one jump can reach, jump toward it and steer in the air. From the ground, walk
+   * to the lowest step first.
+   */
+  private async climbStack(s: E2eSnapshot, cx: number): Promise<void> {
+    const p: NonNullable<E2eSnapshot['player']> = s.player!;
+    await this.setAttack(false);
+    const feet: number = p.y + WORLD.playerHeight;
+    const holds: Foothold[] = s.corpseViews
+      .filter((c: E2eCorpseView): boolean => c.anchored && c.isGrounded)
+      .map(
+        (c: E2eCorpseView): Foothold => ({ x: c.footX + c.footWidth / 2, y: c.footY, width: c.footWidth }),
+      );
+    const exitHold: Foothold = { x: s.exit.x + s.exit.width / 2, y: s.exit.y, width: s.exit.width };
+    // Footholds are one-way: from under one, a straight jump lands on it if the body overlaps it.
+    const overlaps: (h: Foothold) => boolean = (h: Foothold): boolean =>
+      Math.abs(h.x - cx) < (h.width + WORLD.playerWidth) / 2 - 6;
+    const inReach: Foothold[] = [...holds, exitHold]
+      .filter((h: Foothold): boolean => h.y < feet - 4 && feet - h.y <= CLIMB_REACH_PX)
+      .sort((a: Foothold, b: Foothold): number => a.y - b.y);
+    // Prefer the highest foothold already overhead: no walking on narrow steps. On the zigzag the
+    // same-side step two up always overlaps, so walking is only needed from the ground.
+    const overhead: Foothold | undefined = inReach.find(overlaps);
+    const onStack: boolean = s.exitStack.playerSteadied && p.isGrounded;
+    const target: Foothold | undefined = overhead ?? (onStack ? undefined : inReach[0]);
+
+    if (Date.now() - this.lastClimbLogAt > 1_000) {
+      this.lastClimbLogAt = Date.now();
+      this.log(
+        `climb: x=${Math.round(cx)} vy=${p.velocityY.toFixed(1)} feet=${Math.round(feet)} aim=${target ? `(${Math.round(target.x)},${Math.round(target.y)})${overhead ? ' overhead' : ''}` : 'none'} grounded=${p.isGrounded}`,
+      );
+    }
+
+    await this.setMove(0);
+    if (p.isClimbing) {
+      // Ended up on a rope: direction + jump lets go, toward the stack.
+      const toStack: string = s.exitStack.centerX > cx ? KEYS.right : KEYS.left;
+      await this.me.hold(toStack);
+      await this.me.press(KEYS.jump, 80);
+      await this.me.release(toStack);
+      return;
+    }
+    if (!p.isGrounded) return;
+    if (overhead) {
+      await this.fullJump();
+      return;
+    }
+    if (target) {
+      await this.walkTo(target.x);
+      return;
+    }
+    // On a step with nothing overhead: step toward the beam center, where the zigzag overlaps.
+    if (Math.abs(s.exitStack.centerX - cx) > 6) await this.walkTo(s.exitStack.centerX);
+    else await this.fullJump();
+  }
+
+
+  /**
+   * Hold jump until the apex. A fixed-length press gets cut short by variable jump height when
+   * the browser drops frames (fewer game ticks pass per real millisecond).
+   */
+  private async fullJump(): Promise<void> {
+    await this.me.hold(KEYS.jump);
+    const until: number = Date.now() + 1_500;
+    let tookOff: boolean = false;
+    while (Date.now() < until) {
+      await this.me.wait(20);
+      const vy: number = (await this.me.probe.state()).player?.velocityY ?? 0;
+      if (vy < 0) tookOff = true;
+      else if (tookOff) break;
+    }
+    await this.me.release(KEYS.jump);
+  }
+
+  /**
+   * Closed-loop walk to a center x: hold the key, watch the position, and let go early enough for
+   * the slide. Fixed-length taps overshoot back and forth forever once the player is fast (maxed
+   * stats or super speed).
+   */
+  private async walkTo(targetX: number): Promise<void> {
+    const key: string = targetX > this.centerX(await this.me.probe.state()) ? KEYS.right : KEYS.left;
+    const dir: number = key === KEYS.right ? 1 : -1;
+    await this.me.hold(key);
+    const until: number = Date.now() + 1_200;
+    while (Date.now() < until) {
+      const s: E2eSnapshot = await this.me.probe.state();
+      const remaining: number = (targetX - this.centerX(s)) * dir;
+      const slide: number = Math.abs(s.player?.velocityX ?? 0) * 4;
+      if (remaining <= slide + 4) break;
+      await this.me.wait(10);
+    }
+    await this.me.release(key);
+    await this.me.wait(120);
+  }
+
+  private centerX(s: E2eSnapshot): number {
+    return s.player ? s.player.x + WORLD.playerWidth / 2 : 0;
+  }
+
   // ── Combat ───────────────────────────────────────────────
 
   private async fight(s: E2eSnapshot, threats: Threat[]): Promise<void> {
@@ -420,7 +642,12 @@ export class Brain {
     await this.castSkills(s, threats);
   }
 
-  private async castSkills(s: E2eSnapshot, threats: Threat[]): Promise<void> {
+  /** holdPosition: skip movement skills (dash) that would carry the fight out of the beam. */
+  private async castSkills(
+    s: E2eSnapshot,
+    threats: Threat[],
+    holdPosition: boolean = false,
+  ): Promise<void> {
     const p: NonNullable<E2eSnapshot['player']> = s.player!;
     const close: number = threats.filter(
       (t: Threat): boolean => t.sameLevel && Math.abs(t.dx) < 220,
@@ -433,7 +660,7 @@ export class Brain {
         (skill.type === 'buff' && close >= 1) ||
         (skill.mechanic === 'pull' && close >= 3) ||
         (skill.mechanic === 'damage' && close >= 1) ||
-        (skill.mechanic === 'dash' && close >= 2);
+        (skill.mechanic === 'dash' && close >= 2 && !holdPosition);
       if (!worthIt || p.mp < 8) continue;
       await this.me.castSkill(skill.slot);
       this.stats.skillCasts++;
@@ -558,24 +785,43 @@ export class Brain {
       Math.floor(p.gold / HP_POTION_PRICE),
       POTION_STOCK_TARGET - hpPotions,
     );
-    if (affordable <= 0) return false;
+    const mpWanted: number =
+      emergency || s.usableSkills.length === 0
+        ? 0
+        : Math.min(
+            Math.floor((p.gold - Math.max(0, affordable) * HP_POTION_PRICE) / MP_POTION_PRICE),
+            MP_POTION_STOCK_TARGET - (p.potions[MP_POTION_ID] ?? 0),
+          );
+    if (affordable <= 0 && mpWanted <= 0) return false;
     this.lastShopAt = Date.now();
     await this.stop();
     let bought: number = 0;
-    await this.withMenu(KEYS.openShop, 'app-shop', async (): Promise<void> => {
-      const buy: Locator = this.me.page.getByTestId(`shop-item-button-buy-shop-${HP_POTION_ID}`);
-      for (let i: number = 0; i < affordable; i++) {
+    let boughtMp: number = 0;
+    const buyMany: (potionId: string, count: number) => Promise<number> = async (
+      potionId: string,
+      count: number,
+    ): Promise<number> => {
+      const buy: Locator = this.me.page.getByTestId(`shop-item-button-buy-shop-${potionId}`);
+      let n: number = 0;
+      for (let i: number = 0; i < count; i++) {
         const ok: boolean = await buy.click({ timeout: 1_500 }).then(
           (): boolean => true,
           (): boolean => false,
         );
         if (!ok) break;
-        bought++;
+        n++;
       }
+      return n;
+    };
+    await this.withMenu(KEYS.openShop, 'app-shop', async (): Promise<void> => {
+      bought = await buyMany(HP_POTION_ID, Math.max(0, affordable));
+      boughtMp = await buyMany(MP_POTION_ID, Math.max(0, mpWanted));
     });
-    this.stats.potionsBought += bought;
-    this.log(`bought ${bought} HP potion(s)${emergency ? ' (emergency)' : ''}`);
-    return bought > 0;
+    this.stats.potionsBought += bought + boughtMp;
+    this.log(
+      `bought ${bought} HP and ${boughtMp} MP potion(s)${emergency ? ' (emergency)' : ''}`,
+    );
+    return bought + boughtMp > 0;
   }
 
   // ── Key state ────────────────────────────────────────────

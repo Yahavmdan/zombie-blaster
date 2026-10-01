@@ -2,6 +2,7 @@ import {
   CharacterState,
   GAME_CONSTANTS,
   ZOMBIE_TYPES,
+  isZombieWindingUp,
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
@@ -11,12 +12,13 @@ import {
   ZombieType,
   ZombieCorpse,
 } from '@shared/game-entities';
-import { IGameEngine, Platform } from './engine-types';
+import { ExitStackState, IGameEngine, Platform } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { CombatSystem } from './combat-system';
 import { DropSystem } from './drop-system';
 import { ProjectileSystem } from './projectile-system';
 import { ZombieAnimState } from './zombie-sprite-animator';
+import { corpseSurface, CorpseSurface } from './corpse-surface';
 
 interface TargetInfo {
   id: string;
@@ -183,12 +185,13 @@ export class ZombieSystem {
         let bestCorpseSurface: number | null = null;
         const zBot: number = z.y + z.instanceHeight;
         const zPrevBot: number = zBot - z.velocityY;
-        const wRatio: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
         for (const corpse of this.e.zombieCorpses) {
-          if (!corpse.isGrounded) continue;
-          const cEffX: number = corpse.x + corpse.width * (1 - wRatio) / 2;
-          const cEffW: number = corpse.width * wRatio;
-          const surfaceY: number = corpse.y + corpse.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+          // Only the living climb the exit stack: zombies fall through its steps.
+          if (!corpse.isGrounded || corpse.anchored) continue;
+          const corpseFoothold: CorpseSurface = corpseSurface(corpse);
+          const cEffX: number = corpseFoothold.x;
+          const cEffW: number = corpseFoothold.width;
+          const surfaceY: number = corpseFoothold.y;
           if (
             z.x + z.instanceWidth > cEffX &&
             z.x < cEffX + cEffW &&
@@ -315,7 +318,12 @@ export class ZombieSystem {
 
     if (distX < attackRange && distY < heightCheck) {
       if (!isRanged && z.attackHesitation > 0) return;
-      z.attackAnimTimer = zDef.attackAnimTicks;
+      if (!isRanged && this.countAttackersOn(target, z) >= GAME_CONSTANTS.ZOMBIE_MAX_ATTACKERS_PER_TARGET) {
+        // Attack tokens: wait for a free slot instead of piling on the same player.
+        z.attackCooldown = 10;
+        return;
+      }
+      z.attackAnimTimer = zDef.attackAnimTicks + (isRanged ? 0 : GAME_CONSTANTS.ZOMBIE_ATTACK_WINDUP_TICKS);
       z.attackHasHit = false;
       z.attackCooldown = GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN +
         Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX - GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN));
@@ -325,6 +333,18 @@ export class ZombieSystem {
           Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MAX - GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MIN));
       }
     }
+  }
+
+  private countAttackersOn(target: TargetInfo, self: ZombieState): number {
+    const tCx: number = target.x + target.width / 2;
+    const tCy: number = target.y + target.height / 2;
+    return this.e.zombies.filter(
+      (o: ZombieState): boolean =>
+        o !== self &&
+        !o.isDead &&
+        o.attackAnimTimer > 0 &&
+        Math.hypot(o.x + o.instanceWidth / 2 - tCx, o.y + o.instanceHeight / 2 - tCy) < GAME_CONSTANTS.ZOMBIE_ATTACKER_RADIUS,
+    ).length;
   }
 
   private resolveZombieSwingHits(z: ZombieState): void {
@@ -593,19 +613,32 @@ export class ZombieSystem {
     this.e.zombieCorpses.splice(idx, 1);
   }
 
+  /**
+   * The exit beacon calls the dead: wandering zombies mostly drift toward the beam. It goes quiet
+   * once the stack is finished, so climbers aren't buried under a crowd at the base.
+   */
+  private pickWanderDirection(z: ZombieState, randomDirection: number): number {
+    const stack: ExitStackState = this.e.getExitStack();
+    if (stack.reachable) return randomDirection;
+    const beamX: number = stack.centerX;
+    const zCx: number = z.x + z.instanceWidth / 2;
+    if (Math.abs(beamX - zCx) < GAME_CONSTANTS.EXIT_BEAM_WIDTH / 2) return randomDirection;
+    return Math.random() < GAME_CONSTANTS.EXIT_BEACON_PULL_CHANCE ? Math.sign(beamX - zCx) : randomDirection;
+  }
+
   private updateZombieIdleWander(z: ZombieState, zDef: ZombieDefinition): void {
     const isStanding: boolean = Math.abs(z.velocityX) < 0.01;
 
     if (isStanding) {
       if (Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_DIRECTION_CHANGE_CHANCE) {
-        z.facing = Math.random() > 0.5 ? 1 : -1;
+        z.facing = this.pickWanderDirection(z, Math.random() > 0.5 ? 1 : -1);
         z.velocityX = z.facing * z.instanceSpeed * GAME_CONSTANTS.ZOMBIE_IDLE_WANDER_SPEED_MULT;
       }
     } else {
       if (Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_STOP_CHANCE) {
         z.velocityX = 0;
       } else if (Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_DIRECTION_CHANGE_CHANCE) {
-        z.facing = z.facing > 0 ? -1 : 1;
+        z.facing = this.pickWanderDirection(z, z.facing > 0 ? -1 : 1);
         z.velocityX = z.facing * z.instanceSpeed * GAME_CONSTANTS.ZOMBIE_IDLE_WANDER_SPEED_MULT;
       }
     }
@@ -646,6 +679,11 @@ export class ZombieSystem {
       } else {
         this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.AttackAlt2);
       }
+      return;
+    }
+
+    if (isZombieWindingUp(z)) {
+      this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Idle);
       return;
     }
 
@@ -817,6 +855,32 @@ export class ZombieSystem {
     }
   }
 
+  /**
+   * While the exit stack is unfinished, the exit calls the dead: part of the spawns rise from the
+   * ground beside the beam (never inside it, so every step is still earned). Otherwise a random platform.
+   */
+  private pickSpawnSpot(width: number, height: number): { x: number; y: number } {
+    const stack: ExitStackState = this.e.getExitStack();
+    if (!stack.reachable && Math.random() < GAME_CONSTANTS.EXIT_BEACON_SPAWN_CHANCE) {
+      const offset: number =
+        GAME_CONSTANTS.EXIT_BEAM_WIDTH / 2 + width + Math.random() * GAME_CONSTANTS.EXIT_BEACON_SPAWN_SPREAD_PX;
+      const preferredSide: number = Math.random() < 0.5 ? -1 : 1;
+      const fits: (side: number) => boolean = (side: number): boolean => {
+        const centerX: number = stack.centerX + side * offset;
+        return centerX - width / 2 >= 0 && centerX + width / 2 <= GAME_CONSTANTS.CANVAS_WIDTH;
+      };
+      const side: number = fits(preferredSide) ? preferredSide : -preferredSide;
+      if (fits(side)) return { x: stack.centerX + side * offset - width / 2, y: stack.baseY - height };
+    }
+    const plat: Platform = this.e.platforms[Math.floor(Math.random() * this.e.platforms.length)];
+    const platMinX: number = Math.max(0, plat.x);
+    const platMaxX: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - width, plat.x + plat.width - width);
+    return {
+      x: platMinX + Math.floor(Math.random() * (platMaxX - platMinX + 1)),
+      y: plat.y - height,
+    };
+  }
+
   private spawnZombie(): void {
     let type: ZombieType = ZombieType.Walker;
     const roll: number = Math.random();
@@ -837,7 +901,11 @@ export class ZombieSystem {
 
     const zDef: ZombieDefinition = ZOMBIE_TYPES[type];
     const hpScale: number = 1 + (this.e.floor - 1) * GAME_CONSTANTS.ZOMBIE_HP_SCALE_PER_WAVE;
-    const damageScale: number = 1 + (this.e.floor - 1) * GAME_CONSTANTS.ZOMBIE_DAMAGE_SCALE_PER_WAVE;
+    const earlyFloorMult: number = Math.min(
+      1,
+      GAME_CONSTANTS.ZOMBIE_EARLY_DAMAGE_MULT_START + (this.e.floor - 1) * GAME_CONSTANTS.ZOMBIE_EARLY_DAMAGE_MULT_STEP,
+    );
+    const damageScale: number = (1 + (this.e.floor - 1) * GAME_CONSTANTS.ZOMBIE_DAMAGE_SCALE_PER_WAVE) * earlyFloorMult;
 
     const rolledHp: number = Math.floor((zDef.hpMin + Math.random() * (zDef.hpMax - zDef.hpMin)) * hpScale);
     const rolledSpeed: number = zDef.speedMin + Math.random() * (zDef.speedMax - zDef.speedMin);
@@ -849,11 +917,9 @@ export class ZombieSystem {
     const rolledWidth: number = Math.floor(zDef.widthMin + Math.random() * (zDef.widthMax - zDef.widthMin));
     const rolledHeight: number = Math.floor(zDef.heightMin + Math.random() * (zDef.heightMax - zDef.heightMin));
 
-    const plat: Platform = this.e.platforms[Math.floor(Math.random() * this.e.platforms.length)];
-    const platMinX: number = Math.max(0, plat.x);
-    const platMaxX: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - rolledWidth, plat.x + plat.width - rolledWidth);
-    const x: number = platMinX + Math.floor(Math.random() * (platMaxX - platMinX + 1));
-    const y: number = plat.y - rolledHeight;
+    const spot: { x: number; y: number } = this.pickSpawnSpot(rolledWidth, rolledHeight);
+    const x: number = spot.x;
+    const y: number = spot.y;
     const nearestSpawnTarget: TargetInfo | null = this.findNearestTarget(x + rolledWidth / 2, y + rolledHeight / 2);
     const facing: number = nearestSpawnTarget ? (nearestSpawnTarget.x > x ? 1 : -1) : (Math.random() > 0.5 ? 1 : -1);
 
@@ -1022,12 +1088,12 @@ export class ZombieSystem {
 
         let bestCorpseSurface: number | null = null;
         let bestCorpseOther: ZombieCorpse | null = null;
-        const wRatioFall: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
         for (const other of this.e.zombieCorpses) {
           if (other === corpse || !other.isGrounded) continue;
-          const effectiveX: number = other.x + other.width * (1 - wRatioFall) / 2;
-          const effectiveW: number = other.width * wRatioFall;
-          const surfaceY: number = other.y + other.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+          const otherSurface: CorpseSurface = corpseSurface(other);
+          const effectiveX: number = otherSurface.x;
+          const effectiveW: number = otherSurface.width;
+          const surfaceY: number = otherSurface.y;
           if (
             corpse.x + corpse.width > effectiveX &&
             corpse.x < effectiveX + effectiveW &&
@@ -1055,7 +1121,9 @@ export class ZombieSystem {
 
       if (corpse.isGrounded && !corpse.landProcessed) {
         corpse.landProcessed = true;
-        this.diversifyCorpsePose(corpse);
+        if (!this.anchorToExitStack(corpse)) {
+          this.diversifyCorpsePose(corpse);
+        }
       }
 
       if (!corpse.frozen) {
@@ -1101,11 +1169,11 @@ export class ZombieSystem {
   }
 
   private revalidateGroundedCorpses(): void {
-    const wRatio: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
     const tolerance: number = GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE;
 
     for (const corpse of this.e.zombieCorpses) {
-      if (!corpse.isGrounded) continue;
+      // Exit-stack corpses are held in place by the beam (switchback steps don't overlap).
+      if (!corpse.isGrounded || corpse.anchored) continue;
 
       const bottom: number = corpse.y + corpse.height;
       let supported: boolean = false;
@@ -1124,9 +1192,10 @@ export class ZombieSystem {
       if (!supported) {
         for (const other of this.e.zombieCorpses) {
           if (other === corpse || !other.isGrounded) continue;
-          const effectiveX: number = other.x + other.width * (1 - wRatio) / 2;
-          const effectiveW: number = other.width * wRatio;
-          const surfaceY: number = other.y + other.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+          const otherSurface: CorpseSurface = corpseSurface(other);
+          const effectiveX: number = otherSurface.x;
+          const effectiveW: number = otherSurface.width;
+          const surfaceY: number = otherSurface.y;
           if (
             corpse.x + corpse.width > effectiveX &&
             corpse.x < effectiveX + effectiveW &&
@@ -1144,6 +1213,39 @@ export class ZombieSystem {
         corpse.frozen = false;
       }
     }
+  }
+
+  /**
+   * Exit beacon: a zombie that dies inside the exit's beam, on the platform under the exit or
+   * on the stack itself, is bound to the stack: it snaps onto the top in a zig-zag, never
+   * fades, and adds a full step, so players climb the dead to reach the exit.
+   */
+  private anchorToExitStack(corpse: ZombieCorpse): boolean {
+    const stack: ExitStackState = this.e.getExitStack();
+    // Bound at death (caught by the beam) or landed inside the beam.
+    const cx: number = corpse.x + corpse.width / 2;
+    const landedInBeam: boolean =
+      cx >= stack.columnLeft &&
+      cx <= stack.columnRight &&
+      corpse.y + corpse.height <= stack.baseY + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE;
+    if (!corpse.anchored && !landedInBeam) return false;
+    if (stack.reachable) {
+      corpse.anchored = false;
+      return false;
+    }
+
+    const side: number = stack.steps % 2 === 0 ? -1 : 1;
+    corpse.anchored = true;
+    corpse.platformHeight = stack.step;
+    corpse.frozen = true;
+    corpse.velocityX = 0;
+    corpse.velocityY = 0;
+    corpse.facing = side;
+    corpse.x = stack.centerX - corpse.width / 2 + side * GAME_CONSTANTS.EXIT_STACK_ZIGZAG_PX;
+    corpse.y = stack.topY - corpse.height;
+    this.e.zombieSpriteAnimator.setFinalFrame(corpse.id, corpse.spriteKey, ZombieAnimState.Dead);
+    this.e.spawnExitStackEffect(stack.centerX, stack.topY - stack.step / 2);
+    return true;
   }
 
   private diversifyCorpsePose(corpse: ZombieCorpse): void {

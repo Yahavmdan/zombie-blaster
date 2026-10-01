@@ -224,7 +224,7 @@ export class GameComponent implements OnInit, OnDestroy {
         .subscribe((msg: ServerMessage): void => {
           const payload: RemoteZombieDamagePayload =
             msg.payload as RemoteZombieDamagePayload;
-          this.gameCanvas()?.applyRemoteDamage(payload.events);
+          this.gameCanvas()?.applyRemoteDamage(payload.events, payload.playerId);
         });
     }
 
@@ -713,7 +713,7 @@ export class GameComponent implements OnInit, OnDestroy {
       .subscribe((msg: ServerMessage): void => {
         const payload: RemoteZombieDamagePayload =
           msg.payload as RemoteZombieDamagePayload;
-        this.gameCanvas()?.applyRemoteDamage(payload.events);
+        this.gameCanvas()?.applyRemoteDamage(payload.events, payload.playerId);
       });
 
     console.log('[Game] This client has been promoted to host');

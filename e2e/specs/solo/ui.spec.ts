@@ -112,9 +112,9 @@ test.describe('in-game UI', { tag: '@solo' }, (): void => {
     await expect(player.page.getByTestId('game-settings-button-close')).toBeHidden();
   });
 
-  test('attacking (Ctrl) while moving does not trigger browser shortcuts', async (): Promise<void> => {
-    // Attack is bound to Control, so Ctrl+A (select all), Ctrl+D (bookmark), Ctrl+S (save)
-    // happen whenever a player attacks while moving. The game must swallow them.
+  test('Ctrl + game keys never trigger browser shortcuts', async (): Promise<void> => {
+    // Players used to attack with Ctrl (and some rebind it back), so Ctrl+A (select all),
+    // Ctrl+D (bookmark), Ctrl+S (save) must be swallowed for every key bound to the game.
     await player.page.evaluate((): void => {
       (window as unknown as { __zbCtrlLeaks: string[] }).__zbCtrlLeaks = [];
       window.addEventListener('keydown', (e: KeyboardEvent): void => {
@@ -125,11 +125,11 @@ test.describe('in-game UI', { tag: '@solo' }, (): void => {
         }, 0);
       });
     });
-    await player.hold(KEYS.attack);
+    await player.hold('Control');
     for (const key of [KEYS.left, KEYS.right, KEYS.down, '1']) {
       await player.press(key, 80);
     }
-    await player.release(KEYS.attack);
+    await player.release('Control');
     const leaks: string[] = await player.page.evaluate(
       (): string[] => (window as unknown as { __zbCtrlLeaks: string[] }).__zbCtrlLeaks,
     );

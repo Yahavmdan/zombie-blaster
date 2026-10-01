@@ -84,4 +84,103 @@ test.describe('movement and physics', { tag: '@solo' }, (): void => {
     const s: E2eSnapshot = await player.probe.state();
     expect(s.player!.y + WORLD.playerHeight).toBeLessThanOrEqual(WORLD.groundY + 2);
   });
+
+  /** Tracks the lowest y (highest point) the player reaches over `ms`. */
+  async function apexOver(ms: number): Promise<number> {
+    let apex: number = Infinity;
+    const end: number = Date.now() + ms;
+    while (Date.now() < end) {
+      apex = Math.min(apex, (await player.probe.state()).player!.y);
+      await player.wait(20);
+    }
+    return apex;
+  }
+
+  test('coyote time: jumping just after walking off a ledge still works', async (): Promise<void> => {
+    // Stand near the right edge of the low-left platform (x 80–300, y 530) and walk off.
+    await player.probe.teleport(250, 530 - WORLD.playerHeight);
+    await player.probe.waitFor(
+      'on the platform',
+      (s: E2eSnapshot): boolean => s.player!.isGrounded,
+    );
+    // In-page watcher: press jump on the first frame the player is airborne (~1 tick late).
+    await player.page.evaluate((): void => {
+      const tick: () => void = (): void => {
+        const s: { player: { isGrounded: boolean } | null } | null =
+          window.__zbE2e?.getState() ?? null;
+        if (s?.player && !s.player.isGrounded) {
+          setTimeout((): void => {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+            setTimeout((): void => {
+              window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' }));
+            }, 150);
+          }, 40);
+          return;
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    await player.hold(KEYS.right);
+    const apex: number = await apexOver(900);
+    await player.release(KEYS.right);
+    expect(apex, 'a late jump off the ledge still rises above the platform').toBeLessThan(
+      530 - WORLD.playerHeight - 30,
+    );
+  });
+
+  test('variable jump height: a tap is a short hop, holding jumps higher', async (): Promise<void> => {
+    await player.press(KEYS.jump, 40);
+    const tapApex: number = await apexOver(900);
+    await player.probe.waitFor('landed', (s: E2eSnapshot): boolean => s.player!.isGrounded, {
+      timeoutMs: 3_000,
+    });
+    await player.hold(KEYS.jump);
+    const holdApex: number = await apexOver(900);
+    await player.release(KEYS.jump);
+    const ground: number = WORLD.groundY - WORLD.playerHeight;
+    expect(ground - tapApex, 'tap height').toBeLessThan((ground - holdApex) * 0.7);
+    expect(ground - holdApex, 'full jump still reaches ~116 px').toBeGreaterThan(105);
+  });
+
+  test('air control: you can steer a jump', async (): Promise<void> => {
+    const start: E2eSnapshot = await player.probe.state();
+    await player.hold(KEYS.jump);
+    await player.probe.waitFor('airborne', (s: E2eSnapshot): boolean => !s.player!.isGrounded, {
+      timeoutMs: 2_000,
+    });
+    await player.hold(KEYS.right);
+    await player.probe.waitFor('landed', (s: E2eSnapshot): boolean => s.player!.isGrounded, {
+      timeoutMs: 3_000,
+    });
+    await player.release(KEYS.right);
+    await player.release(KEYS.jump);
+    const end: E2eSnapshot = await player.probe.state();
+    expect(end.player!.x - start.player!.x, 'steered sideways in the air').toBeGreaterThan(40);
+  });
+
+  test('ropes: turn while climbing, jump alone keeps you on, direction + jump lets go', async (): Promise<void> => {
+    await player.probe.teleport(560 - WORLD.playerWidth / 2, 520);
+    await player.hold(KEYS.up);
+    await player.probe.waitFor('climbing', (s: E2eSnapshot): boolean => s.player!.isClimbing, {
+      timeoutMs: 2_000,
+    });
+    await player.release(KEYS.up);
+    const facing: string = (await player.probe.state()).player!.facing;
+    await player.press(facing === 'right' ? KEYS.left : KEYS.right, 100);
+    const turned: E2eSnapshot = await player.probe.state();
+    expect(turned.player!.isClimbing, 'still on the rope after turning').toBe(true);
+    expect(turned.player!.facing).not.toBe(facing);
+
+    await player.press(KEYS.jump, 100);
+    expect(
+      (await player.probe.state()).player!.isClimbing,
+      'jump alone keeps you on the rope',
+    ).toBe(true);
+
+    await player.hold(KEYS.right);
+    await player.press(KEYS.jump, 100);
+    await player.release(KEYS.right);
+    expect((await player.probe.state()).player!.isClimbing, 'right + jump lets go').toBe(false);
+  });
 });

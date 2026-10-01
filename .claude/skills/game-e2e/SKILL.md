@@ -42,7 +42,8 @@ e2e/support/
   probe.ts                    GameProbe: state(), waitFor(desc, pred), vfxLog(), controls (god mode, floor, level, skills, teleport)
   room.ts                     startRoom(): N browsers → lobby → ready → in game, roles verified
   bot.ts                      runBot(): simple "hunt nearest zombie" (tests only need hits/kills)
-  brain.ts                    Brain: plays well (potions, flee, revive, kite, loot, shop, spend points)
+  brain.ts                    Brain: plays well (potions, flee, revive, kite, loot, shop, spend points, exit stack)
+  navigation.ts               level map + route planner (walk, jump up, climb ropes, drop down)
   chaos.ts                    runChaos(): seeded key/dialog/resize fuzzer + invariant checks
   invariants.ts               findInvariantViolations(): rules that must always hold
   vfx-gate.ts                 vfxQueuedBy(): VFX events an action queued for other players
@@ -85,19 +86,30 @@ Fix production code only after the repro is agreed.
 
 Mechanics that matter (verify in shared/game-constants.ts if changed):
 
-- Zombies: melee reach 35 px, attack cooldown 40–70 ticks, hit lands 6 ticks into a 12-tick swing,
-  floor-1 hits deal 24–85. A crowd kills a level-1 assassin (120 HP) in one burst.
+- Zombies: melee reach 35 px, attack cooldown 40–70 ticks. Every melee swing is telegraphed: a
+  15-tick wind-up (red "!" + glow, `windingUp` in the probe) before the swing, ~0.5 s total.
+  At most 2 zombies swing at one player at once (attack tokens). Damage ramps from 40% on floor 1
+  to full by floor 5. Zombies only chase players within 640 px (`ZOMBIE_DETECTION_RANGE`);
+  wanderers drift toward the exit beam.
 - Player: 90 ticks (1.8 s) invincible after a hit; move speed 3 (faster than most zombies).
 - Potions: key 7 (HP +50) / 8 (MP +30), 30-tick cooldown, start with 3 each, 30/20 gold.
   Auto-potion needs the class's auto-potion passive; without it nothing drinks for you.
   Dev builds start with 1,000,000 gold (`game-state.service.ts`), prod with 0.
 - Menus (stats/skills/shop) do NOT pause the game: open them only when no zombie is within ~200 px.
-- Revive: hold F within 60 px for 150 ticks (3 s); any hit cancels. Downed window 1500 ticks.
-- Skills unlock with skill points (3 per level) and required levels (warrior slot 1 at level 3).
-- Floors never end by killing: zombies spawn forever and a floor completes only when a player
-  stands on the EXIT platform (y 130, x moves per floor). Its rope was removed ("deleted test
-  rope"), so it is reachable only by double jump / low gravity / zombie piles. The brain does
-  not climb yet, so demos stay on floor 1.
+- Revive: hold F within 60 px for 100 ticks (2 s); a hit cancels it; the downed player's bleed-out
+  timer pauses while someone channels (`revivingPlayerId` on the reviver's state).
+- Menus: the first 4 s after opening one you take 30% damage (menu shield).
+- Skills unlock with skill points (3 per level); warrior power-strike and assassin lucky-seven
+  are level-1 skills. Ranger/Mage/Priest still have no active skills.
+- Controls: attack is J (Ctrl is unbound, all game keys preventDefault). Air control, coyote
+  time (5 ticks), variable jump (release early = short hop), apex hang. On ropes: left/right
+  turns, jump alone does nothing, direction + jump lets go, climbing past the top dismounts.
+- Floor exit = exit beacon: a 160 px light column under the exit (corridor x 1160 / 750 / 385 by
+  floor). Zombies killed inside it are caught by the beam (death fling cancelled) and join a
+  switchback corpse staircase from the ground (`anchored` corpses, 30 px steps on floor 1, wide
+  footholds, never fade, exempt from support checks). `exitStack` in the probe has steps,
+  stepsNeeded (13 on floor 1), reachable. When reachable, the exit turns gold ("CLIMB!"); climb
+  the steps and stand on the exit. `probe.buildExitStack(n)` pre-builds it for setup.
 
 Driving tips:
 
@@ -107,7 +119,26 @@ Driving tips:
 - Menus: after the open key, wait for the component to render before clicking or pressing
   Escape (`Brain.withMenu`). Escape sent too early hits nothing, the menu appears afterwards
   and blocks all input while zombies keep hitting. `closeStrayDialogs` logs any leak.
-- Skill points: auto-potion passive first (it drinks for you), then damage actives, then buffs.
+- Skill points: 1 point in every active first, then auto-potion to 3, then damage skills.
+  (All-in on auto-potion left the AI with zero active skills for a whole game.)
+- Exit goal (`goal: 'exit'`): `navigation.ts` walks/jumps/climbs ropes to a platform; on the
+  ground under the beam, stay inside the column (melee: far wall facing the horde; ranged: center)
+  and fight anything in reach: kills made from inside the beam count wherever the zombie stands;
+  no dash in the beam (monster-magnet pull is great: it drags zombies in). Climbing
+  (`Brain.climbStack`): footholds are one-way, so jump straight up under one.
+  Align with `walkTo` (closed loop: hold, poll x, release early for the slide). Fixed-length
+  taps oscillated ±40 px forever once the player was fast (maxed stats, super speed).
+  - Hold jump until the apex (`fullJump`, polls `velocityY`). A fixed 240 ms press is cut short by
+    variable jump height when parallel workers drop frames: passes alone, fails in the suite.
+  - Loose (non-stack) corpses at the base count as ground; only the stack is safe
+    (`exitStack.playerSteadied`). Clear zombies adjacent on the ground first, then climb.
+  - A ready stack beats `escapeSurround`: running from the crowd walked the bot onto a ladder.
+  - Always validate exit/climb specs with `--workers=5` (plus fairness specs) to reproduce suite load.
+  - Climb by **overlap**: prefer the highest reachable foothold already over the body and jump straight
+    up; walk (`walkTo`) only when nothing overlaps. Precise walking fails under load at max speed.
+  - Build phase: kills made from inside the beam count, so hold the column and fight anything in reach
+    (ranged classes stand at the center and shoot far).
+  - The brain restocks MP potions (5) for classes with skills; the game has no MP regen.
 - Special drops open a Y/N prompt with a timer; the brain presses Y.
 
 Running demos/visual checks:
@@ -116,6 +147,8 @@ Running demos/visual checks:
   `e2e/.results/demo/compare-NN-<player>.png` and logs `worldDifferences` (floor, zombie ids,
   corpse count, corpse pose/facing). Read a pair of PNGs yourself now and then: humans spot what
   the numbers miss (the corpse pose bug and the Ctrl+A text selection were both seen this way).
+- Every Playwright run wipes `e2e/.results/` (demo PNGs included). Look at or copy the compare
+  PNGs before running any other test.
 - Never edit `src/` while a demo or e2e run is live: the dev servers hot-reload the pages and
   the run dies with "Execution context was destroyed".
 - A dev server that compiled a half-saved edit shows an error overlay that eats every click;
@@ -142,10 +175,18 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
 
 ## Gotchas
 
-- Headless pages still render; `attachCanvas` gives real frames. `KEYS.attack` is `Control`.
+- Headless pages still render; `attachCanvas` gives real frames. `KEYS.attack` is `j`.
+- Physics gotcha: tiny velocities snap to 0 (`PLAYER_MIN_VELOCITY`); any per-tick acceleration
+  smaller than that must skip the snap (air control was silently dead until fixed).
 - Skills live in slots 1..6 = usable Active/Buff skills sorted by required level
   (`state().usableSkills[].slot`). Ranger/Mage/Priest currently have only passives (tests skip them).
 - Particles cap at 400: wait for effects to fade before measuring "effect appeared".
+- Probe setup helpers that inject entities (`buildExitStack`) must also register sprite instances
+  (`setFinalFrame`), or the entities are invisible in screenshots while physics still works.
+- Look at the attached "stack ready"/"stack built" canvases after exit changes: numbers passed
+  while the stack rendered as floating shelves 44 px above the bodies.
+- Unit-test engine mocks (`zombie-system.spec.ts`, `multiplayer-sync.spec.ts`) must gain every new
+  animator method; a missing one throws only on a random branch and looks like a flake.
 - `vfxQueuedBy` reads the probe VFX log. Events leave the queue as `sent` (multiplayer) or
   `discarded` (solo, drained every tick), so it works in both modes.
 - `dropConnection()` closes the app's sockets (init-script tracked) to test reconnect.

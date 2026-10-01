@@ -36,7 +36,7 @@ export const KEYS: {
   up: 'w',
   down: 's',
   jump: ' ',
-  attack: 'Control',
+  attack: 'j',
   revive: 'f',
   openStats: 'p',
   openSkills: 'o',

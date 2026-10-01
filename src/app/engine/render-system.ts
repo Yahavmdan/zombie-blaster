@@ -5,7 +5,10 @@ import {
   CHARACTER_CLASSES,
   Direction,
   GAME_CONSTANTS,
+  SKILLS,
+  SkillDefinition,
   ZOMBIE_TYPES,
+  isZombieWindingUp,
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
@@ -28,8 +31,10 @@ import {
   DamageNumber,
   DashPhaseState,
   DropNotification,
+  ExitStackState,
   IGameEngine,
   LevelUpNotification,
+  Platform,
   PlayerProjectile,
 } from './engine-types';
 
@@ -156,6 +161,7 @@ export class RenderSystem {
       return;
     }
 
+    this.renderBuffAura(ctx, p);
     if (this.e.invincibilityFrames > 0 && Math.floor(this.e.invincibilityFrames / GAME_CONSTANTS.INVINCIBILITY_BLINK_RATE) % 2 === 0) return;
 
     const dash: DashPhaseState | null = this.e.dashPhase;
@@ -341,6 +347,7 @@ export class RenderSystem {
         continue;
       }
 
+      this.renderBuffAura(ctx, rp);
       const classDef: CharacterClassDefinition = CHARACTER_CLASSES[rp.classId];
       const classColor: string = classDef.color;
       const flipX: boolean = rp.facing === Direction.Left;
@@ -648,6 +655,68 @@ export class RenderSystem {
     ctx.restore();
   }
 
+  /** Brief white flash on a zombie that was just hit (knockback is synced, so everyone sees it). */
+  private renderHitFlash(ctx: CanvasRenderingContext2D, z: ZombieState): void {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(
+      z.x + z.instanceWidth / 2,
+      z.y + z.instanceHeight / 2,
+      z.instanceWidth * 0.55,
+      z.instanceHeight * 0.5,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** Soft glow at the feet of a player with an active buff, in the buff skill's color. */
+  private renderBuffAura(ctx: CanvasRenderingContext2D, p: CharacterState): void {
+    const buff: ActiveBuff | undefined = p.activeBuffs.find((b: ActiveBuff): boolean => b.remainingMs > 0);
+    if (!buff) return;
+    const color: string = SKILLS.find((s: SkillDefinition): boolean => s.id === buff.skillId)?.color ?? '#ffcc44';
+    const pulse: number = 0.5 + Math.sin(performance.now() / 180) * 0.5;
+    const cx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const feet: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT;
+    ctx.save();
+    ctx.globalAlpha = 0.25 + pulse * 0.2;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(cx, feet - 2, 26 + pulse * 4, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.12 + pulse * 0.08;
+    ctx.beginPath();
+    ctx.ellipse(cx, feet - GAME_CONSTANTS.PLAYER_HEIGHT / 2, 30, GAME_CONSTANTS.PLAYER_HEIGHT * 0.75, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** Wind-up warning: pulsing red glow and "!" so players can react before the hit lands. */
+  private renderAttackTelegraph(ctx: CanvasRenderingContext2D, z: ZombieState): void {
+    const cx: number = z.x + z.instanceWidth / 2;
+    const pulse: number = 0.5 + Math.sin(performance.now() / 45) * 0.5;
+    ctx.save();
+    ctx.globalAlpha = 0.25 + pulse * 0.25;
+    ctx.fillStyle = '#ff3333';
+    ctx.beginPath();
+    ctx.ellipse(cx, z.y + z.instanceHeight / 2, z.instanceWidth * 0.8, z.instanceHeight * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.9;
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#1a0000';
+    ctx.strokeText('!', cx, z.y - 8);
+    ctx.fillStyle = '#ff4444';
+    ctx.fillText('!', cx, z.y - 8);
+    ctx.restore();
+  }
+
   private renderZombies(ctx: CanvasRenderingContext2D): void {
     this.renderZombieCorpses(ctx);
 
@@ -688,6 +757,8 @@ export class RenderSystem {
         }
 
         this.e.zombieSpriteAnimator.draw(ctx, z.id, spriteKey, drawX, drawY, renderW, renderH, flipX);
+        if (z.knockbackFrames >= GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES - 2) this.renderHitFlash(ctx, z);
+        if (isZombieWindingUp(z)) this.renderAttackTelegraph(ctx, z);
 
         if (shocked && !isSpawning) {
           const arcCx: number = z.x + z.instanceWidth / 2;
@@ -728,6 +799,7 @@ export class RenderSystem {
 
   private renderZombieCorpses(ctx: CanvasRenderingContext2D): void {
     if (!this.e.zombieSpriteAnimator.isLoaded()) return;
+    const stackBaseY: number = this.e.getExitStack().baseY;
 
     for (const corpse of this.e.zombieCorpses) {
       const progress: number = corpse.fadeTimer / corpse.maxFadeTimer;
@@ -743,7 +815,21 @@ export class RenderSystem {
       const anchor: ZombieSpriteAnchor = this.e.zombieSpriteAnimator.getAnchor(corpse.spriteKey);
       const effectiveAnchorX: number = flipX ? (1 - anchor.anchorX) : anchor.anchorX;
       const drawX: number = corpse.x + corpse.width / 2 - renderW * effectiveAnchorX;
-      const drawY: number = corpse.y + corpse.height - renderH * anchor.anchorY;
+      // A stack step's body lies on the step surface, not at the bottom of its (tall) collision box.
+      const bodyBottom: number = corpse.anchored
+        ? corpse.y + corpse.height - corpse.platformHeight + GAME_CONSTANTS.EXIT_STACK_BODY_PX
+        : corpse.y + corpse.height;
+      const drawY: number = bodyBottom - renderH * anchor.anchorY;
+
+      if (corpse.anchored) {
+        // Fill down to the same-side step two below, which continues the pile (the two lowest
+        // steps reach the ground). Filling every step to the ground grew quadratically into a black mass.
+        const pileBottom: number = Math.min(
+          stackBaseY,
+          bodyBottom + 2 * corpse.platformHeight + GAME_CONSTANTS.EXIT_STACK_BODY_PX,
+        );
+        this.renderExitStackPile(ctx, corpse, drawX, bodyBottom, pileBottom, renderW, renderH, anchor.anchorY);
+      }
 
       ctx.save();
       ctx.globalAlpha = alpha;
@@ -760,6 +846,39 @@ export class RenderSystem {
         this.renderCorpseFlies(ctx, corpse);
       }
     }
+  }
+
+  /**
+   * Fills the space under a stack step with darker bodies, so the stack reads
+   * as one pile of the dead instead of floating ledges. Layout is seeded by the corpse id, so every
+   * client draws the same pile.
+   */
+  private renderExitStackPile(
+    ctx: CanvasRenderingContext2D,
+    corpse: ZombieCorpse,
+    drawX: number,
+    bodyBottom: number,
+    pileBottom: number,
+    renderW: number,
+    renderH: number,
+    anchorY: number,
+  ): void {
+    const layer: number = GAME_CONSTANTS.EXIT_STACK_BODY_PX;
+    let seed: number = 0;
+    for (let i: number = 0; i < corpse.id.length; i++) seed = (seed * 31 + corpse.id.charCodeAt(i)) >>> 0;
+    ctx.save();
+    ctx.filter = 'brightness(0.6)';
+    let index: number = 0;
+    for (let bottom: number = pileBottom; bottom > bodyBottom + layer / 2; bottom -= layer) {
+      const jitter: number = ((seed >>> (index % 24)) % 25) - 12;
+      const flip: boolean = ((seed >>> (index % 31)) & 1) === 1;
+      this.e.zombieSpriteAnimator.draw(
+        ctx, corpse.id, corpse.spriteKey,
+        drawX + jitter, bottom - renderH * anchorY, renderW, renderH, flip,
+      );
+      index++;
+    }
+    ctx.restore();
   }
 
   private renderCorpseFlies(ctx: CanvasRenderingContext2D, corpse: ZombieCorpse): void {
@@ -1032,13 +1151,14 @@ export class RenderSystem {
 
   private getParticleAlpha(p: Particle): number {
     const ratio: number = p.life / p.maxLife;
+    const scale: number = p.alphaScale ?? 1;
     switch (p.fadeMode) {
       case FadeMode.Quick:
-        return ratio * ratio;
+        return ratio * ratio * scale;
       case FadeMode.Late:
-        return ratio < 0.3 ? ratio / 0.3 : 1;
+        return (ratio < 0.3 ? ratio / 0.3 : 1) * scale;
       default:
-        return ratio;
+        return ratio * scale;
     }
   }
 
@@ -1351,10 +1471,10 @@ export class RenderSystem {
 
     const cw: number = GAME_CONSTANTS.CANVAS_WIDTH;
     const ch: number = GAME_CONSTANTS.CANVAS_HEIGHT;
-    const boxW: number = 420;
-    const boxH: number = 200;
+    const boxW: number = 380;
+    const boxH: number = 190;
     const boxX: number = (cw - boxW) / 2;
-    const boxY: number = (ch - boxH) / 2 - 40;
+    const boxY: number = Math.min(56, ch - boxH);
     const cornerR: number = 14;
     const timerProgress: number = pending.remainingTicks / pending.totalTicks;
     const secondsLeft: number = Math.ceil(pending.remainingTicks / GAME_CONSTANTS.TICK_RATE);
@@ -1362,10 +1482,7 @@ export class RenderSystem {
 
     ctx.save();
 
-    ctx.globalAlpha = 0.45;
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, cw, ch);
-
+    // A toast near the top, not a modal: the fight stays visible and playable.
     ctx.globalAlpha = 0.92;
     ctx.fillStyle = '#0c0c1a';
     ctx.beginPath();
@@ -1529,8 +1646,10 @@ export class RenderSystem {
     const exit: { x: number; y: number; width: number; height: number } = this.e.exitPlatform;
     const t: number = performance.now() / 1000;
     const pulse: number = 0.6 + Math.sin(t * 2) * 0.2;
+    const stack: ExitStackState = this.e.getExitStack();
 
     ctx.save();
+    this.renderExitBeam(ctx, stack, t);
 
     if (this.e.mapRenderer.isLoaded()) {
       this.e.mapRenderer.drawDynamicPlatform(ctx, exit.x, exit.y, exit.width, exit.height);
@@ -1544,11 +1663,12 @@ export class RenderSystem {
       ctx.strokeRect(exit.x, exit.y, exit.width, exit.height);
     }
 
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = stack.reachable ? '#ffd24a' : '#ffffff';
     ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'center';
-    ctx.globalAlpha = pulse;
-    ctx.fillText('EXIT', exit.x + exit.width / 2, exit.y - 8);
+    ctx.globalAlpha = stack.reachable ? 1 : pulse;
+    ctx.fillText(stack.reachable ? 'CLIMB!' : 'EXIT', exit.x + exit.width / 2, exit.y - 8);
+    this.renderExitMeter(ctx, stack, exit);
 
     const arrowCount: number = 3;
     for (let i: number = 0; i < arrowCount; i++) {
@@ -1566,6 +1686,57 @@ export class RenderSystem {
     }
 
     ctx.restore();
+  }
+
+  /** Light column under the exit: zombies slain inside it build the stack players climb. */
+  private renderExitBeam(ctx: CanvasRenderingContext2D, stack: ExitStackState, t: number): void {
+    const top: number = this.e.exitPlatform.y + this.e.exitPlatform.height;
+    const height: number = stack.baseY - top;
+    if (height <= 0) return;
+    const color: string = stack.reachable ? '255, 210, 74' : '68, 221, 255';
+    const shimmer: number = 0.1 + Math.sin(t * 3) * 0.04;
+    const gradient: CanvasGradient = ctx.createLinearGradient(0, top, 0, stack.baseY);
+    gradient.addColorStop(0, `rgba(${color}, ${shimmer + 0.08})`);
+    gradient.addColorStop(1, `rgba(${color}, ${shimmer * 0.4})`);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(stack.columnLeft, top, stack.columnRight - stack.columnLeft, height);
+
+    ctx.strokeStyle = `rgba(${color}, 0.35)`;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 6]);
+    ctx.lineDashOffset = -t * 20;
+    ctx.beginPath();
+    ctx.moveTo(stack.columnLeft, top);
+    ctx.lineTo(stack.columnLeft, stack.baseY);
+    ctx.moveTo(stack.columnRight, top);
+    ctx.lineTo(stack.columnRight, stack.baseY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Target line: once the stack reaches it, the exit is one jump away.
+    ctx.strokeStyle = `rgba(${color}, 0.6)`;
+    ctx.beginPath();
+    ctx.moveTo(stack.columnLeft + 20, stack.reachY);
+    ctx.lineTo(stack.columnRight - 20, stack.reachY);
+    ctx.stroke();
+  }
+
+  private renderExitMeter(ctx: CanvasRenderingContext2D, stack: ExitStackState, exit: Platform): void {
+    const width: number = 110;
+    const x: number = exit.x + exit.width / 2 - width / 2;
+    const y: number = exit.y + exit.height + 6;
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = 'rgba(10, 12, 24, 0.75)';
+    ctx.fillRect(x - 2, y - 2, width + 4, 12);
+    ctx.fillStyle = stack.reachable ? '#ffd24a' : '#44ddff';
+    ctx.fillRect(x, y, width * stack.progress, 8);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    const label: string = stack.reachable
+      ? 'Stack ready — climb!'
+      : `Slay in the beam ${Math.min(stack.steps, stack.stepsNeeded)}/${stack.stepsNeeded}`;
+    ctx.fillText(label, exit.x + exit.width / 2, y + 22);
   }
 
   private renderRopes(ctx: CanvasRenderingContext2D): void {

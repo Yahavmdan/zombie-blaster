@@ -9,8 +9,14 @@ import {
   SpecialDropType,
 } from '@shared/game-entities';
 import { IGameEngine, Platform, Rope } from './engine-types';
+import { corpseSurface, CorpseSurface } from './corpse-surface';
 
 export class PhysicsSystem {
+  /** Ticks left in which a jump still works after leaving the ground. */
+  private coyoteTicks: number = 0;
+  /** A player jump is still going up (for variable height and apex hang). */
+  private jumpRising: boolean = false;
+
   constructor(private readonly e: IGameEngine) {}
 
   private getEffectiveGravity(): number {
@@ -163,6 +169,10 @@ export class PhysicsSystem {
     p.velocityY = 0;
     p.x = activeRope.x - GAME_CONSTANTS.PLAYER_WIDTH / 2;
 
+    // Turn on the rope (to attack either way) without letting go.
+    if (this.e.keys.left) p.facing = Direction.Left;
+    else if (this.e.keys.right) p.facing = Direction.Right;
+
     if (this.e.keys.up) {
       p.y -= GAME_CONSTANTS.ROPE_CLIMB_SPEED;
       if (p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2 < activeRope.topY) {
@@ -180,18 +190,14 @@ export class PhysicsSystem {
       }
     }
 
-    if (this.e.keys.jump) {
+    // Leave a rope with direction + jump (MapleStory rule): jump alone keeps you on it,
+    // so a stray press mid-climb doesn't drop you into the horde.
+    const sideways: boolean = this.e.keys.left || this.e.keys.right;
+    if (this.e.keys.jump && sideways) {
       p.isClimbing = false;
-      p.velocityY = GAME_CONSTANTS.PLAYER_JUMP_FORCE;
+      p.velocityY = GAME_CONSTANTS.PLAYER_JUMP_FORCE * 0.75;
       this.e.ropeJumpCooldown = GAME_CONSTANTS.ROPE_JUMP_COOLDOWN_TICKS;
-
-      if (this.e.keys.left) {
-        p.velocityX = -p.derived.speed;
-        p.facing = Direction.Left;
-      } else if (this.e.keys.right) {
-        p.velocityX = p.derived.speed;
-        p.facing = Direction.Right;
-      }
+      p.velocityX = this.e.keys.left ? -p.derived.speed : p.derived.speed;
     }
   }
 
@@ -212,27 +218,44 @@ export class PhysicsSystem {
         if (Math.abs(p.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) p.velocityX = 0;
       }
     } else {
-      if (this.e.keys.left) {
-        p.facing = Direction.Left;
-      } else if (this.e.keys.right) {
-        p.facing = Direction.Right;
+      // Air control: steer toward the held direction, never faster than running speed.
+      const airDir: number = this.e.keys.left ? -1 : this.e.keys.right ? 1 : 0;
+      if (airDir !== 0) {
+        p.facing = airDir < 0 ? Direction.Left : Direction.Right;
+        const steered: number = p.velocityX + airDir * GAME_CONSTANTS.PLAYER_AIR_ACCEL;
+        p.velocityX = Math.abs(steered) > speed ? Math.sign(steered) * Math.max(speed, Math.abs(p.velocityX)) : steered;
       }
       p.velocityX *= GAME_CONSTANTS.PLAYER_AIR_DRAG;
-      if (Math.abs(p.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) p.velocityX = 0;
+      if (airDir === 0 && Math.abs(p.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) p.velocityX = 0;
+    }
+
+    if (p.isGrounded) {
+      this.coyoteTicks = GAME_CONSTANTS.COYOTE_TICKS;
+      this.jumpRising = false;
+    } else if (this.coyoteTicks > 0) {
+      this.coyoteTicks--;
     }
 
     const jumpKeyDown: boolean = this.e.keys.up || this.e.keys.jump;
     const jumpRequested: boolean = jumpKeyDown || this.e.jumpBufferTicks > 0;
-    if (jumpRequested && !this.e.jumpHeld && p.isGrounded) {
-      if (this.e.keys.down && p.y + GAME_CONSTANTS.PLAYER_HEIGHT < GAME_CONSTANTS.GROUND_Y) {
+    const canJump: boolean = p.isGrounded || this.coyoteTicks > 0;
+    if (jumpRequested && !this.e.jumpHeld && canJump) {
+      if (p.isGrounded && this.e.keys.down && p.y + GAME_CONSTANTS.PLAYER_HEIGHT < GAME_CONSTANTS.GROUND_Y) {
         this.e.platformDropTimer = GAME_CONSTANTS.PLATFORM_DROP_TICKS;
         p.y += GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE + 1;
         p.isGrounded = false;
       } else {
         p.velocityY = GAME_CONSTANTS.PLAYER_JUMP_FORCE;
         p.isGrounded = false;
+        this.jumpRising = true;
       }
+      this.coyoteTicks = 0;
       this.e.jumpBufferTicks = 0;
+    }
+    // Variable jump height: letting go while still rising cuts the jump short.
+    if (this.jumpRising && !jumpKeyDown && p.velocityY < 0) {
+      p.velocityY *= GAME_CONSTANTS.JUMP_CUT_MULTIPLIER;
+      this.jumpRising = false;
     }
     this.e.jumpHeld = jumpKeyDown;
 
@@ -250,10 +273,13 @@ export class PhysicsSystem {
       return;
     }
 
-    p.velocityY += this.getEffectiveGravity();
+    const apexHang: boolean =
+      this.jumpRising && jumpKeyDown && Math.abs(p.velocityY) < GAME_CONSTANTS.APEX_HANG_VELOCITY;
+    p.velocityY += this.getEffectiveGravity() * (apexHang ? GAME_CONSTANTS.APEX_HANG_GRAVITY_MULT : 1);
     if (p.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
       p.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
     }
+    if (p.velocityY > 0) this.jumpRising = false;
 
     p.x += p.velocityX;
     p.y += p.velocityY;
@@ -297,13 +323,13 @@ export class PhysicsSystem {
     const bottom: number = entityY + entityHeight;
     const prevBottom: number = bottom - velocityY;
 
-    const widthRatio: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
     for (const corpse of this.e.zombieCorpses) {
       if (!corpse.isGrounded) continue;
       if (this.e.platformDropTimer > 0) continue;
-      const effectiveX: number = corpse.x + corpse.width * (1 - widthRatio) / 2;
-      const effectiveW: number = corpse.width * widthRatio;
-      const surfaceY: number = corpse.y + corpse.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+      const corpseFoothold: CorpseSurface = corpseSurface(corpse);
+      const effectiveX: number = corpseFoothold.x;
+      const effectiveW: number = corpseFoothold.width;
+      const surfaceY: number = corpseFoothold.y;
       if (
         entityX + entityWidth > effectiveX &&
         entityX < effectiveX + effectiveW &&

@@ -1,5 +1,7 @@
-import { CharacterState, SkillDefinition, VfxEvent } from '@shared/index';
-import { ActiveSpecialEffect, WorldDrop, ZombieCorpse, ZombieState } from '@shared/game-entities';
+import { CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, isZombieWindingUp } from '@shared/index';
+import { ActiveSpecialEffect, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
+import { ExitStackState } from '../engine/engine-types';
+import { CorpseSurface, corpseSurface } from '../engine/corpse-surface';
 import { ZombieAnimState } from '../engine/zombie-sprite-animator';
 import { GameEngine } from '../engine/game-engine';
 import { SpriteAnimator } from '../engine/sprite-animator';
@@ -79,6 +81,7 @@ function toPlayerView(p: CharacterState): E2ePlayerView {
     isDoubleJumping: p.isDoubleJumping,
     isDead: p.isDead,
     isDown: p.isDown,
+    downTimer: p.downTimer,
     unallocatedStatPoints: p.unallocatedStatPoints,
     unallocatedSkillPoints: p.unallocatedSkillPoints,
     xp: p.xp,
@@ -103,6 +106,7 @@ function toZombieView(z: ZombieState): E2eZombieView {
     spawnTimer: z.spawnTimer,
     facing: z.facing,
     isAttacking: z.attackAnimTimer > 0,
+    windingUp: isZombieWindingUp(z),
     attackCooldown: z.attackCooldown,
   };
 }
@@ -156,6 +160,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
     zombies: engine.zombies.map(toZombieView),
     corpses: engine.zombieCorpses.length,
     corpseViews: engine.zombieCorpses.map((c: ZombieCorpse): E2eCorpseView => {
+      const foothold: CorpseSurface = corpseSurface(c);
       const anim: { state: ZombieAnimState; frame: number } | null =
         engine.zombieSpriteAnimator.getInstanceFrame(c.id);
       return {
@@ -164,6 +169,10 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
         y: c.y,
         isGrounded: c.isGrounded,
         frozen: c.frozen,
+        anchored: c.anchored,
+        footX: foothold.x,
+        footWidth: foothold.width,
+        footY: foothold.y,
         facing: c.facing,
         animState: anim ? anim.state : null,
         frame: anim ? anim.frame : null,
@@ -172,6 +181,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
     }),
     worldDrops: engine.worldDrops.length,
     exit: { x: engine.exitPlatform.x, y: engine.exitPlatform.y, width: engine.exitPlatform.width },
+    exitStack: { ...engine.getExitStack(), playerSteadied: engine.isOnExitStack() },
     drops: engine.worldDrops.map(
       (d: WorldDrop): E2eDropView => ({ id: d.id, type: d.type, x: d.x, y: d.y, value: d.value }),
     ),
@@ -210,6 +220,39 @@ const engineControls: E2eEngineControls = {
     p.y = y;
     p.velocityX = 0;
     p.velocityY = 0;
+  },
+  buildExitStack(steps: number): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine) return;
+    for (let i: number = 0; i < steps; i++) {
+      const stack: ExitStackState = engine.getExitStack();
+      const width: number = 40;
+      const height: number = 44;
+      const side: number = stack.steps % 2 === 0 ? -1 : 1;
+      const id: string = `e2e-stack-${Date.now()}-${i}`;
+      const spriteKey: string = engine.zombieSpriteAnimator.getSpriteKey(ZombieType.Walker);
+      engine.zombieCorpses.push({
+        id,
+        type: ZombieType.Walker,
+        x: stack.centerX - width / 2 + side * GAME_CONSTANTS.EXIT_STACK_ZIGZAG_PX,
+        y: stack.topY - height,
+        width,
+        height,
+        spriteKey,
+        facing: side,
+        velocityX: 0,
+        velocityY: 0,
+        isGrounded: true,
+        frozen: true,
+        landProcessed: true,
+        fadeTimer: GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS,
+        maxFadeTimer: GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS,
+        showBlood: false,
+        anchored: true,
+        platformHeight: stack.step,
+      });
+      engine.zombieSpriteAnimator.setFinalFrame(id, spriteKey, ZombieAnimState.Dead);
+    }
   },
   peekPendingVfx(): E2eVfxEventView[] {
     return currentEngine ? currentEngine.pendingVfxEvents.map(toVfxEventView) : [];

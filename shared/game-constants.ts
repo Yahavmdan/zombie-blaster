@@ -6,6 +6,7 @@ import {
 import {
   ZombieType,
   ZombieDefinition,
+  ZombieState,
   ShopItemDefinition,
   PotionDefinition,
   PotionCategory,
@@ -47,6 +48,14 @@ export const GAME_CONSTANTS = {
   PLAYER_AIR_DRAG: 0.99, // Air resistance multiplier each tick while airborne
   PLAYER_MIN_VELOCITY: 1, // Speeds below this are snapped to zero (stops sliding)
   JUMP_BUFFER_TICKS: 6, // Ticks a jump press is remembered if it arrives between game ticks (~120ms at 50 tps)
+  COYOTE_TICKS: 5, // Ticks after walking off a ledge during which a jump still works (~100 ms)
+  JUMP_CUT_MULTIPLIER: 0.5, // Releasing jump while rising multiplies upward speed by this (short hops)
+  APEX_HANG_VELOCITY: 1.5, // Near the top of a held jump (|vy| below this) gravity is reduced...
+  APEX_HANG_GRAVITY_MULT: 0.5, // ...to this fraction, for a floatier, more controllable peak
+  HITSTOP_NORMAL_TICKS: 1, // Solo only: world freezes this long when your hit lands (~20 ms)...
+  HITSTOP_CRIT_TICKS: 4, // ...and this long on a critical hit (~80 ms)
+  HITSTOP_COOLDOWN_TICKS: 6, // Minimum gap between freezes so multi-hit skills don't stutter
+  PLAYER_AIR_ACCEL: 0.35, // Horizontal acceleration per tick while airborne and holding a direction (air control)
 
   // ─── Double Jump ─────────────────────────────
   DOUBLE_JUMP_FORCE: -9, // Upward velocity applied during a double jump (negative = up)
@@ -96,6 +105,17 @@ export const GAME_CONSTANTS = {
   EXIT_PLATFORM_Y: 130, // Y position of the exit platform (pixels from top)
   EXIT_PLATFORM_WIDTH: 200, // Width of the exit platform in pixels
   EXIT_PLATFORM_HEIGHT: 20, // Height of the exit platform in pixels
+  EXIT_REACH_PX: 100, // The exit counts as reachable once the stack top is this close below it (jump is ~116 px)
+  EXIT_BEAM_WIDTH: 160, // Width of the light column under the exit where slain zombies join the stack
+  EXIT_BEACON_PULL_CHANCE: 0.9, // Chance a wandering (not chasing) zombie picks the direction toward the exit beam
+  EXIT_BEACON_SPAWN_CHANCE: 0.5, // While the stack is unfinished, chance a new zombie rises from the ground beside the beam
+  EXIT_BEACON_SPAWN_SPREAD_PX: 260, // How far beyond the beam edge those zombies may rise
+  EXIT_STACK_STEP_PX: 44, // Height each corpse slain in the beam adds to the exit stack on floor 1 solo (~9 kills; same-side steps 88 px apart fit a 116 px jump). Divided by the player count: co-op kills twice as fast
+  EXIT_STACK_STEP_DECAY_PER_FLOOR: 1, // Stack step shrinks by this much per floor (more kills needed later)
+  EXIT_STACK_STEP_MIN_PX: 14, // Smallest stack step on high floors
+  EXIT_STACK_ZIGZAG_PX: 36, // Stack steps alternate this far left/right of the beam center (switchback stairs)
+  EXIT_STACK_BODY_PX: 12, // Drawn thickness of one lying body in the stack pile (render only)
+  EXIT_STACK_STEP_WIDTH_RATIO: 1.3, // Walkable width of a stack step relative to the corpse (wide, easy footholds)
 
   // ─── Zombie Spawning ───────────────────────────
   ZOMBIE_SPAWN_INTERVAL_MS: 2000, // Time between zombie spawns in milliseconds
@@ -103,6 +123,12 @@ export const GAME_CONSTANTS = {
   ZOMBIE_SPAWN_DECREASE_PER_WAVE: 100, // Spawn interval shrinks by this many ms each wave
   ZOMBIE_HP_SCALE_PER_WAVE: 0.15, // Zombie HP increases by this fraction each wave (0.15 = +15%)
   ZOMBIE_DAMAGE_SCALE_PER_WAVE: 0.08, // Zombie damage increases by this fraction each wave
+  ZOMBIE_XP_SCALE_PER_WAVE: 0.2, // Kill XP bonus per floor (was a hard-coded 0.1; levels fell far behind floors)
+  ZOMBIE_EARLY_DAMAGE_MULT_START: 0.4, // Floor 1 zombies deal this fraction of their listed damage (onboarding)...
+  ZOMBIE_EARLY_DAMAGE_MULT_STEP: 0.15, // ...rising by this per floor until full damage (floor 5)
+  ZOMBIE_ATTACK_WINDUP_TICKS: 15, // Telegraphed wind-up before a melee swing starts (~0.3 s, plus the swing's own lead-in)
+  ZOMBIE_MAX_ATTACKERS_PER_TARGET: 2, // At most this many zombies swing at the same player at once (attack tokens)
+  ZOMBIE_ATTACKER_RADIUS: 150, // Zombies swinging within this distance of a player count as attacking that player
   ZOMBIE_RUNNER_MIN_WAVE: 2, // First wave that Runner zombies can appear
   ZOMBIE_RUNNER_ROLL_THRESHOLD: 0.7, // Chance (0-1) a spawn is NOT a Runner when eligible
   ZOMBIE_TANK_MIN_WAVE: 3, // First wave that Tank zombies can appear
@@ -254,7 +280,10 @@ export const GAME_CONSTANTS = {
 
   // ─── Revival (Co-op) ───────────────────────────
   REVIVE_WINDOW_TICKS: 1500, // Ticks the downed player can be revived (10 s at 50 tps)
-  REVIVE_CHANNEL_TICKS: 150, // Ticks the reviver must channel to complete (3 s at 50 tps)
+  REVIVE_CHANNEL_TICKS: 100, // Ticks the reviver must channel to complete (2 s at 50 tps); the downed timer pauses meanwhile
+  MENU_SHIELD_TICKS: 200, // For this long after opening a menu (stats/shop/...) you take reduced damage (~4 s)
+  MENU_SHIELD_DAMAGE_MULT: 0.3, // Damage multiplier while the menu shield is up
+  ALLY_VFX_ALPHA: 0.7, // Particles replayed from other players draw at this opacity
   REVIVE_RANGE: 60, // Pixels — reviver must be within this distance
   REVIVE_HP_PERCENT: 30, // Percent of max HP the revived player comes back with
 
@@ -574,6 +603,11 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
   },
 };
 
+/** True while a zombie telegraphs a melee swing (before its attack animation starts). */
+export function isZombieWindingUp(z: ZombieState): boolean {
+  return z.attackAnimTimer > ZOMBIE_TYPES[z.type].attackAnimTicks;
+}
+
 // ─── Skills ─────────────────────────────────────
 
 export const SKILLS: SkillDefinition[] = [
@@ -586,14 +620,14 @@ export const SKILLS: SkillDefinition[] = [
     type: SkillType.Active,
     description: 'Use MP to deliver a killer blow to a single monster with a melee weapon.',
     maxLevel: 20,
-    requiredCharacterLevel: 3,
+    requiredCharacterLevel: 1,
     icon: '⚔️',
     color: '#ff4444',
     scaling: {
       baseDamage: 1.65, damagePerLevel: 0.05,
       baseMpCost: 4, mpCostPerLevel: 0.42,
       baseCooldown: 800, cooldownReductionPerLevel: 15,
-      baseRange: 55, rangePerLevel: 1,
+      baseRange: 70, rangePerLevel: 1,
     },
     levelData: [
       { mpCost: 4,  hpCost: 0, damage: 1.65 },
@@ -644,7 +678,7 @@ export const SKILLS: SkillDefinition[] = [
       baseDamage: 0.72, damagePerLevel: 0.03,
       baseMpCost: 6, mpCostPerLevel: 0.42,
       baseCooldown: 1200, cooldownReductionPerLevel: 20,
-      baseRange: 80, rangePerLevel: 2,
+      baseRange: 140, rangePerLevel: 3,
     },
     levelData: [
       { mpCost: 6,  hpCost: 8,  damage: 0.72 },
@@ -1296,7 +1330,7 @@ export const SKILLS: SkillDefinition[] = [
     type: SkillType.Active,
     description: 'Throws 2 throwing stars based on LUK, regardless of Claw Mastery.',
     maxLevel: 20,
-    requiredCharacterLevel: 3,
+    requiredCharacterLevel: 1,
     icon: '🌟',
     color: '#cc44cc',
     scaling: {
@@ -1527,7 +1561,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   up: ['w', 'arrowup'],
   down: ['s', 'arrowdown'],
   jump: [' '],
-  attack: ['control'],
+  attack: ['j'],
   skill1: ['1'],
   skill2: ['2'],
   skill3: ['3'],

@@ -159,6 +159,25 @@ export interface EntityInterpolation {
   syncAge: number;
 }
 
+/** The corpse stack players build under the exit (see GameEngine.getExitStack). */
+export interface ExitStackState {
+  /** Beam column (exit width) the stack grows in. */
+  columnLeft: number;
+  columnRight: number;
+  centerX: number;
+  /** Surface the stack starts on (platform under the exit). */
+  baseY: number;
+  /** Current top surface of the stack (baseY when empty). */
+  topY: number;
+  /** Surface height at which the exit becomes reachable by a jump. */
+  reachY: number;
+  step: number;
+  steps: number;
+  stepsNeeded: number;
+  progress: number;
+  reachable: boolean;
+}
+
 export interface IGameEngine {
   readonly ctx: CanvasRenderingContext2D;
   readonly fixedDt: number;
@@ -260,6 +279,14 @@ export interface IGameEngine {
   remotePlayerInterpolation: Map<string, EntityInterpolation>;
 
   repositionExitPlatform(): void;
+  getExitStack(): ExitStackState;
+  spawnExitStackEffect(x: number, y: number): void;
+  /** Brief freeze-frame when the local player's hit lands (solo only). */
+  requestHitStop(ticks: number): void;
+  /** Multiplier for damage the local player takes right now (menu shield). */
+  incomingDamageScale(): number;
+  /** The local player stands on the exit corpse stack (the beam holds them: no knockback). */
+  isOnExitStack(): boolean;
 
   onPlayerUpdate: ((player: CharacterState) => void) | null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null;

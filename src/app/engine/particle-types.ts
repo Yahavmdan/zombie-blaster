@@ -26,4 +26,6 @@ export interface Particle {
   rotationSpeed: number;
   fadeMode: FadeMode;
   scaleOverLife: boolean;
+  /** Extra opacity factor (e.g. softer effects replayed from other players). */
+  alphaScale?: number;
 }

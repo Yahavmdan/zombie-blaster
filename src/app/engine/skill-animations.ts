@@ -178,9 +178,9 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
 
   'warrior-power-strike': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] =>
-      arcSlashParticles(x, y, facing, level, '#ff4444', 7),
-    screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
-    spriteEffect: 'weaponhit',
+      arcSlashParticles(x, y, facing, level, '#ff4444', 9),
+    screenShake: 2, screenShakeIntensity: 2, flashColor: null, flashFrames: 0,
+    spriteEffect: 'flamelash',
   },
 
   'warrior-slash-blast': {
@@ -303,6 +303,27 @@ export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
     },
     screenShake: 12, screenShakeIntensity: 8, flashColor: '#ff2200', flashFrames: 8,
     spriteEffect: 'sunburn',
+  },
+
+  'assassin-lucky-seven': {
+    spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] =>
+      projectileTrailParticles(x, y, facing, level, '#cc44cc', 10),
+    screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: 'magickahit',
+  },
+
+  'assassin-claw-mastery': {
+    spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
+      radialBurstParticles(x, y, level, '#cc44cc', 10, ParticleShape.Star),
+    screenShake: 0, screenShakeIntensity: 0, flashColor: '#cc44cc', flashFrames: 3,
+    spriteEffect: 'magic8',
+  },
+
+  'assassin-magic-twin': {
+    spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
+      shockwaveRingParticles(x, y, level, '#aa66ff'),
+    screenShake: 0, screenShakeIntensity: 0, flashColor: '#aa66ff', flashFrames: 3,
+    spriteEffect: 'magicspell',
   },
 
   'assassin-double-jump': {

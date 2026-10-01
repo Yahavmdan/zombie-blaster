@@ -157,6 +157,10 @@ export interface ZombieCorpse {
   fadeTimer: number;
   maxFadeTimer: number;
   showBlood: boolean;
+  /** Part of the exit stack: killed in the exit beam, never fades, climbable step. */
+  anchored: boolean;
+  /** Height of the walkable surface this corpse adds on top of what is under it (px). */
+  platformHeight: number;
 }
 
 export interface ShopItemDefinition {

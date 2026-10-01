@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync } from 'fs';
 import { test, SoloFactory } from '../support/fixtures';
 import { ClassId, GamePlayer, KEYS } from '../support/game-player';
 import { Brain } from '../support/brain';
-import { E2eCorpseView, E2eSkillView, E2eSnapshot, E2eZombieView } from '../support/probe';
+import { E2eSkillView, E2eSnapshot, E2eZombieView } from '../support/probe';
 import { WORLD } from '../support/invariants';
 
 /**
@@ -205,86 +205,37 @@ test.describe('playtest lab', (): void => {
   });
 
   for (const classId of ['warrior', 'assassin'] as ClassId[]) {
-    test(`exit: can a ${classId} climb a corpse pile to the exit?`, async ({
+    test(`exit: how long does a fresh ${classId} take to build the stack and climb out?`, async ({
       solo,
-    }: { solo: SoloFactory }, testInfo: TestInfo): Promise<void> => {
+    }: {
+      solo: SoloFactory;
+    }, testInfo: TestInfo): Promise<void> => {
       const p: GamePlayer = await solo(classId);
-      await p.probe.maxOutPlayer();
-      await p.probe.setGodMode(true);
-      const s0: E2eSnapshot = await p.probe.state();
-      const exitCx: number = s0.exit.x + s0.exit.width / 2;
-      const base: Platform =
-        [...PLATFORMS]
-          .filter((pl: Platform): boolean => exitCx > pl.x - 60 && exitCx < pl.x + pl.width + 60)
-          .sort((a: Platform, b: Platform): number => a.y - b.y)[0] ?? PLATFORMS[2];
-      const spot: { x: number; y: number } = standOn(base, exitCx);
-      await p.probe.teleport(spot.x, spot.y);
-
-      const timeline: Array<{ t: number; pileTopY: number | null; playerMinY: number }> = [];
-      const doubleJump: E2eSkillView | undefined = s0.usableSkills.find(
-        (k: E2eSkillView): boolean => k.mechanic === 'doubleJump',
-      );
       const started: number = Date.now();
-      let reached: boolean = false;
-      let playerMinY: number = spot.y;
-      while (Date.now() - started < 180_000 && !reached) {
-        const s: E2eSnapshot = await p.probe.state();
-        if (s.floor > 1) {
-          reached = true;
-          break;
-        }
-        playerMinY = Math.min(playerMinY, s.player!.y);
-        const me: NonNullable<E2eSnapshot['player']> = s.player!;
-        const dxHome: number = spot.x - me.x;
-        const target: E2eZombieView | undefined = s.zombies
-          .filter(
-            (z: E2eZombieView): boolean =>
-              !z.isDead && z.spawnTimer <= 0 && Math.abs(z.y + z.height - (me.y + 48)) < 70,
-          )
-          .sort(
-            (a: E2eZombieView, b: E2eZombieView): number =>
-              Math.abs(a.x - me.x) - Math.abs(b.x - me.x),
-          )[0];
-        if (Math.abs(dxHome) > 50) {
-          await p.press(dxHome > 0 ? KEYS.right : KEYS.left, 120);
-        } else if (target && Math.abs(target.x - me.x) < 90) {
-          await p.face(target.x > me.x ? 'right' : 'left');
-          await p.press(KEYS.attack, 200);
-        } else {
-          // Try to climb: walk under the exit, jump, (double jump), steer toward the exit.
-          await p.hold(exitCx > me.x + 16 ? KEYS.right : KEYS.left);
-          await p.press(KEYS.jump, 200);
-          if (doubleJump) {
-            await p.wait(120);
-            await p.castSkill(doubleJump.slot);
-          }
-          await p.wait(400);
-          await p.releaseAll();
-        }
-        if (
-          timeline.length === 0 ||
-          Date.now() - started - timeline[timeline.length - 1].t > 10_000
-        ) {
-          const pile: E2eCorpseView[] = s.corpseViews.filter(
-            (c: E2eCorpseView): boolean => c.isGrounded && Math.abs(c.x + 30 - exitCx) < 120,
-          );
-          timeline.push({
-            t: Date.now() - started,
-            pileTopY:
-              pile.length > 0
-                ? Math.round(Math.min(...pile.map((c: E2eCorpseView): number => c.y)))
-                : null,
-            playerMinY: Math.round(playerMinY),
-          });
-        }
-      }
-      await snap(p, `exit-pile-${classId}`);
-      await record(testInfo, `exit-pile-${classId}`, {
-        basePlatform: base.name,
-        exit: s0.exit,
-        reachedExitWithinS: reached ? Math.round((Date.now() - started) / 1000) : null,
-        highestPlayerY: Math.round(playerMinY),
-        timeline,
+      let readyAtS: number | null = null;
+      let stepsAt60s: number | null = null;
+      const brain: Brain = new Brain(p, {
+        deadline: Date.now() + 360_000,
+        goal: 'exit',
+        stopWhen: (s: E2eSnapshot): boolean => {
+          const t: number = (Date.now() - started) / 1000;
+          if (readyAtS === null && s.exitStack.reachable) readyAtS = Math.round(t);
+          if (stepsAt60s === null && t >= 60) stepsAt60s = s.exitStack.steps;
+          return s.floor > 1;
+        },
+      });
+      await brain.run();
+      const end: E2eSnapshot = await p.probe.state();
+      await snap(p, `exit-stack-${classId}`);
+      await record(testInfo, `exit-stack-${classId}`, {
+        level: end.player?.level,
+        stepsNeeded: end.floor === 1 ? end.exitStack.stepsNeeded : 'done',
+        stepsAt60s,
+        stackReadyAfterS: readyAtS,
+        reachedFloor2AfterS: end.floor > 1 ? Math.round((Date.now() - started) / 1000) : null,
+        died: await p.probe.isGameOver(),
+        potionsUsed: brain.stats.potionsUsed,
+        kills: brain.stats.kills,
       });
     });
   }

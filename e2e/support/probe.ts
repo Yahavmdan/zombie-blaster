@@ -4,6 +4,7 @@ import type { E2eSnapshot, E2eVfxEventView, E2eVfxLogEntry } from '../../src/app
 export type { E2eSnapshot, E2eVfxEventView, E2eVfxLogEntry };
 export type {
   E2eCorpseView,
+  E2eExitStack,
   E2eDropView,
   E2ePlayerView,
   E2eRemotePlayerView,
@@ -85,6 +86,11 @@ export class GameProbe {
       },
       { px: x, py: y },
     );
+  }
+
+  /** Setup only: pre-build the exit corpse stack. */
+  async buildExitStack(steps: number): Promise<void> {
+    await this.page.evaluate((n: number): void => window.__zbE2e?.engine?.buildExitStack(n), steps);
   }
 
   async setGodMode(enabled: boolean): Promise<void> {

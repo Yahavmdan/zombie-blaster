@@ -26,7 +26,7 @@ import {
 } from '@shared/index';
 import { ZombieState, ZombieType } from '@shared/game-entities';
 import { ZombieCorpse } from '@shared/game-entities';
-import { DashPhaseState, IGameEngine, PlayerProjectile } from './engine-types';
+import { DashPhaseState, ExitStackState, IGameEngine, PlayerProjectile } from './engine-types';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
@@ -493,6 +493,8 @@ export class CombatSystem {
     }
 
     if (p.classId === CharacterClass.Assassin && skill.hitCount > 0 && skill.aoeRadius <= 0) {
+      this.vfx.triggerSkillAnimation(skill.animationKey, playerCX, playerCY, p.facing, skillLevel);
+      this.pushSkillAnimationEvent(skill.animationKey, playerCX, playerCY, p.facing, skillLevel);
       p.isAttacking = true;
       setTimeout((): void => {
         if (this.e.player) this.e.player.isAttacking = false;
@@ -880,6 +882,9 @@ export class CombatSystem {
   private pushZombieDamageVfx(hitCx: number, hitCy: number, dmgY: number, damage: number, isCrit: boolean, dmgColor: string, particleColor: string): void {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
+    // Impact feel for the hitter only (never broadcast): small shake, and a freeze-frame in solo.
+    this.vfx.triggerScreenShake(isCrit ? 6 : 3, isCrit ? 4 : 2);
+    this.e.requestHitStop(isCrit ? GAME_CONSTANTS.HITSTOP_CRIT_TICKS : GAME_CONSTANTS.HITSTOP_NORMAL_TICKS);
     const events: VfxEvent[] = [
       { type: VfxEventType.HitParticles, playerId: p.id, x: hitCx, y: hitCy, color: particleColor },
       { type: VfxEventType.DamageNumber, playerId: p.id, x: hitCx, y: dmgY, value: damage, isCrit, color: dmgColor },
@@ -1407,6 +1412,12 @@ export class CombatSystem {
   applyZombieKnockback(z: ZombieState): void {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
+    if (this.isHeldByExitBeam(z)) {
+      // The beam holds the dead: no knockback out of the light (the hit still flashes/staggers).
+      z.velocityX = 0;
+      z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES;
+      return;
+    }
     const knockDir: number = z.x > p.x ? 1 : -1;
     z.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_ZOMBIE;
     z.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
@@ -1421,6 +1432,7 @@ export class CombatSystem {
     if (this.e.godMode) return;
     if (this.hasDarkSight()) return;
 
+    damage = Math.max(1, Math.round(damage * this.e.incomingDamageScale()));
     p.hp -= damage;
     this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
 
@@ -1431,7 +1443,7 @@ export class CombatSystem {
     );
     const resistedKnockback: boolean = !!kbResistBuff && Math.random() * 100 < kbResistBuff.value;
 
-    if (!resistedKnockback) {
+    if (!resistedKnockback && !this.e.isOnExitStack()) {
       const knockDir: number = p.x > z.x ? 1 : -1;
       p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
       p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
@@ -1485,7 +1497,12 @@ export class CombatSystem {
     }
   }
 
-  handleZombieDeath(z: ZombieState, awardRewards: boolean = true): void {
+  /** `killer` defaults to the local player; the host passes the remote player for relayed kills. */
+  handleZombieDeath(
+    z: ZombieState,
+    awardRewards: boolean = true,
+    killer: CharacterState | null = this.e.player,
+  ): void {
     z.isDead = true;
 
     if (this.e.isMultiplayerClient) {
@@ -1516,11 +1533,14 @@ export class CombatSystem {
       fadeTimer: lingerTicks,
       maxFadeTimer: lingerTicks,
       showBlood: Math.random() < GAME_CONSTANTS.ZOMBIE_CORPSE_BLOOD_CHANCE,
+      anchored: false,
+      platformHeight: GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT,
     };
+    this.bindToExitBeam(z, corpse, killer);
     this.e.zombieCorpses.push(corpse);
 
     if (awardRewards) {
-      const floorBonus: number = 1 + (this.e.floor - 1) * 0.1;
+      const floorBonus: number = 1 + (this.e.floor - 1) * GAME_CONSTANTS.ZOMBIE_XP_SCALE_PER_WAVE;
       const xpReward: number = Math.floor(z.instanceXpReward * floorBonus);
       this.e.onXpGained?.(xpReward);
       this.e.onScoreUpdate?.(xpReward * 10);
@@ -1528,6 +1548,35 @@ export class CombatSystem {
       const isDragonBoss: boolean = z.type === ZombieType.DragonBoss;
       this.drops.rollDrops(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, isBoss, isDragonBoss);
     }
+  }
+
+  /**
+   * The exit beam catches the body of a zombie that dies inside it: the death fling is
+   * cancelled and the corpse drops straight onto the exit stack (see ZombieSystem.anchorToExitStack).
+   */
+  private isHeldByExitBeam(z: ZombieState): boolean {
+    const stack: ExitStackState = this.e.getExitStack();
+    if (stack.reachable) return false;
+    const zcx: number = z.x + z.instanceWidth / 2;
+    return zcx >= stack.columnLeft && zcx <= stack.columnRight;
+  }
+
+  private bindToExitBeam(z: ZombieState, corpse: ZombieCorpse, killer: CharacterState | null): void {
+    if (this.e.isMultiplayerClient) return;
+    const stack: ExitStackState = this.e.getExitStack();
+    if (stack.reachable) return;
+    const zcx: number = z.x + z.instanceWidth / 2;
+    const diedInBeam: boolean =
+      zcx >= stack.columnLeft &&
+      zcx <= stack.columnRight &&
+      z.y + z.instanceHeight <= stack.baseY + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE;
+    // The light also claims kills made from inside it, so ranged classes build by shooting from the beam.
+    const killerCx: number = killer ? killer.x + GAME_CONSTANTS.PLAYER_WIDTH / 2 : -1;
+    const killedFromBeam: boolean =
+      killer !== null && !killer.isDown && killerCx >= stack.columnLeft && killerCx <= stack.columnRight;
+    if (!diedInBeam && !killedFromBeam) return;
+    corpse.anchored = true;
+    corpse.velocityX = 0;
   }
 
   private collectDamageEvent(zombieId: string, damage: number, killed: boolean): void {

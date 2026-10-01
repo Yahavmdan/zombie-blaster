@@ -86,6 +86,65 @@ DOOM 2016 attack tokens). Date: 2026-09-30. Items are ordered by impact.
 - The HUD "FLOOR" and "SCORE" got a blue selection highlight from Ctrl+A. That's fixed now, but the canvas also needs `user-select: none`.
 - **Dev builds start with 1,000,000 gold**, which hides economy problems in testing. Measured on floor 1: 185 gold/min earned vs ~40 gold/min of potions (30 each). The balance is fine for production.
 
+## Round 2 (2026-10-01): what shipped and what the replay found
+
+**Exit: the dead build the way up (kept the "climb the corpses" idea).**
+
+- The exit sits over one of three ground corridors and casts a 160 px **beam** down to the ground.
+- Zombies slain in the beam, **or slain by a player standing in it**, become **stack steps**:
+  - A switchback stair of bodies (44 px per step solo, alternating ±36 px, wide footholds), drawn as one pile down to the ground.
+  - Bodies are held (no death fling).
+  - Ranged classes build by shooting from the light.
+- The HUD meter shows "Slay in the beam n/N", then "Stack ready — climb!" with a gold CLIMB! marker.
+- While the stack is unfinished:
+  - The exit **calls the dead**: half the spawns rise on the ground beside the beam, never inside it.
+  - Wandering zombies drift toward the beam.
+- Once the stack is finished:
+  - The call goes quiet, so climbers aren't buried under a crowd.
+  - The beam **steadies climbers** (no knockback on or between steps).
+  - Zombies can't stand on the stack.
+- Floor 1 needs 9 beam kills solo. Each kill adds 1/N of a step with N players, because co-op kills (and spawns) N times faster.
+- Measured (maxed warrior bot, godmode, 5 parallel browsers):
+  - Before: 7 of 11 steps after 6 min.
+  - After: stack done in ~100–160 s, including climbing.
+  - Specs: `exit.spec.ts`, beacon unit tests in `zombie-system.spec.ts`.
+
+**Also shipped:**
+
+- Fairness: a 0.3 s wind-up telegraph before melee hits, at most 2 melee attackers per player, floor-1 damage ×0.4 ramping to full by floor 5.
+- Feel:
+  - Hit-stop (solo only), hit flash, screen shake on skill hits, buff aura.
+  - Power-strike available at level 1 (range 70), lucky-seven at level 1, slash-blast range 140.
+  - Cast animations for the assassin skills.
+- Movement: coyote time, variable jump height, apex hang, air control; turning on ropes, and direction + jump to let go.
+- Co-op:
+  - The revive channel is 2 s and pauses the bleed-out.
+  - A menu shield cuts damage by 70% for 4 s after opening a menu.
+  - Allies' effects are drawn at 70% opacity.
+  - Special drops show as a toast, not a dimming prompt.
+- Controls: J attacks (Ctrl no longer does), the How-to-Play panel shows the real keys and explains the beam, and the canvas has `user-select: none`.
+
+**Found in the round-2 replay:**
+
+- The first stack **looked like floating shelves**: each body was drawn at the bottom of its tall step box, 44 px below where you stand. Now the body lies on the step and darker bodies fill the pile down to the ground.
+- A crowd gathered at the stack base (the beacon kept luring after the stack was done) and knocked climbers off between steps. Fixed by silencing the lure once the stack is ready and steadying anywhere in the column.
+- A unit test "flake" was really a missing `setFinalFrame` mock that threw whenever the random pose branch ran.
+- **Co-op raced through floors:** 2 bots reached floor 16 in 8 min at level 5–6. Stack steps now shrink with the player count; the next run reached floor 8 in 6 min.
+- **Levels fell behind floors:** the kill XP bonus was a hard-coded +10% per floor, against a ×1.6 XP curve. It is now `ZOMBIE_XP_SCALE_PER_WAVE` = +20% per floor.
+- **Ranged classes couldn't build the stack:**
+  - Before the fix: a fresh assassin got 0 of 9 steps in 6 min (55 kills).
+  - Its knives killed zombies before they reached the beam.
+  - Fix: kills made from inside the beam count; a guest's relayed kills carry the killer id from the server.
+- **The co-op pile turned into a black mass:** every step's filler reached the ground, so layers grew quadratically. Each step now fills only down to the same-side step two below, with a lighter shade.
+- Solo pacing (lab, fresh characters, no godmode): a level-1 warrior reached floor 2 in 34 s (17 kills, no potions).
+
+**Proposals (not changed yet; need a design call):**
+
+- **MP regen:** the game has none. The assassin sat at 2/65 MP for most of both demos and cast half as many skills as the warrior. MapleStory regenerates a little MP over time (scaling with INT); something like 1 MP/s would keep skills usable without potions.
+- **Floor length:** about 30–45 s per floor makes the map feel like a corridor. If floors should feel like grinding maps, raise `EXIT_STACK_STEP_DECAY_PER_FLOOR` or lower `EXIT_BEACON_SPAWN_CHANCE` (0.5) to slow the stack.
+- **XP curve:** ×1.6 per level is steep for a game whose floors last under a minute. ×1.35–1.4 would keep levels near the floor number.
+- **The chaos "dialog + resize storm" test** sometimes ends with the player unable to move (0 px in 400 ms, no dialog open). It only happens under heavy parallel load; the assertion now prints the player state for the next occurrence.
+
 ## Suggested order
 
 1. Exit gate (progression is impossible today).

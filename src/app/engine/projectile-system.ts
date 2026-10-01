@@ -205,11 +205,13 @@ export class ProjectileSystem {
           }
           const p: CharacterState | null = this.e.player;
           if (p && this.e.invincibilityFrames <= 0) {
-            p.hp -= rawDamage;
+            p.hp -= Math.max(1, Math.round(rawDamage * this.e.incomingDamageScale()));
             this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
-            p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
-            p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
-            p.isGrounded = false;
+            if (!this.e.isOnExitStack()) {
+              p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
+              p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
+              p.isGrounded = false;
+            }
 
             if (p.hp <= 0) {
               p.hp = 0;
@@ -285,11 +287,13 @@ export class ProjectileSystem {
           }
           const p: CharacterState | null = this.e.player;
           if (p && this.e.invincibilityFrames <= 0) {
-            p.hp -= rawDamage;
+            p.hp -= Math.max(1, Math.round(rawDamage * this.e.incomingDamageScale()));
             this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
-            p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER * 0.5;
-            p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE * 0.5;
-            p.isGrounded = false;
+            if (!this.e.isOnExitStack()) {
+              p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER * 0.5;
+              p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE * 0.5;
+              p.isGrounded = false;
+            }
 
             this.applyPoisonToPlayer();
             this.e.pendingVfxEvents.push({
@@ -383,7 +387,7 @@ export class ProjectileSystem {
     if (this.e.poisonEffect.tickTimer <= 0) {
       this.e.poisonEffect.tickTimer = this.e.poisonEffect.tickInterval;
       if (!this.e.godMode && !this.isLocalPlayerDarkSighted()) {
-        this.e.player.hp -= this.e.poisonEffect.damagePerTick;
+        this.e.player.hp -= Math.max(1, Math.round(this.e.poisonEffect.damagePerTick * this.e.incomingDamageScale()));
         this.vfx.spawnDamageNumber(
           this.e.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
           this.e.player.y - 10,

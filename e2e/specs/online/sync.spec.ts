@@ -154,8 +154,14 @@ test.describe('host-authoritative world sync', { tag: '@online' }, (): void => {
 
     const downed: E2eRemotePlayerView = remoteView(await host.probe.state(), guestId)!;
     await host.probe.teleport(downed.x, downed.y);
+    const channelStart: number = Date.now();
     await host.hold(KEYS.revive);
+    let timerDrop: number = 0;
     try {
+      const firstTimer: number = (await guest.probe.state()).player!.downTimer;
+      await guest.wait(700);
+      const mid: E2eSnapshot = await guest.probe.state();
+      if (mid.player!.isDown) timerDrop = firstTimer - mid.player!.downTimer;
       await guest.probe.waitFor(
         'guest revived',
         (s: E2eSnapshot): boolean => !s.player!.isDown && !s.player!.isDead && s.player!.hp > 0,
@@ -164,6 +170,11 @@ test.describe('host-authoritative world sync', { tag: '@online' }, (): void => {
     } finally {
       await host.release(KEYS.revive);
     }
+    const channelMs: number = Date.now() - channelStart;
+    expect(timerDrop, 'the bleed-out timer pauses while a teammate channels').toBeLessThanOrEqual(
+      5,
+    );
+    expect(channelMs, 'revive channel takes about 2 s').toBeLessThan(4_000);
     await host.attachCanvas(testInfo, 'after revive');
   });
 });
