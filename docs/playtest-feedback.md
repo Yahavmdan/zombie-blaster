@@ -145,6 +145,17 @@ DOOM 2016 attack tokens). Date: 2026-09-30. Items are ordered by impact.
 - **XP curve:** ×1.6 per level is steep for a game whose floors last under a minute. ×1.35–1.4 would keep levels near the floor number.
 - **The chaos "dialog + resize storm" test** sometimes ends with the player unable to move (0 px in 400 ms, no dialog open). It only happens under heavy parallel load; the assertion now prints the player state for the next occurrence.
 
+## Round 3 (2026-10-04): your feedback on round 2
+
+- **No visible hint under the exit.** The light column and the "Slay in the beam n/N" meter are gone; the exit just says EXIT. The zone where kills count is still there, invisible. How to Play only says the exit is out of jump reach "...but the dead pile up."
+- **One kill, one body.** The pile no longer draws filler bodies (each kill used to look like 5–6 corpses). Each body adds 16 px, about one lying body.
+- **The exit is lower and shortcut-proof.**
+  - y 310 on floor 1 (was 130), so floor 1 needs about 14 kills solo.
+  - It rises 12 px per floor and 64 px per extra player.
+  - The two upper platforms and their ropes are gone; the rest of the level is mirrored, so the exit alternates right/left over open ground.
+  - No double jump from the ground or any platform reaches it (`exit.spec` checks every launch spot).
+- **Monster magnet drags instead of teleporting.** Zombies brace briefly (longer when farther), then are lifted and pulled along an accelerating arc into the warrior's spot with purple drag streaks, then drop. The drag is host-simulated and synced, so every screen sees it. It's the warrior's tool for piling bodies under the exit.
+
 ## Suggested order
 
 1. Exit gate (progression is impossible today).

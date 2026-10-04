@@ -19,7 +19,6 @@ import {
   WorldDrop,
   ZombieCorpse,
   ZombieState,
-  ZombieType,
 } from '@shared/game-entities';
 import { InputKeys } from '@shared/messages';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
@@ -51,6 +50,8 @@ import { DropSystem } from './drop-system';
 import { CombatSystem } from './combat-system';
 import { ProjectileSystem } from './projectile-system';
 import { ZombieSystem } from './zombie-system';
+import { pullZombiesToward } from './magnet-pull';
+import { exitPlatformY, generateLevel, GROUND_PLATFORM, LevelLayout, Prop } from './level-generator';
 import { RenderSystem } from './render-system';
 
 export type { Particle };
@@ -86,6 +87,9 @@ export class GameEngine implements IGameEngine {
   worldDrops: WorldDrop[] = [];
   platforms: Platform[] = [];
   ropes: Rope[] = [];
+  /** Seed for this run's floor layouts: the host picks it, clients adopt it from game-sync. */
+  layoutSeed: number = Math.floor(Math.random() * 0x7fffffff);
+  level: LevelLayout = generateLevel(this.layoutSeed, 1);
   keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
   attackCooldown: number = 0;
   attackAnimTicks: number = 0;
@@ -109,7 +113,6 @@ export class GameEngine implements IGameEngine {
   spawnTimer: number = 0;
   floorTransitionTimer: number = 0;
   exitPlatform: Platform = { x: 0, y: 0, width: 0, height: 0 };
-  exitRope: Rope | null = null;
 
   backgroundStars: BackgroundStar[] = [];
 
@@ -214,9 +217,8 @@ export class GameEngine implements IGameEngine {
     this.zombieSystem = new ZombieSystem(this, this.physicsSystem, this.combatSystem, this.projectileSystem, this.dropSystem);
     this.renderSystem = new RenderSystem(this);
 
-    this.initPlatforms();
     this.initExitPlatform();
-    this.initRopes();
+    this.applyLevel();
     this.initStars();
     this.spriteAnimator.load();
     this.zombieSpriteAnimator.load();
@@ -226,16 +228,6 @@ export class GameEngine implements IGameEngine {
     this.dragonImpactImg.src = 'sprites/zombies/dragon_boss/AttackEffect1.png';
   }
 
-  private initPlatforms(): void {
-    this.platforms = [
-      { x: -100, y: GAME_CONSTANTS.GROUND_Y, width: GAME_CONSTANTS.CANVAS_WIDTH + 200, height: 100 },
-      { x: 80, y: 530, width: 220, height: 20 },
-      { x: 800, y: 530, width: 220, height: 20 },
-      { x: 420, y: 430, width: 280, height: 20 },
-      { x: 150, y: 330, width: 200, height: 20 },
-      { x: 820, y: 340, width: 200, height: 20 },
-    ];
-  }
 
   private initExitPlatform(): void {
     this.exitPlatform = {
@@ -247,30 +239,43 @@ export class GameEngine implements IGameEngine {
   }
 
   /**
-   * The exit hangs over one of the open corridors (cycling by floor) so its beam reaches the
-   * ground, where the zombies are: players slay them under the exit and climb the dead.
+   * Builds the current floor's layout from the shared seed: collision (platforms, ropes) and the
+   * drawn map come from the same data, so what players see is exactly what they stand on.
    */
-  repositionExitPlatform(): void {
-    const platWidth: number = GAME_CONSTANTS.EXIT_PLATFORM_WIDTH;
-    const corridorCenters: number[] = [1160, 750, 385];
-    const center: number = corridorCenters[(this.floor - 1) % corridorCenters.length];
-    const centered: number = center - platWidth / 2;
-    const exitX: number = Math.max(20, Math.min(GAME_CONSTANTS.CANVAS_WIDTH - platWidth - 20, centered));
-
-    this.exitPlatform.x = exitX;
-
-    if (this.exitRope) {
-      this.exitRope.x = exitX + platWidth / 2;
-    }
+  applyLevel(): void {
+    this.level = generateLevel(this.layoutSeed, this.floor);
+    this.platforms = [
+      { ...GROUND_PLATFORM },
+      ...this.level.platforms.map((p: Platform): Platform => ({ ...p })),
+      // Props are solid: you stand on their tops and bump into their sides.
+      ...this.level.props.map(
+        (p: Prop): Platform => ({ x: p.x, y: p.y, width: p.width, height: p.height, solid: true }),
+      ),
+    ];
+    this.ropes = this.level.ropes.map((r: Rope): Rope => ({ ...r }));
+    this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.level.props);
+    this.repositionExitPlatform();
   }
 
-  /** Height each stacked corpse adds on the current floor. */
-  /** Height one beam kill adds. Co-op teams kill (and spawn) faster, so each kill adds less. */
+  /** Clients follow the host's layout seed (sent with every game-sync). */
+  syncLayoutSeed(seed: number): void {
+    if (!this.isMultiplayerClient || seed === this.layoutSeed) return;
+    this.layoutSeed = seed;
+    this.applyLevel();
+  }
+
+  /**
+   * The exit hangs at the screen edge the layout picked, out of jump reach: players slay zombies
+   * under it and climb the pile of the dead. It sits higher on later floors and with more players.
+   */
+  repositionExitPlatform(): void {
+    this.exitPlatform.x = this.level.exitX;
+    this.exitPlatform.y = exitPlatformY(this.floor, this.remotePlayers.length);
+  }
+
+  /** Height one body adds to the exit pile: one kill, one body. */
   exitStackStep(): number {
-    const players: number = 1 + this.remotePlayers.length;
-    const soloStep: number =
-      GAME_CONSTANTS.EXIT_STACK_STEP_PX - (this.floor - 1) * GAME_CONSTANTS.EXIT_STACK_STEP_DECAY_PER_FLOOR;
-    return Math.max(GAME_CONSTANTS.EXIT_STACK_STEP_MIN_PX, soloStep / players);
+    return GAME_CONSTANTS.EXIT_STACK_STEP_PX;
   }
 
   getExitStack(): ExitStackState {
@@ -344,15 +349,6 @@ export class GameEngine implements IGameEngine {
     });
   }
 
-  private initRopes(): void {
-    this.ropes = [
-      { x: 190, topY: 330, bottomY: 530 },
-      { x: 910, topY: 340, bottomY: 530 },
-      { x: 560, topY: 430, bottomY: GAME_CONSTANTS.GROUND_Y },
-      // { x: 640, topY: GAME_CONSTANTS.EXIT_PLATFORM_Y, bottomY: 430 },
-    ];
-    this.exitRope = this.ropes.find((r: Rope): boolean => r.topY === GAME_CONSTANTS.EXIT_PLATFORM_Y) ?? null;
-  }
 
   private initStars(): void {
     for (let i: number = 0; i < GAME_CONSTANTS.BACKGROUND_STAR_COUNT; i++) {
@@ -798,7 +794,7 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     if (!this.player) return null;
     const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
@@ -817,6 +813,7 @@ export class GameEngine implements IGameEngine {
         .map((z: ZombieState): ZombieState => ({ ...z })),
       corpses: this.zombieCorpses.map((c: ZombieCorpse): ZombieCorpse => ({ ...c })),
       floor: this.floor,
+      layoutSeed: this.layoutSeed,
       attacks,
       revives,
       specialDropActivations,
@@ -936,7 +933,7 @@ export class GameEngine implements IGameEngine {
     if (floor === this.floor) return;
     this.floor = floor;
     this.floorTransitionTimer = GAME_CONSTANTS.FLOOR_TRANSITION_TICKS;
-    this.repositionExitPlatform();
+    this.applyLevel();
 
     if (this.player) {
       this.player.x = GAME_CONSTANTS.CANVAS_WIDTH / 2 - GAME_CONSTANTS.PLAYER_WIDTH / 2;
@@ -1132,32 +1129,11 @@ export class GameEngine implements IGameEngine {
   applyRemotePull(evt: { playerX: number; playerY: number; pullRange: number; skillColor: string }): void {
     if (!this.isMultiplayerHost) return;
 
-    const playerCX: number = evt.playerX + GAME_CONSTANTS.PLAYER_WIDTH / 2;
-    const playerCY: number = evt.playerY + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
-    const spreadHalf: number = GAME_CONSTANTS.PLAYER_WIDTH * 2;
-
-    for (const z of this.zombies) {
-      if (z.isDead || z.spawnTimer > 0) continue;
-      if (z.type === ZombieType.Boss || z.type === ZombieType.DragonBoss) continue;
-
-      const zCX: number = z.x + z.instanceWidth / 2;
-      const zCY: number = z.y + z.instanceHeight / 2;
-      const dist: number = Math.sqrt((zCX - playerCX) ** 2 + (zCY - playerCY) ** 2);
-
-      if (dist <= evt.pullRange) {
-        const offsetX: number = (Math.random() - 0.5) * spreadHalf * 2;
-        z.x = evt.playerX + offsetX;
-        z.y = evt.playerY + GAME_CONSTANTS.PLAYER_HEIGHT - z.instanceHeight;
-        z.velocityX = 0;
-        z.velocityY = 0;
-        z.knockbackFrames = 0;
-
-        this.vfxSystem.spawnHitParticles(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, evt.skillColor);
-      }
-    }
+    pullZombiesToward(this.zombies, evt.playerX, evt.playerY, evt.pullRange);
   }
 
   setRemotePlayers(players: CharacterState[]): void {
+    const playerCountChanged: boolean = players.length !== this.remotePlayers.length;
     const visualPositions: Map<string, { x: number; y: number }> = new Map<string, { x: number; y: number }>();
     for (const rp of this.remotePlayers) {
       visualPositions.set(rp.id, { x: rp.x, y: rp.y });
@@ -1173,6 +1149,8 @@ export class GameEngine implements IGameEngine {
       }
     }
     this.remotePlayers = players;
+    // The exit sits higher with more players; every client derives it the same way.
+    if (playerCountChanged) this.repositionExitPlatform();
 
     for (const rp of this.remotePlayers) {
       const visual: { x: number; y: number } | undefined = visualPositions.get(rp.id);
@@ -1318,6 +1296,7 @@ export class GameEngine implements IGameEngine {
 
   private deriveZombieAnimState(z: ZombieState): ZombieAnimState {
     if (z.isDead) return ZombieAnimState.Dead;
+    if (z.magnetPull) return ZombieAnimState.Hurt;
     if (isZombieWindingUp(z)) return ZombieAnimState.Idle;
     if (z.attackAnimTimer > 0) return ZombieAnimState.Attack;
     if (z.knockbackFrames > 0) return ZombieAnimState.Hurt;

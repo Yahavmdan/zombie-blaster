@@ -69,6 +69,8 @@ export interface Platform {
   y: number;
   width: number;
   height: number;
+  /** A prop: besides standing on its top, its sides block anyone walking into it. */
+  solid?: boolean;
 }
 
 export interface Rope {
@@ -218,7 +220,6 @@ export interface IGameEngine {
   spawnTimer: number;
   floorTransitionTimer: number;
   exitPlatform: Platform;
-  exitRope: Rope | null;
 
   backgroundStars: BackgroundStar[];
 
@@ -279,6 +280,8 @@ export interface IGameEngine {
   remotePlayerInterpolation: Map<string, EntityInterpolation>;
 
   repositionExitPlatform(): void;
+  /** Builds the current floor's layout (collision + drawn map) from the shared seed. */
+  applyLevel(): void;
   getExitStack(): ExitStackState;
   spawnExitStackEffect(x: number, y: number): void;
   /** Brief freeze-frame when the local player's hit lands (solo only). */

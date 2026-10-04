@@ -102,20 +102,28 @@ export const GAME_CONSTANTS = {
   FLOOR_MAX_ALIVE_ZOMBIES_CAP: 30, // Absolute max zombies alive at once regardless of floor
 
   // ─── Exit Platform (floor exit) ──────────────
-  EXIT_PLATFORM_Y: 130, // Y position of the exit platform (pixels from top)
-  EXIT_PLATFORM_WIDTH: 200, // Width of the exit platform in pixels
-  EXIT_PLATFORM_HEIGHT: 20, // Height of the exit platform in pixels
+  EXIT_PLATFORM_Y: 310, // Exit height on floor 1 solo: above what a double jump reaches from the ground or a low platform (~14 bodies)
+  EXIT_RISE_PER_FLOOR: 12, // The exit sits this much higher each floor (more bodies needed)
+  EXIT_RISE_PER_EXTRA_PLAYER: 64, // ...and this much higher per extra player (co-op kills faster)
+  EXIT_PLATFORM_MIN_Y: 150, // Highest the exit ever goes
+  EXIT_PLATFORM_WIDTH: 192, // Width of the exit platform: whole tiles (6 × 32), so the art matches the collision box
+  EXIT_PLATFORM_HEIGHT: 32, // Height of the exit platform: one tile
+  EXIT_EDGE_MARGIN_PX: 20, // Gap between the exit and the screen edge it hangs at
+  LEVEL_TILE_PX: 32, // Platforms are whole tiles wide and one tile tall: drawn art == collision box
+  LEVEL_TIER_Y: [530, 430, 330], // Platform surfaces by tier: each is one jump (≤ 100 px) above the one below
+  LEVEL_EXIT_CLEARANCE_PX: 48, // No platform within this of the exit's span (the ground under it stays open)
+  LEVEL_TIER2_EXIT_GAP_PX: 320, // Tier-2 platforms keep this far from the exit (no double jump across)
+  LEVEL_TIER3_EXIT_GAP_PX: 480, // Tier-3 platforms keep this far from the exit
+  LEVEL_PLATFORM_GAP_PX: 64, // Minimum gap between two platforms on the same tier
+  LEVEL_STEP_UP_GAP_PX: 24, // A platform one tier up is jumpable if its span is within this of the one below
   EXIT_REACH_PX: 100, // The exit counts as reachable once the stack top is this close below it (jump is ~116 px)
-  EXIT_BEAM_WIDTH: 160, // Width of the light column under the exit where slain zombies join the stack
-  EXIT_BEACON_PULL_CHANCE: 0.9, // Chance a wandering (not chasing) zombie picks the direction toward the exit beam
-  EXIT_BEACON_SPAWN_CHANCE: 0.5, // While the stack is unfinished, chance a new zombie rises from the ground beside the beam
-  EXIT_BEACON_SPAWN_SPREAD_PX: 260, // How far beyond the beam edge those zombies may rise
-  EXIT_STACK_STEP_PX: 44, // Height each corpse slain in the beam adds to the exit stack on floor 1 solo (~9 kills; same-side steps 88 px apart fit a 116 px jump). Divided by the player count: co-op kills twice as fast
-  EXIT_STACK_STEP_DECAY_PER_FLOOR: 1, // Stack step shrinks by this much per floor (more kills needed later)
-  EXIT_STACK_STEP_MIN_PX: 14, // Smallest stack step on high floors
-  EXIT_STACK_ZIGZAG_PX: 36, // Stack steps alternate this far left/right of the beam center (switchback stairs)
-  EXIT_STACK_BODY_PX: 12, // Drawn thickness of one lying body in the stack pile (render only)
-  EXIT_STACK_STEP_WIDTH_RATIO: 1.3, // Walkable width of a stack step relative to the corpse (wide, easy footholds)
+  EXIT_BEAM_WIDTH: 160, // Width of the (invisible) zone under the exit where slain zombies join the pile
+  EXIT_BEACON_PULL_CHANCE: 0.9, // Chance a wandering (not chasing) zombie picks the direction toward the exit
+  EXIT_BEACON_SPAWN_CHANCE: 0.5, // While the pile is unfinished, chance a new zombie rises from the ground beside the zone
+  EXIT_BEACON_SPAWN_SPREAD_PX: 260, // How far beyond the zone edge those zombies may rise
+  EXIT_STACK_STEP_PX: 16, // Height one body adds to the pile under the exit (about one lying body: one kill, one body)
+  EXIT_STACK_SPREAD_PX: 18, // Bodies land left/center/right of the zone center, so the pile reads as a heap
+  EXIT_STACK_STEP_WIDTH_RATIO: 1.3, // Walkable width of a pile body relative to the corpse (wide, easy footholds)
 
   // ─── Zombie Spawning ───────────────────────────
   ZOMBIE_SPAWN_INTERVAL_MS: 2000, // Time between zombie spawns in milliseconds
@@ -123,6 +131,11 @@ export const GAME_CONSTANTS = {
   ZOMBIE_SPAWN_DECREASE_PER_WAVE: 100, // Spawn interval shrinks by this many ms each wave
   ZOMBIE_HP_SCALE_PER_WAVE: 0.15, // Zombie HP increases by this fraction each wave (0.15 = +15%)
   ZOMBIE_DAMAGE_SCALE_PER_WAVE: 0.08, // Zombie damage increases by this fraction each wave
+  MAGNET_PULL_DELAY_TICKS_PER_100PX: 3, // Monster magnet: zombies brace this long per 100 px of distance before they are torn loose
+  MAGNET_PULL_BASE_TICKS: 12, // Drag duration for a zombie right next to the caster
+  MAGNET_PULL_TICKS_PER_100PX: 9, // Extra drag duration per 100 px (far zombies fly longer)
+  MAGNET_PULL_MAX_TICKS: 40, // Longest drag (0.8 s)
+  MAGNET_PULL_LIFT_PX: 22, // How high a dragged zombie is lifted off its feet mid-pull
   ZOMBIE_XP_SCALE_PER_WAVE: 0.2, // Kill XP bonus per floor (was a hard-coded 0.1; levels fell far behind floors)
   ZOMBIE_EARLY_DAMAGE_MULT_START: 0.4, // Floor 1 zombies deal this fraction of their listed damage (onboarding)...
   ZOMBIE_EARLY_DAMAGE_MULT_STEP: 0.15, // ...rising by this per floor until full damage (floor 5)

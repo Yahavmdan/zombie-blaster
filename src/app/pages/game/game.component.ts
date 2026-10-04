@@ -161,14 +161,15 @@ export class GameComponent implements OnInit, OnDestroy {
     this.ws.onMessage(ServerMessageType.GameSync)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
-        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] } =
-          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] };
+        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed?: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] } =
+          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed?: number; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] };
 
         this.remotePlayerStates.set(payload.player.id, payload.player);
 
         if (!this.isHost) {
           this.gameCanvas()?.applyRemoteZombies(payload.zombies);
           this.gameCanvas()?.applyRemoteCorpses(payload.corpses ?? []);
+          if (payload.layoutSeed !== undefined) this.gameCanvas()?.syncLayoutSeed(payload.layoutSeed);
           this.gameCanvas()?.syncRemoteFloor(payload.floor);
           this.gameCanvas()?.applyRemoteSpecialEffects(payload.activeSpecialEffects ?? []);
           this.gameCanvas()?.applyRemoteProjectiles(payload.spitterProjectiles ?? [], payload.dragonProjectiles ?? []);
@@ -281,7 +282,7 @@ export class GameComponent implements OnInit, OnDestroy {
         const canvas: GameCanvasComponent | undefined = this.gameCanvas();
         if (!canvas) return;
 
-        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null =
+        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null =
           canvas.getStateSnapshot();
         if (!snapshot) return;
 

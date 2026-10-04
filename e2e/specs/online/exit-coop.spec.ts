@@ -4,11 +4,12 @@ import { GamePlayer } from '../../support/game-player';
 import { Brain } from '../../support/brain';
 import { E2eSnapshot } from '../../support/probe';
 
-/** Mirrors EXIT_STACK_STEP_PX (floor 1, solo) in shared/game-constants.ts. */
-const SOLO_FLOOR1_STEP_PX: number = 44;
+/** Mirrors EXIT_PLATFORM_Y (floor 1, solo) and EXIT_RISE_PER_EXTRA_PLAYER in shared/game-constants.ts. */
+const SOLO_FLOOR1_EXIT_Y: number = 310;
+const EXIT_RISE_PER_EXTRA_PLAYER: number = 64;
 
 test.describe('exit stack in co-op', { tag: '@online' }, (): void => {
-  test('two players need twice the beam kills, and both screens agree on the goal', async ({
+  test('with two players the exit hangs higher (more bodies), and both screens agree', async ({
     room,
   }: {
     room: RoomFactory;
@@ -30,16 +31,12 @@ test.describe('exit stack in co-op', { tag: '@online' }, (): void => {
         (s: E2eSnapshot): boolean => s.remotePlayers.length === 1,
       ),
     ]);
-    expect(h.exitStack.step, 'each kill adds half a solo step').toBeCloseTo(
-      SOLO_FLOOR1_STEP_PX / 2,
-      5,
+    expect(h.exit.y, 'one extra player raises the exit').toBe(
+      SOLO_FLOOR1_EXIT_Y - EXIT_RISE_PER_EXTRA_PLAYER,
     );
-    const soloStepsNeeded: number = Math.ceil(
-      (h.exitStack.baseY - h.exitStack.reachY) / SOLO_FLOOR1_STEP_PX,
-    );
-    expect(h.exitStack.stepsNeeded).toBeGreaterThanOrEqual(2 * soloStepsNeeded - 1);
-    expect(g.exitStack.step, 'the guest HUD uses the same step').toBeCloseTo(h.exitStack.step, 5);
-    expect(g.exitStack.stepsNeeded, 'the guest HUD shows the same goal').toBe(
+    expect(g.exit.y, 'the guest sees the exit at the same height').toBe(h.exit.y);
+    expect(g.exitStack.step, 'one kill is one body for everyone').toBe(h.exitStack.step);
+    expect(g.exitStack.stepsNeeded, 'both screens need the same pile').toBe(
       h.exitStack.stepsNeeded,
     );
   });

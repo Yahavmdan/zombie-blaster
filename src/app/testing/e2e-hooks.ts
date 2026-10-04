@@ -1,7 +1,10 @@
 import { CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, isZombieWindingUp } from '@shared/index';
 import { ActiveSpecialEffect, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
-import { ExitStackState } from '../engine/engine-types';
-import { CorpseSurface, corpseSurface } from '../engine/corpse-surface';
+import { ExitStackState, Platform, Rope } from '../engine/engine-types';
+import { measureLevelGeometry } from './geometry-report';
+import { Prop } from '../engine/level-generator';
+import { CorpseSurface, corpseSurface, exitPileOffset } from '../engine/corpse-surface';
+import { magnetPullProgress } from '../engine/magnet-pull';
 import { ZombieAnimState } from '../engine/zombie-sprite-animator';
 import { GameEngine } from '../engine/game-engine';
 import { SpriteAnimator } from '../engine/sprite-animator';
@@ -10,6 +13,7 @@ import {
   E2eCorpseView,
   E2eDropView,
   E2eEngineControls,
+  E2eGeometryReport,
   E2ePlayerView,
   E2eRemotePlayerView,
   E2eRole,
@@ -107,6 +111,7 @@ function toZombieView(z: ZombieState): E2eZombieView {
     facing: z.facing,
     isAttacking: z.attackAnimTimer > 0,
     windingUp: isZombieWindingUp(z),
+    magnetPull: magnetPullProgress(z),
     attackCooldown: z.attackCooldown,
   };
 }
@@ -182,6 +187,31 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
     worldDrops: engine.worldDrops.length,
     exit: { x: engine.exitPlatform.x, y: engine.exitPlatform.y, width: engine.exitPlatform.width },
     exitStack: { ...engine.getExitStack(), playerSteadied: engine.isOnExitStack() },
+    level: {
+      seed: engine.layoutSeed,
+      platforms: engine.platforms
+        .filter((p: Platform): boolean => p.y !== GAME_CONSTANTS.GROUND_Y && !p.solid)
+        .map((p: Platform): { x: number; y: number; width: number; height: number } => ({
+          x: p.x,
+          y: p.y,
+          width: p.width,
+          height: p.height,
+        })),
+      ropes: engine.ropes.map((r: Rope): { x: number; topY: number; bottomY: number } => ({
+        x: r.x,
+        topY: r.topY,
+        bottomY: r.bottomY,
+      })),
+      props: engine.level.props.map(
+        (p: Prop): { kind: string; x: number; y: number; width: number; height: number } => ({
+          kind: p.kind,
+          x: p.x,
+          y: p.y,
+          width: p.width,
+          height: p.height,
+        }),
+      ),
+    },
     drops: engine.worldDrops.map(
       (d: WorldDrop): E2eDropView => ({ id: d.id, type: d.type, x: d.x, y: d.y, value: d.value }),
     ),
@@ -226,15 +256,15 @@ const engineControls: E2eEngineControls = {
     if (!engine) return;
     for (let i: number = 0; i < steps; i++) {
       const stack: ExitStackState = engine.getExitStack();
-      const width: number = 40;
-      const height: number = 44;
+      const width: number = 30;
+      const height: number = 41;
       const side: number = stack.steps % 2 === 0 ? -1 : 1;
       const id: string = `e2e-stack-${Date.now()}-${i}`;
       const spriteKey: string = engine.zombieSpriteAnimator.getSpriteKey(ZombieType.Walker);
       engine.zombieCorpses.push({
         id,
         type: ZombieType.Walker,
-        x: stack.centerX - width / 2 + side * GAME_CONSTANTS.EXIT_STACK_ZIGZAG_PX,
+        x: stack.centerX - width / 2 + exitPileOffset(stack.steps),
         y: stack.topY - height,
         width,
         height,
@@ -253,6 +283,17 @@ const engineControls: E2eEngineControls = {
       });
       engine.zombieSpriteAnimator.setFinalFrame(id, spriteKey, ZombieAnimState.Dead);
     }
+  },
+  setLayoutSeed(seed: number): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine || engine.isMultiplayerClient) return;
+    engine.layoutSeed = seed;
+    engine.applyLevel();
+  },
+  geometryReport(): E2eGeometryReport {
+    return currentEngine
+      ? measureLevelGeometry(currentEngine)
+      : { ready: false, checks: [], strayPixels: 0, strayExample: null };
   },
   peekPendingVfx(): E2eVfxEventView[] {
     return currentEngine ? currentEngine.pendingVfxEvents.map(toVfxEventView) : [];

@@ -3,7 +3,7 @@ import { E2eSnapshot } from './probe';
 import { WORLD } from './invariants';
 
 /**
- * Level geometry (mirrors GameEngine.initPlatforms / initRopes) and a tiny route planner:
+ * Level geometry (read live from the probe: every floor is generated) and a tiny route planner:
  * walk, jump up onto a low platform, climb a rope, or drop through a platform. Every step is
  * real key input, so the AI moves like a player.
  */
@@ -28,20 +28,34 @@ export const GROUND: LevelPlatform = {
   width: WORLD.width + 200,
 };
 
-export const LEVEL_PLATFORMS: LevelPlatform[] = [
-  GROUND,
-  { name: 'low-left', x: 80, y: 530, width: 220 },
-  { name: 'low-right', x: 800, y: 530, width: 220 },
-  { name: 'middle', x: 420, y: 430, width: 280 },
-  { name: 'top-left', x: 150, y: 330, width: 200 },
-  { name: 'top-right', x: 820, y: 340, width: 200 },
-];
+/** This floor's platforms, ground first (from the live collision geometry). */
+export function levelPlatforms(s: E2eSnapshot): LevelPlatform[] {
+  return [
+    GROUND,
+    ...s.level.platforms.map(
+      (p: { x: number; y: number; width: number }): LevelPlatform => ({
+        name: `${p.x},${p.y}`,
+        x: p.x,
+        y: p.y,
+        width: p.width,
+      }),
+    ),
+    // Props are solid: you can stand on their tops too.
+    ...s.level.props.map(
+      (p: { x: number; y: number; width: number }): LevelPlatform => ({
+        name: `prop ${p.x},${p.y}`,
+        x: p.x,
+        y: p.y,
+        width: p.width,
+      }),
+    ),
+  ];
+}
 
-export const LEVEL_ROPES: LevelRope[] = [
-  { x: 190, topY: 330, bottomY: 530 },
-  { x: 910, topY: 340, bottomY: 530 },
-  { x: 560, topY: 430, bottomY: WORLD.groundY },
-];
+/** This floor's ropes (from the live collision geometry). */
+export function levelRopes(s: E2eSnapshot): LevelRope[] {
+  return s.level.ropes;
+}
 
 const FEET_TOLERANCE: number = 8;
 
@@ -55,7 +69,7 @@ export function currentPlatform(s: E2eSnapshot): LevelPlatform | null {
   if (!p || p.isClimbing || !p.isGrounded) return null;
   const feet: number = p.y + WORLD.playerHeight;
   return (
-    LEVEL_PLATFORMS.filter(
+    levelPlatforms(s).filter(
       (pl: LevelPlatform): boolean =>
         Math.abs(feet - pl.y) < FEET_TOLERANCE &&
         p.x + WORLD.playerWidth > pl.x &&
@@ -65,9 +79,9 @@ export function currentPlatform(s: E2eSnapshot): LevelPlatform | null {
 }
 
 /** The platform directly under x at or below y (the one a stack or player at x rests on). */
-export function platformUnder(x: number, y: number): LevelPlatform {
+export function platformUnder(s: E2eSnapshot, x: number, y: number): LevelPlatform {
   return (
-    LEVEL_PLATFORMS.filter((pl: LevelPlatform): boolean => pl.y >= y - 1 && spans(pl, x)).sort(
+    levelPlatforms(s).filter((pl: LevelPlatform): boolean => pl.y >= y - 1 && spans(pl, x)).sort(
       (a: LevelPlatform, b: LevelPlatform): number => a.y - b.y,
     )[0] ?? GROUND
   );
@@ -130,11 +144,11 @@ export async function stepToward(
     return 'moving';
   }
 
-  const rope: LevelRope | undefined = LEVEL_ROPES.find(
+  const rope: LevelRope | undefined = levelRopes(s).find(
     (r: LevelRope): boolean => r.topY === target.y && spans(target, r.x),
   );
   if (rise > 0 && rope) {
-    const base: LevelPlatform = platformUnder(rope.x, rope.bottomY);
+    const base: LevelPlatform = platformUnder(s, rope.x, rope.bottomY);
     if (here.name === base.name) {
       const dx: number = rope.x - cx;
       if (Math.abs(dx) > 6) {
@@ -150,7 +164,7 @@ export async function stepToward(
 
   if (here.name !== GROUND.name) {
     // Pressing down on a rope grabs it instead of dropping: step away from ropes first.
-    const ropeNear: LevelRope | undefined = LEVEL_ROPES.find(
+    const ropeNear: LevelRope | undefined = levelRopes(s).find(
       (r: LevelRope): boolean => Math.abs(r.x - cx) < 45 && r.topY <= here.y && r.bottomY >= here.y,
     );
     if (ropeNear) {
@@ -180,4 +194,25 @@ async function dropThrough(player: GamePlayer): Promise<void> {
   await player.hold(KEYS.down);
   await player.press(KEYS.jump, 60);
   await player.release(KEYS.down);
+}
+
+/**
+ * Floors are generated, so tests that need a feature (a rope, a platform on some tier) walk the
+ * floors until one has it. Returns the matching snapshot.
+ */
+export async function goToFloorWhere(
+  player: GamePlayer,
+  description: string,
+  wanted: (s: E2eSnapshot) => boolean,
+  maxFloor: number = 10,
+): Promise<E2eSnapshot> {
+  for (let floor: number = 1; floor <= maxFloor; floor++) {
+    if (floor > 1 || (await player.probe.state()).floor !== 1) await player.probe.setFloor(floor);
+    const s: E2eSnapshot = await player.probe.waitFor(
+      `floor ${floor}`,
+      (st: E2eSnapshot): boolean => st.floor === floor,
+    );
+    if (wanted(s)) return s;
+  }
+  throw new Error(`no floor up to ${maxFloor} has ${description}`);
 }

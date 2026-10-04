@@ -18,7 +18,9 @@ import { CombatSystem } from './combat-system';
 import { DropSystem } from './drop-system';
 import { ProjectileSystem } from './projectile-system';
 import { ZombieAnimState } from './zombie-sprite-animator';
-import { corpseSurface, CorpseSurface } from './corpse-surface';
+import { corpseSurface, CorpseSurface, exitPileOffset } from './corpse-surface';
+import { advanceMagnetPull } from './magnet-pull';
+import { pushOutOfSolids } from './solid-blocks';
 
 interface TargetInfo {
   id: string;
@@ -109,6 +111,14 @@ export class ZombieSystem {
         continue;
       }
 
+      // Monster magnet: the drag owns the zombie until it lands at the caster's spot.
+      if (advanceMagnetPull(z)) {
+        const spriteKey: string = this.e.zombieSpriteAnimator.getSpriteKey(z.type);
+        this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Hurt);
+        this.e.zombieSpriteAnimator.tick(z.id, spriteKey);
+        continue;
+      }
+
       if (shocked) {
         z.velocityX = 0;
         z.velocityY = 0;
@@ -161,7 +171,17 @@ export class ZombieSystem {
           z.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
         }
 
+        const prevX: number = z.x;
         z.x += z.velocityX;
+        // Solid props block zombies too; a blocked zombie on the ground hops over.
+        const pushed: { x: number; blocked: boolean } = pushOutOfSolids(
+          z.x, z.y, z.instanceWidth, z.instanceHeight, prevX, this.e.platforms,
+        );
+        if (pushed.blocked) {
+          z.x = pushed.x;
+          z.velocityX = 0;
+          if (z.isGrounded && z.jumpCooldown <= 0) this.zombieJump(z);
+        }
         z.y += z.velocityY;
 
         z.isGrounded = false;
@@ -872,7 +892,9 @@ export class ZombieSystem {
       const side: number = fits(preferredSide) ? preferredSide : -preferredSide;
       if (fits(side)) return { x: stack.centerX + side * offset - width / 2, y: stack.baseY - height };
     }
-    const plat: Platform = this.e.platforms[Math.floor(Math.random() * this.e.platforms.length)];
+    // Zombies rise on the ground and platforms, never on top of a prop.
+    const spawnSurfaces: Platform[] = this.e.platforms.filter((p: Platform): boolean => !p.solid);
+    const plat: Platform = spawnSurfaces[Math.floor(Math.random() * spawnSurfaces.length)];
     const platMinX: number = Math.max(0, plat.x);
     const platMaxX: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - width, plat.x + plat.width - width);
     return {
@@ -959,6 +981,7 @@ export class ZombieSystem {
         Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MAX_TICKS - GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS)),
       eatingTargetId: null,
       eatingTimer: 0,
+      magnetPull: null,
     };
 
     const spriteKey: string = this.e.zombieSpriteAnimator.getSpriteKey(type);
@@ -1039,7 +1062,7 @@ export class ZombieSystem {
   startFloor(): void {
     this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead);
     this.e.spawnTimer = GAME_CONSTANTS.FLOOR_INITIAL_SPAWN_DELAY_TICKS;
-    this.e.repositionExitPlatform();
+    this.e.applyLevel();
     this.e.onFloorUpdate?.(this.e.floor);
   }
 
@@ -1241,7 +1264,7 @@ export class ZombieSystem {
     corpse.velocityX = 0;
     corpse.velocityY = 0;
     corpse.facing = side;
-    corpse.x = stack.centerX - corpse.width / 2 + side * GAME_CONSTANTS.EXIT_STACK_ZIGZAG_PX;
+    corpse.x = stack.centerX - corpse.width / 2 + exitPileOffset(stack.steps);
     corpse.y = stack.topY - corpse.height;
     this.e.zombieSpriteAnimator.setFinalFrame(corpse.id, corpse.spriteKey, ZombieAnimState.Dead);
     this.e.spawnExitStackEffect(stack.centerX, stack.topY - stack.step / 2);

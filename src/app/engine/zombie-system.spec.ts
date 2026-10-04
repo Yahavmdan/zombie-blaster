@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   GAME_CONSTANTS,
   ZOMBIE_TYPES,
@@ -16,6 +16,7 @@ import { ProjectileSystem } from './projectile-system';
 import { ZombieSystem } from './zombie-system';
 import { SpriteAnimator } from './sprite-animator';
 import { ZombieAnimState } from './zombie-sprite-animator';
+import { advanceMagnetPull, pullZombiesToward } from './magnet-pull';
 
 function makePlayer(overrides: Partial<CharacterState> = {}): CharacterState {
   return {
@@ -94,6 +95,7 @@ function makeZombie(overrides: Partial<ZombieState> = {}): ZombieState {
     reactionDelay: 0,
     eatingTargetId: null,
     eatingTimer: 0,
+    magnetPull: null,
     ...overrides,
   };
 }
@@ -146,7 +148,6 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
       width: 250,
       height: 20,
     },
-    exitRope: null,
     backgroundStars: [],
     screenShakeFrames: 0,
     screenShakeIntensity: 0,
@@ -208,6 +209,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     zombieInterpolation: new Map<string, EntityInterpolation>(),
     remotePlayerInterpolation: new Map<string, EntityInterpolation>(),
     repositionExitPlatform: vi.fn(),
+    applyLevel: vi.fn(),
     spawnExitStackEffect: vi.fn(),
     requestHitStop: vi.fn(),
     incomingDamageScale: vi.fn((): number => 1),
@@ -503,5 +505,60 @@ describe('CombatSystem — kills, XP and the exit beam', () => {
   it('a downed player in the beam does not claim kills', (): void => {
     combat.handleZombieDeath(makeZombie({ x: 600 }), true, makePlayer({ x: 1150, isDown: true }));
     expect(lastCorpse().anchored).toBe(false);
+  });
+});
+
+describe('monster magnet drag', () => {
+  const casterX: number = 100;
+  const casterY: number = GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT;
+
+  // Land exactly on the caster (no random spread) so gaps are measurable.
+  beforeEach((): void => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  });
+  afterEach((): void => {
+    vi.restoreAllMocks();
+  });
+
+  it('does not teleport: a far zombie braces, then closes the gap a little more every tick', (): void => {
+    const z: ZombieState = makeZombie({ x: 600 });
+    pullZombiesToward([z], casterX, casterY, 1000);
+    expect(z.magnetPull).not.toBeNull();
+    expect(z.x).toBe(600);
+
+    let ticks: number = 0;
+    while (advanceMagnetPull(z) && z.x === 600 && ticks < 100) ticks++;
+    expect(ticks, 'braces for a moment before it is torn loose').toBeGreaterThan(0);
+
+    const gaps: number[] = [];
+    while (z.magnetPull && ticks < 200) {
+      advanceMagnetPull(z);
+      gaps.push(Math.abs(z.x - casterX));
+      ticks++;
+    }
+    expect(gaps.length, 'the drag takes several ticks').toBeGreaterThan(5);
+    for (let i: number = 1; i < gaps.length; i++) expect(gaps[i]).toBeLessThanOrEqual(gaps[i - 1] + 1e-9);
+    const firstStep: number = 600 - casterX - gaps[0];
+    const lastStep: number = gaps[gaps.length - 2] - gaps[gaps.length - 1];
+    expect(lastStep, 'accelerates into the caster').toBeGreaterThan(firstStep);
+    expect(z.x, 'lands at the caster spot').toBeCloseTo(casterX, 5);
+    expect(z.y + z.instanceHeight).toBeCloseTo(GAME_CONSTANTS.GROUND_Y, 5);
+    expect(z.magnetPull).toBeNull();
+  });
+
+  it('lifts the zombie off its feet mid-drag', (): void => {
+    const z: ZombieState = makeZombie({ x: 600 });
+    pullZombiesToward([z], casterX, casterY, 1000);
+    let highest: number = z.y;
+    while (advanceMagnetPull(z)) highest = Math.min(highest, z.y);
+    expect(highest).toBeLessThan(GAME_CONSTANTS.GROUND_Y - z.instanceHeight - 5);
+  });
+
+  it('bosses resist, and zombies out of range are left alone', (): void => {
+    const boss: ZombieState = makeZombie({ id: 'boss', type: ZombieType.Boss, x: 300 });
+    const far: ZombieState = makeZombie({ id: 'far', x: 1200 });
+    pullZombiesToward([boss, far], casterX, casterY, 500);
+    expect(boss.magnetPull).toBeNull();
+    expect(far.magnetPull).toBeNull();
   });
 });

@@ -111,6 +111,10 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.syncProgression(player);
   }
 
+  syncLayoutSeed(seed: number): void {
+    this.engine?.syncLayoutSeed(seed);
+  }
+
   setFloor(floor: number): void {
     this.engine?.setFloor(floor);
   }
@@ -186,7 +190,7 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; floor: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; floor: number; layoutSeed: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     return this.engine?.getStateSnapshot() ?? null;
   }
 

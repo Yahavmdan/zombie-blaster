@@ -10,6 +10,7 @@ import {
 } from '@shared/game-entities';
 import { IGameEngine, Platform, Rope } from './engine-types';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
+import { pushOutOfSolids } from './solid-blocks';
 
 export class PhysicsSystem {
   /** Ticks left in which a jump still works after leaving the ground. */
@@ -97,7 +98,9 @@ export class PhysicsSystem {
     if (p.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
       p.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
     }
+    const prevX: number = p.x;
     p.x += p.velocityX;
+    this.blockSideways(p, prevX);
     p.y += p.velocityY;
     p.isGrounded = false;
     for (const plat of this.e.platforms) {
@@ -132,6 +135,16 @@ export class PhysicsSystem {
     if (p.x + GAME_CONSTANTS.PLAYER_WIDTH > GAME_CONSTANTS.CANVAS_WIDTH) {
       p.x = GAME_CONSTANTS.CANVAS_WIDTH - GAME_CONSTANTS.PLAYER_WIDTH;
     }
+  }
+
+  /** Solid props stop the player walking into their sides. */
+  private blockSideways(p: CharacterState, prevX: number): void {
+    const pushed: { x: number; blocked: boolean } = pushOutOfSolids(
+      p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, prevX, this.e.platforms,
+    );
+    if (!pushed.blocked) return;
+    p.x = pushed.x;
+    p.velocityX = 0;
   }
 
   private clampPlayerToGround(p: CharacterState): void {
@@ -184,7 +197,9 @@ export class PhysicsSystem {
 
     if (this.e.keys.down) {
       p.y += GAME_CONSTANTS.ROPE_CLIMB_SPEED;
-      if (p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2 > activeRope.bottomY) {
+      // A rope that reaches the ground ends at the feet, not mid-body (no sinking into the floor).
+      const feetOnGround: boolean = p.y + GAME_CONSTANTS.PLAYER_HEIGHT >= GAME_CONSTANTS.GROUND_Y;
+      if (feetOnGround || p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2 > activeRope.bottomY) {
         p.isClimbing = false;
         this.clampPlayerToGround(p);
       }
@@ -266,7 +281,9 @@ export class PhysicsSystem {
       return;
     }
 
-    if (this.e.keys.down && activeRope && this.e.ropeJumpCooldown <= 0) {
+    const standingOnGround: boolean =
+      p.isGrounded && p.y + GAME_CONSTANTS.PLAYER_HEIGHT >= GAME_CONSTANTS.GROUND_Y - 1;
+    if (this.e.keys.down && activeRope && this.e.ropeJumpCooldown <= 0 && !standingOnGround) {
       p.isClimbing = true;
       p.velocityX = 0;
       p.velocityY = 0;
@@ -281,7 +298,9 @@ export class PhysicsSystem {
     }
     if (p.velocityY > 0) this.jumpRising = false;
 
+    const prevX: number = p.x;
     p.x += p.velocityX;
+    this.blockSideways(p, prevX);
     p.y += p.velocityY;
 
     p.isGrounded = false;

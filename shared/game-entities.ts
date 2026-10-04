@@ -66,6 +66,20 @@ export interface ZombieState {
   reactionDelay: number;
   eatingTargetId: string | null;
   eatingTimer: number;
+  /** Monster-magnet drag in progress. Host-simulated and synced, so every screen draws the pull. */
+  magnetPull: MagnetPull | null;
+}
+
+/** A zombie being dragged by monster magnet from where it stood to the caster's spot. */
+export interface MagnetPull {
+  startX: number;
+  startY: number;
+  targetX: number;
+  targetY: number;
+  /** Ticks the zombie still braces before it is torn loose (farther zombies wait longer). */
+  delayTicks: number;
+  elapsedTicks: number;
+  durationTicks: number;
 }
 
 export enum DropType {

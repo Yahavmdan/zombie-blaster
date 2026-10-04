@@ -90,7 +90,7 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   15-tick wind-up (red "!" + glow, `windingUp` in the probe) before the swing, ~0.5 s total.
   At most 2 zombies swing at one player at once (attack tokens). Damage ramps from 40% on floor 1
   to full by floor 5. Zombies only chase players within 640 px (`ZOMBIE_DETECTION_RANGE`);
-  wanderers drift toward the exit beam.
+  wanderers drift toward the exit.
 - Player: 90 ticks (1.8 s) invincible after a hit; move speed 3 (faster than most zombies).
 - Potions: key 7 (HP +50) / 8 (MP +30), 30-tick cooldown, start with 3 each, 30/20 gold.
   Auto-potion needs the class's auto-potion passive; without it nothing drinks for you.
@@ -104,12 +104,26 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
 - Controls: attack is J (Ctrl is unbound, all game keys preventDefault). Air control, coyote
   time (5 ticks), variable jump (release early = short hop), apex hang. On ropes: left/right
   turns, jump alone does nothing, direction + jump lets go, climbing past the top dismounts.
-- Floor exit = exit beacon: a 160 px light column under the exit (corridor x 1160 / 750 / 385 by
-  floor). Zombies killed inside it are caught by the beam (death fling cancelled) and join a
-  switchback corpse staircase from the ground (`anchored` corpses, 30 px steps on floor 1, wide
-  footholds, never fade, exempt from support checks). `exitStack` in the probe has steps,
-  stepsNeeded (13 on floor 1), reachable. When reachable, the exit turns gold ("CLIMB!"); climb
-  the steps and stand on the exit. `probe.buildExitStack(n)` pre-builds it for setup.
+- **Levels are generated per floor** (`level-generator.ts`, seed from the host): never hard-code
+  platform/rope coordinates in tests. Read them from `state().level` (`levelPlatforms(s)`,
+  `levelRopes(s)`, `goToFloorWhere(player, 'a rope', pred)`), or pin a layout with
+  `probe.setLayoutSeed(n)` (solo/host). Tiers at y 530 / 430 / 330; ropes only where the layout
+  has them (floor 1 may have none, later floors always have one). Props (`state().level.props`) are
+  solid: you stand on them and they block walking; the Brain hops when a held direction stalls.
+- **Visual == collision:** `probe.geometryReport()` measures the drawn level pixels against the
+  collision data; `expectArtMatchesCollision` (support/level-geometry.ts) asserts it. Any art/layout
+  change must keep `level-geometry.spec` and `level-sync.spec` green. Look at their floor screenshots.
+- Floor exit: hangs out of jump reach (y 310 on floor 1 solo, 12 px higher per floor, 64 px higher
+  per extra player, min y 150) at the left or right screen edge (the layout picks). No double jump
+  from the ground or any platform reaches it (`exit.spec` checks floors 1–4). Under the exit is an **invisible** 160 px zone (`exitStack.column*`;
+  nothing is drawn, by design: players work it out). Zombies killed in it, or by a player standing
+  in it, become one body each on a pile (16 px per body, left/center/right heap, wide footholds,
+  never fade). `exitStack`: steps, stepsNeeded (14 on floor 1 solo), reachable.
+  `probe.buildExitStack(n)` pre-builds the pile for setup.
+- Monster magnet (warrior) drags zombies, it doesn't teleport them: each braces ~3 ticks per
+  100 px, then flies along a lifted, accelerating arc to the caster's spot (12–40 ticks). The host
+  simulates it (`magnet-pull.ts`); `zombies[].magnetPull` in the probe is null / 0 (bracing) /
+  0..1 (dragging). Pulled zombies ignore knockback. Great for piling bodies under the exit.
 
 Driving tips:
 

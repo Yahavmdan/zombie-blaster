@@ -22,3 +22,9 @@ export function corpseSurface(corpse: ZombieCorpse): CorpseSurface {
     y: corpse.y + corpse.height - corpse.platformHeight,
   };
 }
+
+/** Horizontal offset of the nth body in the exit pile: left, center, right, so it reads as a heap. */
+export function exitPileOffset(index: number): number {
+  const pattern: number[] = [0, -1, 1];
+  return pattern[index % pattern.length] * GAME_CONSTANTS.EXIT_STACK_SPREAD_PX;
+}

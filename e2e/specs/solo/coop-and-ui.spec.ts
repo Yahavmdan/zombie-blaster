@@ -12,7 +12,7 @@ test.describe('controls, onboarding and menus', { tag: '@solo' }, (): void => {
       await page.goto('/');
       await page.getByTestId('menu-main-button-howtoplay').click();
       const help: string = await page.locator('.help-panel').innerText();
-      for (const expected of ['J / CLICK', 'Attack', '1 – 6', 'Skills', 'F', 'Revive', 'inside the EXIT beam']) {
+      for (const expected of ['J / CLICK', 'Attack', '1 – 6', 'Skills', 'F', 'Revive', 'EXIT']) {
         expect(help).toContain(expected);
       }
       expect(help).not.toContain('Pause');

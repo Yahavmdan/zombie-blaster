@@ -96,6 +96,7 @@ function makeZombie(overrides: Partial<ZombieState> = {}): ZombieState {
     reactionDelay: 0,
     eatingTargetId: null,
     eatingTimer: 0,
+    magnetPull: null,
     ...overrides,
   };
 }
@@ -361,7 +362,6 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
       width: 250,
       height: 20,
     },
-    exitRope: null,
     backgroundStars: [],
     screenShakeFrames: 0,
     screenShakeIntensity: 0,
@@ -423,6 +423,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     zombieInterpolation: new Map<string, EntityInterpolation>(),
     remotePlayerInterpolation: new Map<string, EntityInterpolation>(),
     repositionExitPlatform: vi.fn(),
+    applyLevel: vi.fn(),
     spawnExitStackEffect: vi.fn(),
     requestHitStop: vi.fn(),
     incomingDamageScale: vi.fn((): number => 1),

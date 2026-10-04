@@ -20,11 +20,30 @@ The engine is split into focused files under `src/app/engine/`.
 | `drop-system.ts` | Loot drops, potion use, item pickup |
 | `vfx-system.ts` | Particles, damage numbers, screen shake/flash, skill animations, hit marks |
 | `render-system.ts` | All canvas drawing: background, players, zombies, projectiles, overlays |
-| `map-renderer.ts` | Tile map / floor background drawing |
+| `map-renderer.ts` | Draws scenery (backgrounds) and the level geometry layer (ground, platforms, ladders) **from the layout data only** |
+| `level-generator.ts` | Seeded per-floor layouts (platforms, ropes, exit side) + `levelViolations` rules; host picks the seed, clients follow it via game-sync |
+| `magnet-pull.ts` | Monster-magnet drag (host-simulated, synced as `ZombieState.magnetPull`) |
+| `corpse-surface.ts` | Walkable surface of a corpse; exit-pile body offsets |
+| `solid-blocks.ts` | Side collision with solid props (players and zombies) |
 | `sprite-effect-system.ts` | Sprite-sheet effects (`EFFECT_CONFIGS`), standalone |
 | `skill-animations.ts` | `SKILL_ANIMATIONS` particle definitions per skill |
 | `particle-types.ts` | `Particle`, `ParticleShape`, `FadeMode` |
 | `sprite-animator.ts` / `zombie-sprite-animator.ts` | Player / zombie sprite-sheet animation state |
+
+## Level geometry: what you see is what you stand on
+
+- The floor layout from `generateLevel(seed, floor)` is the single source of truth. `GameEngine.applyLevel()`
+  feeds the same data to physics (`platforms`, `ropes`) and to `MapRenderer.setLevel()`.
+- Never hard-code a platform, ladder or prop in a renderer, and never draw scenery that looks walkable.
+  Platforms are whole tiles (`LEVEL_TILE_PX`) wide and one tile tall, so art == collision box.
+- Props (barrels, boxes, lockers, fences) are placed by the generator and are solid (`Platform.solid`):
+  stand on top, blocked at the sides (`solid-blocks.ts`, zombies hop over). A prop's box is its
+  image's measured visible pixels (`PROP_ART`); the renderer offsets the image so the art lands on the
+  box. New prop art: measure its opaque bounds and add it to `PROP_ART`.
+- Any change to level art, tiles, layouts or collision must pass `e2e/specs/solo/level-geometry.spec.ts`
+  and `e2e/specs/online/level-sync.spec.ts`. They measure the drawn pixels against the collision
+  data, land on every platform and climb every ladder. Also look at the attached floor screenshots.
+- New layout rules go into `levelViolations` (unit-tested over thousands of seeds in `level-generator.spec.ts`).
 
 ## Dependency rules
 

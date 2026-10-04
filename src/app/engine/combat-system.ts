@@ -32,6 +32,7 @@ import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { DropSystem } from './drop-system';
 import { ZombieAnimState } from './zombie-sprite-animator';
+import { pullZombiesToward } from './magnet-pull';
 
 export class CombatSystem {
   private clientDamageEvents: Array<{ zombieId: string; damage: number; killed: boolean }> = [];
@@ -633,32 +634,10 @@ export class CombatSystem {
     this.vfx.triggerSkillAnimation(skill.animationKey, playerCX, playerCY, p.facing, skillLevel);
     this.pushSkillAnimationEvent(skill.animationKey, playerCX, playerCY, p.facing, skillLevel);
 
-    const spreadHalf: number = GAME_CONSTANTS.PLAYER_WIDTH * 2;
-    let pulledCount: number = 0;
-
-    for (const z of this.e.zombies) {
-      if (z.isDead || z.spawnTimer > 0) continue;
-      if (z.type === ZombieType.Boss || z.type === ZombieType.DragonBoss) continue;
-
-      const zCX: number = z.x + z.instanceWidth / 2;
-      const zCY: number = z.y + z.instanceHeight / 2;
-      const dist: number = Math.sqrt((zCX - playerCX) ** 2 + (zCY - playerCY) ** 2);
-
-      if (dist <= pullRange) {
-        const offsetX: number = (Math.random() - 0.5) * spreadHalf * 2;
-        z.x = p.x + offsetX;
-        z.y = p.y + GAME_CONSTANTS.PLAYER_HEIGHT - z.instanceHeight;
-        z.velocityX = 0;
-        z.velocityY = 0;
-        z.knockbackFrames = 0;
-
-        this.vfx.spawnHitParticles(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2, skill.color);
-        pulledCount++;
-      }
-    }
-
-    if (pulledCount > 0) {
-      this.e.onZombiesUpdate?.(this.e.zombies);
+    // Zombies belong to the host's simulation: a client only asks the host to pull (it then
+    // sees the drag through the synced `magnetPull` state, like every other player).
+    if (!this.e.isMultiplayerClient) {
+      pullZombiesToward(this.e.zombies, p.x, p.y, pullRange);
     }
 
     if (this.e.isMultiplayerClient) {
@@ -1412,8 +1391,10 @@ export class CombatSystem {
   applyZombieKnockback(z: ZombieState): void {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
+    // A zombie in a monster-magnet drag keeps flying to the caster: hits never knock it off course.
+    if (z.magnetPull) return;
     if (this.isHeldByExitBeam(z)) {
-      // The beam holds the dead: no knockback out of the light (the hit still flashes/staggers).
+      // The exit zone holds the dead: no knockback out of it (the hit still flashes/staggers).
       z.velocityX = 0;
       z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES;
       return;

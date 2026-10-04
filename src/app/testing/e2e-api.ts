@@ -61,6 +61,8 @@ export interface E2eZombieView {
   isAttacking: boolean;
   /** True while telegraphing a melee swing (wind-up before the attack animation). */
   windingUp: boolean;
+  /** Monster-magnet drag: null when not pulled, 0 while bracing, then 0..1 along the drag. */
+  magnetPull: number | null;
   /** Ticks until this zombie can start its next attack. */
   attackCooldown: number;
 }
@@ -167,6 +169,44 @@ export interface E2eVfxLogEntry {
   spriteEffectsAdded?: number;
 }
 
+export interface E2eLevelView {
+  seed: number;
+  /** Platforms above the ground (the ground is always y = GROUND_Y, full width). */
+  platforms: Array<{ x: number; y: number; width: number; height: number }>;
+  ropes: Array<{ x: number; topY: number; bottomY: number }>;
+  /** Solid props (stand on top, blocked at the sides); their boxes are their visible art. */
+  props: Array<{ kind: string; x: number; y: number; width: number; height: number }>;
+}
+
+/** Where one collision object's art was actually drawn, measured from rendered pixels. */
+export interface E2eGeometryCheck {
+  object: string;
+  kind: 'ground' | 'platform' | 'exit' | 'rope' | 'prop';
+  expectedTop: number;
+  /** First pixel row (scanning around expectedTop) where the art covers most of the object. */
+  drawnTop: number | null;
+  expectedLeft: number;
+  expectedRight: number;
+  /** Outermost drawn columns along the object's surface row (platforms) or span (ropes). */
+  drawnLeft: number | null;
+  drawnRight: number | null;
+  /** Ropes only: last drawn row. */
+  expectedBottom: number | null;
+  drawnBottom: number | null;
+  /** Fraction of the object (columns for surfaces, rows for ropes) that has art. */
+  coverage: number;
+  /** Fraction of the object's art (drawn alone) that also appears in the real frame. */
+  presentInFrame: number;
+}
+
+export interface E2eGeometryReport {
+  ready: boolean;
+  checks: E2eGeometryCheck[];
+  /** Opaque geometry-layer pixels that belong to no collision object (art with nothing to stand on). */
+  strayPixels: number;
+  strayExample: string | null;
+}
+
 export interface E2eSnapshot {
   at: number;
   role: E2eRole;
@@ -184,6 +224,8 @@ export interface E2eSnapshot {
   exit: { x: number; y: number; width: number };
   /** Corpse stack under the exit (zombies slain in the exit beam). */
   exitStack: E2eExitStack;
+  /** The live collision geometry of this floor (what physics uses). */
+  level: E2eLevelView;
   drops: E2eDropView[];
   /** Ticks until the potion keys work again. */
   potionCooldownTicks: number;
@@ -212,6 +254,10 @@ export interface E2eEngineControls {
   /** Moves the local player (client-owned state, safe in multiplayer). */
   teleport(x: number, y: number): void;
   peekPendingVfx(): E2eVfxEventView[];
+  /** Solo/host setup only: pin the run's layout seed (the current floor is rebuilt from it). */
+  setLayoutSeed(seed: number): void;
+  /** Measures the drawn level art against the collision geometry (see E2eGeometryReport). */
+  geometryReport(): E2eGeometryReport;
   /** Setup only: stack N corpses in the exit beam (as if slain there). */
   buildExitStack(steps: number): void;
 }

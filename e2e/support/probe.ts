@@ -1,11 +1,19 @@
 import { Page } from '@playwright/test';
-import type { E2eSnapshot, E2eVfxEventView, E2eVfxLogEntry } from '../../src/app/testing/e2e-api';
+import type {
+  E2eGeometryReport,
+  E2eSnapshot,
+  E2eVfxEventView,
+  E2eVfxLogEntry,
+} from '../../src/app/testing/e2e-api';
 
 export type { E2eSnapshot, E2eVfxEventView, E2eVfxLogEntry };
 export type {
   E2eCorpseView,
   E2eExitStack,
   E2eDropView,
+  E2eGeometryCheck,
+  E2eGeometryReport,
+  E2eLevelView,
   E2ePlayerView,
   E2eRemotePlayerView,
   E2eSkillView,
@@ -85,6 +93,24 @@ export class GameProbe {
         window.__zbE2e?.engine?.teleport(px, py);
       },
       { px: x, py: y },
+    );
+  }
+
+  /** Setup only (solo/host): pin the layout seed so a test gets a known level. */
+  async setLayoutSeed(seed: number): Promise<void> {
+    await this.page.evaluate((n: number): void => window.__zbE2e?.engine?.setLayoutSeed(n), seed);
+  }
+
+  /** Where the level art is actually drawn, measured against the collision geometry. */
+  async geometryReport(): Promise<E2eGeometryReport> {
+    return this.page.evaluate(
+      (): E2eGeometryReport =>
+        window.__zbE2e?.engine?.geometryReport() ?? {
+          ready: false,
+          checks: [],
+          strayPixels: 0,
+          strayExample: null,
+        },
     );
   }
 

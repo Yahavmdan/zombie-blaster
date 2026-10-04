@@ -26,17 +26,17 @@ import {
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
 import { ZombieSpriteAnchor } from './zombie-sprite-animator';
-import { ZombieCorpse } from '@shared/game-entities';
+import { MagnetPull, ZombieCorpse } from '@shared/game-entities';
+import { magnetPullProgress } from './magnet-pull';
 import {
-  DamageNumber,
   DashPhaseState,
   DropNotification,
-  ExitStackState,
   IGameEngine,
   LevelUpNotification,
-  Platform,
-  PlayerProjectile,
 } from './engine-types';
+
+/** Matches the warrior-monster-magnet skill color. */
+const MAGNET_STREAK_COLOR: string = '#cc44ff';
 
 export class RenderSystem {
   constructor(private readonly e: IGameEngine) {}
@@ -656,6 +656,51 @@ export class RenderSystem {
   }
 
   /** Brief white flash on a zombie that was just hit (knockback is synced, so everyone sees it). */
+  /**
+   * Monster-magnet drag, drawn from the synced pull state so every screen shows the same thing.
+   * Bracing: the zombie shakes and leans away, resisting. Dragged: it tilts toward the caster,
+   * feet trailing, with streaks behind it that lengthen as it speeds up.
+   */
+  private renderMagnetDrag(
+    ctx: CanvasRenderingContext2D,
+    z: ZombieState,
+    progress: number,
+    drawSprite: () => void,
+  ): void {
+    const pull: MagnetPull | null = z.magnetPull;
+    if (!pull) return;
+    const dir: number = pull.targetX >= pull.startX ? 1 : -1;
+    const bracing: boolean = pull.delayTicks > 0;
+    const feetX: number = z.x + z.instanceWidth / 2;
+    const feetY: number = z.y + z.instanceHeight;
+
+    if (!bracing) {
+      const streakLength: number = 8 + 34 * progress;
+      ctx.save();
+      ctx.strokeStyle = MAGNET_STREAK_COLOR;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      for (let i: number = 0; i < 3; i++) {
+        const y: number = z.y + z.instanceHeight * (0.3 + i * 0.25);
+        ctx.globalAlpha = 0.5 - i * 0.12;
+        ctx.beginPath();
+        ctx.moveTo(feetX - dir * (z.instanceWidth / 2 + 2), y);
+        ctx.lineTo(feetX - dir * (z.instanceWidth / 2 + 2 + streakLength * (1 - i * 0.2)), y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    const shake: number = bracing ? Math.sin(performance.now() / 18) * 1.5 : 0;
+    const tilt: number = bracing ? -dir * 0.12 : dir * 0.35 * Math.sin(Math.PI * Math.min(1, progress * 1.4));
+    ctx.save();
+    ctx.translate(feetX + shake, feetY);
+    ctx.rotate(tilt);
+    ctx.translate(-feetX, -feetY);
+    drawSprite();
+    ctx.restore();
+  }
+
   private renderHitFlash(ctx: CanvasRenderingContext2D, z: ZombieState): void {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -756,7 +801,14 @@ export class RenderSystem {
           drawY += (Math.random() - 0.5) * vibrate * 2;
         }
 
-        this.e.zombieSpriteAnimator.draw(ctx, z.id, spriteKey, drawX, drawY, renderW, renderH, flipX);
+        const pullProgress: number | null = magnetPullProgress(z);
+        if (pullProgress !== null) {
+          this.renderMagnetDrag(ctx, z, pullProgress, (): void => {
+            this.e.zombieSpriteAnimator.draw(ctx, z.id, spriteKey, drawX, drawY, renderW, renderH, flipX);
+          });
+        } else {
+          this.e.zombieSpriteAnimator.draw(ctx, z.id, spriteKey, drawX, drawY, renderW, renderH, flipX);
+        }
         if (z.knockbackFrames >= GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES - 2) this.renderHitFlash(ctx, z);
         if (isZombieWindingUp(z)) this.renderAttackTelegraph(ctx, z);
 
@@ -799,7 +851,6 @@ export class RenderSystem {
 
   private renderZombieCorpses(ctx: CanvasRenderingContext2D): void {
     if (!this.e.zombieSpriteAnimator.isLoaded()) return;
-    const stackBaseY: number = this.e.getExitStack().baseY;
 
     for (const corpse of this.e.zombieCorpses) {
       const progress: number = corpse.fadeTimer / corpse.maxFadeTimer;
@@ -815,21 +866,8 @@ export class RenderSystem {
       const anchor: ZombieSpriteAnchor = this.e.zombieSpriteAnimator.getAnchor(corpse.spriteKey);
       const effectiveAnchorX: number = flipX ? (1 - anchor.anchorX) : anchor.anchorX;
       const drawX: number = corpse.x + corpse.width / 2 - renderW * effectiveAnchorX;
-      // A stack step's body lies on the step surface, not at the bottom of its (tall) collision box.
-      const bodyBottom: number = corpse.anchored
-        ? corpse.y + corpse.height - corpse.platformHeight + GAME_CONSTANTS.EXIT_STACK_BODY_PX
-        : corpse.y + corpse.height;
-      const drawY: number = bodyBottom - renderH * anchor.anchorY;
-
-      if (corpse.anchored) {
-        // Fill down to the same-side step two below, which continues the pile (the two lowest
-        // steps reach the ground). Filling every step to the ground grew quadratically into a black mass.
-        const pileBottom: number = Math.min(
-          stackBaseY,
-          bodyBottom + 2 * corpse.platformHeight + GAME_CONSTANTS.EXIT_STACK_BODY_PX,
-        );
-        this.renderExitStackPile(ctx, corpse, drawX, bodyBottom, pileBottom, renderW, renderH, anchor.anchorY);
-      }
+      // Exit-pile bodies are one body thick (EXIT_STACK_STEP_PX), so every corpse draws as itself.
+      const drawY: number = corpse.y + corpse.height - renderH * anchor.anchorY;
 
       ctx.save();
       ctx.globalAlpha = alpha;
@@ -846,39 +884,6 @@ export class RenderSystem {
         this.renderCorpseFlies(ctx, corpse);
       }
     }
-  }
-
-  /**
-   * Fills the space under a stack step with darker bodies, so the stack reads
-   * as one pile of the dead instead of floating ledges. Layout is seeded by the corpse id, so every
-   * client draws the same pile.
-   */
-  private renderExitStackPile(
-    ctx: CanvasRenderingContext2D,
-    corpse: ZombieCorpse,
-    drawX: number,
-    bodyBottom: number,
-    pileBottom: number,
-    renderW: number,
-    renderH: number,
-    anchorY: number,
-  ): void {
-    const layer: number = GAME_CONSTANTS.EXIT_STACK_BODY_PX;
-    let seed: number = 0;
-    for (let i: number = 0; i < corpse.id.length; i++) seed = (seed * 31 + corpse.id.charCodeAt(i)) >>> 0;
-    ctx.save();
-    ctx.filter = 'brightness(0.6)';
-    let index: number = 0;
-    for (let bottom: number = pileBottom; bottom > bodyBottom + layer / 2; bottom -= layer) {
-      const jitter: number = ((seed >>> (index % 24)) % 25) - 12;
-      const flip: boolean = ((seed >>> (index % 31)) & 1) === 1;
-      this.e.zombieSpriteAnimator.draw(
-        ctx, corpse.id, corpse.spriteKey,
-        drawX + jitter, bottom - renderH * anchorY, renderW, renderH, flip,
-      );
-      index++;
-    }
-    ctx.restore();
   }
 
   private renderCorpseFlies(ctx: CanvasRenderingContext2D, corpse: ZombieCorpse): void {
@@ -1617,7 +1622,7 @@ export class RenderSystem {
       ctx.shadowBlur = 0;
       ctx.font = 'bold 20px sans-serif';
       ctx.fillStyle = '#aaeeff';
-      ctx.fillText('Pile corpses to reach the exit!', GAME_CONSTANTS.CANVAS_WIDTH / 2, cy + 42);
+      ctx.fillText('Find a way up to the EXIT', GAME_CONSTANTS.CANVAS_WIDTH / 2, cy + 42);
 
       const lineWidth: number = 200;
       const lineY: number = cy + 64;
@@ -1646,10 +1651,8 @@ export class RenderSystem {
     const exit: { x: number; y: number; width: number; height: number } = this.e.exitPlatform;
     const t: number = performance.now() / 1000;
     const pulse: number = 0.6 + Math.sin(t * 2) * 0.2;
-    const stack: ExitStackState = this.e.getExitStack();
 
     ctx.save();
-    this.renderExitBeam(ctx, stack, t);
 
     if (this.e.mapRenderer.isLoaded()) {
       this.e.mapRenderer.drawDynamicPlatform(ctx, exit.x, exit.y, exit.width, exit.height);
@@ -1663,12 +1666,12 @@ export class RenderSystem {
       ctx.strokeRect(exit.x, exit.y, exit.width, exit.height);
     }
 
-    ctx.fillStyle = stack.reachable ? '#ffd24a' : '#ffffff';
+    // No hints about how to get up here: players work out that the dead pile up under it.
+    ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'center';
-    ctx.globalAlpha = stack.reachable ? 1 : pulse;
-    ctx.fillText(stack.reachable ? 'CLIMB!' : 'EXIT', exit.x + exit.width / 2, exit.y - 8);
-    this.renderExitMeter(ctx, stack, exit);
+    ctx.globalAlpha = pulse;
+    ctx.fillText('EXIT', exit.x + exit.width / 2, exit.y - 8);
 
     const arrowCount: number = 3;
     for (let i: number = 0; i < arrowCount; i++) {
@@ -1688,56 +1691,7 @@ export class RenderSystem {
     ctx.restore();
   }
 
-  /** Light column under the exit: zombies slain inside it build the stack players climb. */
-  private renderExitBeam(ctx: CanvasRenderingContext2D, stack: ExitStackState, t: number): void {
-    const top: number = this.e.exitPlatform.y + this.e.exitPlatform.height;
-    const height: number = stack.baseY - top;
-    if (height <= 0) return;
-    const color: string = stack.reachable ? '255, 210, 74' : '68, 221, 255';
-    const shimmer: number = 0.1 + Math.sin(t * 3) * 0.04;
-    const gradient: CanvasGradient = ctx.createLinearGradient(0, top, 0, stack.baseY);
-    gradient.addColorStop(0, `rgba(${color}, ${shimmer + 0.08})`);
-    gradient.addColorStop(1, `rgba(${color}, ${shimmer * 0.4})`);
-    ctx.fillStyle = gradient;
-    ctx.fillRect(stack.columnLeft, top, stack.columnRight - stack.columnLeft, height);
 
-    ctx.strokeStyle = `rgba(${color}, 0.35)`;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([6, 6]);
-    ctx.lineDashOffset = -t * 20;
-    ctx.beginPath();
-    ctx.moveTo(stack.columnLeft, top);
-    ctx.lineTo(stack.columnLeft, stack.baseY);
-    ctx.moveTo(stack.columnRight, top);
-    ctx.lineTo(stack.columnRight, stack.baseY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Target line: once the stack reaches it, the exit is one jump away.
-    ctx.strokeStyle = `rgba(${color}, 0.6)`;
-    ctx.beginPath();
-    ctx.moveTo(stack.columnLeft + 20, stack.reachY);
-    ctx.lineTo(stack.columnRight - 20, stack.reachY);
-    ctx.stroke();
-  }
-
-  private renderExitMeter(ctx: CanvasRenderingContext2D, stack: ExitStackState, exit: Platform): void {
-    const width: number = 110;
-    const x: number = exit.x + exit.width / 2 - width / 2;
-    const y: number = exit.y + exit.height + 6;
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = 'rgba(10, 12, 24, 0.75)';
-    ctx.fillRect(x - 2, y - 2, width + 4, 12);
-    ctx.fillStyle = stack.reachable ? '#ffd24a' : '#44ddff';
-    ctx.fillRect(x, y, width * stack.progress, 8);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 10px sans-serif';
-    ctx.textAlign = 'center';
-    const label: string = stack.reachable
-      ? 'Stack ready — climb!'
-      : `Slay in the beam ${Math.min(stack.steps, stack.stepsNeeded)}/${stack.stepsNeeded}`;
-    ctx.fillText(label, exit.x + exit.width / 2, y + 22);
-  }
 
   private renderRopes(ctx: CanvasRenderingContext2D): void {
     for (const rope of this.e.ropes) {

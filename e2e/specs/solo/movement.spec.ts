@@ -2,6 +2,7 @@ import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer, KEYS } from '../../support/game-player';
 import { E2eSnapshot } from '../../support/probe';
 import { WORLD } from '../../support/invariants';
+import { goToFloorWhere } from '../../support/navigation';
 
 test.describe('movement and physics', { tag: '@solo' }, (): void => {
   let player: GamePlayer;
@@ -97,8 +98,13 @@ test.describe('movement and physics', { tag: '@solo' }, (): void => {
   }
 
   test('coyote time: jumping just after walking off a ledge still works', async (): Promise<void> => {
-    // Stand near the right edge of the low-left platform (x 80–300, y 530) and walk off.
-    await player.probe.teleport(250, 530 - WORLD.playerHeight);
+    // Stand near the right edge of a lowest-tier platform (floors are generated) and walk off.
+    const s0: E2eSnapshot = await player.probe.state();
+    const low: { x: number; y: number; width: number } = s0.level.platforms
+      .filter((pl: { y: number }): boolean => pl.y === 530)
+      .sort((a: { x: number }, b: { x: number }): number => a.x - b.x)[0];
+    // Props keep 40 px off platform edges, so this spot is always clear.
+    await player.probe.teleport(low.x + low.width - 34, low.y - WORLD.playerHeight);
     await player.probe.waitFor(
       'on the platform',
       (s: E2eSnapshot): boolean => s.player!.isGrounded,
@@ -125,7 +131,7 @@ test.describe('movement and physics', { tag: '@solo' }, (): void => {
     const apex: number = await apexOver(900);
     await player.release(KEYS.right);
     expect(apex, 'a late jump off the ledge still rises above the platform').toBeLessThan(
-      530 - WORLD.playerHeight - 30,
+      low.y - WORLD.playerHeight - 30,
     );
   });
 
@@ -160,7 +166,15 @@ test.describe('movement and physics', { tag: '@solo' }, (): void => {
   });
 
   test('ropes: turn while climbing, jump alone keeps you on, direction + jump lets go', async (): Promise<void> => {
-    await player.probe.teleport(560 - WORLD.playerWidth / 2, 520);
+    const s0: E2eSnapshot = await goToFloorWhere(
+      player,
+      'a rope',
+      (s: E2eSnapshot): boolean => s.level.ropes.some((r: { topY: number; bottomY: number }): boolean => r.bottomY - r.topY >= 90),
+    );
+    const rope: { x: number; topY: number; bottomY: number } = s0.level.ropes.find(
+      (r: { topY: number; bottomY: number }): boolean => r.bottomY - r.topY >= 90,
+    )!;
+    await player.probe.teleport(rope.x - WORLD.playerWidth / 2, rope.bottomY - 100);
     await player.hold(KEYS.up);
     await player.probe.waitFor('climbing', (s: E2eSnapshot): boolean => s.player!.isClimbing, {
       timeoutMs: 2_000,

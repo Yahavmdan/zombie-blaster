@@ -156,6 +156,8 @@ export class Brain {
   private lastDrinkAt: number = 0;
   private climbing: boolean = false;
   private lastClimbLogAt: number = 0;
+  private lastX: number = 0;
+  private blockedTicks: number = 0;
 
   constructor(
     private readonly me: GamePlayer,
@@ -168,10 +170,28 @@ export class Brain {
       const s: E2eSnapshot = await this.me.probe.state();
       this.countKills(s);
       if (this.options.stopWhen?.(s)) break;
+      if (await this.hopIfBlocked(s)) continue;
       await this.decide(s);
       await this.me.wait(TICK_MS);
     }
     await this.stop();
+  }
+
+  /**
+   * Solid props block walking: if a held direction key moves us nowhere for a few ticks while
+   * grounded, hop over whatever is in the way (players do the same).
+   */
+  private async hopIfBlocked(s: E2eSnapshot): Promise<boolean> {
+    const p: E2eSnapshot['player'] = s.player;
+    if (!p) return false;
+    const walking: boolean = this.me.isHolding(KEYS.left) || this.me.isHolding(KEYS.right);
+    const stalled: boolean = walking && p.isGrounded && !p.isClimbing && Math.abs(p.x - this.lastX) < 0.5;
+    this.lastX = p.x;
+    this.blockedTicks = stalled ? this.blockedTicks + 1 : 0;
+    if (this.blockedTicks < 3) return false;
+    this.blockedTicks = 0;
+    await this.fullJump();
+    return true;
   }
 
   private log(message: string): void {
@@ -409,7 +429,7 @@ export class Brain {
   private async pursueExit(s: E2eSnapshot, threats: Threat[]): Promise<boolean> {
     const p: NonNullable<E2eSnapshot['player']> = s.player!;
     const stack: E2eSnapshot['exitStack'] = s.exitStack;
-    const base: LevelPlatform = platformUnder(stack.centerX, stack.baseY);
+    const base: LevelPlatform = platformUnder(s, stack.centerX, stack.baseY);
     const here: LevelPlatform | null = currentPlatform(s);
     const cx: number = p.x + WORLD.playerWidth / 2;
     const closeThreat: Threat | undefined = threats.find(

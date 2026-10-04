@@ -5,6 +5,7 @@ import { ClassId, GamePlayer, KEYS } from '../support/game-player';
 import { Brain } from '../support/brain';
 import { E2eSkillView, E2eSnapshot, E2eZombieView } from '../support/probe';
 import { WORLD } from '../support/invariants';
+import { goToFloorWhere } from '../support/navigation';
 
 /**
  * Playtest lab. Every experiment answers one design question by playing with real inputs
@@ -21,14 +22,19 @@ interface Platform {
   width: number;
 }
 
-/** Mirrors GameEngine.initPlatforms() (ground excluded). */
-const PLATFORMS: Platform[] = [
-  { name: 'low-left', x: 80, y: 530, width: 220 },
-  { name: 'low-right', x: 800, y: 530, width: 220 },
-  { name: 'middle', x: 420, y: 430, width: 280 },
-  { name: 'top-left', x: 150, y: 330, width: 200 },
-  { name: 'top-right', x: 820, y: 340, width: 200 },
-];
+/** Floors are generated: experiments that compare spots pin this layout seed in every session. */
+const LAB_LAYOUT_SEED: number = 1;
+
+function platformsOf(s: E2eSnapshot): Platform[] {
+  return s.level.platforms.map(
+    (pl: { x: number; y: number; width: number }): Platform => ({
+      name: `${pl.x},${pl.y}`,
+      x: pl.x,
+      y: pl.y,
+      width: pl.width,
+    }),
+  );
+}
 
 async function record(
   testInfo: TestInfo,
@@ -66,7 +72,13 @@ test.describe('playtest lab', (): void => {
   }: { solo: SoloFactory }, testInfo: TestInfo): Promise<void> => {
     const p: GamePlayer = await solo('warrior');
     await p.probe.setGodMode(true);
-    await p.probe.teleport(560 - WORLD.playerWidth / 2, 520);
+    const withRope: E2eSnapshot = await goToFloorWhere(
+      p,
+      'a rope',
+      (s: E2eSnapshot): boolean => s.level.ropes.length > 0,
+    );
+    const rope: { x: number; topY: number; bottomY: number } = withRope.level.ropes[0];
+    await p.probe.teleport(rope.x - WORLD.playerWidth / 2, rope.bottomY - 100);
     await p.hold(KEYS.up);
     await p.wait(400);
     await p.release(KEYS.up);
@@ -141,24 +153,28 @@ test.describe('playtest lab', (): void => {
     }
     await record(testInfo, 'jump-reach', {
       ...results,
-      gapTopPlatformToExitPx: 330 - results.exitY,
-      exitReachableBySingleJumpFromTopPlatform:
-        results['warrior.singleJumpPx'] >= 330 - results.exitY,
-      exitReachableByDoubleJumpFromTopPlatform:
-        (results['assassin.doubleJumpPx'] ?? 0) >= 330 - results.exitY,
+      gapLowestPlatformToExitPx: 530 - results.exitY,
+      exitReachableByDoubleJumpFromLowPlatform:
+        (results['assassin.doubleJumpPx'] ?? 0) >= 530 - results.exitY,
     });
   });
 
   test('afk: is there a spot where you can idle without being hurt?', async ({
     solo,
   }: { solo: SoloFactory }, testInfo: TestInfo): Promise<void> => {
+    const scout: GamePlayer = await solo('warrior', 'scout');
+    await scout.probe.setLayoutSeed(LAB_LAYOUT_SEED);
+    const layout: E2eSnapshot = await scout.probe.state();
+    const firstRope: { x: number; topY: number; bottomY: number } | undefined = layout.level.ropes[0];
     const spots: Array<{ name: string; x: number; y: number; rope?: boolean }> = [
       { name: 'ground-center', x: 624, y: WORLD.groundY - WORLD.playerHeight },
-      ...PLATFORMS.map((pl: Platform): { name: string; x: number; y: number } => ({
+      ...platformsOf(layout).map((pl: Platform): { name: string; x: number; y: number } => ({
         name: pl.name,
         ...standOn(pl, pl.x + pl.width / 2),
       })),
-      { name: 'rope-middle', x: 560 - WORLD.playerWidth / 2, y: 470, rope: true },
+      ...(firstRope
+        ? [{ name: 'rope', x: firstRope.x - WORLD.playerWidth / 2, y: firstRope.bottomY - 100, rope: true }]
+        : []),
     ];
     const results: Array<Record<string, unknown>> = await Promise.all(
       spots.map(
@@ -169,6 +185,7 @@ test.describe('playtest lab', (): void => {
           rope?: boolean;
         }): Promise<Record<string, unknown>> => {
           const p: GamePlayer = await solo('warrior', spot.name);
+          await p.probe.setLayoutSeed(LAB_LAYOUT_SEED);
           await p.probe.teleport(spot.x, spot.y);
           if (spot.rope) {
             await p.hold(KEYS.up);
