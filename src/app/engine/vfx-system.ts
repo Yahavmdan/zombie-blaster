@@ -404,6 +404,72 @@ export class VfxSystem {
     this.e.hitMarks.push({ x, y, frame: 0, tickCounter: 0 });
   }
 
+  /** Wood splinters flying off the boulder's gate as it gives way, and a short shake. */
+  spawnGateBreak(cx: number, cy: number): void {
+    const woods: string[] = ['#a0703c', '#7a5230', '#c89858'];
+    for (let i: number = 0; i < 28; i++) {
+      const life: number = 35 + Math.floor(Math.random() * 25);
+      this.addParticle({
+        x: cx + (Math.random() - 0.5) * 12,
+        y: cy + (Math.random() - 0.5) * 30,
+        vx: (Math.random() - 0.5) * 9,
+        vy: -2 - Math.random() * 4,
+        life,
+        maxLife: life,
+        color: woods[i % woods.length],
+        size: 2 + Math.random() * 4,
+        shape: ParticleShape.Line,
+        rotation: Math.random() * Math.PI,
+        rotationSpeed: (Math.random() - 0.5) * 0.4,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: false,
+      });
+    }
+    this.triggerScreenShake(10, 4);
+  }
+
+  /** Stone debris down the whole wall, a dust cloud at the impact, and a heavy shake. */
+  spawnWallBreak(cx: number, impactY: number): void {
+    const stones: string[] = ['#6b6b78', '#8a8a96', '#4a4a55', '#a89c88'];
+    for (let i: number = 0; i < 60; i++) {
+      const life: number = 50 + Math.floor(Math.random() * 30);
+      this.addParticle({
+        x: cx + (Math.random() - 0.5) * 64,
+        y: Math.random() * GAME_CONSTANTS.GROUND_Y,
+        vx: (Math.random() - 0.5) * 8,
+        vy: -2 - Math.random() * 5,
+        life,
+        maxLife: life,
+        color: stones[i % stones.length],
+        size: 3 + Math.random() * 6,
+        shape: ParticleShape.Square,
+        rotation: Math.random() * Math.PI,
+        rotationSpeed: (Math.random() - 0.5) * 0.3,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: false,
+      });
+    }
+    for (let i: number = 0; i < 24; i++) {
+      const life: number = 40 + Math.floor(Math.random() * 20);
+      this.addParticle({
+        x: cx + (Math.random() - 0.5) * 80,
+        y: impactY - Math.random() * 40,
+        vx: (Math.random() - 0.5) * 3,
+        vy: -0.5 - Math.random(),
+        life,
+        maxLife: life,
+        color: 'rgba(190, 180, 160, 0.7)',
+        size: 10 + Math.random() * 14,
+        shape: ParticleShape.Circle,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Linear,
+        scaleOverLife: true,
+      });
+    }
+    this.triggerScreenShake(24, 10);
+  }
+
   updateParticles(): void {
     for (const p of this.e.particles) {
       p.x += p.vx;

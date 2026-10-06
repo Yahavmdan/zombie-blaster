@@ -120,6 +120,23 @@ export const GAME_CONSTANTS = {
   LEVEL_SAFE_SPOT_Y: 230, // Surface of each floor's safe spot: a high ledge reached by its own ladder
   LEVEL_SAFE_SPOT_TILES: 5, // Width of the safe spot in tiles (room for a full party)
   LEVEL_SAFE_SPOT_EXIT_GAP_PX: 640, // The safe spot keeps this far from the exit (no dropping from it onto the exit)
+  PUZZLE_BOULDER_FLOOR: 2, // Floor whose exit is a side wall broken by a boulder (the hanging exit is the boulder's ledge)
+  BOULDER_SIZE_PX: 48, // Boulder diameter: its box is size x size
+  BOULDER_GATE_HITS: 3, // Hits the small wall (gate) holding the boulder takes before it breaks
+  BOULDER_GATE_WIDTH_PX: 16, // The gate stands on the ledge's downhill edge: this wide...
+  BOULDER_GATE_HEIGHT_PX: 40, // ...and this tall
+  BOULDER_HIT_REACH_PX: 24, // Max gap between an attacking player's box and the gate for the swing to hit it
+  BOULDER_HIT_COOLDOWN_TICKS: 36, // One gate hit per swing (a held attack swings every 36 ticks)
+  BOULDER_ROLL_ACCEL: 0.35, // Speed (px/tick) the released boulder gains each tick along its path
+  BOULDER_MAX_SPEED: 14, // Top rolling speed (px/tick)
+  BOULDER_CRUSH_DAMAGE_PERCENT: 60, // The boulder (and the wall's debris) takes this share of a zombie's max HP, once
+  BOULDER_CHUTE_MIN_SPAN_PX: 256, // The chute from the ledge to the wall spans at least this far...
+  BOULDER_CHUTE_MAX_SPAN_PX: 320, // ...and at most this far horizontally
+  BOULDER_CHUTE_END_CLEARANCE_PX: 60, // The chute's low end stays this high above the ground (players walk under it)
+  BOULDER_SAFE_SPOT_GAP_PX: 448, // On the puzzle floor the safe spot keeps this far from the ledge (no jumping across)
+  BOULDER_DEBRIS_PX: 96, // Wall debris lands this far out from the wall face (and crushes zombies there)
+  BOULDER_WALL_TILES: 2, // Width of the breakable side wall (it spans the screen top to the ground)
+  BOULDER_OPENING_CLEAR_PX: 96, // Props keep this far from the wall, so the way out stays open
   SAFE_SPOT_HEADROOM_PX: 160, // Players up to this far above the safe spot (jumping on it) still count as resting there
 
   // ─── Zombie Spawning ───────────────────────────
@@ -222,6 +239,8 @@ export const GAME_CONSTANTS = {
 
   // ─── Zombie Corpse ─────────────────────────────
   ZOMBIE_CORPSE_LINGER_TICKS: 999_999, // How long a corpse stays on screen before fading (very large = nearly forever)
+  // Quick-climb values for manual testing (a few bodies reach the exit/ledge, walk up the pile):
+  // ZOMBIE_CORPSE_PLATFORM_HEIGHT: 50, ZOMBIE_CORPSE_SNAP_TOLERANCE: 50, ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO: 1
   ZOMBIE_CORPSE_PLATFORM_HEIGHT: 5, // Height of the invisible platform a corpse becomes (lower = denser piles)
   ZOMBIE_CORPSE_SNAP_TOLERANCE: 10, // How close something must be to snap onto a corpse platform
   ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO: 0.55, // Fraction of corpse width used as a walkable platform

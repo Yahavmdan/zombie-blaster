@@ -16,6 +16,7 @@ import {
   WorldDrop,
 } from '@shared/game-entities';
 import { IGameEngine } from './engine-types';
+import { keepOutOfWall } from './boulder-puzzle';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
@@ -194,6 +195,8 @@ export class DropSystem {
         }
       }
 
+      // Never inside the standing puzzle wall, where nobody could pick it up.
+      drop.x = keepOutOfWall(drop.x, size, this.e.puzzleWall());
       drop.lifetime--;
 
       if (this.physics.rectsOverlap(

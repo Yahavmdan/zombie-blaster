@@ -251,3 +251,15 @@ export const QUICK_SLOT_ACTIONS: QuickSlotAction[] = [
 ];
 
 export const QUICK_SLOT_ACTION_SET: Set<string> = new Set<string>(QUICK_SLOT_ACTIONS);
+
+/** Floor-2 boulder puzzle: the host simulates it and sends it with every game-sync. */
+export interface BoulderState {
+  /** Hits the gate holding the boulder has taken; at BOULDER_GATE_HITS it breaks and the boulder rolls. */
+  gateHits: number;
+  /** Distance rolled along the boulder's path (0 = resting against the gate). */
+  progress: number;
+  /** Rolling speed along the path, px/tick. */
+  speed: number;
+  /** True once the boulder smashed the side wall and shattered (permanent for the floor). */
+  wallBroken: boolean;
+}

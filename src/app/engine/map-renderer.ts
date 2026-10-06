@@ -1,5 +1,5 @@
 import { GAME_CONSTANTS } from '@shared/index';
-import { Platform, Rope } from './engine-types';
+import { BoulderPuzzleLayout, Platform, Rope } from './engine-types';
 import { Prop, PROP_ART, PropArt, PropKind } from './level-generator';
 
 interface TileBlock {
@@ -58,6 +58,8 @@ export class MapRenderer {
   private geometryCanvas: HTMLCanvasElement | null = null;
   private platforms: Platform[] = [];
   private ropes: Rope[] = [];
+  private puzzle: BoulderPuzzleLayout | null = null;
+  private wallStanding: boolean = false;
   private loaded: boolean = false;
   private loadCount: number = 0;
   private totalCount: number = 0;
@@ -105,11 +107,22 @@ export class MapRenderer {
     return this.loaded;
   }
 
-  /** Sets the floor's platforms (ground excluded), ropes and props, and redraws the geometry layer. */
-  setLevel(platforms: Platform[], ropes: Rope[], props: Prop[]): void {
+  /**
+   * Sets the floor's platforms (ground excluded), ropes, props and floor-2 puzzle (its wall is drawn
+   * while it stands), and redraws the geometry layer.
+   */
+  setLevel(
+    platforms: Platform[],
+    ropes: Rope[],
+    props: Prop[],
+    puzzle: BoulderPuzzleLayout | null,
+    wallStanding: boolean,
+  ): void {
     this.platforms = platforms.map((p: Platform): Platform => ({ ...p }));
     this.ropes = ropes.map((r: Rope): Rope => ({ ...r }));
     this.props = props.map((p: Prop): Prop => ({ ...p }));
+    this.puzzle = puzzle;
+    this.wallStanding = wallStanding;
     if (this.loaded) this.composeGeometry();
   }
 
@@ -171,6 +184,7 @@ export class MapRenderer {
     for (const plat of this.platforms) {
       this.drawPlatformSurface(ctx, plat);
     }
+    if (this.puzzle && this.wallStanding) this.drawPuzzleWall(ctx, this.puzzle.wall);
     for (const rope of this.ropes) {
       this.drawLadder(ctx, rope);
     }
@@ -235,6 +249,38 @@ export class MapRenderer {
       const srcH: number = (img.naturalHeight * h) / TILE_SIZE;
       ctx.drawImage(img, 0, 0, img.naturalWidth, srcH, x, y, LADDER_TILE_WIDTH, h);
     }
+  }
+
+  /** The cracked stone wall: tiles over its whole box, the open-side column using the edge tile. */
+  drawPuzzleWall(ctx: CanvasRenderingContext2D, wall: Platform): void {
+    const cols: number = Math.round(wall.width / TILE_SIZE);
+    const rows: number = Math.ceil(wall.height / TILE_SIZE);
+    const faceCol: number = wall.x === 0 ? cols - 1 : 0;
+    const faceTile: number = wall.x === 0 ? GROUND_BLOCK.mr : GROUND_BLOCK.ml;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(wall.x, wall.y, wall.width, wall.height);
+    ctx.clip();
+    for (let row: number = 0; row < rows; row++) {
+      for (let col: number = 0; col < cols; col++) {
+        const tileId: number = col === faceCol ? faceTile : GROUND_BLOCK.mc;
+        this.drawTile(ctx, tileId, wall.x + col * TILE_SIZE, wall.y + row * TILE_SIZE);
+      }
+    }
+    // Cracks: a hint that it can break.
+    ctx.strokeStyle = 'rgba(10, 10, 15, 0.8)';
+    ctx.lineWidth = 2;
+    const faceX: number = wall.x === 0 ? wall.x + wall.width - 6 : wall.x + 6;
+    const inward: number = wall.x === 0 ? -1 : 1;
+    for (let y: number = 120; y < wall.height; y += 140) {
+      ctx.beginPath();
+      ctx.moveTo(faceX, y);
+      ctx.lineTo(faceX + inward * 14, y + 22);
+      ctx.lineTo(faceX + inward * 6, y + 44);
+      ctx.lineTo(faceX + inward * 22, y + 70);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** A prop image placed so its visible art covers exactly the prop's collision box. */

@@ -207,6 +207,28 @@ export interface E2eGeometryReport {
   strayExample: string | null;
 }
 
+/** Floor-2 boulder puzzle (null on other floors). */
+export interface E2eBoulderPuzzleView {
+  wall: { x: number; y: number; width: number; height: number };
+  /** +1: the wall is right of the ledge, -1: left of it (the boulder rolls that way). */
+  wallDir: number;
+  /** The boulder's ledge: the floor's exit platform (same box as `exit`), climbed by the pile. */
+  ledge: { x: number; y: number; width: number };
+  /** The small wall holding the boulder, on the ledge's downhill edge. */
+  gate: { x: number; y: number; width: number; height: number };
+  gateHits: number;
+  gateHitsNeeded: number;
+  /** The boulder's box; null once it shattered against the wall. */
+  boulder: { x: number; y: number; width: number; height: number } | null;
+  /** Distance rolled along the path (0 = resting against the gate) and the path's length. */
+  progress: number;
+  pathLength: number;
+  speed: number;
+  wallBroken: boolean;
+  /** The wall still blocks the way out (its collision exists). */
+  wallStanding: boolean;
+}
+
 export interface E2eSnapshot {
   at: number;
   role: E2eRole;
@@ -228,6 +250,8 @@ export interface E2eSnapshot {
   restingPlayerIds: string[];
   /** The live collision geometry of this floor (what physics uses). */
   level: E2eLevelView;
+  /** Floor-2 boulder puzzle: wall, ledge, gate and the boulder (null on other floors). */
+  puzzle: E2eBoulderPuzzleView | null;
   drops: E2eDropView[];
   /** Ticks until the potion keys work again. */
   potionCooldownTicks: number;

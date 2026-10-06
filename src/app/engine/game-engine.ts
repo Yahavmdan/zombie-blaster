@@ -12,6 +12,7 @@ import {
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
+  BoulderState,
   DropType,
   PendingSpecialDropConfirm,
   SpecialDropDefinition,
@@ -28,6 +29,7 @@ import { MapRenderer } from './map-renderer';
 import { SpriteEffectSystem } from './sprite-effect-system';
 import {
   BackgroundStar,
+  BoulderPuzzleLayout,
   DamageNumber,
   DragonImpact,
   DragonProjectile,
@@ -49,6 +51,8 @@ import { DropSystem } from './drop-system';
 import { CombatSystem } from './combat-system';
 import { ProjectileSystem } from './projectile-system';
 import { ZombieSystem } from './zombie-system';
+import { BoulderPuzzleSystem } from './boulder-puzzle-system';
+import { Box, boulderPath, gateBox, gateBroken } from './boulder-puzzle';
 import { pullZombiesToward } from './magnet-pull';
 import { exitPlatformY, generateLevel, GROUND_PLATFORM, LevelLayout, Prop } from './level-generator';
 import { RenderSystem } from './render-system';
@@ -113,6 +117,8 @@ export class GameEngine implements IGameEngine {
   spawnTimer: number = 0;
   floorTransitionTimer: number = 0;
   exitPlatform: Platform = { x: 0, y: 0, width: 0, height: 0 };
+  boulderPuzzle: BoulderPuzzleLayout | null = null;
+  boulder: BoulderState | null = null;
 
   backgroundStars: BackgroundStar[] = [];
 
@@ -200,6 +206,7 @@ export class GameEngine implements IGameEngine {
   private readonly combatSystem: CombatSystem;
   private readonly projectileSystem: ProjectileSystem;
   private readonly zombieSystem: ZombieSystem;
+  private readonly boulderPuzzleSystem: BoulderPuzzleSystem;
   private readonly renderSystem: RenderSystem;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -213,6 +220,7 @@ export class GameEngine implements IGameEngine {
     this.combatSystem = new CombatSystem(this, this.physicsSystem, this.vfxSystem, this.dropSystem);
     this.projectileSystem = new ProjectileSystem(this, this.physicsSystem, this.vfxSystem);
     this.zombieSystem = new ZombieSystem(this, this.physicsSystem, this.combatSystem, this.projectileSystem, this.dropSystem);
+    this.boulderPuzzleSystem = new BoulderPuzzleSystem(this, this.combatSystem, this.vfxSystem);
     this.renderSystem = new RenderSystem(this);
 
     this.initExitPlatform();
@@ -242,6 +250,10 @@ export class GameEngine implements IGameEngine {
    */
   applyLevel(): void {
     this.level = generateLevel(this.layoutSeed, this.floor);
+    this.boulderPuzzle = this.level.boulderPuzzle ?? null;
+    this.boulder = this.boulderPuzzle
+      ? { gateHits: 0, progress: 0, speed: 0, wallBroken: false }
+      : null;
     this.platforms = [
       { ...GROUND_PLATFORM },
       ...this.level.platforms.map((p: Platform): Platform => ({ ...p })),
@@ -249,10 +261,39 @@ export class GameEngine implements IGameEngine {
       ...this.level.props.map(
         (p: Prop): Platform => ({ x: p.x, y: p.y, width: p.width, height: p.height, solid: true }),
       ),
+      // The puzzle wall is solid too, until the boulder breaks it (the gate: placeGate).
+      ...(this.boulderPuzzle
+        ? [{ ...this.boulderPuzzle.wall, solid: true, puzzlePart: 'wall' as const }]
+        : []),
     ];
     this.ropes = this.level.ropes.map((r: Rope): Rope => ({ ...r }));
-    this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.level.props);
+    this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.level.props, this.boulderPuzzle, true);
     this.repositionExitPlatform();
+  }
+
+  /** The gate is a solid block on the ledge's edge: it moves with the ledge until it breaks. */
+  private placeGate(): void {
+    this.platforms = this.platforms.filter((p: Platform): boolean => p.puzzlePart !== 'gate');
+    if (!this.boulderPuzzle || !this.boulder || gateBroken(this.boulder)) return;
+    const gate: Box = gateBox(this.boulderPuzzle, this.exitPlatform.y);
+    this.platforms.push({ ...gate, solid: true, puzzlePart: 'gate' });
+  }
+
+  breakPuzzleGate(): void {
+    if (!this.boulder) return;
+    this.boulder.gateHits = Math.max(this.boulder.gateHits, GAME_CONSTANTS.BOULDER_GATE_HITS);
+    this.placeGate();
+  }
+
+  breakPuzzleWall(): void {
+    if (!this.boulderPuzzle || !this.boulder || this.boulder.wallBroken) return;
+    this.boulder.wallBroken = true;
+    this.platforms = this.platforms.filter((p: Platform): boolean => p.puzzlePart !== 'wall');
+    this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.level.props, this.boulderPuzzle, false);
+  }
+
+  puzzleWall(): Platform | null {
+    return this.boulderPuzzle && this.boulder && !this.boulder.wallBroken ? this.boulderPuzzle.wall : null;
   }
 
   /** Clients follow the host's layout seed (sent with every game-sync). */
@@ -263,12 +304,14 @@ export class GameEngine implements IGameEngine {
   }
 
   /**
-   * The exit hangs at the screen edge the layout picked, out of jump reach: players slay zombies
-   * under it and climb the pile of the dead. It sits higher on later floors and with more players.
+   * The exit hangs where the layout put it (a screen edge; mid-screen as the boulder ledge on the
+   * puzzle floor), out of jump reach: players slay zombies under it and climb the pile of the
+   * dead. It sits higher on later floors and with more players.
    */
   repositionExitPlatform(): void {
     this.exitPlatform.x = this.level.exitX;
     this.exitPlatform.y = exitPlatformY(this.floor, this.remotePlayers.length);
+    this.placeGate();
   }
 
   isInSafeSpot(x: number, y: number): boolean {
@@ -459,12 +502,14 @@ export class GameEngine implements IGameEngine {
 
     if (!this.isMultiplayerClient) {
       this.zombieSystem.updateZombies();
+      this.boulderPuzzleSystem.update();
       this.projectileSystem.updateDragonProjectiles();
       this.projectileSystem.updateSpitterProjectiles();
       this.projectileSystem.updatePoisonEffect();
       this.zombieSystem.updateSpawning();
     } else {
       this.tickClientZombieVisuals();
+      this.boulderPuzzleSystem.tickClient();
       this.projectileSystem.tickClientProjectileVisuals();
       this.projectileSystem.updatePoisonEffect();
       if (this.floorTransitionTimer > 0) this.floorTransitionTimer--;
@@ -729,7 +774,7 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; boulder: BoulderState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     if (!this.player) return null;
     const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
@@ -749,6 +794,7 @@ export class GameEngine implements IGameEngine {
       corpses: this.zombieCorpses.map((c: ZombieCorpse): ZombieCorpse => ({ ...c })),
       floor: this.floor,
       layoutSeed: this.layoutSeed,
+      boulder: this.boulder ? { ...this.boulder } : null,
       attacks,
       revives,
       specialDropActivations,
@@ -879,6 +925,21 @@ export class GameEngine implements IGameEngine {
     }
   }
 
+  /** Clients follow the host's boulder: clamped onto its path, and the wall breaks once. */
+  applyRemoteBoulder(state: BoulderState | null): void {
+    if (!this.isMultiplayerClient || !this.boulderPuzzle || !this.boulder || !state) return;
+    const numbers: number[] = [state.gateHits, state.progress, state.speed];
+    if (!numbers.every((n: number): boolean => Number.isFinite(n))) return;
+    const pathLength: number = boulderPath(this.boulderPuzzle, this.exitPlatform.y).length;
+    const clamp: (n: number, max: number) => number = (n: number, max: number): number =>
+      Math.min(max, Math.max(0, n));
+    this.boulder.gateHits = clamp(Math.round(state.gateHits), GAME_CONSTANTS.BOULDER_GATE_HITS);
+    this.boulder.progress = clamp(state.progress, pathLength);
+    this.boulder.speed = clamp(state.speed, GAME_CONSTANTS.BOULDER_MAX_SPEED);
+    this.placeGate();
+    if (state.wallBroken === true) this.breakPuzzleWall();
+  }
+
   applyRemoteProjectiles(spitterProjectiles: SpitterProjectile[], dragonProjectiles: DragonProjectile[]): void {
     if (!this.isMultiplayerClient) return;
     this.spitterProjectiles = spitterProjectiles;
@@ -940,6 +1001,12 @@ export class GameEngine implements IGameEngine {
           break;
         case VfxEventType.MagicTwinSpawn:
           this.vfxSystem.spawnBuffActivationParticles(evt.x, evt.y, evt.color!);
+          break;
+        case VfxEventType.WallBreak:
+          this.vfxSystem.spawnWallBreak(evt.x, evt.y);
+          break;
+        case VfxEventType.GateBreak:
+          this.vfxSystem.spawnGateBreak(evt.x, evt.y);
           break;
       }
       // Other players' effects render a bit softer so your own read first.

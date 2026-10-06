@@ -1,7 +1,8 @@
 import { CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, isZombieWindingUp } from '@shared/index';
-import { ActiveSpecialEffect, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
-import { Platform, Rope } from '../engine/engine-types';
+import { ActiveSpecialEffect, BoulderState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
+import { BoulderPuzzleLayout, Platform, Rope } from '../engine/engine-types';
 import { measureLevelGeometry } from './geometry-report';
+import { BoulderPath, boulderBox, boulderPath, gateBox } from '../engine/boulder-puzzle';
 import { Prop } from '../engine/level-generator';
 import { CorpseSurface, corpseSurface } from '../engine/corpse-surface';
 import { magnetPullProgress } from '../engine/magnet-pull';
@@ -9,6 +10,7 @@ import { ZombieAnimState } from '../engine/zombie-sprite-animator';
 import { GameEngine } from '../engine/game-engine';
 import { SpriteAnimator } from '../engine/sprite-animator';
 import {
+  E2eBoulderPuzzleView,
   E2eControls,
   E2eCorpseView,
   E2eDropView,
@@ -162,6 +164,28 @@ function safeSpotView(engine: GameEngine): { x: number; y: number; width: number
   return spot ? { x: spot.x, y: spot.y, width: spot.width } : null;
 }
 
+function puzzleView(engine: GameEngine): E2eBoulderPuzzleView | null {
+  const puzzle: BoulderPuzzleLayout | null = engine.boulderPuzzle;
+  const boulder: BoulderState | null = engine.boulder;
+  if (!puzzle || !boulder) return null;
+  const ledge: Platform = engine.exitPlatform;
+  const path: BoulderPath = boulderPath(puzzle, ledge.y);
+  return {
+    wall: { x: puzzle.wall.x, y: puzzle.wall.y, width: puzzle.wall.width, height: puzzle.wall.height },
+    wallDir: puzzle.wallDir,
+    ledge: { x: ledge.x, y: ledge.y, width: ledge.width },
+    gate: gateBox(puzzle, ledge.y),
+    gateHits: boulder.gateHits,
+    gateHitsNeeded: GAME_CONSTANTS.BOULDER_GATE_HITS,
+    boulder: boulderBox(boulder, path),
+    progress: boulder.progress,
+    pathLength: path.length,
+    speed: boulder.speed,
+    wallBroken: boulder.wallBroken,
+    wallStanding: engine.puzzleWall() !== null,
+  };
+}
+
 function buildSnapshot(engine: GameEngine): E2eSnapshot {
   const player: CharacterState | null = engine.player;
   const remotePlayers: E2eRemotePlayerView[] = engine.remotePlayers.map(
@@ -245,6 +269,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
       ),
       safeSpot: safeSpotView(engine),
     },
+    puzzle: puzzleView(engine),
     drops: engine.worldDrops.map(
       (d: WorldDrop): E2eDropView => ({ id: d.id, type: d.type, x: d.x, y: d.y, value: d.value }),
     ),

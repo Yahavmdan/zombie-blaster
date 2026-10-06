@@ -214,6 +214,11 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     applyLevel: vi.fn(),
     requestHitStop: vi.fn(),
     isInSafeSpot: vi.fn((): boolean => false),
+    boulderPuzzle: null,
+    boulder: null,
+    breakPuzzleWall: vi.fn(),
+    breakPuzzleGate: vi.fn(),
+    puzzleWall: vi.fn((): Platform | null => null),
     onPlayerUpdate: null,
     onZombiesUpdate: null,
     onFloorUpdate: null,
@@ -291,6 +296,15 @@ describe('ZombieSystem — corpse falling physics', () => {
 
     expect(corpse.isGrounded).toBe(true);
     expect(corpse.y + corpse.height).toBeCloseTo(GAME_CONSTANTS.GROUND_Y, 0);
+  });
+
+  it('a corpse flung into the standing puzzle wall lands outside it', (): void => {
+    const wall: Platform = { x: 1216, y: 0, width: 64, height: GAME_CONSTANTS.GROUND_Y, solid: true, puzzlePart: 'wall' };
+    engine.puzzleWall = vi.fn((): Platform | null => wall);
+    engine.zombieCorpses = [makeCorpse({ x: 1180, y: 500, velocityX: 12 })];
+    for (let t: number = 0; t < 120; t++) zombieSystem.updateZombieCorpses();
+    const corpse: ZombieCorpse = engine.zombieCorpses[0];
+    expect(corpse.x + corpse.width).toBeLessThanOrEqual(wall.x);
   });
 
   it('grounded corpse with no platform or corpse beneath it should un-ground and fall', () => {
