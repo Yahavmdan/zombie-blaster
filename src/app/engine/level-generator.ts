@@ -1,5 +1,6 @@
 import { GAME_CONSTANTS } from '@shared/index';
-import { Platform, Rope } from './engine-types';
+import { BoulderPuzzleLayout, Platform, Rope } from './engine-types';
+import { chuteSpan } from './boulder-puzzle';
 
 /**
  * Procedural floor layouts. Every floor gets a new arrangement of platforms and ropes from a
@@ -19,6 +20,8 @@ export interface LevelLayout {
   exitX: number;
   /** Solid props on the ground and platforms. */
   props: Prop[];
+  /** Floor-2 puzzle (breakable wall; the exit platform is the boulder's ledge, at exitX). */
+  boulderPuzzle?: BoulderPuzzleLayout;
 }
 
 export const GROUND_PLATFORM: Platform = {
@@ -70,6 +73,8 @@ interface TierRules {
   minTiles: number;
   maxTiles: number;
   exitGap: number;
+  /** A horizontal span no platform may overlap (the puzzle floor's chute), or null. */
+  avoid: [number, number] | null;
 }
 
 function exitGapFor(tierIndex: number): number {
@@ -99,6 +104,7 @@ function tryPlace(
     const x: number = Math.round(randomInt(rand, tile, maxX) / 16) * 16;
     const candidate: Platform = { x, y: rules.y, width, height: tile };
     if (spanGap(x, x + width, exitX, exitRight) < rules.exitGap) continue;
+    if (rules.avoid && x < rules.avoid[1] && x + width > rules.avoid[0]) continue;
     if (
       sameTier.some(
         (p: Platform): boolean => platformGap(p, candidate) < GAME_CONSTANTS.LEVEL_PLATFORM_GAP_PX,
@@ -223,6 +229,7 @@ interface PropContext {
   ropes: Rope[];
   exitX: number;
   props: Prop[];
+  boulderPuzzle?: BoulderPuzzleLayout;
 }
 
 /** Broken rules for one prop against the rest of the layout (shared by the generator and the checks). */
@@ -287,6 +294,11 @@ function propProblems(prop: Prop, layout: PropContext): string[] {
       spanGap(left, right, q.x, q.x + q.width) === 0 && prop.y < q.y + q.height && q.y < bottom;
     if (overlap) out.push('overlaps another prop');
   }
+  const puzzle: BoulderPuzzleLayout | undefined = layout.boulderPuzzle;
+  if (puzzle) {
+    const fromWall: number = spanGap(left, right, puzzle.wall.x, puzzle.wall.x + puzzle.wall.width);
+    if (fromWall < GAME_CONSTANTS.BOULDER_OPENING_CLEAR_PX) out.push('blocks the way out');
+  }
   return out;
 }
 
@@ -339,6 +351,7 @@ function placeProps(rand: Random, layout: Omit<PropContext, 'props'>): Prop[] {
 function placeSafeSpot(
   rand: Random,
   exitX: number,
+  exitGap: number,
   below: Platform[],
 ): { spot: Platform; ladder: Rope } {
   const tile: number = GAME_CONSTANTS.LEVEL_TILE_PX;
@@ -348,7 +361,7 @@ function placeSafeSpot(
   const maxX: number = GAME_CONSTANTS.CANVAS_WIDTH - tile - width;
   const candidates: number[] = [];
   for (let x: number = minX; x <= maxX; x += 16) {
-    if (spanGap(x, x + width, exitX, exitRight) >= GAME_CONSTANTS.LEVEL_SAFE_SPOT_EXIT_GAP_PX) {
+    if (spanGap(x, x + width, exitX, exitRight) >= exitGap) {
       candidates.push(x);
     }
   }
@@ -369,22 +382,56 @@ function placeSafeSpot(
   return { spot, ladder };
 }
 
+/**
+ * Floor-2 puzzle: a solid wall at one screen edge and, a chute's span in from it, the boulder's
+ * ledge. The ledge takes the exit platform's place (same height rules, no ladder): players reach
+ * it by piling up the dead under it, like the exit on other floors.
+ */
+function placeBoulderPuzzle(rand: Random, wallOnRight: boolean): BoulderPuzzleLayout {
+  const wallWidth: number = GAME_CONSTANTS.BOULDER_WALL_TILES * GAME_CONSTANTS.LEVEL_TILE_PX;
+  const span: number =
+    randomInt(
+      rand,
+      GAME_CONSTANTS.BOULDER_CHUTE_MIN_SPAN_PX / 32,
+      GAME_CONSTANTS.BOULDER_CHUTE_MAX_SPAN_PX / 32,
+    ) * 32;
+  const wall: Platform = {
+    x: wallOnRight ? GAME_CONSTANTS.CANVAS_WIDTH - wallWidth : 0,
+    y: 0,
+    width: wallWidth,
+    height: GAME_CONSTANTS.GROUND_Y,
+  };
+  return {
+    wall,
+    wallDir: wallOnRight ? 1 : -1,
+    ledgeX: wallOnRight
+      ? wall.x - span - GAME_CONSTANTS.EXIT_PLATFORM_WIDTH
+      : wall.x + wallWidth + span,
+  };
+}
+
 export function generateLevel(seed: number, floor: number): LevelLayout {
   const rand: Random = seededRandom((seed ^ Math.imul(floor, 0x9e3779b1)) >>> 0);
   const [tier1Y, tier2Y, tier3Y]: readonly number[] = GAME_CONSTANTS.LEVEL_TIER_Y;
   const exitOnRight: boolean = rand() < 0.5;
-  const exitX: number = exitOnRight
-    ? GAME_CONSTANTS.CANVAS_WIDTH -
-      GAME_CONSTANTS.EXIT_EDGE_MARGIN_PX -
-      GAME_CONSTANTS.EXIT_PLATFORM_WIDTH
-    : GAME_CONSTANTS.EXIT_EDGE_MARGIN_PX;
+  const boulderPuzzle: BoulderPuzzleLayout | undefined =
+    floor === GAME_CONSTANTS.PUZZLE_BOULDER_FLOOR ? placeBoulderPuzzle(rand, exitOnRight) : undefined;
+  // On the puzzle floor the exit platform is the boulder's ledge; elsewhere it hangs at an edge.
+  const exitX: number = boulderPuzzle
+    ? boulderPuzzle.ledgeX
+    : exitOnRight
+      ? GAME_CONSTANTS.CANVAS_WIDTH -
+        GAME_CONSTANTS.EXIT_EDGE_MARGIN_PX -
+        GAME_CONSTANTS.EXIT_PLATFORM_WIDTH
+      : GAME_CONSTANTS.EXIT_EDGE_MARGIN_PX;
+  const avoid: [number, number] | null = boulderPuzzle ? chuteSpan(boulderPuzzle) : null;
 
   const tier1: Platform[] = [];
   const tier1Count: number = randomInt(rand, 2, 3);
   for (let i: number = 0; i < tier1Count; i++) {
     const placed: Platform | null = tryPlace(
       rand,
-      { y: tier1Y, minTiles: 5, maxTiles: 8, exitGap: exitGapFor(0) },
+      { y: tier1Y, minTiles: 5, maxTiles: 8, exitGap: exitGapFor(0), avoid },
       exitX,
       tier1,
       null,
@@ -398,7 +445,13 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
   const tier2: Platform[] = [];
   const tier2Count: number = floor === 1 ? 1 : randomInt(rand, 1, 2);
   for (let i: number = 0; i < tier2Count; i++) {
-    const rules: TierRules = { y: tier2Y, minTiles: 5, maxTiles: 9, exitGap: exitGapFor(1) };
+    const rules: TierRules = {
+      y: tier2Y,
+      minTiles: 5,
+      maxTiles: 9,
+      exitGap: exitGapFor(1),
+      avoid,
+    };
     // Prefer a platform you can jump up to; otherwise hang a rope from it.
     const byJump: Platform | null = tryPlace(rand, rules, exitX, tier2, tier1);
     const placed: Platform | null = byJump ?? tryPlace(rand, rules, exitX, tier2, null);
@@ -415,6 +468,7 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
   const { spot: safeSpot, ladder }: { spot: Platform; ladder: Rope } = placeSafeSpot(
     rand,
     exitX,
+    boulderPuzzle ? GAME_CONSTANTS.BOULDER_SAFE_SPOT_GAP_PX : GAME_CONSTANTS.LEVEL_SAFE_SPOT_EXIT_GAP_PX,
     platforms,
   );
   platforms.push(safeSpot);
@@ -423,7 +477,7 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
   if (floor > 1 && tier2.length > 0 && rand() < 0.5) {
     const placed: Platform | null = tryPlace(
       rand,
-      { y: tier3Y, minTiles: 4, maxTiles: 6, exitGap: exitGapFor(2) },
+      { y: tier3Y, minTiles: 4, maxTiles: 6, exitGap: exitGapFor(2), avoid },
       exitX,
       // Keeps clear of the safe spot, so nothing blocks its ladder or crowds it from below.
       [safeSpot],
@@ -432,8 +486,40 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
     if (placed) platforms.push(placed);
   }
 
-  const props: Prop[] = placeProps(rand, { platforms, ropes, exitX });
-  return { seed, floor, platforms, ropes, exitX, props };
+  const props: Prop[] = placeProps(rand, { platforms, ropes, exitX, boulderPuzzle });
+  // Normal floors leave the key out, so their layouts compare equal to before.
+  return boulderPuzzle
+    ? { seed, floor, platforms, ropes, exitX, props, boulderPuzzle }
+    : { seed, floor, platforms, ropes, exitX, props };
+}
+
+/** Broken rules of the floor-2 puzzle. */
+function boulderPuzzleProblems(layout: LevelLayout, puzzle: BoulderPuzzleLayout): string[] {
+  const out: string[] = [];
+  const wall: Platform = puzzle.wall;
+  if (wall.x !== 0 && wall.x + wall.width !== GAME_CONSTANTS.CANVAS_WIDTH) {
+    out.push('wall: not at a screen edge');
+  }
+  if (wall.y !== 0 || wall.height !== GAME_CONSTANTS.GROUND_Y) {
+    out.push('wall: does not span the screen top to the ground');
+  }
+  if ((puzzle.wallDir === 1) !== (wall.x > 0)) out.push('wall: on the wrong side of the ledge');
+  if (layout.exitX !== puzzle.ledgeX) out.push('ledge: not where the exit platform hangs');
+  const [from, to]: [number, number] = chuteSpan(puzzle);
+  const span: number = to - from;
+  if (
+    span < GAME_CONSTANTS.BOULDER_CHUTE_MIN_SPAN_PX ||
+    span > GAME_CONSTANTS.BOULDER_CHUTE_MAX_SPAN_PX
+  ) {
+    out.push(`chute: spans ${span} px`);
+  }
+  for (const p of layout.platforms) {
+    if (p.x < to && p.x + p.width > from) out.push(`platform ${p.x},${p.y}: under the chute`);
+  }
+  for (const r of layout.ropes) {
+    if (r.x > from && r.x < to) out.push(`rope at ${r.x}: under the chute`);
+  }
+  return out;
 }
 
 /**
@@ -446,6 +532,11 @@ export function levelViolations(layout: LevelLayout): string[] {
   const exitLeft: number = layout.exitX;
   const exitRight: number = layout.exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH;
   const tiers: readonly number[] = GAME_CONSTANTS.LEVEL_TIER_Y;
+  const puzzle: BoulderPuzzleLayout | undefined = layout.boulderPuzzle;
+  const puzzleFloor: boolean = layout.floor === GAME_CONSTANTS.PUZZLE_BOULDER_FLOOR;
+  if (puzzleFloor && !puzzle) out.push('puzzle floor without a boulder puzzle');
+  if (!puzzleFloor && puzzle) out.push('boulder puzzle on a normal floor');
+  if (puzzle) out.push(...boulderPuzzleProblems(layout, puzzle));
 
   for (const p of layout.platforms) {
     const name: string = `platform ${p.x},${p.y} w${p.width}`;
@@ -490,10 +581,10 @@ export function levelViolations(layout: LevelLayout): string[] {
   for (const spot of safeSpots) {
     const name: string = `safe spot ${spot.x},${spot.y}`;
     if (spot.y !== GAME_CONSTANTS.LEVEL_SAFE_SPOT_Y) out.push(`${name}: not at the safe-spot height`);
-    if (
-      spanGap(spot.x, spot.x + spot.width, exitLeft, exitRight) <
-      GAME_CONSTANTS.LEVEL_SAFE_SPOT_EXIT_GAP_PX
-    ) {
+    const spotGap: number = puzzle
+      ? GAME_CONSTANTS.BOULDER_SAFE_SPOT_GAP_PX
+      : GAME_CONSTANTS.LEVEL_SAFE_SPOT_EXIT_GAP_PX;
+    if (spanGap(spot.x, spot.x + spot.width, exitLeft, exitRight) < spotGap) {
       out.push(`${name}: too close to the exit`);
     }
     const hasLadder: boolean = layout.ropes.some(

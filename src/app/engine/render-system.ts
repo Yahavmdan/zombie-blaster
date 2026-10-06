@@ -12,6 +12,7 @@ import {
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
+  BoulderState,
   DropType,
   PendingSpecialDropConfirm,
   SpecialDropDefinition,
@@ -29,6 +30,16 @@ import { ZombieSpriteAnchor } from './zombie-sprite-animator';
 import { MagnetPull, ZombieCorpse } from '@shared/game-entities';
 import { magnetPullProgress } from './magnet-pull';
 import {
+  Box,
+  BoulderPath,
+  boulderBox,
+  boulderPath,
+  floorHint,
+  gateBox,
+  gateBroken,
+} from './boulder-puzzle';
+import {
+  BoulderPuzzleLayout,
   DashPhaseState,
   DropNotification,
   IGameEngine,
@@ -77,6 +88,7 @@ export class RenderSystem {
     }
     this.renderExitPlatform(ctx);
     this.renderSafeSpotMarker(ctx);
+    this.renderBoulderPuzzle(ctx);
     this.renderZombies(ctx);
     this.renderHitMarks(ctx);
     this.renderDragonProjectiles(ctx);
@@ -1623,7 +1635,7 @@ export class RenderSystem {
       ctx.shadowBlur = 0;
       ctx.font = 'bold 20px sans-serif';
       ctx.fillStyle = '#aaeeff';
-      ctx.fillText('Find a way up to the EXIT', GAME_CONSTANTS.CANVAS_WIDTH / 2, cy + 42);
+      ctx.fillText(floorHint(this.e.boulderPuzzle), GAME_CONSTANTS.CANVAS_WIDTH / 2, cy + 42);
 
       const lineWidth: number = 200;
       const lineY: number = cy + 64;
@@ -1667,6 +1679,12 @@ export class RenderSystem {
       ctx.strokeRect(exit.x, exit.y, exit.width, exit.height);
     }
 
+    // On the puzzle floor this is the boulder's ledge: the way out is the wall it breaks.
+    if (this.e.boulderPuzzle) {
+      ctx.restore();
+      return;
+    }
+
     // No hints about how to get up here: players work out that the dead pile up under it.
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 14px sans-serif';
@@ -1689,6 +1707,130 @@ export class RenderSystem {
       ctx.fill();
     }
 
+    ctx.restore();
+  }
+
+  /**
+   * The floor-2 puzzle, per frame from the layout and the synced boulder (nothing here is
+   * walkable): the chute from the ledge down to the wall (a covered trough, boulder only), the
+   * boulder (it spins with the distance it rolled) until it shatters, the gate holding it (cracking
+   * with each hit) until it breaks, and an EXIT sign at the opening once the wall is gone.
+   */
+  private renderBoulderPuzzle(ctx: CanvasRenderingContext2D): void {
+    const puzzle: BoulderPuzzleLayout | null = this.e.boulderPuzzle;
+    const boulder: BoulderState | null = this.e.boulder;
+    if (!puzzle || !boulder) return;
+    const ledgeY: number = this.e.exitPlatform.y;
+    const path: BoulderPath = boulderPath(puzzle, ledgeY);
+    const r: number = GAME_CONSTANTS.BOULDER_SIZE_PX / 2;
+    this.renderChute(ctx, path, r);
+    const box: Box | null = boulderBox(boulder, path);
+    if (box) this.renderBoulder(ctx, box, (puzzle.wallDir * boulder.progress) / r);
+    if (!gateBroken(boulder)) this.renderGate(ctx, gateBox(puzzle, ledgeY), boulder.gateHits);
+    if (boulder.wallBroken) this.renderOpeningSign(ctx, puzzle);
+  }
+
+  /** Trough floor under the boulder's path and a guard rail over it, from the ledge to the wall. */
+  private renderChute(ctx: CanvasRenderingContext2D, path: BoulderPath, r: number): void {
+    const x0: number = path.edge.x;
+    const x1: number = path.end.x + Math.sign(path.end.x - path.edge.x) * r;
+    const floorY0: number = path.edge.y + r;
+    const floorY1: number = path.end.y + r;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#3c4048';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(x0, floorY0 + 4);
+    ctx.lineTo(x1, floorY1 + 4);
+    ctx.stroke();
+    ctx.strokeStyle = '#7d8590';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x0, floorY0 - 2 * r - 6);
+    ctx.lineTo(x1, floorY1 - 2 * r - 6);
+    ctx.stroke();
+    ctx.strokeStyle = '#555c66';
+    for (let i: number = 1; i < 6; i++) {
+      const t: number = i / 6;
+      const px: number = x0 + (x1 - x0) * t;
+      const py: number = floorY0 + (floorY1 - floorY0) * t;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px, py - 2 * r - 6);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** The small wooden wall holding the boulder; one more crack per hit. */
+  private renderGate(ctx: CanvasRenderingContext2D, gate: Box, hits: number): void {
+    ctx.save();
+    ctx.fillStyle = '#7a5230';
+    ctx.fillRect(gate.x, gate.y, gate.width, gate.height);
+    ctx.fillStyle = '#a0703c';
+    for (let y: number = gate.y + 2; y < gate.y + gate.height; y += 10) {
+      ctx.fillRect(gate.x + 2, y, gate.width - 4, 6);
+    }
+    ctx.strokeStyle = 'rgba(20, 10, 5, 0.9)';
+    ctx.lineWidth = 2;
+    for (let i: number = 0; i < hits; i++) {
+      const y: number = gate.y + 8 + i * 11;
+      ctx.beginPath();
+      ctx.moveTo(gate.x + 2, y);
+      ctx.lineTo(gate.x + gate.width / 2, y + 6);
+      ctx.lineTo(gate.x + gate.width - 2, y + 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private renderBoulder(ctx: CanvasRenderingContext2D, box: Box, angle: number): void {
+    const r: number = box.width / 2;
+    ctx.save();
+    ctx.translate(box.x + r, box.y + r);
+    ctx.rotate(angle);
+    const stone: CanvasGradient = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 2, 0, 0, r);
+    stone.addColorStop(0, '#a3a0a8');
+    stone.addColorStop(1, '#4d4a55');
+    ctx.fillStyle = stone;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(20, 20, 25, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.6, -r * 0.1);
+    ctx.lineTo(-r * 0.1, r * 0.2);
+    ctx.lineTo(r * 0.4, -r * 0.3);
+    ctx.moveTo(-r * 0.1, r * 0.2);
+    ctx.lineTo(0, r * 0.7);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private renderOpeningSign(ctx: CanvasRenderingContext2D, puzzle: BoulderPuzzleLayout): void {
+    const wall: Platform = puzzle.wall;
+    const t: number = performance.now() / 1000;
+    const signX: number = wall.x + wall.width / 2;
+    const signY: number = GAME_CONSTANTS.GROUND_Y - 70;
+    const dir: number = puzzle.wallDir;
+    ctx.save();
+    ctx.globalAlpha = 0.6 + Math.sin(t * 2) * 0.2;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('EXIT', signX, signY);
+    ctx.fillStyle = '#44ddff';
+    for (let i: number = 0; i < 3; i++) {
+      const ax: number = signX - dir * 12 + dir * i * 12 + Math.sin(t * 3 + i) * 2;
+      ctx.beginPath();
+      ctx.moveTo(ax + dir * 8, signY + 18);
+      ctx.lineTo(ax, signY + 10);
+      ctx.lineTo(ax, signY + 26);
+      ctx.closePath();
+      ctx.fill();
+    }
     ctx.restore();
   }
 

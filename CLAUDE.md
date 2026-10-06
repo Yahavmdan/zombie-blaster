@@ -30,6 +30,8 @@ No ESLint and no lint script. Prettier is installed, but most existing files are
 
 Changed `shared/`? It compiles into both apps: run the frontend build and the server build.
 
+New stage or floor puzzle? Use the `stage-puzzle` skill. Its backlog is `docs/level-puzzle-ideas.md`, and the floor-2 boulder puzzle is the reference implementation.
+
 ## Hard rules
 
 - **Explicit types everywhere.** Every `const`/`let`, parameter, return type, class field and callback parameter gets an annotation (`for...of` variables can't; type the iterable). Signals: `readonly x: WritableSignal<T> = signal<T>(...)`. Details: `.claude/rules/explicit-types.md`.

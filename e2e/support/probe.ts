@@ -8,6 +8,7 @@ import type {
 
 export type { E2eSnapshot, E2eVfxEventView, E2eVfxLogEntry };
 export type {
+  E2eBoulderPuzzleView,
   E2eCorpseView,
   E2eExitPile,
   E2eDropView,

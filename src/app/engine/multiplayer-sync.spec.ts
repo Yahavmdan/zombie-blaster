@@ -9,7 +9,15 @@ import {
   VfxEventType,
 } from '@shared/index';
 import { ZombieState, ZombieType } from '@shared/game-entities';
-import { DamageNumber, EntityInterpolation, IGameEngine, Platform } from './engine-types';
+import {
+  BoulderPuzzleLayout,
+  DamageNumber,
+  EntityInterpolation,
+  IGameEngine,
+  Platform,
+} from './engine-types';
+import { BoulderPuzzleSystem } from './boulder-puzzle-system';
+import { Box, BoulderPath, boulderPath, gateBox, pointAlong } from './boulder-puzzle';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { CombatSystem } from './combat-system';
@@ -426,6 +434,11 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     applyLevel: vi.fn(),
     requestHitStop: vi.fn(),
     isInSafeSpot: vi.fn((): boolean => false),
+    boulderPuzzle: null,
+    boulder: null,
+    breakPuzzleWall: vi.fn(),
+    breakPuzzleGate: vi.fn(),
+    puzzleWall: vi.fn((): Platform | null => null),
     onPlayerUpdate: null,
     onZombiesUpdate: null,
     onFloorUpdate: null,
@@ -509,5 +522,166 @@ describe('Bug 2: corpse animation on non-host when killing non-grounded zombie',
 
     expect(call).toBeDefined();
     expect(call![1]).toBe(ZombieAnimState.Hurt);
+  });
+});
+
+describe('Boulder puzzle (floor 2)', (): void => {
+  let engine: GameEngine;
+
+  function systemFor(e: GameEngine): BoulderPuzzleSystem {
+    const physics: PhysicsSystem = new PhysicsSystem(e);
+    const vfx: VfxSystem = new VfxSystem(e);
+    const drops: DropSystem = new DropSystem(e, physics, vfx);
+    return new BoulderPuzzleSystem(e, new CombatSystem(e, physics, vfx, drops), vfx);
+  }
+
+  /** A player on the ledge right next to the gate, attacking, facing it (or away). */
+  function playerAtGate(e: GameEngine, facingGate: boolean, id: string = 'player-1'): CharacterState {
+    const puzzle: BoulderPuzzleLayout = e.boulderPuzzle!;
+    const gate: Box = gateBox(puzzle, e.exitPlatform.y);
+    const x: number =
+      puzzle.wallDir === 1 ? gate.x - GAME_CONSTANTS.PLAYER_WIDTH - 4 : gate.x + gate.width + 4;
+    const toward: Direction = puzzle.wallDir === 1 ? Direction.Right : Direction.Left;
+    const away: Direction = toward === Direction.Right ? Direction.Left : Direction.Right;
+    return makePlayer({
+      id,
+      x,
+      y: e.exitPlatform.y - GAME_CONSTANTS.PLAYER_HEIGHT,
+      facing: facingGate ? toward : away,
+      isAttacking: true,
+    });
+  }
+
+  function hasEvent(e: GameEngine, type: VfxEventType): boolean {
+    return e.pendingVfxEvents.some((evt: VfxEvent): boolean => evt.type === type);
+  }
+
+  beforeEach((): void => {
+    engine = new GameEngine(createMockCanvas());
+    engine.player = makePlayer();
+    engine.setFloor(GAME_CONSTANTS.PUZZLE_BOULDER_FLOOR);
+  });
+
+  it('floor 2: the exit platform is the boulder ledge, the wall is solid and breakable, the boulder waits', (): void => {
+    const puzzle: BoulderPuzzleLayout = engine.boulderPuzzle!;
+    expect(engine.exitPlatform.x).toBe(puzzle.ledgeX);
+    expect(engine.boulder).toEqual({ gateHits: 0, progress: 0, speed: 0, wallBroken: false });
+    expect(engine.platforms.filter((p: Platform): boolean => p.puzzlePart === 'wall')).toHaveLength(1);
+    expect(engine.puzzleWall()).toEqual(puzzle.wall);
+  });
+
+  it('three hits break the gate, the boulder rolls down and breaks the wall', (): void => {
+    const sys: BoulderPuzzleSystem = systemFor(engine);
+    engine.player = playerAtGate(engine, true);
+    const swing: number = GAME_CONSTANTS.BOULDER_HIT_COOLDOWN_TICKS + 1;
+    for (let t: number = 0; t < swing * (GAME_CONSTANTS.BOULDER_GATE_HITS - 1); t++) sys.update();
+    expect(engine.boulder!.gateHits).toBe(GAME_CONSTANTS.BOULDER_GATE_HITS - 1);
+    expect(engine.boulder!.progress).toBe(0);
+    for (let t: number = 0; t < 300; t++) sys.update();
+    expect(hasEvent(engine, VfxEventType.GateBreak)).toBe(true);
+    expect(engine.boulder!.wallBroken).toBe(true);
+    expect(engine.puzzleWall()).toBeNull();
+    expect(engine.platforms.some((p: Platform): boolean => p.puzzlePart === 'wall')).toBe(false);
+    expect(hasEvent(engine, VfxEventType.WallBreak)).toBe(true);
+  });
+
+  it('the gate is a solid block on the ledge edge, follows the ledge height, and is gone once broken', (): void => {
+    const gateSolid: () => Platform | undefined = (): Platform | undefined =>
+      engine.platforms.find((p: Platform): boolean => p.puzzlePart === 'gate');
+    const expected: Box = gateBox(engine.boulderPuzzle!, engine.exitPlatform.y);
+    expect(gateSolid()).toEqual({ ...expected, solid: true, puzzlePart: 'gate' });
+    engine.remotePlayers = [makePlayer({ id: 'guest' })];
+    engine.repositionExitPlatform();
+    expect(gateSolid()!.y).toBe(gateBox(engine.boulderPuzzle!, engine.exitPlatform.y).y);
+    expect(gateSolid()!.y).toBeLessThan(expected.y);
+    engine.breakPuzzleGate();
+    expect(gateSolid()).toBeUndefined();
+    engine.repositionExitPlatform();
+    expect(gateSolid(), 'a broken gate stays broken when the ledge moves').toBeUndefined();
+  });
+
+  it('attacking while facing away from the gate does nothing', (): void => {
+    const sys: BoulderPuzzleSystem = systemFor(engine);
+    engine.player = playerAtGate(engine, false);
+    for (let t: number = 0; t < 300; t++) sys.update();
+    expect(engine.boulder!.gateHits).toBe(0);
+  });
+
+  it("the host counts a guest's hits on the gate", (): void => {
+    engine.isMultiplayerHost = true;
+    const sys: BoulderPuzzleSystem = systemFor(engine);
+    engine.remotePlayers = [playerAtGate(engine, true, 'guest')];
+    for (let t: number = 0; t < 300; t++) sys.update();
+    expect(engine.boulder!.wallBroken).toBe(true);
+  });
+
+  it('the rolling boulder crushes a zombie in the chute once; the falling wall crushes one in front of it', (): void => {
+    const sys: BoulderPuzzleSystem = systemFor(engine);
+    const puzzle: BoulderPuzzleLayout = engine.boulderPuzzle!;
+    const path: BoulderPath = boulderPath(puzzle, engine.exitPlatform.y);
+    const mid: { x: number; y: number } = pointAlong(path, path.length / 2);
+    const inChute: ZombieState = makeZombie({
+      id: 'z-chute',
+      x: mid.x - 15,
+      y: mid.y - 20,
+      hp: 1000,
+      maxHp: 1000,
+      instanceWidth: 30,
+      instanceHeight: 40,
+    });
+    const wallFace: number = puzzle.wallDir === 1 ? puzzle.wall.x - 40 : puzzle.wall.x + puzzle.wall.width + 10;
+    const byWall: ZombieState = makeZombie({
+      id: 'z-wall',
+      x: wallFace,
+      y: GAME_CONSTANTS.GROUND_Y - 40,
+      hp: 1000,
+      maxHp: 1000,
+      instanceWidth: 30,
+      instanceHeight: 40,
+    });
+    engine.zombies = [inChute, byWall];
+    engine.boulder!.gateHits = GAME_CONSTANTS.BOULDER_GATE_HITS;
+    for (let t: number = 0; t < 300; t++) sys.update();
+    const crushHp: number = 1000 - Math.ceil((1000 * GAME_CONSTANTS.BOULDER_CRUSH_DAMAGE_PERCENT) / 100);
+    expect(inChute.hp).toBe(crushHp);
+    expect(byWall.hp).toBe(crushHp);
+  });
+
+  it('a client applies the synced boulder: NaN ignored, clamped onto its path, wall removed once broken', (): void => {
+    engine.isMultiplayerClient = true;
+    const path: BoulderPath = boulderPath(engine.boulderPuzzle!, engine.exitPlatform.y);
+    engine.applyRemoteBoulder({ gateHits: 99, progress: 99_999, speed: 500, wallBroken: false });
+    expect(engine.boulder!.gateHits).toBe(GAME_CONSTANTS.BOULDER_GATE_HITS);
+    expect(engine.boulder!.progress).toBe(path.length);
+    expect(engine.boulder!.speed).toBe(GAME_CONSTANTS.BOULDER_MAX_SPEED);
+    engine.applyRemoteBoulder({ gateHits: 0, progress: Number.NaN, speed: 0, wallBroken: true });
+    expect(engine.boulder!.progress).toBe(path.length);
+    expect(engine.puzzleWall()).not.toBeNull();
+    engine.applyRemoteBoulder({ gateHits: 3, progress: path.length, speed: 0, wallBroken: true });
+    expect(engine.puzzleWall()).toBeNull();
+    expect(engine.platforms.some((p: Platform): boolean => p.puzzlePart === 'wall')).toBe(false);
+  });
+
+  it('replaying the gate and wall breaks spawns debris and shakes the screen', (): void => {
+    engine.replayRemoteVfxEvents([{ type: VfxEventType.GateBreak, playerId: 'host', x: 900, y: 280 }]);
+    expect(engine.particles.length).toBeGreaterThan(0);
+    const afterGate: number = engine.particles.length;
+    engine.replayRemoteVfxEvents([{ type: VfxEventType.WallBreak, playerId: 'host', x: 1248, y: 560 }]);
+    expect(engine.particles.length).toBeGreaterThan(afterGate);
+    expect(engine.screenShakeFrames).toBeGreaterThan(0);
+  });
+
+  it('the snapshot carries the boulder', (): void => {
+    expect(engine.getStateSnapshot()!.boulder).toEqual(engine.boulder);
+  });
+
+  it('floor 3 has no puzzle, no wall, and the exit hangs at a screen edge again', (): void => {
+    engine.breakPuzzleWall();
+    engine.setFloor(GAME_CONSTANTS.PUZZLE_BOULDER_FLOOR + 1);
+    expect(engine.boulderPuzzle).toBeNull();
+    expect(engine.boulder).toBeNull();
+    expect(engine.puzzleWall()).toBeNull();
+    const exitCenter: number = engine.exitPlatform.x + engine.exitPlatform.width / 2;
+    expect(Math.abs(exitCenter - GAME_CONSTANTS.CANVAS_WIDTH / 2)).toBeGreaterThan(400);
   });
 });

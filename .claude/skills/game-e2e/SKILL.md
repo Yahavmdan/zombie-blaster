@@ -127,6 +127,18 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   so a tall enough pile is climbed by walking into it and jumping. `exitPile` (probe-computed from
   corpse footholds over the exit span): bodies, topY, reachY, reachable.
   `probe.dropCorpses(x, n)` drops n corpses from above x for setup; they pile by normal physics.
+- **Floor 2 is the boulder puzzle**: the exit platform is the boulder's ledge (mid-screen, same
+  height rules, climbed by the corpse pile: `exitPile` works as usual), but standing on it does not
+  finish the floor. A small solid gate on its downhill edge holds the boulder; 3 hits (attack while
+  beside the gate or the boulder resting against it, facing it, feet on the ledge) break it, the
+  boulder rolls down a boulder-only chute, breaks the full-height wall at the screen edge and
+  shatters. Walk into the opening on the ground to finish. Probe: `state().puzzle` (wall, wallDir,
+  ledge, gate, gateHits/gateHitsNeeded, boulder box or null, progress/pathLength/speed, wallBroken,
+  wallStanding); null on other floors. Specs: `solo/boulder-puzzle.spec.ts` (Brain climbs the
+  pile, then hold attack at the gate), `online/boulder-puzzle-coop.spec.ts`. The Brain climbs to the
+  ledge but has no gate/wall goal yet: AI players stall on floor 2.
+- A failure "dev server shows a compile error overlay" right after editing source is usually the
+  reused dev server catching a half-saved edit: check `npm run build`, then rerun the spec.
 - Monster magnet (warrior) drags zombies, it doesn't teleport them: each braces ~3 ticks per
   100 px, then flies along a lifted, accelerating arc to the caster's spot (12–40 ticks). The host
   simulates it (`magnet-pull.ts`); `zombies[].magnetPull` in the probe is null / 0 (bracing) /

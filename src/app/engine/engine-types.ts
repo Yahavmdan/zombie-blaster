@@ -6,6 +6,7 @@ import {
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
+  BoulderState,
   DropType,
   PendingSpecialDropConfirm,
   SpecialDropType,
@@ -73,12 +74,31 @@ export interface Platform {
   solid?: boolean;
   /** The floor's safe spot: zombies never stand on it and can't hurt anyone resting on it. */
   safe?: boolean;
+  /**
+   * A floor-2 puzzle solid, removed when it breaks: the side `wall` (broken by the boulder) or the
+   * `gate` holding the boulder on its ledge (broken by players' hits).
+   */
+  puzzlePart?: 'wall' | 'gate';
 }
 
 export interface Rope {
   x: number;
   topY: number;
   bottomY: number;
+}
+
+/**
+ * Floor-2 puzzle: the boulder rests on a high ledge (the exit platform's spot, climbed by the
+ * corpse pile) behind a small gate; a chute runs from the ledge down to a breakable wall at a
+ * screen edge. The ledge height follows the exit's rules, so the chute is derived per frame.
+ */
+export interface BoulderPuzzleLayout {
+  /** The wall at the screen edge: from the screen top to the ground. */
+  wall: Platform;
+  /** +1: the wall is right of the ledge, -1: left of it (the boulder rolls this way). */
+  wallDir: 1 | -1;
+  /** Left edge of the ledge (it is EXIT_PLATFORM_WIDTH wide, like the exit). */
+  ledgeX: number;
 }
 
 export interface BackgroundStar {
@@ -203,6 +223,9 @@ export interface IGameEngine {
   spawnTimer: number;
   floorTransitionTimer: number;
   exitPlatform: Platform;
+  /** Floor-2 puzzle layout and its boulder (null on other floors). */
+  boulderPuzzle: BoulderPuzzleLayout | null;
+  boulder: BoulderState | null;
 
   backgroundStars: BackgroundStar[];
 
@@ -269,6 +292,12 @@ export interface IGameEngine {
   requestHitStop(ticks: number): void;
   /** A player whose top-left corner is at (x, y) rests on the floor's safe spot (out of every attack's reach). */
   isInSafeSpot(x: number, y: number): boolean;
+  /** Removes the gate holding the boulder (its collision) for good on this floor. */
+  breakPuzzleGate(): void;
+  /** Removes the puzzle wall (collision + art) for good on this floor. */
+  breakPuzzleWall(): void;
+  /** The puzzle wall while it still stands, else null. */
+  puzzleWall(): Platform | null;
 
   onPlayerUpdate: ((player: CharacterState) => void) | null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null;

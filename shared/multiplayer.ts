@@ -264,6 +264,8 @@ export enum VfxEventType {
   PoisonTrigger = 'poison-trigger',
   ThrowingStar = 'throwing-star',
   MagicTwinSpawn = 'magic-twin-spawn',
+  WallBreak = 'wall-break',
+  GateBreak = 'gate-break',
 }
 
 export interface VfxEvent {

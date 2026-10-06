@@ -6,13 +6,15 @@ import {
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
+  BoulderState,
   SpecialDropType,
   ZombieDefinition,
   ZombieState,
   ZombieType,
   ZombieCorpse,
 } from '@shared/game-entities';
-import { IGameEngine, Platform } from './engine-types';
+import { BoulderPuzzleLayout, IGameEngine, Platform } from './engine-types';
+import { keepOutOfWall, leavesThroughOpening } from './boulder-puzzle';
 import { PhysicsSystem } from './physics-system';
 import { CombatSystem } from './combat-system';
 import { DropSystem } from './drop-system';
@@ -881,7 +883,11 @@ export class ZombieSystem {
     const platMinX: number = Math.max(0, plat.x);
     const platMaxX: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - width, plat.x + plat.width - width);
     return {
-      x: platMinX + Math.floor(Math.random() * (platMaxX - platMinX + 1)),
+      x: keepOutOfWall(
+        platMinX + Math.floor(Math.random() * (platMaxX - platMinX + 1)),
+        width,
+        this.e.puzzleWall(),
+      ),
       y: plat.y - height,
     };
   }
@@ -978,6 +984,9 @@ export class ZombieSystem {
     if (this.e.floorTransitionTimer > 0) return;
 
     const exit: Platform = this.e.exitPlatform;
+    // The puzzle floor has no hanging exit: players leave through the opening of the broken wall.
+    const puzzle: BoulderPuzzleLayout | null = this.e.boulderPuzzle;
+    const boulder: BoulderState | null = this.e.boulder;
 
     const candidates: CharacterState[] = [];
     if (this.e.player && !this.e.player.isDead) {
@@ -1002,7 +1011,9 @@ export class ZombieSystem {
         bottom <= exit.y + exit.height + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
         c.isGrounded;
 
-      if (onExitPlatform) {
+      const leaves: boolean =
+        puzzle && boulder ? leavesThroughOpening(c, puzzle, boulder) : onExitPlatform;
+      if (leaves) {
         this.e.onFloorComplete?.();
         this.advanceFloor();
         return;
@@ -1072,6 +1083,12 @@ export class ZombieSystem {
         if (corpse.x < 0) { corpse.x = 0; corpse.velocityX = 0; }
         const maxCX: number = GAME_CONSTANTS.CANVAS_WIDTH - corpse.width;
         if (corpse.x > maxCX) { corpse.x = maxCX; corpse.velocityX = 0; }
+        // Never inside the standing puzzle wall, where nobody could reach it.
+        const outsideWallX: number = keepOutOfWall(corpse.x, corpse.width, this.e.puzzleWall());
+        if (outsideWallX !== corpse.x) {
+          corpse.x = outsideWallX;
+          corpse.velocityX = 0;
+        }
 
         const fallBottom: number = corpse.y + corpse.height;
         const fallPrevBottom: number = fallBottom - corpse.velocityY;

@@ -10,7 +10,8 @@ import {
   PropArt,
 } from './level-generator';
 import { pushOutOfSolids } from './solid-blocks';
-import { Platform, Rope } from './engine-types';
+import { chuteSpan } from './boulder-puzzle';
+import { BoulderPuzzleLayout, Platform, Rope } from './engine-types';
 
 describe('level generator', () => {
   it('every generated floor obeys the layout rules (tiles, exit clearance, reachability)', (): void => {
@@ -169,5 +170,73 @@ describe('map props', () => {
       { ...box, solid: false },
     ]);
     expect(notSolid.blocked).toBe(false);
+  });
+
+  it('a solid at a screen edge always pushes back onto the screen (a dash ending inside the puzzle wall)', (): void => {
+    const rightWall: Platform = { x: 1216, y: 0, width: 64, height: GAME_CONSTANTS.GROUND_Y, solid: true };
+    expect(pushOutOfSolids(1248, 572, 32, 48, 1248, [rightWall])).toEqual({ x: 1184, blocked: true });
+    const leftWall: Platform = { x: 0, y: 0, width: 64, height: GAME_CONSTANTS.GROUND_Y, solid: true };
+    expect(pushOutOfSolids(0, 572, 32, 48, 0, [leftWall])).toEqual({ x: 64, blocked: true });
+  });
+});
+
+describe('boulder puzzle floor', (): void => {
+  const PUZZLE_FLOOR: number = GAME_CONSTANTS.PUZZLE_BOULDER_FLOOR;
+  const LEDGE_W: number = GAME_CONSTANTS.EXIT_PLATFORM_WIDTH;
+
+  it('only the puzzle floor has a boulder puzzle', (): void => {
+    for (let seed: number = 1; seed <= 200; seed++) {
+      for (let floor: number = 1; floor <= 6; floor++) {
+        const level: LevelLayout = generateLevel(seed, floor);
+        expect(level.boulderPuzzle !== undefined, `seed ${seed} floor ${floor}`).toBe(
+          floor === PUZZLE_FLOOR,
+        );
+      }
+    }
+  });
+
+  it('the boulder ledge is the exit spot (climbed by the corpse pile); the chute runs clear to the wall', (): void => {
+    for (let seed: number = 1; seed <= 200; seed++) {
+      const level: LevelLayout = generateLevel(seed, PUZZLE_FLOOR);
+      const puzzle: BoulderPuzzleLayout = level.boulderPuzzle!;
+      expect(level.exitX, `seed ${seed}: the ledge hangs where the exit would`).toBe(puzzle.ledgeX);
+      const [from, to]: [number, number] = chuteSpan(puzzle);
+      expect(to - from, `seed ${seed} chute span`).toBeGreaterThanOrEqual(
+        GAME_CONSTANTS.BOULDER_CHUTE_MIN_SPAN_PX,
+      );
+      expect(to - from).toBeLessThanOrEqual(GAME_CONSTANTS.BOULDER_CHUTE_MAX_SPAN_PX);
+      for (const p of level.platforms) {
+        expect(p.x + p.width <= from || p.x >= to, `seed ${seed} platform ${p.x},${p.y} under the chute`).toBe(
+          true,
+        );
+      }
+      const spot: Platform = level.platforms.find((p: Platform): boolean => p.safe === true)!;
+      const gap: number = Math.max(spot.x - (puzzle.ledgeX + LEDGE_W), puzzle.ledgeX - (spot.x + spot.width));
+      expect(gap, `seed ${seed}: the safe spot keeps away from the ledge`).toBeGreaterThanOrEqual(
+        GAME_CONSTANTS.BOULDER_SAFE_SPOT_GAP_PX,
+      );
+    }
+  });
+
+  it('the rules catch a platform under the chute, a wall off the edge and a missing puzzle', (): void => {
+    const level: LevelLayout = generateLevel(5, PUZZLE_FLOOR);
+    const puzzle: BoulderPuzzleLayout = level.boulderPuzzle!;
+    const has: (l: LevelLayout, text: string) => boolean = (l: LevelLayout, text: string): boolean =>
+      levelViolations(l).some((v: string): boolean => v.includes(text));
+    expect(levelViolations(level)).toEqual([]);
+    const [from]: [number, number] = chuteSpan(puzzle);
+    const underChute: Platform = { x: from + 32, y: 530, width: 96, height: 32 };
+    expect(has({ ...level, platforms: [...level.platforms, underChute] }, 'under the chute')).toBe(
+      true,
+    );
+    expect(
+      has(
+        { ...level, boulderPuzzle: { ...puzzle, wall: { ...puzzle.wall, x: puzzle.wall.x - 32 } } },
+        'wall: not at a screen edge',
+      ),
+    ).toBe(true);
+    expect(has({ ...level, boulderPuzzle: undefined }, 'puzzle floor without a boulder puzzle')).toBe(
+      true,
+    );
   });
 });

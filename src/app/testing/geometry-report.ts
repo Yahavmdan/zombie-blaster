@@ -39,6 +39,8 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
   const groundY: number = GAME_CONSTANTS.GROUND_Y;
   const renderer: GameEngine['mapRenderer'] = engine.mapRenderer;
   const exit: Platform = engine.exitPlatform;
+  // The floor-2 puzzle wall (while it stands) is measured like a prop.
+  const wall: Platform | null = engine.puzzleWall();
   const ladderWidth: number = renderer.getLadderArtWidth();
 
   const frame: CanvasRenderingContext2D = blankLayer(w, h);
@@ -66,6 +68,20 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
       draw: (ctx: CanvasRenderingContext2D): void =>
         renderer.drawDynamicPlatform(ctx, exit.x, exit.y, exit.width, exit.height),
     },
+    // The puzzle wall, like a prop: art in every column of its collision box.
+    ...(wall
+      ? [
+          {
+            object: `wall ${wall.x},${wall.y} ${wall.width}x${wall.height}`,
+            kind: 'prop' as const,
+            x: wall.x,
+            y: wall.y,
+            width: wall.width,
+            height: wall.height,
+            draw: (ctx: CanvasRenderingContext2D): void => renderer.drawPuzzleWall(ctx, wall),
+          },
+        ]
+      : []),
     ...engine.platforms
       .filter((p: Platform): boolean => p.y !== groundY && !p.solid)
       .map(
@@ -81,7 +97,7 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
       ),
     // Props: the collision box (stand on it, bump into it) must be exactly the drawn art.
     ...engine.platforms
-      .filter((p: Platform): boolean => p.solid === true)
+      .filter((p: Platform): boolean => p.solid === true && p.puzzlePart === undefined)
       .map((p: Platform): Measured => {
         const prop: Prop | undefined = engine.level.props.find(
           (q: Prop): boolean => q.x === p.x && q.y === p.y,

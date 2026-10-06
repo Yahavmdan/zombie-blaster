@@ -21,7 +21,9 @@ The engine is split into focused files under `src/app/engine/`.
 | `vfx-system.ts` | Particles, damage numbers, screen shake/flash, skill animations, hit marks |
 | `render-system.ts` | All canvas drawing: background, players, zombies, projectiles, overlays |
 | `map-renderer.ts` | Draws scenery (backgrounds) and the level geometry layer (ground, platforms, ladders) **from the layout data only** |
-| `level-generator.ts` | Seeded per-floor layouts (platforms, ropes, exit side, safe spot + its ladder) + `levelViolations` rules; host picks the seed, clients follow it via game-sync |
+| `level-generator.ts` | Seeded per-floor layouts (platforms, ropes, exit side, safe spot + its ladder, floor-2 boulder puzzle: wall + ledge position, platforms kept out of the chute) + `levelViolations` rules; host picks the seed, clients follow it via game-sync |
+| `boulder-puzzle.ts` | Floor-2 puzzle rules (pure): gate box + hits, boulder path (ledge → chute → wall), rolling, crush targets, debris, `keepOutOfWall`, leaving through the opening |
+| `boulder-puzzle-system.ts` | Floor-2 puzzle simulation: host counts gate hits (all players), rolls the boulder, crushes, breaks the wall; clients extrapolate the synced roll |
 | `magnet-pull.ts` | Monster-magnet drag (host-simulated, synced as `ZombieState.magnetPull`) |
 | `corpse-surface.ts` | Walkable surface of a corpse (the same for every corpse, the exit pile included) |
 | `safe-spot.ts` | `restsOnSafeSpot`: who rests on the floor's safe spot (zombies can't target/hit/land; no attacking from it) |
@@ -45,6 +47,14 @@ The engine is split into focused files under `src/app/engine/`.
   and `e2e/specs/online/level-sync.spec.ts`. They measure the drawn pixels against the collision
   data, land on every platform and climb every ladder. Also look at the attached floor screenshots.
 - New layout rules go into `levelViolations` (unit-tested over thousands of seeds in `level-generator.spec.ts`).
+- Puzzle floors: on floor 2 the exit platform is the boulder's ledge (`layout.exitX = ledgeX`, same
+  height rules, climbed by the corpse pile; standing on it does not finish the floor). Its gate is a
+  solid `puzzlePart: 'gate'` platform re-placed with the ledge (`placeGate`) until it breaks; the
+  side wall is a solid `puzzlePart: 'wall'` platform drawn in the geometry layer, and
+  `breakPuzzleWall()` removes collision and art together. The chute is boulder-only art (per frame),
+  so the generator keeps every platform and rope out of its span. Ledge height (player count)
+  changes the path, so everything is derived from `exitPlatform.y` each tick. Leaving is
+  `leavesThroughOpening`; corpses, drops and spawns go through `keepOutOfWall`.
 
 ## Dependency rules
 
@@ -57,6 +67,7 @@ DropSystem       -> Physics, Vfx
 CombatSystem     -> Physics, Vfx, Drop
 ProjectileSystem -> Physics, Vfx
 ZombieSystem     -> Physics, Combat, Projectile, Drop
+BoulderPuzzleSystem -> Combat, Vfx
 RenderSystem     -> reads state only (no system deps)
 ```
 
