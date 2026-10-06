@@ -17,7 +17,8 @@ ships, tick its box here and rewrite its line to match what was built.
 - [x] **Spring** (floor 3; was "seesaw"): the exit hangs at the very top (y 100), straight over a
       big solid spring at the screen edge. Kill zombies so 30 corpses land on the spring (they
       charge it), pull the lever beside it: a 3-2-1 gives everyone time to hop on, then the spring
-      launches them straight up onto the exit. It stays charged; too little charge only jiggles
+      launches them straight up onto the exit while its corpses scatter through the air (spent:
+      charge it again for another launch). Too little charge only jiggles
       the lever.
 - [ ] **Hanging cage**: shoot the rope and the cage drops to become a platform. The wrong rope
       blocks the path.

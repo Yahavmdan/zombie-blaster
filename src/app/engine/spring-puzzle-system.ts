@@ -1,5 +1,5 @@
 import { CharacterState, GAME_CONSTANTS, VfxEventType } from '@shared/index';
-import { SpringState } from '@shared/game-entities';
+import { SpringState, ZombieCorpse } from '@shared/game-entities';
 import { IGameEngine, SpringPuzzleLayout } from './engine-types';
 import { VfxSystem } from './vfx-system';
 import { Box } from './boulder-puzzle';
@@ -10,6 +10,7 @@ import {
   leverBox,
   leverHitBy,
   pullLever,
+  scatterVelocity,
   springSpan,
   tickSpring,
   tickSpringClient,
@@ -20,7 +21,8 @@ const LEVER_COLOR: string = '#c8c8d0';
 /**
  * Floor-3 spring puzzle. The host (or solo) watches every player's attacks on the lever: with a
  * full charge it starts the 3-2-1, else the lever only jiggles. When the count runs out the spring
- * launches the local player if they stand on it; guests launch themselves when the synced launch
+ * launches the local player if they stand on it and scatters its charge through the air (the
+ * corpses are synced, so everyone sees them fly); guests launch themselves when the synced launch
  * reaches them (they own their player state). Clients only run the count and bounce down.
  */
 export class SpringPuzzleSystem {
@@ -71,6 +73,19 @@ export class SpringPuzzleSystem {
   }
 
   private launch(puzzle: SpringPuzzleLayout): void {
+    // Measured before anyone moves: the corpses lying on the spring right now are its charge.
+    const charge: ZombieCorpse[] = chargeCorpses(this.e.zombieCorpses, puzzle);
+    for (const corpse of charge) {
+      const v: { vx: number; vy: number } = scatterVelocity(
+        corpse,
+        puzzle,
+        Math.random(),
+        Math.random(),
+      );
+      corpse.velocityX = v.vx;
+      corpse.velocityY = v.vy;
+      corpse.isGrounded = false;
+    }
     if (this.e.player) flingIfOnSpring(this.e.player, puzzle);
     const [left, right]: [number, number] = springSpan(puzzle);
     const cx: number = (left + right) / 2;

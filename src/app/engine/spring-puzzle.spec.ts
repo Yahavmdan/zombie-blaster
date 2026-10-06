@@ -15,6 +15,7 @@ import {
   onSpring,
   plateOffset,
   pullLever,
+  scatterVelocity,
   springSpan,
   tickSpring,
   tickSpringClient,
@@ -152,7 +153,7 @@ describe('spring lever', (): void => {
     expect(pullLever(s, NEEDED + 5)).toBeNull();
   });
 
-  it('the countdown runs out into exactly one launch, then the spring bounces and is ready again (still charged)', (): void => {
+  it('the countdown runs out into exactly one launch, then the spring bounces and is ready again', (): void => {
     const s: SpringState = state({ countdownTicks: COUNT });
     let launches: number = 0;
     for (let i: number = 0; i < COUNT - 1; i++) if (tickSpring(s)) launches++;
@@ -200,6 +201,43 @@ describe('spring launch', (): void => {
     const p: CharacterState = standingPlayer(300, GROUND);
     expect(flingIfOnSpring(p, LEFT)).toBe(false);
     expect(p.velocityY).toBe(0);
+  });
+
+  it('the launch scatters the charge up and out: every corpse clears the spring and lands within the scatter range', (): void => {
+    for (const [puzzle, cx] of [
+      [RIGHT, 1075],
+      [RIGHT, 1270],
+      [LEFT, 5],
+      [LEFT, 205],
+    ] as Array<[SpringPuzzleLayout, number]>) {
+      for (const [spread, pop] of [
+        [0, 0],
+        [0, 1],
+        [1, 0],
+        [1, 1],
+      ] as Array<[number, number]>) {
+        const c: ZombieCorpse = corpse(cx, TOP);
+        const v: { vx: number; vy: number } = scatterVelocity(c, puzzle, spread, pop);
+        expect(Math.sign(v.vx)).toBe(-puzzle.side);
+        expect(v.vy).toBeLessThan(0);
+        // Corpse flight (zombie-system): slide with drag, fall with gravity, back to spring-top height.
+        let x: number = c.x;
+        let vx: number = v.vx;
+        let vy: number = v.vy;
+        let feet: number = TOP;
+        do {
+          x += vx;
+          vx *= 0.92;
+          vy += GAME_CONSTANTS.GRAVITY;
+          feet += vy;
+        } while (feet < TOP);
+        const [left, right]: [number, number] = springSpan(puzzle);
+        const past: number = puzzle.side === 1 ? left - (x + c.width) : x - right;
+        const where: string = `corpse at ${cx}, spread ${spread}, pop ${pop}: x ${x.toFixed(1)}`;
+        expect(past, `${where} clears the spring`).toBeGreaterThanOrEqual(0);
+        expect(past, where).toBeLessThanOrEqual(GAME_CONSTANTS.SPRING_SCATTER_MAX_PX + 40);
+      }
+    }
   });
 
   it('the plate rests level, sinks as it winds up and shoots up on release', (): void => {

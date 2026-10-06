@@ -810,10 +810,13 @@ describe('Spring puzzle (floor 3)', (): void => {
     expect(player.y + GAME_CONSTANTS.PLAYER_HEIGHT, 'landed on the exit').toBe(
       engine.exitPlatform.y,
     );
-    expect(
-      engine.zombieCorpses.filter((c: ZombieCorpse): boolean => c.isGrounded),
-      'the spring stays charged',
-    ).toHaveLength(GAME_CONSTANTS.SPRING_CHARGE_CORPSES);
+    // The charge scatters through the air, out over the open side (it is spent).
+    const out: number = -engine.springPuzzle!.side;
+    for (const c of engine.zombieCorpses) {
+      expect(c.isGrounded, `${c.id} thrown`).toBe(false);
+      expect(c.velocityY).toBeLessThan(0);
+      expect(Math.sign(c.velocityX)).toBe(out);
+    }
   });
 
   it('not enough charge: the lever only jiggles and nobody flies', (): void => {

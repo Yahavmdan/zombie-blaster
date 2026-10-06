@@ -142,7 +142,8 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   on it) charge it (`spring.charge` / `chargeNeeded`, 30). Attacking the lever beside it (`lever`,
   on the ground at the spring's open side; facing it) with a full charge starts a 3-2-1
   (`countdownTicks`), then everyone standing on the spring or its pile flies straight up onto the
-  exit (`launches`, `bounceTicks`). It stays charged. Too little charge only jiggles the lever
+  exit (`launches`, `bounceTicks`) while the charge corpses scatter up and out past the spring (spent).
+  Too little charge only jiggles the lever
   (`wobbleTicks`). `probe.dropCorpses` at a few x across the spring charges it. Don't teleport
   above the exit to get on the spring: you land on the exit. Specs: `solo/spring-puzzle.spec.ts`,
   `online/spring-puzzle-coop.spec.ts`. The Brain has no spring goal yet: AI players stall on floor 3.

@@ -116,7 +116,7 @@ test.describe('spring puzzle (floor 3)', { tag: '@solo' }, (): void => {
       (st: E2eSnapshot): boolean => st.spring!.launches === 1 && st.player!.y < 300,
       { timeoutMs: 8_000 },
     );
-    expect(flying.spring!.charge, 'the spring stays charged').toBeGreaterThanOrEqual(
+    expect(flying.spring!.charge, 'the charge scattered through the air (spent)').toBeLessThan(
       spring.chargeNeeded,
     );
     const log: E2eVfxLogEntry[] = await p.probe.vfxLog();

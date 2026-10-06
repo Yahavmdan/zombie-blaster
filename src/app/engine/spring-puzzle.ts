@@ -10,13 +10,19 @@ import { Platform, SpringPuzzleLayout } from './engine-types';
  * The exit hangs at the very top of the screen. Straight under it, at the screen edge, stands a
  * big spring (a solid block one hop high). Corpses landing on it charge it. With a full charge, a
  * hit on the lever beside it starts a 3-2-1: when it runs out, the spring launches everyone
- * standing on it (or on the corpses piled on it) straight up to the exit. It stays charged.
+ * standing on it (or on the corpses piled on it) straight up to the exit, and its charge scatters
+ * through the air (spent: charge it again for another launch).
  */
 export type LeverPull = 'countdown' | 'wobble';
 
 /** How far the plate sinks while the spring winds up, and how far it shoots up on release. */
 const WIND_PX: number = 6;
 const RELEASE_PX: number = 30;
+/** Scattered corpses pop up this fast (px/tick), from the low to the high end of the range. */
+const SCATTER_POP_MIN: number = 11;
+const SCATTER_POP_MAX: number = 19;
+/** Corpses keep sliding at this fraction of their speed per tick while airborne (zombie-system). */
+const CORPSE_AIR_DRAG: number = 0.92;
 
 export const SPRING_FLOOR_HINT: string = 'Pile corpses on the spring, pull its lever and hop on';
 
@@ -150,6 +156,31 @@ export function flingIfOnSpring(player: CharacterState, puzzle: SpringPuzzleLayo
   player.velocityY = -GAME_CONSTANTS.SPRING_LAUNCH_FORCE;
   player.isGrounded = false;
   return true;
+}
+
+/**
+ * The launch throws a charge corpse up and out over the spring's open side (toward the screen
+ * center): it clears the spring and lands up to SPRING_SCATTER_MAX_PX past it. `spread` and
+ * `pop` (0..1, random in play) pick how far out and how high, so the load fans out in the air.
+ */
+export function scatterVelocity(
+  corpse: ZombieCorpse,
+  puzzle: SpringPuzzleLayout,
+  spread: number,
+  pop: number,
+): { vx: number; vy: number } {
+  const dir: number = -puzzle.side;
+  const s: Platform = puzzle.spring;
+  const toClear: number = dir === -1 ? corpse.x + corpse.width - s.x : s.x + s.width - corpse.x;
+  const distance: number =
+    Math.max(0, toClear) +
+    GAME_CONSTANTS.LEVEL_TILE_PX +
+    spread * GAME_CONSTANTS.SPRING_SCATTER_MAX_PX;
+  const vy: number = -(SCATTER_POP_MIN + pop * (SCATTER_POP_MAX - SCATTER_POP_MIN));
+  // Airborne until back at the spring top: slide vx * (1 - drag^T) / (1 - drag) in that time.
+  const airTicks: number = (2 * -vy) / GAME_CONSTANTS.GRAVITY;
+  const reach: number = (1 - Math.pow(CORPSE_AIR_DRAG, airTicks)) / (1 - CORPSE_AIR_DRAG);
+  return { vx: (dir * distance) / reach, vy };
 }
 
 /**

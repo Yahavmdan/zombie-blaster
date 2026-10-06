@@ -147,6 +147,7 @@ export const GAME_CONSTANTS = {
   SPRING_LEVER_GAP_PX: 20, // Gap between the spring's open side and the lever
   SPRING_HIT_REACH_PX: 24, // Max gap between an attacking player's box and the lever for the swing to pull it
   SPRING_HIT_COOLDOWN_TICKS: 36, // One lever pull per swing (a held attack swings every 36 ticks)
+  SPRING_SCATTER_MAX_PX: 360, // On launch the charge scatters through the air, landing up to this far past the spring
   SPRING_COUNTDOWN_TICKS: 150, // 3-2-1 after a pull with a full charge: time to get on the spring
   SPRING_BOUNCE_TICKS: 40, // The spring's release-and-settle animation after a launch
   SPRING_WOBBLE_TICKS: 24, // The lever's jiggle after a pull with too little charge
