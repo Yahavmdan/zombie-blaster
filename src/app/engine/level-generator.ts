@@ -1,5 +1,5 @@
 import { GAME_CONSTANTS } from '@shared/index';
-import { BoulderPuzzleLayout, Platform, Rope } from './engine-types';
+import { BoulderPuzzleLayout, Platform, Rope, SpringPuzzleLayout } from './engine-types';
 import { chuteSpan } from './boulder-puzzle';
 
 /**
@@ -22,6 +22,8 @@ export interface LevelLayout {
   props: Prop[];
   /** Floor-2 puzzle (breakable wall; the exit platform is the boulder's ledge, at exitX). */
   boulderPuzzle?: BoulderPuzzleLayout;
+  /** Floor-3 puzzle (the spring at the screen edge under the exit, at exitX). */
+  springPuzzle?: SpringPuzzleLayout;
 }
 
 export const GROUND_PLATFORM: Platform = {
@@ -73,7 +75,7 @@ interface TierRules {
   minTiles: number;
   maxTiles: number;
   exitGap: number;
-  /** A horizontal span no platform may overlap (the puzzle floor's chute), or null. */
+  /** A horizontal span no platform may overlap (a puzzle's chute or spring), or null. */
   avoid: [number, number] | null;
 }
 
@@ -230,6 +232,7 @@ interface PropContext {
   exitX: number;
   props: Prop[];
   boulderPuzzle?: BoulderPuzzleLayout;
+  springPuzzle?: SpringPuzzleLayout;
 }
 
 /** Broken rules for one prop against the rest of the layout (shared by the generator and the checks). */
@@ -298,6 +301,13 @@ function propProblems(prop: Prop, layout: PropContext): string[] {
   if (puzzle) {
     const fromWall: number = spanGap(left, right, puzzle.wall.x, puzzle.wall.x + puzzle.wall.width);
     if (fromWall < GAME_CONSTANTS.BOULDER_OPENING_CLEAR_PX) out.push('blocks the way out');
+  }
+  const spring: SpringPuzzleLayout | undefined = layout.springPuzzle;
+  if (spring) {
+    const block: Platform = spring.spring;
+    if (spanGap(left, right, block.x, block.x + block.width) < GAME_CONSTANTS.SPRING_CLEAR_PX) {
+      out.push('crowds the spring');
+    }
   }
   return out;
 }
@@ -410,6 +420,25 @@ function placeBoulderPuzzle(rand: Random, wallOnRight: boolean): BoulderPuzzleLa
   };
 }
 
+/**
+ * Floor-3 puzzle: a big spring block from the exit's screen edge to the exit's inner edge, so the
+ * exit (which hangs at the very top) is straight above it.
+ */
+function placeSpringPuzzle(exitX: number, exitOnRight: boolean): SpringPuzzleLayout {
+  const height: number = GAME_CONSTANTS.SPRING_HEIGHT_PX;
+  const y: number = GAME_CONSTANTS.GROUND_Y - height;
+  const exitRight: number = exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH;
+  return exitOnRight
+    ? { spring: { x: exitX, y, width: GAME_CONSTANTS.CANVAS_WIDTH - exitX, height }, side: 1 }
+    : { spring: { x: 0, y, width: exitRight, height }, side: -1 };
+}
+
+/** The spring's span widened by its clearance: platforms, ropes and props stay out of it. */
+function springClearSpan(puzzle: SpringPuzzleLayout): [number, number] {
+  const clear: number = GAME_CONSTANTS.SPRING_CLEAR_PX;
+  return [puzzle.spring.x - clear, puzzle.spring.x + puzzle.spring.width + clear];
+}
+
 export function generateLevel(seed: number, floor: number): LevelLayout {
   const rand: Random = seededRandom((seed ^ Math.imul(floor, 0x9e3779b1)) >>> 0);
   const [tier1Y, tier2Y, tier3Y]: readonly number[] = GAME_CONSTANTS.LEVEL_TIER_Y;
@@ -424,7 +453,13 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
         GAME_CONSTANTS.EXIT_EDGE_MARGIN_PX -
         GAME_CONSTANTS.EXIT_PLATFORM_WIDTH
       : GAME_CONSTANTS.EXIT_EDGE_MARGIN_PX;
-  const avoid: [number, number] | null = boulderPuzzle ? chuteSpan(boulderPuzzle) : null;
+  const springPuzzle: SpringPuzzleLayout | undefined =
+    floor === GAME_CONSTANTS.PUZZLE_SPRING_FLOOR ? placeSpringPuzzle(exitX, exitOnRight) : undefined;
+  const avoid: [number, number] | null = boulderPuzzle
+    ? chuteSpan(boulderPuzzle)
+    : springPuzzle
+      ? springClearSpan(springPuzzle)
+      : null;
 
   const tier1: Platform[] = [];
   const tier1Count: number = randomInt(rand, 2, 3);
@@ -486,11 +521,11 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
     if (placed) platforms.push(placed);
   }
 
-  const props: Prop[] = placeProps(rand, { platforms, ropes, exitX, boulderPuzzle });
-  // Normal floors leave the key out, so their layouts compare equal to before.
-  return boulderPuzzle
-    ? { seed, floor, platforms, ropes, exitX, props, boulderPuzzle }
-    : { seed, floor, platforms, ropes, exitX, props };
+  const props: Prop[] = placeProps(rand, { platforms, ropes, exitX, boulderPuzzle, springPuzzle });
+  // Normal floors leave the keys out, so their layouts compare equal to before.
+  if (boulderPuzzle) return { seed, floor, platforms, ropes, exitX, props, boulderPuzzle };
+  if (springPuzzle) return { seed, floor, platforms, ropes, exitX, props, springPuzzle };
+  return { seed, floor, platforms, ropes, exitX, props };
 }
 
 /** Broken rules of the floor-2 puzzle. */
@@ -522,6 +557,30 @@ function boulderPuzzleProblems(layout: LevelLayout, puzzle: BoulderPuzzleLayout)
   return out;
 }
 
+/** Broken rules of the floor-3 puzzle. */
+function springPuzzleProblems(layout: LevelLayout, puzzle: SpringPuzzleLayout): string[] {
+  const out: string[] = [];
+  const block: Platform = puzzle.spring;
+  const right: number = block.x + block.width;
+  const grounded: boolean = block.y + block.height === GAME_CONSTANTS.GROUND_Y;
+  if (block.height !== GAME_CONSTANTS.SPRING_HEIGHT_PX || !grounded) {
+    out.push('spring: not standing on the ground at its height');
+  }
+  const atRight: boolean = right === GAME_CONSTANTS.CANVAS_WIDTH;
+  if (block.x !== 0 && !atRight) out.push('spring: not at a screen edge');
+  if ((puzzle.side === 1) !== atRight) out.push('spring: side does not match its edge');
+  const exitRight: number = layout.exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH;
+  if (block.x > layout.exitX || right < exitRight) out.push('spring: not under the whole exit');
+  const [from, to]: [number, number] = springClearSpan(puzzle);
+  for (const p of layout.platforms) {
+    if (p.x < to && p.x + p.width > from) out.push(`platform ${p.x},${p.y}: over the spring`);
+  }
+  for (const r of layout.ropes) {
+    if (r.x > from && r.x < to) out.push(`rope at ${r.x}: over the spring`);
+  }
+  return out;
+}
+
 /**
  * Rules every generated layout must satisfy (unit-tested over many seeds). Returns the broken
  * rules; empty means valid.
@@ -537,6 +596,11 @@ export function levelViolations(layout: LevelLayout): string[] {
   if (puzzleFloor && !puzzle) out.push('puzzle floor without a boulder puzzle');
   if (!puzzleFloor && puzzle) out.push('boulder puzzle on a normal floor');
   if (puzzle) out.push(...boulderPuzzleProblems(layout, puzzle));
+  const spring: SpringPuzzleLayout | undefined = layout.springPuzzle;
+  const springFloor: boolean = layout.floor === GAME_CONSTANTS.PUZZLE_SPRING_FLOOR;
+  if (springFloor && !spring) out.push('spring floor without a spring');
+  if (!springFloor && spring) out.push('spring on another floor');
+  if (spring) out.push(...springPuzzleProblems(layout, spring));
 
   for (const p of layout.platforms) {
     const name: string = `platform ${p.x},${p.y} w${p.width}`;

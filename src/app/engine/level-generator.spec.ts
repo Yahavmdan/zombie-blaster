@@ -11,7 +11,8 @@ import {
 } from './level-generator';
 import { pushOutOfSolids } from './solid-blocks';
 import { chuteSpan } from './boulder-puzzle';
-import { BoulderPuzzleLayout, Platform, Rope } from './engine-types';
+import { BoulderPuzzleLayout, Platform, Rope, SpringPuzzleLayout } from './engine-types';
+import { springSpan } from './spring-puzzle';
 
 describe('level generator', () => {
   it('every generated floor obeys the layout rules (tiles, exit clearance, reachability)', (): void => {
@@ -238,5 +239,57 @@ describe('boulder puzzle floor', (): void => {
     expect(has({ ...level, boulderPuzzle: undefined }, 'puzzle floor without a boulder puzzle')).toBe(
       true,
     );
+  });
+});
+
+describe('spring puzzle floor', (): void => {
+  const SPRING_FLOOR: number = GAME_CONSTANTS.PUZZLE_SPRING_FLOOR;
+
+  it('only the spring floor has a spring', (): void => {
+    for (let seed: number = 1; seed <= 200; seed++) {
+      for (let floor: number = 1; floor <= 6; floor++) {
+        const level: LevelLayout = generateLevel(seed, floor);
+        expect(level.springPuzzle !== undefined, `seed ${seed} floor ${floor}`).toBe(
+          floor === SPRING_FLOOR,
+        );
+      }
+    }
+  });
+
+  it('the spring stands at the screen edge under the whole exit; nothing hangs over or crowds it', (): void => {
+    for (let seed: number = 1; seed <= 200; seed++) {
+      const level: LevelLayout = generateLevel(seed, SPRING_FLOOR);
+      const puzzle: SpringPuzzleLayout = level.springPuzzle!;
+      const [left, right]: [number, number] = springSpan(puzzle);
+      expect(left === 0 || right === GAME_CONSTANTS.CANVAS_WIDTH, `seed ${seed} at an edge`).toBe(true);
+      expect(left).toBeLessThanOrEqual(level.exitX);
+      expect(right).toBeGreaterThanOrEqual(level.exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH);
+      const from: number = left - GAME_CONSTANTS.SPRING_CLEAR_PX;
+      const to: number = right + GAME_CONSTANTS.SPRING_CLEAR_PX;
+      for (const p of level.platforms) {
+        expect(p.x + p.width <= from || p.x >= to, `seed ${seed} platform ${p.x},${p.y}`).toBe(true);
+      }
+      for (const prop of level.props) {
+        expect(prop.x + prop.width <= from || prop.x >= to, `seed ${seed} prop ${prop.x}`).toBe(true);
+      }
+    }
+  });
+
+  it('the rules catch a platform over the spring, a prop by its lever, a moved spring and a missing one', (): void => {
+    const level: LevelLayout = generateLevel(5, SPRING_FLOOR);
+    const puzzle: SpringPuzzleLayout = level.springPuzzle!;
+    const has: (l: LevelLayout, text: string) => boolean = (l: LevelLayout, text: string): boolean =>
+      levelViolations(l).some((v: string): boolean => v.includes(text));
+    expect(levelViolations(level)).toEqual([]);
+    const over: Platform = { x: puzzle.spring.x + 32, y: 430, width: 96, height: 32 };
+    expect(has({ ...level, platforms: [...level.platforms, over] }, 'over the spring')).toBe(true);
+    const nearX: number =
+      puzzle.side === 1 ? puzzle.spring.x - 40 : puzzle.spring.x + puzzle.spring.width + 12;
+    const byLever: Prop = { kind: 'box1', x: nearX, y: GAME_CONSTANTS.GROUND_Y - 22, width: 28, height: 22 };
+    expect(has({ ...level, props: [...level.props, byLever] }, 'crowds the spring')).toBe(true);
+    const moved: SpringPuzzleLayout = { ...puzzle, spring: { ...puzzle.spring, x: puzzle.spring.x + 32 } };
+    expect(has({ ...level, springPuzzle: moved }, 'spring: not')).toBe(true);
+    expect(has({ ...level, springPuzzle: undefined }, 'spring floor without a spring')).toBe(true);
+    expect(has({ ...generateLevel(5, 4), springPuzzle: puzzle }, 'spring on another floor')).toBe(true);
   });
 });

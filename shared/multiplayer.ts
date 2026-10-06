@@ -266,6 +266,7 @@ export enum VfxEventType {
   MagicTwinSpawn = 'magic-twin-spawn',
   WallBreak = 'wall-break',
   GateBreak = 'gate-break',
+  SpringLaunch = 'spring-launch',
 }
 
 export interface VfxEvent {

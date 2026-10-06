@@ -216,6 +216,8 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     isInSafeSpot: vi.fn((): boolean => false),
     boulderPuzzle: null,
     boulder: null,
+    springPuzzle: null,
+    spring: null,
     breakPuzzleWall: vi.fn(),
     breakPuzzleGate: vi.fn(),
     puzzleWall: vi.fn((): Platform | null => null),

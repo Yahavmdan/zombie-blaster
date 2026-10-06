@@ -229,6 +229,23 @@ export interface E2eBoulderPuzzleView {
   wallStanding: boolean;
 }
 
+/** Floor-3 spring puzzle (null on other floors). */
+export interface E2eSpringView {
+  /** The spring's solid box (stand on its top): at the screen edge, under the whole exit. */
+  spring: { x: number; y: number; width: number; height: number };
+  /** +1: the spring is at the right screen edge (the lever on its left), -1: at the left edge. */
+  side: number;
+  /** The lever on the ground beside the spring's open side. */
+  lever: { x: number; y: number; width: number; height: number };
+  /** Corpses resting on the spring (its charge), and how many arm it. */
+  charge: number;
+  chargeNeeded: number;
+  launches: number;
+  countdownTicks: number;
+  bounceTicks: number;
+  wobbleTicks: number;
+}
+
 export interface E2eSnapshot {
   at: number;
   role: E2eRole;
@@ -252,6 +269,8 @@ export interface E2eSnapshot {
   level: E2eLevelView;
   /** Floor-2 boulder puzzle: wall, ledge, gate and the boulder (null on other floors). */
   puzzle: E2eBoulderPuzzleView | null;
+  /** Floor-3 spring: block, lever, charge, countdown and launches (null on other floors). */
+  spring: E2eSpringView | null;
   drops: E2eDropView[];
   /** Ticks until the potion keys work again. */
   potionCooldownTicks: number;

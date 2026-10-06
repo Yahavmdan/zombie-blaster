@@ -42,10 +42,13 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
   // The floor-2 puzzle wall (while it stands) is measured like a prop.
   const wall: Platform | null = engine.puzzleWall();
   const ladderWidth: number = renderer.getLadderArtWidth();
+  // The floor-3 spring is drawn per frame (its plate moves when it fires), like the exit.
+  const spring: Platform | null = engine.springPuzzle?.spring ?? null;
 
   const frame: CanvasRenderingContext2D = blankLayer(w, h);
   frame.drawImage(layer, 0, 0);
   renderer.drawDynamicPlatform(frame, exit.x, exit.y, exit.width, exit.height);
+  if (spring) renderer.drawSpring(frame, spring, 0);
   const inFrame: Alpha = alphaOf(frame, w, h);
 
   const objects: Measured[] = [
@@ -79,6 +82,20 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
             width: wall.width,
             height: wall.height,
             draw: (ctx: CanvasRenderingContext2D): void => renderer.drawPuzzleWall(ctx, wall),
+          },
+        ]
+      : []),
+    // The spring, like a prop: art in every column of its box, from its walkable top.
+    ...(spring
+      ? [
+          {
+            object: `spring ${spring.x},${spring.y} ${spring.width}x${spring.height}`,
+            kind: 'prop' as const,
+            x: spring.x,
+            y: spring.y,
+            width: spring.width,
+            height: spring.height,
+            draw: (ctx: CanvasRenderingContext2D): void => renderer.drawSpring(ctx, spring, 0),
           },
         ]
       : []),

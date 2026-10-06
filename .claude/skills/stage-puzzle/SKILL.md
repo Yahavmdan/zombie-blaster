@@ -6,7 +6,10 @@ description: Build a new stage/level puzzle for Zombie Blaster (a floor that nee
 # Stage puzzles
 
 Every floor should feel different. The floor-2 **boulder puzzle** is the reference
-implementation: copy its shape. The backlog of ideas is **`docs/level-puzzle-ideas.md`** (a
+implementation: copy its shape. The floor-3 **spring** (`spring-puzzle.ts`,
+`spring-puzzle-system.ts`) is the second one: a solid moving part, a countdown, a player-affecting effect
+on guests, and state derived from synced corpses. It started as a seesaw; after playtesting the
+user wanted a big spring, a 3-2-1 to get on, 30 corpses and the exit at the very top. The backlog of ideas is **`docs/level-puzzle-ideas.md`** (a
 checklist). Pick from it, build one, then tick its box and fix its description to match what
 shipped.
 
@@ -80,6 +83,24 @@ Rules that came out of building it:
     the ledge, never through a one-way floor from below.
   - Count a swing at the obvious target too: hitting the boulder resting on the gate counts as
     hitting the gate.
+
+Lessons from the spring:
+
+- **A moving puzzle part** (the spring) is a `puzzlePart` platform kept in `engine.platforms`
+  (solid: walk onto it like a prop), drawn per frame (its plate moves when it fires) and measured
+  at rest in `geometry-report.ts`. Solid ground blocks need ground spawns kept out of them
+  (`pickSpawnSpot`), like the boulder wall.
+- **Derive what you can from synced state.** The spring charge is counted from `zombieCorpses`
+  (already in game-sync), so clients draw the same "CHARGE n/30" with nothing new to sync.
+- **Countdowns:** the host runs the countdown and launches; clients tick it down but hold it at
+  its last tick (`tickSpringClient`) so only the host decides when it fires.
+- **Effects on players:** the host can't move a guest (guests own their state). Sync a counter
+  (`launches`) plus a freshness window (`bounceTicks`); each client applies the effect to its own
+  player when it sees a fresh change (`applyRemoteSpring`), never on a late join.
+- **Fling straight up = zero velocityX.** Air drag is 0.99, so walking speed at launch carried the
+  player ~170 px off the ledge. Unit-test the full flight with the real `PhysicsSystem`.
+- **Fixed exit height** on a puzzle floor: override in `repositionExitPlatform`, not in
+  `exitPlatformY` (tests use it for normal floors).
 
 ## Multiplayer checklist (host authority)
 
@@ -166,7 +187,7 @@ restore.
   engine-architecture rule (`.claude/rules/engine-architecture.md`), the `game-e2e` skill
   (puzzle probe paragraph) and the checklist.
 - The e2e AI Brain climbs to the ledge but has **no puzzle goals** (`npm run e2e:demo` stalls on
-  floor 2). New puzzles should add a Brain goal or note the gap.
+  floor 2 and floor 3). New puzzles should add a Brain goal or note the gap.
 - The first boulder design (flat rail, push both ways, ladder) was replaced after playtesting. The
   user wanted a slope, a gate, and the corpse climb. `docs/superpowers/specs|plans/2026-10-06-boulder-*`
   describe that **old** design; trust the code and this skill.

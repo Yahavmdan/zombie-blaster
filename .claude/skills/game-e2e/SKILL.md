@@ -137,6 +137,17 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   wallStanding); null on other floors. Specs: `solo/boulder-puzzle.spec.ts` (Brain climbs the
   pile, then hold attack at the gate), `online/boulder-puzzle-coop.spec.ts`. The Brain climbs to the
   ledge but has no gate/wall goal yet: AI players stall on floor 2.
+- **Floor 3 is the spring puzzle**: the exit hangs at y 100 (no pile reaches it) straight over a
+  solid spring block at the screen edge (`spring.spring`, `side`). Corpses resting on it (or piled
+  on it) charge it (`spring.charge` / `chargeNeeded`, 30). Attacking the lever beside it (`lever`,
+  on the ground at the spring's open side; facing it) with a full charge starts a 3-2-1
+  (`countdownTicks`), then everyone standing on the spring or its pile flies straight up onto the
+  exit (`launches`, `bounceTicks`). It stays charged. Too little charge only jiggles the lever
+  (`wobbleTicks`). `probe.dropCorpses` at a few x across the spring charges it. Don't teleport
+  above the exit to get on the spring: you land on the exit. Specs: `solo/spring-puzzle.spec.ts`,
+  `online/spring-puzzle-coop.spec.ts`. The Brain has no spring goal yet: AI players stall on floor 3.
+- After `teleport`, `isGrounded` can still read true from before: wait for the feet to reach the
+  surface, not just `isGrounded`.
 - A failure "dev server shows a compile error overlay" right after editing source is usually the
   reused dev server catching a half-saved edit: check `npm run build`, then rerun the spec.
 - Monster magnet (warrior) drags zombies, it doesn't teleport them: each braces ~3 ticks per

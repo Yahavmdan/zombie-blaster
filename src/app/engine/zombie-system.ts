@@ -882,12 +882,15 @@ export class ZombieSystem {
     const plat: Platform = spawnSurfaces[Math.floor(Math.random() * spawnSurfaces.length)];
     const platMinX: number = Math.max(0, plat.x);
     const platMaxX: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - width, plat.x + plat.width - width);
+    const x: number = keepOutOfWall(
+      platMinX + Math.floor(Math.random() * (platMaxX - platMinX + 1)),
+      width,
+      this.e.puzzleWall(),
+    );
+    // Nor inside the spring block at its screen edge (ground spawns).
+    const spring: Platform | null = this.e.springPuzzle?.spring ?? null;
     return {
-      x: keepOutOfWall(
-        platMinX + Math.floor(Math.random() * (platMaxX - platMinX + 1)),
-        width,
-        this.e.puzzleWall(),
-      ),
+      x: plat.y === GAME_CONSTANTS.GROUND_Y ? keepOutOfWall(x, width, spring) : x,
       y: plat.y - height,
     };
   }

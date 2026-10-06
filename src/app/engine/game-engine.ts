@@ -13,6 +13,7 @@ import {
 import {
   ActiveSpecialEffect,
   BoulderState,
+  SpringState,
   DropType,
   PendingSpecialDropConfirm,
   SpecialDropDefinition,
@@ -30,6 +31,7 @@ import { SpriteEffectSystem } from './sprite-effect-system';
 import {
   BackgroundStar,
   BoulderPuzzleLayout,
+  SpringPuzzleLayout,
   DamageNumber,
   DragonImpact,
   DragonProjectile,
@@ -53,6 +55,8 @@ import { ProjectileSystem } from './projectile-system';
 import { ZombieSystem } from './zombie-system';
 import { BoulderPuzzleSystem } from './boulder-puzzle-system';
 import { Box, boulderPath, gateBox, gateBroken } from './boulder-puzzle';
+import { SpringPuzzleSystem } from './spring-puzzle-system';
+import { flingIfOnSpring, freshLaunch } from './spring-puzzle';
 import { pullZombiesToward } from './magnet-pull';
 import { exitPlatformY, generateLevel, GROUND_PLATFORM, LevelLayout, Prop } from './level-generator';
 import { RenderSystem } from './render-system';
@@ -119,6 +123,8 @@ export class GameEngine implements IGameEngine {
   exitPlatform: Platform = { x: 0, y: 0, width: 0, height: 0 };
   boulderPuzzle: BoulderPuzzleLayout | null = null;
   boulder: BoulderState | null = null;
+  springPuzzle: SpringPuzzleLayout | null = null;
+  spring: SpringState | null = null;
 
   backgroundStars: BackgroundStar[] = [];
 
@@ -207,6 +213,7 @@ export class GameEngine implements IGameEngine {
   private readonly projectileSystem: ProjectileSystem;
   private readonly zombieSystem: ZombieSystem;
   private readonly boulderPuzzleSystem: BoulderPuzzleSystem;
+  private readonly springPuzzleSystem: SpringPuzzleSystem;
   private readonly renderSystem: RenderSystem;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -221,6 +228,7 @@ export class GameEngine implements IGameEngine {
     this.projectileSystem = new ProjectileSystem(this, this.physicsSystem, this.vfxSystem);
     this.zombieSystem = new ZombieSystem(this, this.physicsSystem, this.combatSystem, this.projectileSystem, this.dropSystem);
     this.boulderPuzzleSystem = new BoulderPuzzleSystem(this, this.combatSystem, this.vfxSystem);
+    this.springPuzzleSystem = new SpringPuzzleSystem(this, this.vfxSystem);
     this.renderSystem = new RenderSystem(this);
 
     this.initExitPlatform();
@@ -254,6 +262,8 @@ export class GameEngine implements IGameEngine {
     this.boulder = this.boulderPuzzle
       ? { gateHits: 0, progress: 0, speed: 0, wallBroken: false }
       : null;
+    this.springPuzzle = this.level.springPuzzle ?? null;
+    this.spring = this.springPuzzle ? { launches: 0, countdownTicks: 0, bounceTicks: 0, wobbleTicks: 0 } : null;
     this.platforms = [
       { ...GROUND_PLATFORM },
       ...this.level.platforms.map((p: Platform): Platform => ({ ...p })),
@@ -264,6 +274,10 @@ export class GameEngine implements IGameEngine {
       // The puzzle wall is solid too, until the boulder breaks it (the gate: placeGate).
       ...(this.boulderPuzzle
         ? [{ ...this.boulderPuzzle.wall, solid: true, puzzlePart: 'wall' as const }]
+        : []),
+      // The spring: solid like a prop, you hop onto its plate (drawn per frame, it bounces).
+      ...(this.springPuzzle
+        ? [{ ...this.springPuzzle.spring, solid: true, puzzlePart: 'spring' as const }]
         : []),
     ];
     this.ropes = this.level.ropes.map((r: Rope): Rope => ({ ...r }));
@@ -306,11 +320,14 @@ export class GameEngine implements IGameEngine {
   /**
    * The exit hangs where the layout put it (a screen edge; mid-screen as the boulder ledge on the
    * puzzle floor), out of jump reach: players slay zombies under it and climb the pile of the
-   * dead. It sits higher on later floors and with more players.
+   * dead. It sits higher on later floors and with more players. On the spring floor it hangs at
+   * the very top, where no pile reaches: the spring launches players up to it.
    */
   repositionExitPlatform(): void {
     this.exitPlatform.x = this.level.exitX;
-    this.exitPlatform.y = exitPlatformY(this.floor, this.remotePlayers.length);
+    this.exitPlatform.y = this.springPuzzle
+      ? GAME_CONSTANTS.SPRING_LEDGE_Y
+      : exitPlatformY(this.floor, this.remotePlayers.length);
     this.placeGate();
   }
 
@@ -503,6 +520,7 @@ export class GameEngine implements IGameEngine {
     if (!this.isMultiplayerClient) {
       this.zombieSystem.updateZombies();
       this.boulderPuzzleSystem.update();
+      this.springPuzzleSystem.update();
       this.projectileSystem.updateDragonProjectiles();
       this.projectileSystem.updateSpitterProjectiles();
       this.projectileSystem.updatePoisonEffect();
@@ -510,6 +528,7 @@ export class GameEngine implements IGameEngine {
     } else {
       this.tickClientZombieVisuals();
       this.boulderPuzzleSystem.tickClient();
+      this.springPuzzleSystem.tickClient();
       this.projectileSystem.tickClientProjectileVisuals();
       this.projectileSystem.updatePoisonEffect();
       if (this.floorTransitionTimer > 0) this.floorTransitionTimer--;
@@ -774,7 +793,7 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; boulder: BoulderState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     if (!this.player) return null;
     const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
@@ -795,6 +814,7 @@ export class GameEngine implements IGameEngine {
       floor: this.floor,
       layoutSeed: this.layoutSeed,
       boulder: this.boulder ? { ...this.boulder } : null,
+      spring: this.spring ? { ...this.spring } : null,
       attacks,
       revives,
       specialDropActivations,
@@ -940,6 +960,32 @@ export class GameEngine implements IGameEngine {
     if (state.wallBroken === true) this.breakPuzzleWall();
   }
 
+  /**
+   * Clients follow the host's spring (counts and timers clamped). A launch the client just saw
+   * happen launches its own player if it stands on the spring: guests own their player state.
+   */
+  applyRemoteSpring(state: SpringState | null): void {
+    if (!this.isMultiplayerClient || !this.springPuzzle || !this.spring || !state) return;
+    const numbers: number[] = [
+      state.launches,
+      state.countdownTicks,
+      state.bounceTicks,
+      state.wobbleTicks,
+    ];
+    if (!numbers.every((n: number): boolean => Number.isFinite(n))) return;
+    const clamp: (n: number, max: number) => number = (n: number, max: number): number =>
+      Math.min(max, Math.max(0, Math.round(n)));
+    const launches: number = clamp(state.launches, Number.MAX_SAFE_INTEGER);
+    const launched: boolean = launches > this.spring.launches;
+    this.spring.launches = launches;
+    this.spring.countdownTicks = clamp(state.countdownTicks, GAME_CONSTANTS.SPRING_COUNTDOWN_TICKS);
+    this.spring.bounceTicks = clamp(state.bounceTicks, GAME_CONSTANTS.SPRING_BOUNCE_TICKS);
+    this.spring.wobbleTicks = clamp(state.wobbleTicks, GAME_CONSTANTS.SPRING_WOBBLE_TICKS);
+    if (launched && freshLaunch(this.spring) && this.player) {
+      flingIfOnSpring(this.player, this.springPuzzle);
+    }
+  }
+
   applyRemoteProjectiles(spitterProjectiles: SpitterProjectile[], dragonProjectiles: DragonProjectile[]): void {
     if (!this.isMultiplayerClient) return;
     this.spitterProjectiles = spitterProjectiles;
@@ -1007,6 +1053,9 @@ export class GameEngine implements IGameEngine {
           break;
         case VfxEventType.GateBreak:
           this.vfxSystem.spawnGateBreak(evt.x, evt.y);
+          break;
+        case VfxEventType.SpringLaunch:
+          this.vfxSystem.spawnSpringLaunch(evt.x, evt.y);
           break;
       }
       // Other players' effects render a bit softer so your own read first.
