@@ -308,7 +308,11 @@ function placeProps(rand: Random, layout: Omit<PropContext, 'props'>): Prop[] {
         const base: Prop = bases[randomInt(rand, 0, bases.length - 1)];
         candidate = propBox(kind, base.x + Math.floor((base.width - width) / 2), base.y);
       } else {
-        const surfaces: Platform[] = [GROUND_PLATFORM, GROUND_PLATFORM, ...layout.platforms];
+        const surfaces: Platform[] = [
+          GROUND_PLATFORM,
+          GROUND_PLATFORM,
+          ...layout.platforms.filter((p: Platform): boolean => !p.safe),
+        ];
         const surface: Platform = surfaces[randomInt(rand, 0, surfaces.length - 1)];
         const margin: number = surface === GROUND_PLATFORM ? 0 : PROP_EDGE_MARGIN_PX;
         const minX: number = Math.max(8, surface.x + margin);
@@ -326,6 +330,43 @@ function placeProps(rand: Random, layout: Omit<PropContext, 'props'>): Prop[] {
     }
   }
   return props;
+}
+
+/**
+ * The floor's safe spot: a high ledge (a tier above the highest platforms) on the far side from
+ * the exit, with its own ladder, where players rest out of the zombies' reach.
+ */
+function placeSafeSpot(
+  rand: Random,
+  exitX: number,
+  below: Platform[],
+): { spot: Platform; ladder: Rope } {
+  const tile: number = GAME_CONSTANTS.LEVEL_TILE_PX;
+  const width: number = GAME_CONSTANTS.LEVEL_SAFE_SPOT_TILES * tile;
+  const exitRight: number = exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH;
+  const minX: number = tile;
+  const maxX: number = GAME_CONSTANTS.CANVAS_WIDTH - tile - width;
+  const candidates: number[] = [];
+  for (let x: number = minX; x <= maxX; x += 16) {
+    if (spanGap(x, x + width, exitX, exitRight) >= GAME_CONSTANTS.LEVEL_SAFE_SPOT_EXIT_GAP_PX) {
+      candidates.push(x);
+    }
+  }
+  const at: (x: number) => Platform = (x: number): Platform => ({
+    x,
+    y: GAME_CONSTANTS.LEVEL_SAFE_SPOT_Y,
+    width,
+    height: tile,
+    safe: true,
+  });
+  // Pick a spot whose ladder lands cleanly on whatever is below it.
+  let spot: Platform = at(exitX > GAME_CONSTANTS.CANVAS_WIDTH / 2 ? minX : maxX);
+  let ladder: Rope = ropeFrom(rand, spot, below);
+  for (let attempt: number = 0; attempt < 40 && !ropeLandsCleanly(ladder, below); attempt++) {
+    spot = at(candidates[randomInt(rand, 0, candidates.length - 1)]);
+    ladder = ropeFrom(rand, spot, below);
+  }
+  return { spot, ladder };
 }
 
 export function generateLevel(seed: number, floor: number): LevelLayout {
@@ -371,12 +412,21 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
   if (floor > 1 && ropes.length === 0 && tier2.length > 0) {
     ropes.push(ropeFrom(rand, tier2[randomInt(rand, 0, tier2.length - 1)], platforms));
   }
+  const { spot: safeSpot, ladder }: { spot: Platform; ladder: Rope } = placeSafeSpot(
+    rand,
+    exitX,
+    platforms,
+  );
+  platforms.push(safeSpot);
+  ropes.push(ladder);
+
   if (floor > 1 && tier2.length > 0 && rand() < 0.5) {
     const placed: Platform | null = tryPlace(
       rand,
       { y: tier3Y, minTiles: 4, maxTiles: 6, exitGap: exitGapFor(2) },
       exitX,
-      [],
+      // Keeps clear of the safe spot, so nothing blocks its ladder or crowds it from below.
+      [safeSpot],
       tier2,
     );
     if (placed) platforms.push(placed);
@@ -400,7 +450,7 @@ export function levelViolations(layout: LevelLayout): string[] {
   for (const p of layout.platforms) {
     const name: string = `platform ${p.x},${p.y} w${p.width}`;
     const tierIndex: number = tiers.indexOf(p.y);
-    if (tierIndex < 0) out.push(`${name}: not on a tier`);
+    if (tierIndex < 0 && !p.safe) out.push(`${name}: not on a tier`);
     if (p.width % tile !== 0 || p.height !== tile) out.push(`${name}: not whole tiles`);
     if (p.x < 0 || p.x + p.width > GAME_CONSTANTS.CANVAS_WIDTH) out.push(`${name}: off screen`);
     if (
@@ -433,6 +483,34 @@ export function levelViolations(layout: LevelLayout): string[] {
   for (const prop of layout.props) {
     for (const problem of propProblems(prop, layout))
       out.push(`prop ${prop.kind} at ${prop.x},${prop.y}: ${problem}`);
+  }
+
+  const safeSpots: Platform[] = layout.platforms.filter((p: Platform): boolean => p.safe === true);
+  if (safeSpots.length !== 1) out.push(`${safeSpots.length} safe spots, want exactly 1`);
+  for (const spot of safeSpots) {
+    const name: string = `safe spot ${spot.x},${spot.y}`;
+    if (spot.y !== GAME_CONSTANTS.LEVEL_SAFE_SPOT_Y) out.push(`${name}: not at the safe-spot height`);
+    if (
+      spanGap(spot.x, spot.x + spot.width, exitLeft, exitRight) <
+      GAME_CONSTANTS.LEVEL_SAFE_SPOT_EXIT_GAP_PX
+    ) {
+      out.push(`${name}: too close to the exit`);
+    }
+    const hasLadder: boolean = layout.ropes.some(
+      (r: Rope): boolean => r.topY === spot.y && r.x >= spot.x && r.x <= spot.x + spot.width,
+    );
+    if (!hasLadder) out.push(`${name}: no ladder`);
+    if (layout.props.some((prop: Prop): boolean => prop.y + prop.height === spot.y)) {
+      out.push(`${name}: has a prop on it`);
+    }
+    const crowded: boolean = layout.platforms.some(
+      (q: Platform): boolean =>
+        q !== spot &&
+        q.y > spot.y &&
+        q.y - spot.y <= 100 &&
+        platformGap(q, spot) < GAME_CONSTANTS.LEVEL_PLATFORM_GAP_PX,
+    );
+    if (crowded) out.push(`${name}: a platform crowds it from below`);
   }
 
   // Every platform is reachable from the ground by jumping up a tier or by rope.

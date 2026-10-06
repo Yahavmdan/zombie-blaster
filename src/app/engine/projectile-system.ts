@@ -34,10 +34,11 @@ export class ProjectileSystem {
     );
   }
 
+  /** Players resting on the safe spot are out of every attack's reach. */
   private getAllTargets(): ProjectileTarget[] {
     const targets: ProjectileTarget[] = [];
     const p: CharacterState | null = this.e.player;
-    if (p && !p.isDead) {
+    if (p && !p.isDead && !this.e.isInSafeSpot(p.x, p.y)) {
       targets.push({
         id: p.id,
         x: p.x,
@@ -49,7 +50,7 @@ export class ProjectileSystem {
       });
     }
     for (const rp of this.e.remotePlayers) {
-      if (rp.isDead) continue;
+      if (rp.isDead || this.e.isInSafeSpot(rp.x, rp.y)) continue;
       targets.push({
         id: rp.id,
         x: rp.x,
@@ -205,13 +206,11 @@ export class ProjectileSystem {
           }
           const p: CharacterState | null = this.e.player;
           if (p && this.e.invincibilityFrames <= 0) {
-            p.hp -= Math.max(1, Math.round(rawDamage * this.e.incomingDamageScale()));
+            p.hp -= rawDamage;
             this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
-            if (!this.e.isOnExitStack()) {
-              p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
-              p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
-              p.isGrounded = false;
-            }
+            p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
+            p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
+            p.isGrounded = false;
 
             if (p.hp <= 0) {
               p.hp = 0;
@@ -287,13 +286,11 @@ export class ProjectileSystem {
           }
           const p: CharacterState | null = this.e.player;
           if (p && this.e.invincibilityFrames <= 0) {
-            p.hp -= Math.max(1, Math.round(rawDamage * this.e.incomingDamageScale()));
+            p.hp -= rawDamage;
             this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
-            if (!this.e.isOnExitStack()) {
-              p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER * 0.5;
-              p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE * 0.5;
-              p.isGrounded = false;
-            }
+            p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER * 0.5;
+            p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE * 0.5;
+            p.isGrounded = false;
 
             this.applyPoisonToPlayer();
             this.e.pendingVfxEvents.push({
@@ -387,7 +384,7 @@ export class ProjectileSystem {
     if (this.e.poisonEffect.tickTimer <= 0) {
       this.e.poisonEffect.tickTimer = this.e.poisonEffect.tickInterval;
       if (!this.e.godMode && !this.isLocalPlayerDarkSighted()) {
-        this.e.player.hp -= Math.max(1, Math.round(this.e.poisonEffect.damagePerTick * this.e.incomingDamageScale()));
+        this.e.player.hp -= this.e.poisonEffect.damagePerTick;
         this.vfx.spawnDamageNumber(
           this.e.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
           this.e.player.y - 10,

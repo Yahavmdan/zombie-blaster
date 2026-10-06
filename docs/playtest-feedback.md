@@ -156,6 +156,23 @@ DOOM 2016 attack tokens). Date: 2026-09-30. Items are ordered by impact.
   - No double jump from the ground or any platform reaches it (`exit.spec` checks every launch spot).
 - **Monster magnet drags instead of teleporting.** Zombies brace briefly (longer when farther), then are lifted and pulled along an accelerating arc into the warrior's spot with purple drag streaks, then drop. The drag is host-simulated and synced, so every screen sees it. It's the warrior's tool for piling bodies under the exit.
 
+## Round 3 (2026-10-06): natural pile, safe spot instead of menu shield
+
+- **The exit pile is ordinary now.** The user found the arranged pile unnatural. Removed: the invisible
+  zone that snapped bodies into a left/center/right heap of 16 px steps, the wide footholds, the
+  knockback hold, kills counted "from inside the zone", the lure (wanderers drifting to the exit, half
+  the spawns rising beside it) and the climb steadying. Corpses under the exit now fall, stack and
+  look like corpses anywhere else (5 px per body, narrow footholds). The exit height is unchanged, so
+  floor 1 solo needs ~40+ bodies landing under it (was 14): much harder by design.
+  - Open question: re-measure with `npm run e2e:lab -- -g exit`. If floors take far too long, tune
+    the exit height (`EXIT_PLATFORM_Y`, `EXIT_RISE_PER_*`) rather than bringing assistance back.
+- **Safe spot instead of the menu shield.** Menus no longer cut damage. Every floor has one high
+  ledge with its own ladder, on the far side from the exit (lantern + "SAFE" sign). Zombies can't
+  land there, don't target anyone resting there and their shots pass through; players can't attack
+  or use attack skills from it (buffs work), so it is for stats/skills/shop, not for sniping.
+  Getting up the exposed ladder is how players earn the rest.
+  Specs: `safe-spot.spec.ts`, `safe-spot-coop.spec.ts`, `exit.spec.ts`, level rules in `level-generator.spec.ts`.
+
 ## Suggested order
 
 1. Exit gate (progression is impossible today).

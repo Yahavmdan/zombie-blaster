@@ -21,9 +21,10 @@ The engine is split into focused files under `src/app/engine/`.
 | `vfx-system.ts` | Particles, damage numbers, screen shake/flash, skill animations, hit marks |
 | `render-system.ts` | All canvas drawing: background, players, zombies, projectiles, overlays |
 | `map-renderer.ts` | Draws scenery (backgrounds) and the level geometry layer (ground, platforms, ladders) **from the layout data only** |
-| `level-generator.ts` | Seeded per-floor layouts (platforms, ropes, exit side) + `levelViolations` rules; host picks the seed, clients follow it via game-sync |
+| `level-generator.ts` | Seeded per-floor layouts (platforms, ropes, exit side, safe spot + its ladder) + `levelViolations` rules; host picks the seed, clients follow it via game-sync |
 | `magnet-pull.ts` | Monster-magnet drag (host-simulated, synced as `ZombieState.magnetPull`) |
-| `corpse-surface.ts` | Walkable surface of a corpse; exit-pile body offsets |
+| `corpse-surface.ts` | Walkable surface of a corpse (the same for every corpse, the exit pile included) |
+| `safe-spot.ts` | `restsOnSafeSpot`: who rests on the floor's safe spot (zombies can't target/hit/land; no attacking from it) |
 | `solid-blocks.ts` | Side collision with solid props (players and zombies) |
 | `sprite-effect-system.ts` | Sprite-sheet effects (`EFFECT_CONFIGS`), standalone |
 | `skill-animations.ts` | `SKILL_ANIMATIONS` particle definitions per skill |

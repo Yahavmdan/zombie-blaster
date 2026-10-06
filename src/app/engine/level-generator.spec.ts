@@ -10,7 +10,7 @@ import {
   PropArt,
 } from './level-generator';
 import { pushOutOfSolids } from './solid-blocks';
-import { Platform } from './engine-types';
+import { Platform, Rope } from './engine-types';
 
 describe('level generator', () => {
   it('every generated floor obeys the layout rules (tiles, exit clearance, reachability)', (): void => {
@@ -48,6 +48,47 @@ describe('level generator', () => {
         ).toBeGreaterThan(0);
       }
     }
+  });
+
+  it('every floor has one safe spot: high, far from the exit, with its own ladder', (): void => {
+    for (let seed: number = 1; seed <= 200; seed++) {
+      for (let floor: number = 1; floor <= 8; floor++) {
+        const level: LevelLayout = generateLevel(seed, floor);
+        const spots: Platform[] = level.platforms.filter((p: Platform): boolean => p.safe === true);
+        expect(spots.length, `seed ${seed} floor ${floor}`).toBe(1);
+        const spot: Platform = spots[0];
+        expect(spot.y, 'above every tier').toBeLessThan(Math.min(...GAME_CONSTANTS.LEVEL_TIER_Y));
+        const exitCx: number = level.exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH / 2;
+        const spotCx: number = spot.x + spot.width / 2;
+        expect(Math.sign(spotCx - GAME_CONSTANTS.CANVAS_WIDTH / 2), 'opposite half from the exit').toBe(
+          -Math.sign(exitCx - GAME_CONSTANTS.CANVAS_WIDTH / 2),
+        );
+        const ladder: Rope | undefined = level.ropes.find(
+          (r: Rope): boolean => r.topY === spot.y && r.x >= spot.x && r.x <= spot.x + spot.width,
+        );
+        expect(ladder, `seed ${seed} floor ${floor}: ladder`).toBeDefined();
+        expect(ladder!.bottomY, 'the ladder reaches down to a lower surface').toBeGreaterThan(spot.y);
+      }
+    }
+  });
+
+  it('the safe spot rules catch a missing ladder and a spot next to the exit', (): void => {
+    const level: LevelLayout = generateLevel(3, 2);
+    const spot: Platform = level.platforms.find((p: Platform): boolean => p.safe === true)!;
+    const noLadder: LevelLayout = {
+      ...level,
+      ropes: level.ropes.filter((r: Rope): boolean => r.topY !== spot.y),
+    };
+    expect(levelViolations(noLadder).some((v: string): boolean => v.includes('no ladder'))).toBe(true);
+    const byExit: LevelLayout = {
+      ...level,
+      platforms: level.platforms.map(
+        (p: Platform): Platform => (p.safe ? { ...p, x: level.exitX } : p),
+      ),
+    };
+    expect(
+      levelViolations(byExit).some((v: string): boolean => v.includes('safe spot') && v.includes('exit')),
+    ).toBe(true);
   });
 
   it('no platform is within double-jump reach of the exit', (): void => {

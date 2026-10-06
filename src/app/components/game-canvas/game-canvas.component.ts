@@ -90,7 +90,6 @@ export class GameCanvasComponent implements OnDestroy {
 
     effect((): void => {
       const disabled: boolean = this.inputDisabled();
-      this.engine?.setMenuOpen(disabled);
       if (disabled) {
         this.resetAllKeys();
       }
@@ -214,8 +213,8 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.applyRemoteSpecialEffects(effects);
   }
 
-  applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>, attackerId: string): void {
-    this.engine?.applyRemoteDamage(events, attackerId);
+  applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
+    this.engine?.applyRemoteDamage(events);
   }
 
   applyRemotePull(evt: { playerX: number; playerY: number; pullRange: number; skillColor: string }): void {

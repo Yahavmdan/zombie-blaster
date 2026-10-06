@@ -7,12 +7,14 @@ import {
   Direction,
 } from '@shared/index';
 import { ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
-import { EntityInterpolation, IGameEngine, Platform, ExitStackState } from './engine-types';
+import { EntityInterpolation, IGameEngine, Platform } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { CombatSystem } from './combat-system';
 import { DropSystem } from './drop-system';
 import { ProjectileSystem } from './projectile-system';
+import { restsOnSafeSpot } from './safe-spot';
+import { corpseSurface } from './corpse-surface';
 import { ZombieSystem } from './zombie-system';
 import { SpriteAnimator } from './sprite-animator';
 import { ZombieAnimState } from './zombie-sprite-animator';
@@ -210,14 +212,8 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     remotePlayerInterpolation: new Map<string, EntityInterpolation>(),
     repositionExitPlatform: vi.fn(),
     applyLevel: vi.fn(),
-    spawnExitStackEffect: vi.fn(),
     requestHitStop: vi.fn(),
-    incomingDamageScale: vi.fn((): number => 1),
-    isOnExitStack: vi.fn((): boolean => false),
-    getExitStack: vi.fn((): ExitStackState => ({
-      columnLeft: -1, columnRight: -1, centerX: -1, baseY: 0, topY: 0, reachY: 0,
-      step: 22, steps: 0, stepsNeeded: 0, progress: 0, reachable: false,
-    })),
+    isInSafeSpot: vi.fn((): boolean => false),
     onPlayerUpdate: null,
     onZombiesUpdate: null,
     onFloorUpdate: null,
@@ -257,8 +253,6 @@ function makeCorpse(overrides: Partial<ZombieCorpse> = {}): ZombieCorpse {
     fadeTimer: 999_999,
     maxFadeTimer: 999_999,
     showBlood: false,
-    anchored: false,
-    platformHeight: GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT,
     ...overrides,
   };
 }
@@ -406,18 +400,18 @@ describe('ZombieSystem — hesitation attack timing', () => {
   });
 });
 
-describe('ZombieSystem — exit beacon', () => {
-  const stackAt: (reachable: boolean) => ExitStackState = (reachable: boolean): ExitStackState => ({
-    columnLeft: 1080, columnRight: 1240, centerX: 1160, baseY: GAME_CONSTANTS.GROUND_Y, topY: GAME_CONSTANTS.GROUND_Y,
-    reachY: 230, step: 44, steps: reachable ? 9 : 2, stepsNeeded: 9, progress: reachable ? 1 : 0.2, reachable,
-  });
+describe('ZombieSystem — safe spot', () => {
+  const safeSpot: Platform = { x: 800, y: 230, width: 160, height: 32, safe: true };
+  const restingY: number = safeSpot.y - GAME_CONSTANTS.PLAYER_HEIGHT;
   let engine: IGameEngine;
   let zombieSystem: ZombieSystem;
-  let zombie: ZombieState;
+  let player: CharacterState;
 
   beforeEach((): void => {
-    zombie = makeZombie({ x: 300 });
-    engine = makeMockEngine(makePlayer(), [zombie]);
+    player = makePlayer({ x: 100 });
+    engine = makeMockEngine(player, []);
+    engine.platforms = [...engine.platforms, safeSpot];
+    engine.isInSafeSpot = (x: number, y: number): boolean => restsOnSafeSpot(engine.platforms, x, y);
     const physics: PhysicsSystem = new PhysicsSystem(engine);
     const vfx: VfxSystem = new VfxSystem(engine);
     const combat: CombatSystem = new CombatSystem(engine, physics, vfx, { rollDrops: vi.fn() } as never);
@@ -426,58 +420,56 @@ describe('ZombieSystem — exit beacon', () => {
     );
   });
 
-  it('wandering zombies drift toward the beam while the stack is unfinished', (): void => {
-    engine.getExitStack = vi.fn((): ExitStackState => stackAt(false));
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    expect(zombieSystem['pickWanderDirection'](zombie, -1)).toBe(1);
+  afterEach((): void => {
     vi.restoreAllMocks();
   });
 
-  it('the beacon goes quiet once the stack is finished', (): void => {
-    engine.getExitStack = vi.fn((): ExitStackState => stackAt(true));
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    expect(zombieSystem['pickWanderDirection'](zombie, -1)).toBe(-1);
-    vi.restoreAllMocks();
+  it('a player resting on the safe spot is no target; back on the ground they are', (): void => {
+    player.x = safeSpot.x + 40;
+    player.y = restingY;
+    expect(zombieSystem['getAllTargets']()).toHaveLength(0);
+    player.y = GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT;
+    expect(zombieSystem['getAllTargets']()).toHaveLength(1);
   });
 
-  it('while unfinished, spawns can rise on the ground beside (never inside) the beam', (): void => {
-    engine.getExitStack = vi.fn((): ExitStackState => stackAt(false));
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    const spot: { x: number; y: number } = zombieSystem['pickSpawnSpot'](30, 40);
-    vi.restoreAllMocks();
-    expect(spot.y).toBe(GAME_CONSTANTS.GROUND_Y - 40);
-    const centerX: number = spot.x + 15;
-    expect(centerX < 1080 || centerX > 1240, 'outside the beam').toBe(true);
-    expect(spot.x).toBeGreaterThanOrEqual(0);
-    expect(spot.x + 30).toBeLessThanOrEqual(GAME_CONSTANTS.CANVAS_WIDTH);
+  it('zombies never land on the safe spot: they fall through it', (): void => {
+    const zombie: ZombieState = makeZombie({ x: safeSpot.x + 40, isGrounded: false, velocityY: 2, reactionDelay: 1_000 });
+    zombie.y = safeSpot.y - zombie.instanceHeight - 2;
+    engine.zombies = [zombie];
+    for (let tick: number = 0; tick < 120 && !(zombie.isGrounded && zombie.y > safeSpot.y); tick++) {
+      zombieSystem.updateZombies();
+    }
+    expect(zombie.y + zombie.instanceHeight).toBeCloseTo(GAME_CONSTANTS.GROUND_Y, 0);
   });
 
-  it('once the stack is finished, spawns use the normal platforms', (): void => {
-    engine.getExitStack = vi.fn((): ExitStackState => stackAt(true));
-    const platform: Platform = { x: 100, y: 300, width: 200, height: 20 };
-    engine.platforms = [platform];
-    const spot: { x: number; y: number } = zombieSystem['pickSpawnSpot'](30, 40);
-    expect(spot.y).toBe(260);
-    expect(spot.x).toBeGreaterThanOrEqual(100);
+  it('zombies never rise on the safe spot', (): void => {
+    for (let i: number = 0; i < 300; i++) {
+      const spot: { x: number; y: number } = zombieSystem['pickSpawnSpot'](30, 40);
+      expect(spot.y).not.toBe(safeSpot.y - 40);
+    }
+  });
+
+  it('with everyone resting, zombies shamble around instead of freezing', (): void => {
+    player.x = safeSpot.x + 40;
+    player.y = restingY;
+    // attackCooldown: skip the idle swing (it stops the zombie for a moment).
+    const zombie: ZombieState = makeZombie({ x: 300, velocityX: 0, isGrounded: true, attackCooldown: 50 });
+    engine.zombies = [zombie];
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    zombieSystem['updateZombieAI'](zombie, ZOMBIE_TYPES[ZombieType.Walker]);
+    expect(zombie.velocityX).not.toBe(0);
   });
 });
 
-describe('CombatSystem — kills, XP and the exit beam', () => {
-  const beamStack: ExitStackState = {
-    columnLeft: 1080, columnRight: 1240, centerX: 1160, baseY: GAME_CONSTANTS.GROUND_Y, topY: GAME_CONSTANTS.GROUND_Y,
-    reachY: 230, step: 44, steps: 0, stepsNeeded: 9, progress: 0, reachable: false,
-  };
+describe('CombatSystem — kills and XP', () => {
   let engine: IGameEngine;
   let combat: CombatSystem;
 
   beforeEach((): void => {
     engine = makeMockEngine(makePlayer(), []);
-    engine.getExitStack = vi.fn((): ExitStackState => beamStack);
     const physics: PhysicsSystem = new PhysicsSystem(engine);
     combat = new CombatSystem(engine, physics, new VfxSystem(engine), { rollDrops: vi.fn() } as never);
   });
-
-  const lastCorpse: () => ZombieCorpse = (): ZombieCorpse => engine.zombieCorpses[engine.zombieCorpses.length - 1];
 
   it('kill XP grows with the floor', (): void => {
     const gained: number[] = [];
@@ -492,19 +484,13 @@ describe('CombatSystem — kills, XP and the exit beam', () => {
     expect(gained[1]).toBe(Math.floor(10 * (1 + 5 * GAME_CONSTANTS.ZOMBIE_XP_SCALE_PER_WAVE)));
   });
 
-  it('a zombie slain outside the beam by a player outside it does not join the stack', (): void => {
-    combat.handleZombieDeath(makeZombie({ x: 300 }), true, makePlayer({ x: 400 }));
-    expect(lastCorpse().anchored).toBe(false);
-  });
-
-  it('a kill made by a player standing in the beam joins the stack, wherever the zombie was', (): void => {
-    combat.handleZombieDeath(makeZombie({ x: 600 }), true, makePlayer({ x: 1150 }));
-    expect(lastCorpse().anchored).toBe(true);
-  });
-
-  it('a downed player in the beam does not claim kills', (): void => {
-    combat.handleZombieDeath(makeZombie({ x: 600 }), true, makePlayer({ x: 1150, isDown: true }));
-    expect(lastCorpse().anchored).toBe(false);
+  it('a zombie slain under the exit leaves an ordinary corpse: it keeps its fling and a narrow foothold', (): void => {
+    engine.exitPlatform = { x: 1068, y: 310, width: GAME_CONSTANTS.EXIT_PLATFORM_WIDTH, height: 32 };
+    combat.handleZombieDeath(makeZombie({ x: 1150, isGrounded: false, velocityX: 4, velocityY: -2 }));
+    const corpse: ZombieCorpse = engine.zombieCorpses[engine.zombieCorpses.length - 1];
+    expect(Math.abs(corpse.velocityX - 4)).toBeLessThanOrEqual(GAME_CONSTANTS.ZOMBIE_CORPSE_DEATH_SCATTER);
+    expect(corpseSurface(corpse).width).toBeCloseTo(corpse.width * GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO);
+    expect(corpse.frozen).toBe(false);
   });
 });
 

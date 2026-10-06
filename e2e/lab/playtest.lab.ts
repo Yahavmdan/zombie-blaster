@@ -222,7 +222,7 @@ test.describe('playtest lab', (): void => {
   });
 
   for (const classId of ['warrior', 'assassin'] as ClassId[]) {
-    test(`exit: how long does a fresh ${classId} take to build the stack and climb out?`, async ({
+    test(`exit: how long does a fresh ${classId} take to pile up the dead and climb out?`, async ({
       solo,
     }: {
       solo: SoloFactory;
@@ -230,25 +230,25 @@ test.describe('playtest lab', (): void => {
       const p: GamePlayer = await solo(classId);
       const started: number = Date.now();
       let readyAtS: number | null = null;
-      let stepsAt60s: number | null = null;
+      let bodiesAt60s: number | null = null;
       const brain: Brain = new Brain(p, {
         deadline: Date.now() + 360_000,
         goal: 'exit',
         stopWhen: (s: E2eSnapshot): boolean => {
           const t: number = (Date.now() - started) / 1000;
-          if (readyAtS === null && s.exitStack.reachable) readyAtS = Math.round(t);
-          if (stepsAt60s === null && t >= 60) stepsAt60s = s.exitStack.steps;
+          if (readyAtS === null && s.exitPile.reachable) readyAtS = Math.round(t);
+          if (bodiesAt60s === null && t >= 60) bodiesAt60s = s.exitPile.bodies;
           return s.floor > 1;
         },
       });
       await brain.run();
       const end: E2eSnapshot = await p.probe.state();
-      await snap(p, `exit-stack-${classId}`);
-      await record(testInfo, `exit-stack-${classId}`, {
+      await snap(p, `exit-pile-${classId}`);
+      await record(testInfo, `exit-pile-${classId}`, {
         level: end.player?.level,
-        stepsNeeded: end.floor === 1 ? end.exitStack.stepsNeeded : 'done',
-        stepsAt60s,
-        stackReadyAfterS: readyAtS,
+        pileHeightLeft: end.floor === 1 ? end.exitPile.topY - end.exitPile.reachY : 'done',
+        bodiesAt60s,
+        pileReadyAfterS: readyAtS,
         reachedFloor2AfterS: end.floor > 1 ? Math.round((Date.now() - started) / 1000) : null,
         died: await p.probe.isGameOver(),
         potionsUsed: brain.stats.potionsUsed,

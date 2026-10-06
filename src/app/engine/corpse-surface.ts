@@ -2,8 +2,8 @@ import { GAME_CONSTANTS } from '@shared/index';
 import { ZombieCorpse } from '@shared/game-entities';
 
 /**
- * Walkable surface a corpse provides. Ordinary corpses give a narrow, low foothold (piles grow
- * slowly); exit-stack corpses give a wide step so players can climb the stack like stairs.
+ * Walkable surface a corpse provides: a narrow, low foothold, so piles grow slowly. Every corpse
+ * is the same wherever it falls, the pile under the exit included.
  */
 export interface CorpseSurface {
   x: number;
@@ -12,19 +12,10 @@ export interface CorpseSurface {
 }
 
 export function corpseSurface(corpse: ZombieCorpse): CorpseSurface {
-  const ratio: number = corpse.anchored
-    ? GAME_CONSTANTS.EXIT_STACK_STEP_WIDTH_RATIO
-    : GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
-  const width: number = corpse.width * ratio;
+  const width: number = corpse.width * GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO;
   return {
     x: corpse.x + (corpse.width - width) / 2,
     width,
-    y: corpse.y + corpse.height - corpse.platformHeight,
+    y: corpse.y + corpse.height - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT,
   };
-}
-
-/** Horizontal offset of the nth body in the exit pile: left, center, right, so it reads as a heap. */
-export function exitPileOffset(index: number): number {
-  const pattern: number[] = [0, -1, 1];
-  return pattern[index % pattern.length] * GAME_CONSTANTS.EXIT_STACK_SPREAD_PX;
 }

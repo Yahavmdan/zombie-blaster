@@ -116,14 +116,11 @@ export const GAME_CONSTANTS = {
   LEVEL_TIER3_EXIT_GAP_PX: 480, // Tier-3 platforms keep this far from the exit
   LEVEL_PLATFORM_GAP_PX: 64, // Minimum gap between two platforms on the same tier
   LEVEL_STEP_UP_GAP_PX: 24, // A platform one tier up is jumpable if its span is within this of the one below
-  EXIT_REACH_PX: 100, // The exit counts as reachable once the stack top is this close below it (jump is ~116 px)
-  EXIT_BEAM_WIDTH: 160, // Width of the (invisible) zone under the exit where slain zombies join the pile
-  EXIT_BEACON_PULL_CHANCE: 0.9, // Chance a wandering (not chasing) zombie picks the direction toward the exit
-  EXIT_BEACON_SPAWN_CHANCE: 0.5, // While the pile is unfinished, chance a new zombie rises from the ground beside the zone
-  EXIT_BEACON_SPAWN_SPREAD_PX: 260, // How far beyond the zone edge those zombies may rise
-  EXIT_STACK_STEP_PX: 16, // Height one body adds to the pile under the exit (about one lying body: one kill, one body)
-  EXIT_STACK_SPREAD_PX: 18, // Bodies land left/center/right of the zone center, so the pile reads as a heap
-  EXIT_STACK_STEP_WIDTH_RATIO: 1.3, // Walkable width of a pile body relative to the corpse (wide, easy footholds)
+  EXIT_REACH_PX: 100, // The exit is in jump reach once a corpse pile under it tops out this close below it (jump is ~116 px)
+  LEVEL_SAFE_SPOT_Y: 230, // Surface of each floor's safe spot: a high ledge reached by its own ladder
+  LEVEL_SAFE_SPOT_TILES: 5, // Width of the safe spot in tiles (room for a full party)
+  LEVEL_SAFE_SPOT_EXIT_GAP_PX: 640, // The safe spot keeps this far from the exit (no dropping from it onto the exit)
+  SAFE_SPOT_HEADROOM_PX: 160, // Players up to this far above the safe spot (jumping on it) still count as resting there
 
   // ─── Zombie Spawning ───────────────────────────
   ZOMBIE_SPAWN_INTERVAL_MS: 2000, // Time between zombie spawns in milliseconds
@@ -294,8 +291,6 @@ export const GAME_CONSTANTS = {
   // ─── Revival (Co-op) ───────────────────────────
   REVIVE_WINDOW_TICKS: 1500, // Ticks the downed player can be revived (10 s at 50 tps)
   REVIVE_CHANNEL_TICKS: 100, // Ticks the reviver must channel to complete (2 s at 50 tps); the downed timer pauses meanwhile
-  MENU_SHIELD_TICKS: 200, // For this long after opening a menu (stats/shop/...) you take reduced damage (~4 s)
-  MENU_SHIELD_DAMAGE_MULT: 0.3, // Damage multiplier while the menu shield is up
   ALLY_VFX_ALPHA: 0.7, // Particles replayed from other players draw at this opacity
   REVIVE_RANGE: 60, // Pixels — reviver must be within this distance
   REVIVE_HP_PERCENT: 30, // Percent of max HP the revived player comes back with

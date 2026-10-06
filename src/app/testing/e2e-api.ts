@@ -73,8 +73,6 @@ export interface E2eCorpseView {
   y: number;
   isGrounded: boolean;
   frozen: boolean;
-  /** Part of the exit stack. */
-  anchored: boolean;
   /** Walkable foothold on top of this corpse. */
   footX: number;
   footWidth: number;
@@ -87,20 +85,20 @@ export interface E2eCorpseView {
   lastFrame: number;
 }
 
-export interface E2eExitStack {
+/** Corpses piled up under the exit: ordinary corpses, nothing holds or arranges them. */
+export interface E2eExitPile {
+  /** The exit's span: grounded corpses whose foothold overlaps it make up the pile. */
   columnLeft: number;
   columnRight: number;
   centerX: number;
+  /** Ground under the exit. */
   baseY: number;
+  /** Highest corpse foothold in the column (baseY when there is none). */
   topY: number;
+  /** A foothold at or above this line puts the exit within one jump. */
   reachY: number;
-  step: number;
-  steps: number;
-  stepsNeeded: number;
-  progress: number;
+  bodies: number;
   reachable: boolean;
-  /** The local player is steadied by the beam (no knockback on or between stack steps). */
-  playerSteadied: boolean;
 }
 
 export interface E2eDropView {
@@ -176,6 +174,8 @@ export interface E2eLevelView {
   ropes: Array<{ x: number; topY: number; bottomY: number }>;
   /** Solid props (stand on top, blocked at the sides); their boxes are their visible art. */
   props: Array<{ kind: string; x: number; y: number; width: number; height: number }>;
+  /** The floor's safe spot (also listed in `platforms`); its ladder is in `ropes`. */
+  safeSpot: { x: number; y: number; width: number } | null;
 }
 
 /** Where one collision object's art was actually drawn, measured from rendered pixels. */
@@ -222,8 +222,10 @@ export interface E2eSnapshot {
   worldDrops: number;
   /** Floor exit: stand on it (grounded) to finish the floor. */
   exit: { x: number; y: number; width: number };
-  /** Corpse stack under the exit (zombies slain in the exit beam). */
-  exitStack: E2eExitStack;
+  /** Corpses piled up under the exit. */
+  exitPile: E2eExitPile;
+  /** Players (local and remote, by id) resting on the safe spot: out of every attack's reach. */
+  restingPlayerIds: string[];
   /** The live collision geometry of this floor (what physics uses). */
   level: E2eLevelView;
   drops: E2eDropView[];
@@ -258,8 +260,8 @@ export interface E2eEngineControls {
   setLayoutSeed(seed: number): void;
   /** Measures the drawn level art against the collision geometry (see E2eGeometryReport). */
   geometryReport(): E2eGeometryReport;
-  /** Setup only: stack N corpses in the exit beam (as if slain there). */
-  buildExitStack(steps: number): void;
+  /** Solo/host setup only: drops N corpses from above x; they fall and pile up by the normal corpse physics. */
+  dropCorpses(centerX: number, count: number): void;
 }
 
 export interface ZbE2eApi {

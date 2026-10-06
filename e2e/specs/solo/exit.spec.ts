@@ -6,27 +6,71 @@ import { E2eCorpseView, E2eSnapshot, E2eZombieView } from '../../support/probe';
 import { GROUND, LevelPlatform, levelPlatforms } from '../../support/navigation';
 import { WORLD } from '../../support/invariants';
 
+/** Mirrors ZOMBIE_CORPSE_PLATFORM_HEIGHT in shared/game-constants.ts: one body is a thin layer. */
+const CORPSE_STEP_PX: number = 5;
+
 /**
- * Exit beacon: the exit's light column marks where zombies must die; each one slain inside
- * it joins a non-rotting corpse stack under the exit, and the stack is how players climb out.
+ * The exit hangs out of reach. The only way up is the pile of the dead under it, and that pile is
+ * ordinary: corpses there fall, stack and look exactly like corpses anywhere else on the map.
  */
-test.describe('exit beacon and corpse stack', { tag: '@solo' }, (): void => {
-  test('the exit pile starts empty on the ground under the exit', async ({
+test.describe('exit and the pile of the dead', { tag: '@solo' }, (): void => {
+  test('the pile under the exit starts empty and the exit is out of reach', async ({
     solo,
   }: {
     solo: SoloFactory;
   }): Promise<void> => {
     const p: GamePlayer = await solo('warrior');
     const s: E2eSnapshot = await p.probe.state();
-    expect(s.exitStack.baseY, 'the stack rises from the ground, where zombies are').toBe(GROUND.y);
-    expect(s.exitStack.steps).toBe(0);
-    expect(s.exitStack.progress).toBe(0);
-    expect(s.exitStack.reachable).toBe(false);
-    expect(s.exitStack.stepsNeeded).toBeGreaterThan(0);
-    expect(s.exitStack.stepsNeeded, 'a handful of kills, not a tower').toBeLessThanOrEqual(20);
+    expect(s.exitPile.baseY, 'the pile rises from the ground').toBe(GROUND.y);
+    expect(s.exitPile.bodies).toBe(0);
+    expect(s.exitPile.topY).toBe(GROUND.y);
+    expect(s.exitPile.reachable).toBe(false);
+    expect(s.exitPile.reachY).toBeLessThan(GROUND.y);
   });
 
-  test('while the stack is unfinished, the dead rise on the ground beside the beam', async ({
+  test('zombies slain under the exit pile up like anywhere else: thin bodies, nothing arranges them', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }, testInfo: TestInfo): Promise<void> => {
+    test.setTimeout(180_000);
+    const p: GamePlayer = await solo('warrior');
+    await p.probe.maxOutPlayer();
+    await p.probe.setGodMode(true);
+    const brain: Brain = new Brain(p, {
+      deadline: Date.now() + 150_000,
+      goal: 'exit',
+      stopWhen: (s: E2eSnapshot): boolean => s.exitPile.bodies >= 4,
+    });
+    await brain.run();
+    const s: E2eSnapshot = await p.probe.state();
+    await p.attachCanvas(testInfo, 'pile under the exit');
+    expect(s.exitPile.bodies, 'kills under the exit leave bodies there').toBeGreaterThanOrEqual(4);
+    // The pile may spill past the exit's edges: count every body lying near it.
+    const nearby: number = s.corpseViews.filter(
+      (c: E2eCorpseView): boolean =>
+        c.isGrounded &&
+        c.footX + c.footWidth > s.exitPile.columnLeft - 150 &&
+        c.footX < s.exitPile.columnRight + 150,
+    ).length;
+    expect(
+      s.exitPile.baseY - s.exitPile.topY,
+      `each body adds a thin ${CORPSE_STEP_PX} px layer at most (no tall steps)`,
+    ).toBeLessThanOrEqual(nearby * CORPSE_STEP_PX + 1);
+    const elsewhere: E2eCorpseView[] = s.corpseViews.filter(
+      (c: E2eCorpseView): boolean => c.footX >= s.exitPile.columnRight || c.footX + c.footWidth <= s.exitPile.columnLeft,
+    );
+    const inPile: E2eCorpseView[] = s.corpseViews.filter(
+      (c: E2eCorpseView): boolean => !elsewhere.includes(c),
+    );
+    const widest: (cs: E2eCorpseView[]) => number = (cs: E2eCorpseView[]): number =>
+      Math.max(0, ...cs.map((c: E2eCorpseView): number => c.footWidth));
+    expect(widest(inPile), 'footholds under the exit are as narrow as anywhere').toBeLessThanOrEqual(
+      Math.max(widest(elsewhere), 40),
+    );
+  });
+
+  test('nothing calls the dead to the exit: zombies rise all over the map', async ({
     solo,
   }: {
     solo: SoloFactory;
@@ -35,125 +79,64 @@ test.describe('exit beacon and corpse stack', { tag: '@solo' }, (): void => {
     const p: GamePlayer = await solo('warrior');
     await p.probe.setGodMode(true);
     const s0: E2eSnapshot = await p.probe.state();
-    const reach: number = s0.exitStack.columnRight - s0.exitStack.centerX + 300;
     const seen: Set<string> = new Set<string>();
-    let nearBeam: number = 0;
-    const end: number = Date.now() + 60_000;
-    while (Date.now() < end && seen.size < 10) {
+    let nearExit: number = 0;
+    const end: number = Date.now() + 70_000;
+    while (Date.now() < end && seen.size < 12) {
       const s: E2eSnapshot = await p.probe.state();
       for (const z of s.zombies.filter((zz: E2eZombieView): boolean => zz.spawnTimer > 0)) {
         if (seen.has(z.id)) continue;
         seen.add(z.id);
-        const onGround: boolean = Math.abs(z.y + z.height - GROUND.y) <= 2;
-        if (onGround && Math.abs(z.x + z.width / 2 - s.exitStack.centerX) <= reach) nearBeam++;
+        if (Math.abs(z.x + z.width / 2 - s0.exitPile.centerX) <= 400) nearExit++;
       }
       await p.wait(100);
     }
-    expect(seen.size, `zombies spawned`).toBeGreaterThanOrEqual(6);
-    // Half the spawns go beside the beam; with only ~10 samples, demand 2 (exact odds are unit-tested).
-    expect(nearBeam, `${nearBeam}/${seen.size} rose near the beam`).toBeGreaterThanOrEqual(2);
+    expect(seen.size, 'zombies spawned').toBeGreaterThanOrEqual(8);
+    // Uniform spawns put roughly a third within 400 px of an exit at the screen edge.
+    expect(nearExit / seen.size, `${nearExit}/${seen.size} rose near the exit`).toBeLessThan(0.75);
   });
 
-  test('slaying zombies in the beam builds a stack you climb to the next floor', async ({
+  test('a pile tall enough is climbable: walk into it, ride it up, jump to the exit', async ({
     solo,
   }: {
     solo: SoloFactory;
   }, testInfo: TestInfo): Promise<void> => {
-    test.setTimeout(420_000);
+    test.setTimeout(150_000);
     const p: GamePlayer = await solo('warrior');
-    await p.probe.maxOutPlayer();
     await p.probe.setGodMode(true);
+    const s0: E2eSnapshot = await p.probe.state();
+    let ready: E2eSnapshot = s0;
+    for (let batch: number = 0; batch < 15 && !ready.exitPile.reachable; batch++) {
+      await p.probe.dropCorpses(s0.exitPile.centerX, 10);
+      await p.wait(2_500);
+      ready = await p.probe.state();
+    }
+    await p.attachCanvas(testInfo, 'pile built');
+    expect(ready.exitPile.reachable, 'the pile reached jump range of the exit').toBe(true);
+    expect(
+      ready.exitPile.bodies,
+      'thin bodies: it takes dozens of them',
+    ).toBeGreaterThanOrEqual(Math.floor((ready.exitPile.baseY - ready.exitPile.reachY) / CORPSE_STEP_PX));
+    // Setup: start beside the pile (crossing the map through the crowd is not what this tests).
+    const side: number = ready.exitPile.centerX < WORLD.width / 2 ? 1 : -1;
+    await p.probe.teleport(
+      ready.exitPile.centerX + side * 90 - WORLD.playerWidth / 2,
+      GROUND.y - WORLD.playerHeight,
+    );
     const logs: string[] = [];
     const brain: Brain = new Brain(p, {
-      deadline: Date.now() + 360_000,
+      deadline: Date.now() + 60_000,
       goal: 'exit',
       log: (m: string): void => {
         logs.push(m);
       },
       stopWhen: (s: E2eSnapshot): boolean => s.floor > 1,
     });
-    let atReady: E2eSnapshot | null = null;
-    const watcher: Promise<void> = (async (): Promise<void> => {
-      atReady = await p.probe.waitFor(
-        'stack reaches the exit',
-        (s: E2eSnapshot): boolean => s.exitStack.reachable || s.floor > 1,
-        {
-          timeoutMs: 360_000,
-          intervalMs: 500,
-        },
-      );
-      await p.attachCanvas(testInfo, 'stack ready');
-    })();
-    const timeline: string[] = [];
-    const sampler: ReturnType<typeof setInterval> = setInterval((): void => {
-      void p.probe
-        .state()
-        .then((st: E2eSnapshot): void => {
-          timeline.push(
-            `${Math.round((Date.now() - started) / 1000)}s steps=${st.exitStack.steps}/${st.exitStack.stepsNeeded} x=${Math.round(st.player!.x)} zombies=${st.zombies.length} corpses=${st.corpses}`,
-          );
-        })
-        .catch((): void => undefined);
-    }, 10_000);
-    const started: number = Date.now();
     await brain.run();
-    clearInterval(sampler);
-    await testInfo.attach('stack timeline', {
-      body: timeline.join('\n'),
-      contentType: 'text/plain',
-    });
-    await watcher.catch((): void => undefined);
     await testInfo.attach('brain log', { body: logs.join('\n'), contentType: 'text/plain' });
-
-    expect(atReady, 'the stack reached jump range of the exit').not.toBeNull();
-    const ready: E2eSnapshot = atReady!;
-    if (ready.floor === 1) {
-      const stacked: E2eCorpseView[] = ready.corpseViews.filter(
-        (c: E2eCorpseView): boolean => c.anchored,
-      );
-      expect(ready.exitStack.topY, 'the pile reaches jump range of the exit').toBeLessThanOrEqual(
-        ready.exitStack.reachY,
-      );
-      // stepsNeeded assumes the pile starts on bare ground; loose corpses already lying there
-      // lift it a few px, so the last body can be one fewer.
-      expect(stacked.length).toBeGreaterThanOrEqual(ready.exitStack.stepsNeeded - 1);
-      const pileHeight: number = ready.exitStack.baseY - ready.exitStack.topY;
-      expect(
-        Math.abs(pileHeight - stacked.length * ready.exitStack.step),
-        'one kill, one body: the pile is as tall as its bodies (plus at most a loose corpse under it)',
-      ).toBeLessThanOrEqual(8);
-      for (const c of stacked) {
-        expect(c.frozen && c.frame === c.lastFrame, 'stacked corpses lie flat').toBe(true);
-        expect(
-          c.x + 30 > ready.exitStack.columnLeft && c.x < ready.exitStack.columnRight,
-          'stack stays in the beam',
-        ).toBe(true);
-      }
-    }
     const final: E2eSnapshot = await p.probe.state();
-    expect(final.floor, 'climbing the stack reaches floor 2').toBe(2);
-    expect(final.exitStack.steps, 'new floor starts with a fresh stack').toBe(0);
-  });
-
-  test('a ranged class shooting from inside the beam builds the stack', async ({
-    solo,
-  }: {
-    solo: SoloFactory;
-  }): Promise<void> => {
-    test.setTimeout(150_000);
-    const p: GamePlayer = await solo('assassin');
-    await p.probe.setGodMode(true);
-    const brain: Brain = new Brain(p, {
-      deadline: Date.now() + 120_000,
-      goal: 'exit',
-      stopWhen: (s: E2eSnapshot): boolean => s.exitStack.steps >= 3,
-    });
-    await brain.run();
-    const s: E2eSnapshot = await p.probe.state();
-    expect(
-      s.exitStack.steps,
-      'kills made from the light count, even at range',
-    ).toBeGreaterThanOrEqual(3);
+    expect(final.floor, 'climbed the pile onto the exit').toBe(2);
+    expect(final.exitPile.bodies, 'the new floor starts without a pile').toBe(0);
   });
 
   test('the exit hangs out of reach on every generated floor: no double jump gets there', async ({
@@ -172,7 +155,8 @@ test.describe('exit beacon and corpse stack', { tag: '@solo' }, (): void => {
       );
       const exitCx: number = s0.exit.x + s0.exit.width / 2;
       const towardExit: string = exitCx > WORLD.width / 2 ? KEYS.right : KEYS.left;
-      // The nearest launch spots: the ground right under the exit and each platform's edge nearest it.
+      // The nearest launch spots: the ground right under the exit and each platform's edge
+      // nearest it (the safe spot included).
       const launches: Array<{ name: string; x: number; y: number }> = [
         { name: 'ground under the exit', x: exitCx - WORLD.playerWidth / 2, y: GROUND.y },
         ...levelPlatforms(s0)
@@ -217,61 +201,5 @@ test.describe('exit beacon and corpse stack', { tag: '@solo' }, (): void => {
         ).toBeGreaterThan(s.exit.y);
       }
     }
-  });
-
-  test('the beam steadies climbers on and between steps, not on the ground', async ({
-    solo,
-  }: {
-    solo: SoloFactory;
-  }): Promise<void> => {
-    const p: GamePlayer = await solo('warrior');
-    await p.probe.setGodMode(true);
-    const s0: E2eSnapshot = await p.probe.state();
-    expect(s0.exitStack.playerSteadied, 'no stack yet').toBe(false);
-    await p.probe.buildExitStack(3);
-    const built: E2eSnapshot = await p.probe.waitFor(
-      'three steps',
-      (s: E2eSnapshot): boolean => s.exitStack.steps >= 3,
-    );
-    const x: number = built.exitStack.centerX - WORLD.playerWidth / 2;
-    await p.probe.teleport(x, built.exitStack.topY - 70 - WORLD.playerHeight);
-    expect(
-      (await p.probe.state()).exitStack.playerSteadied,
-      'steadied above the ground in the column',
-    ).toBe(true);
-    await p.probe.teleport(built.exitStack.columnLeft - 200, GROUND.y - WORLD.playerHeight);
-    await p.wait(100);
-    expect((await p.probe.state()).exitStack.playerSteadied, 'not on the ground outside').toBe(
-      false,
-    );
-  });
-
-  test('a finished stack is climbable: step by step up to the exit', async ({
-    solo,
-  }: {
-    solo: SoloFactory;
-  }, testInfo: TestInfo): Promise<void> => {
-    const p: GamePlayer = await solo('warrior');
-    await p.probe.setGodMode(true);
-    const s0: E2eSnapshot = await p.probe.state();
-    await p.probe.buildExitStack(s0.exitStack.stepsNeeded);
-    const ready: E2eSnapshot = await p.probe.waitFor(
-      'stack ready',
-      (s: E2eSnapshot): boolean => s.exitStack.reachable,
-    );
-    await p.attachCanvas(testInfo, 'stack built');
-    const logs: string[] = [];
-    const brain: Brain = new Brain(p, {
-      deadline: Date.now() + 60_000,
-      goal: 'exit',
-      log: (m: string): void => {
-        logs.push(m);
-      },
-      stopWhen: (s: E2eSnapshot): boolean => s.floor > 1,
-    });
-    await brain.run();
-    await testInfo.attach('brain log', { body: logs.join('\n'), contentType: 'text/plain' });
-    expect(ready.exitStack.topY).toBeLessThanOrEqual(ready.exitStack.reachY);
-    expect((await p.probe.state()).floor, 'climbed the stack onto the exit').toBe(2);
   });
 });

@@ -60,7 +60,8 @@ test.describe('controls, onboarding and menus', { tag: '@solo' }, (): void => {
     expect(s.player!.level).toBe(2);
   });
 
-  test('opening a menu mid-fight shields you from most damage for a few seconds', async ({
+  // Menus don't pause the game or shield you: rest on the floor's safe spot instead (safe-spot.spec).
+  test('opening a menu mid-fight gives no protection: hits land as hard as with it closed', async ({
     solo,
   }: {
     solo: SoloFactory;
@@ -108,6 +109,6 @@ test.describe('controls, onboarding and menus', { tag: '@solo' }, (): void => {
     });
     expect(closed.length, 'took hits while fighting').toBeGreaterThan(0);
     expect(open.length, 'took hits with the shop open').toBeGreaterThan(0);
-    expect(avg(open), 'average hit with a menu open').toBeLessThan(avg(closed) * 0.6);
+    expect(avg(open), 'average hit with a menu open').toBeGreaterThan(avg(closed) * 0.6);
   });
 });

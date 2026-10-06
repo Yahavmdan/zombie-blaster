@@ -71,6 +71,8 @@ export interface Platform {
   height: number;
   /** A prop: besides standing on its top, its sides block anyone walking into it. */
   solid?: boolean;
+  /** The floor's safe spot: zombies never stand on it and can't hurt anyone resting on it. */
+  safe?: boolean;
 }
 
 export interface Rope {
@@ -159,25 +161,6 @@ export interface EntityInterpolation {
   targetVelocityX: number;
   targetVelocityY: number;
   syncAge: number;
-}
-
-/** The corpse stack players build under the exit (see GameEngine.getExitStack). */
-export interface ExitStackState {
-  /** Beam column (exit width) the stack grows in. */
-  columnLeft: number;
-  columnRight: number;
-  centerX: number;
-  /** Surface the stack starts on (platform under the exit). */
-  baseY: number;
-  /** Current top surface of the stack (baseY when empty). */
-  topY: number;
-  /** Surface height at which the exit becomes reachable by a jump. */
-  reachY: number;
-  step: number;
-  steps: number;
-  stepsNeeded: number;
-  progress: number;
-  reachable: boolean;
 }
 
 export interface IGameEngine {
@@ -282,14 +265,10 @@ export interface IGameEngine {
   repositionExitPlatform(): void;
   /** Builds the current floor's layout (collision + drawn map) from the shared seed. */
   applyLevel(): void;
-  getExitStack(): ExitStackState;
-  spawnExitStackEffect(x: number, y: number): void;
   /** Brief freeze-frame when the local player's hit lands (solo only). */
   requestHitStop(ticks: number): void;
-  /** Multiplier for damage the local player takes right now (menu shield). */
-  incomingDamageScale(): number;
-  /** The local player stands on the exit corpse stack (the beam holds them: no knockback). */
-  isOnExitStack(): boolean;
+  /** A player whose top-left corner is at (x, y) rests on the floor's safe spot (out of every attack's reach). */
+  isInSafeSpot(x: number, y: number): boolean;
 
   onPlayerUpdate: ((player: CharacterState) => void) | null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null;

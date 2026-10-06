@@ -8,8 +8,8 @@ import { E2eSnapshot } from '../../support/probe';
 const SOLO_FLOOR1_EXIT_Y: number = 310;
 const EXIT_RISE_PER_EXTRA_PLAYER: number = 64;
 
-test.describe('exit stack in co-op', { tag: '@online' }, (): void => {
-  test('with two players the exit hangs higher (more bodies), and both screens agree', async ({
+test.describe('exit pile in co-op', { tag: '@online' }, (): void => {
+  test('with two players the exit hangs higher (a taller pile), and both screens agree', async ({
     room,
   }: {
     room: RoomFactory;
@@ -35,13 +35,10 @@ test.describe('exit stack in co-op', { tag: '@online' }, (): void => {
       SOLO_FLOOR1_EXIT_Y - EXIT_RISE_PER_EXTRA_PLAYER,
     );
     expect(g.exit.y, 'the guest sees the exit at the same height').toBe(h.exit.y);
-    expect(g.exitStack.step, 'one kill is one body for everyone').toBe(h.exitStack.step);
-    expect(g.exitStack.stepsNeeded, 'both screens need the same pile').toBe(
-      h.exitStack.stepsNeeded,
-    );
+    expect(g.exitPile.reachY, 'both screens need the same pile').toBe(h.exitPile.reachY);
   });
 
-  test("a guest's kills from the beam build the host's stack, and both screens show it", async ({
+  test("a guest's kills under the exit pile up there, and both screens show the same pile", async ({
     room,
   }: {
     room: RoomFactory;
@@ -58,20 +55,27 @@ test.describe('exit stack in co-op', { tag: '@online' }, (): void => {
     const guest: GamePlayer = session.guests[0];
     await host.probe.setGodMode(true);
     await guest.probe.setGodMode(true);
-    // The host idles far from the beam; only the guest fights.
-    await host.probe.teleport(40, 400);
+    // The host idles far from the exit; only the guest fights.
+    const s0: E2eSnapshot = await host.probe.state();
+    await host.probe.teleport(s0.exitPile.centerX < 640 ? 1100 : 140, 400);
     const brain: Brain = new Brain(guest, {
       deadline: Date.now() + 120_000,
       goal: 'exit',
-      stopWhen: (s: E2eSnapshot): boolean => s.exitStack.steps >= 3,
+      stopWhen: (s: E2eSnapshot): boolean => s.exitPile.bodies >= 3,
     });
     await brain.run();
     const h: E2eSnapshot = await host.probe.waitFor(
-      'host stack grew from guest kills',
-      (s: E2eSnapshot): boolean => s.exitStack.steps >= 3,
+      'host has the bodies under the exit',
+      (s: E2eSnapshot): boolean => s.exitPile.bodies >= 3,
       { timeoutMs: 10_000 },
     );
-    const g: E2eSnapshot = await guest.probe.state();
-    expect(g.exitStack.steps, 'the guest sees the same stack').toBe(h.exitStack.steps);
+    const g: E2eSnapshot = await guest.probe.waitFor(
+      'guest shows the same pile',
+      (s: E2eSnapshot): boolean => s.exitPile.bodies === h.exitPile.bodies || s.exitPile.bodies >= 3,
+      { timeoutMs: 10_000 },
+    );
+    expect(Math.abs(g.exitPile.topY - h.exitPile.topY), 'same pile height on both screens').toBeLessThanOrEqual(
+      10,
+    );
   });
 });

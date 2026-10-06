@@ -9,7 +9,7 @@ import type {
 export type { E2eSnapshot, E2eVfxEventView, E2eVfxLogEntry };
 export type {
   E2eCorpseView,
-  E2eExitStack,
+  E2eExitPile,
   E2eDropView,
   E2eGeometryCheck,
   E2eGeometryReport,
@@ -114,9 +114,12 @@ export class GameProbe {
     );
   }
 
-  /** Setup only: pre-build the exit corpse stack. */
-  async buildExitStack(steps: number): Promise<void> {
-    await this.page.evaluate((n: number): void => window.__zbE2e?.engine?.buildExitStack(n), steps);
+  /** Setup only (solo/host): drops N corpses from above x; they pile up by the normal corpse physics. */
+  async dropCorpses(centerX: number, count: number): Promise<void> {
+    await this.page.evaluate(
+      (args: [number, number]): void => window.__zbE2e?.engine?.dropCorpses(args[0], args[1]),
+      [centerX, count] as [number, number],
+    );
   }
 
   async setGodMode(enabled: boolean): Promise<void> {

@@ -12,13 +12,13 @@ import {
   ZombieType,
   ZombieCorpse,
 } from '@shared/game-entities';
-import { ExitStackState, IGameEngine, Platform } from './engine-types';
+import { IGameEngine, Platform } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { CombatSystem } from './combat-system';
 import { DropSystem } from './drop-system';
 import { ProjectileSystem } from './projectile-system';
 import { ZombieAnimState } from './zombie-sprite-animator';
-import { corpseSurface, CorpseSurface, exitPileOffset } from './corpse-surface';
+import { corpseSurface, CorpseSurface } from './corpse-surface';
 import { advanceMagnetPull } from './magnet-pull';
 import { pushOutOfSolids } from './solid-blocks';
 
@@ -41,10 +41,17 @@ export class ZombieSystem {
     private readonly drops: DropSystem,
   ) {}
 
+  /** Players still in the fight (resting on the safe spot included). */
+  private countPlayersUp(): number {
+    const players: CharacterState[] = this.e.player ? [this.e.player, ...this.e.remotePlayers] : this.e.remotePlayers;
+    return players.filter((pl: CharacterState): boolean => !pl.isDead && !pl.isDown).length;
+  }
+
+  /** Players zombies can hunt and hit: anyone resting on the safe spot is out of reach. */
   private getAllTargets(): TargetInfo[] {
     const targets: TargetInfo[] = [];
     const p: CharacterState | null = this.e.player;
-    if (p && !p.isDead && !p.isDown) {
+    if (p && !p.isDead && !p.isDown && !this.e.isInSafeSpot(p.x, p.y)) {
       targets.push({
         id: p.id,
         x: p.x,
@@ -56,7 +63,7 @@ export class ZombieSystem {
       });
     }
     for (const rp of this.e.remotePlayers) {
-      if (rp.isDead || rp.isDown) continue;
+      if (rp.isDead || rp.isDown || this.e.isInSafeSpot(rp.x, rp.y)) continue;
       targets.push({
         id: rp.id,
         x: rp.x,
@@ -93,7 +100,7 @@ export class ZombieSystem {
   }
 
   updateZombies(): void {
-    if (this.getAllTargets().length === 0) return;
+    if (this.countPlayersUp() === 0) return;
 
     const shocked: boolean = this.isZombieShockActive();
 
@@ -187,6 +194,8 @@ export class ZombieSystem {
         z.isGrounded = false;
         for (const plat of this.e.platforms) {
           if (z.platformDropTimer > 0 && plat.y !== GAME_CONSTANTS.GROUND_Y) continue;
+          // The safe spot is out of the dead's reach: zombies never land on it.
+          if (plat.safe) continue;
           const zBottom: number = z.y + z.instanceHeight;
           const prevZBottom: number = zBottom - z.velocityY;
           if (
@@ -206,8 +215,7 @@ export class ZombieSystem {
         const zBot: number = z.y + z.instanceHeight;
         const zPrevBot: number = zBot - z.velocityY;
         for (const corpse of this.e.zombieCorpses) {
-          // Only the living climb the exit stack: zombies fall through its steps.
-          if (!corpse.isGrounded || corpse.anchored) continue;
+          if (!corpse.isGrounded) continue;
           const corpseFoothold: CorpseSurface = corpseSurface(corpse);
           const cEffX: number = corpseFoothold.x;
           const cEffW: number = corpseFoothold.width;
@@ -406,7 +414,11 @@ export class ZombieSystem {
     const zCx: number = z.x + z.instanceWidth / 2;
     const zCy: number = z.y + z.instanceHeight / 2;
     const target: TargetInfo | null = this.findNearestTarget(zCx, zCy);
-    if (!target) return;
+    if (!target) {
+      // Nobody to hunt (everyone is resting on the safe spot): shamble around until someone comes down.
+      if (z.type !== ZombieType.DragonBoss) this.updateZombieIdleWander(z, zDef);
+      return;
+    }
 
     if (z.type === ZombieType.DragonBoss) {
       this.updateDragonAI(z);
@@ -633,32 +645,19 @@ export class ZombieSystem {
     this.e.zombieCorpses.splice(idx, 1);
   }
 
-  /**
-   * The exit beacon calls the dead: wandering zombies mostly drift toward the beam. It goes quiet
-   * once the stack is finished, so climbers aren't buried under a crowd at the base.
-   */
-  private pickWanderDirection(z: ZombieState, randomDirection: number): number {
-    const stack: ExitStackState = this.e.getExitStack();
-    if (stack.reachable) return randomDirection;
-    const beamX: number = stack.centerX;
-    const zCx: number = z.x + z.instanceWidth / 2;
-    if (Math.abs(beamX - zCx) < GAME_CONSTANTS.EXIT_BEAM_WIDTH / 2) return randomDirection;
-    return Math.random() < GAME_CONSTANTS.EXIT_BEACON_PULL_CHANCE ? Math.sign(beamX - zCx) : randomDirection;
-  }
-
   private updateZombieIdleWander(z: ZombieState, zDef: ZombieDefinition): void {
     const isStanding: boolean = Math.abs(z.velocityX) < 0.01;
 
     if (isStanding) {
       if (Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_DIRECTION_CHANGE_CHANCE) {
-        z.facing = this.pickWanderDirection(z, Math.random() > 0.5 ? 1 : -1);
+        z.facing = Math.random() > 0.5 ? 1 : -1;
         z.velocityX = z.facing * z.instanceSpeed * GAME_CONSTANTS.ZOMBIE_IDLE_WANDER_SPEED_MULT;
       }
     } else {
       if (Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_STOP_CHANCE) {
         z.velocityX = 0;
       } else if (Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_DIRECTION_CHANGE_CHANCE) {
-        z.facing = this.pickWanderDirection(z, z.facing > 0 ? -1 : 1);
+        z.facing = z.facing > 0 ? -1 : 1;
         z.velocityX = z.facing * z.instanceSpeed * GAME_CONSTANTS.ZOMBIE_IDLE_WANDER_SPEED_MULT;
       }
     }
@@ -854,7 +853,7 @@ export class ZombieSystem {
       return;
     }
 
-    const playerCount: number = Math.max(1, this.getAllTargets().length);
+    const playerCount: number = Math.max(1, this.countPlayersUp());
 
     const maxAlive: number = Math.min(
       (GAME_CONSTANTS.FLOOR_MAX_ALIVE_ZOMBIES_BASE + (this.e.floor - 1) * GAME_CONSTANTS.FLOOR_MAX_ALIVE_ZOMBIES_GROWTH) * playerCount,
@@ -875,25 +874,9 @@ export class ZombieSystem {
     }
   }
 
-  /**
-   * While the exit stack is unfinished, the exit calls the dead: part of the spawns rise from the
-   * ground beside the beam (never inside it, so every step is still earned). Otherwise a random platform.
-   */
+  /** Zombies rise on the ground and platforms: never on top of a prop or on the safe spot. */
   private pickSpawnSpot(width: number, height: number): { x: number; y: number } {
-    const stack: ExitStackState = this.e.getExitStack();
-    if (!stack.reachable && Math.random() < GAME_CONSTANTS.EXIT_BEACON_SPAWN_CHANCE) {
-      const offset: number =
-        GAME_CONSTANTS.EXIT_BEAM_WIDTH / 2 + width + Math.random() * GAME_CONSTANTS.EXIT_BEACON_SPAWN_SPREAD_PX;
-      const preferredSide: number = Math.random() < 0.5 ? -1 : 1;
-      const fits: (side: number) => boolean = (side: number): boolean => {
-        const centerX: number = stack.centerX + side * offset;
-        return centerX - width / 2 >= 0 && centerX + width / 2 <= GAME_CONSTANTS.CANVAS_WIDTH;
-      };
-      const side: number = fits(preferredSide) ? preferredSide : -preferredSide;
-      if (fits(side)) return { x: stack.centerX + side * offset - width / 2, y: stack.baseY - height };
-    }
-    // Zombies rise on the ground and platforms, never on top of a prop.
-    const spawnSurfaces: Platform[] = this.e.platforms.filter((p: Platform): boolean => !p.solid);
+    const spawnSurfaces: Platform[] = this.e.platforms.filter((p: Platform): boolean => !p.solid && !p.safe);
     const plat: Platform = spawnSurfaces[Math.floor(Math.random() * spawnSurfaces.length)];
     const platMinX: number = Math.max(0, plat.x);
     const platMaxX: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - width, plat.x + plat.width - width);
@@ -1144,9 +1127,7 @@ export class ZombieSystem {
 
       if (corpse.isGrounded && !corpse.landProcessed) {
         corpse.landProcessed = true;
-        if (!this.anchorToExitStack(corpse)) {
-          this.diversifyCorpsePose(corpse);
-        }
+        this.diversifyCorpsePose(corpse);
       }
 
       if (!corpse.frozen) {
@@ -1195,8 +1176,7 @@ export class ZombieSystem {
     const tolerance: number = GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE;
 
     for (const corpse of this.e.zombieCorpses) {
-      // Exit-stack corpses are held in place by the beam (switchback steps don't overlap).
-      if (!corpse.isGrounded || corpse.anchored) continue;
+      if (!corpse.isGrounded) continue;
 
       const bottom: number = corpse.y + corpse.height;
       let supported: boolean = false;
@@ -1236,39 +1216,6 @@ export class ZombieSystem {
         corpse.frozen = false;
       }
     }
-  }
-
-  /**
-   * Exit beacon: a zombie that dies inside the exit's beam, on the platform under the exit or
-   * on the stack itself, is bound to the stack: it snaps onto the top in a zig-zag, never
-   * fades, and adds a full step, so players climb the dead to reach the exit.
-   */
-  private anchorToExitStack(corpse: ZombieCorpse): boolean {
-    const stack: ExitStackState = this.e.getExitStack();
-    // Bound at death (caught by the beam) or landed inside the beam.
-    const cx: number = corpse.x + corpse.width / 2;
-    const landedInBeam: boolean =
-      cx >= stack.columnLeft &&
-      cx <= stack.columnRight &&
-      corpse.y + corpse.height <= stack.baseY + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE;
-    if (!corpse.anchored && !landedInBeam) return false;
-    if (stack.reachable) {
-      corpse.anchored = false;
-      return false;
-    }
-
-    const side: number = stack.steps % 2 === 0 ? -1 : 1;
-    corpse.anchored = true;
-    corpse.platformHeight = stack.step;
-    corpse.frozen = true;
-    corpse.velocityX = 0;
-    corpse.velocityY = 0;
-    corpse.facing = side;
-    corpse.x = stack.centerX - corpse.width / 2 + exitPileOffset(stack.steps);
-    corpse.y = stack.topY - corpse.height;
-    this.e.zombieSpriteAnimator.setFinalFrame(corpse.id, corpse.spriteKey, ZombieAnimState.Dead);
-    this.e.spawnExitStackEffect(stack.centerX, stack.topY - stack.step / 2);
-    return true;
   }
 
   private diversifyCorpsePose(corpse: ZombieCorpse): void {

@@ -33,6 +33,7 @@ import {
   DropNotification,
   IGameEngine,
   LevelUpNotification,
+  Platform,
 } from './engine-types';
 
 /** Matches the warrior-monster-magnet skill color. */
@@ -75,6 +76,7 @@ export class RenderSystem {
       this.renderPlatforms(ctx);
     }
     this.renderExitPlatform(ctx);
+    this.renderSafeSpotMarker(ctx);
     this.renderZombies(ctx);
     this.renderHitMarks(ctx);
     this.renderDragonProjectiles(ctx);
@@ -866,7 +868,6 @@ export class RenderSystem {
       const anchor: ZombieSpriteAnchor = this.e.zombieSpriteAnimator.getAnchor(corpse.spriteKey);
       const effectiveAnchorX: number = flipX ? (1 - anchor.anchorX) : anchor.anchorX;
       const drawX: number = corpse.x + corpse.width / 2 - renderW * effectiveAnchorX;
-      // Exit-pile bodies are one body thick (EXIT_STACK_STEP_PX), so every corpse draws as itself.
       const drawY: number = corpse.y + corpse.height - renderH * anchor.anchorY;
 
       ctx.save();
@@ -1691,7 +1692,41 @@ export class RenderSystem {
     ctx.restore();
   }
 
+  /**
+   * A lantern and a "SAFE" sign over the floor's safe spot, so players know where they can rest.
+   * Drawn from the layout every frame (not part of the geometry layer: nothing here is walkable).
+   */
+  private renderSafeSpotMarker(ctx: CanvasRenderingContext2D): void {
+    const spot: Platform | undefined = this.e.platforms.find((p: Platform): boolean => p.safe === true);
+    if (!spot) return;
+    const t: number = performance.now() / 1000;
+    const flicker: number = 0.75 + Math.sin(t * 7) * 0.08 + Math.sin(t * 13) * 0.05;
+    const cx: number = spot.x + spot.width / 2;
+    const lanternX: number = spot.x + 18;
+    const lanternY: number = spot.y - 26;
 
+    ctx.save();
+    const glow: CanvasGradient = ctx.createRadialGradient(lanternX, lanternY, 2, lanternX, lanternY, 70);
+    glow.addColorStop(0, `rgba(255, 200, 110, ${0.45 * flicker})`);
+    glow.addColorStop(1, 'rgba(255, 200, 110, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(lanternX - 70, lanternY - 70, 140, 140);
+
+    // Post and lantern.
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(lanternX - 1, lanternY + 6, 3, spot.y - lanternY - 6);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(lanternX - 6, lanternY - 6, 12, 14);
+    ctx.fillStyle = `rgba(255, 210, 120, ${flicker})`;
+    ctx.fillRect(lanternX - 4, lanternY - 4, 8, 10);
+
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#9dffb0';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('SAFE', cx, spot.y - 40);
+    ctx.restore();
+  }
 
   private renderRopes(ctx: CanvasRenderingContext2D): void {
     for (const rope of this.e.ropes) {

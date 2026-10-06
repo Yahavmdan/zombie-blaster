@@ -9,7 +9,7 @@ import {
   VfxEventType,
 } from '@shared/index';
 import { ZombieState, ZombieType } from '@shared/game-entities';
-import { DamageNumber, EntityInterpolation, IGameEngine, Platform, ExitStackState } from './engine-types';
+import { DamageNumber, EntityInterpolation, IGameEngine, Platform } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { CombatSystem } from './combat-system';
@@ -424,14 +424,8 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     remotePlayerInterpolation: new Map<string, EntityInterpolation>(),
     repositionExitPlatform: vi.fn(),
     applyLevel: vi.fn(),
-    spawnExitStackEffect: vi.fn(),
     requestHitStop: vi.fn(),
-    incomingDamageScale: vi.fn((): number => 1),
-    isOnExitStack: vi.fn((): boolean => false),
-    getExitStack: vi.fn((): ExitStackState => ({
-      columnLeft: -1, columnRight: -1, centerX: -1, baseY: 0, topY: 0, reachY: 0,
-      step: 22, steps: 0, stepsNeeded: 0, progress: 0, reachable: false,
-    })),
+    isInSafeSpot: vi.fn((): boolean => false),
     onPlayerUpdate: null,
     onZombiesUpdate: null,
     onFloorUpdate: null,

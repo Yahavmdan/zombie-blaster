@@ -42,7 +42,7 @@ e2e/support/
   probe.ts                    GameProbe: state(), waitFor(desc, pred), vfxLog(), controls (god mode, floor, level, skills, teleport)
   room.ts                     startRoom(): N browsers → lobby → ready → in game, roles verified
   bot.ts                      runBot(): simple "hunt nearest zombie" (tests only need hits/kills)
-  brain.ts                    Brain: plays well (potions, flee, revive, kite, loot, shop, spend points, exit stack)
+  brain.ts                    Brain: plays well (potions, flee, revive, kite, loot, shop, spend points, exit pile)
   navigation.ts               level map + route planner (walk, jump up, climb ropes, drop down)
   chaos.ts                    runChaos(): seeded key/dialog/resize fuzzer + invariant checks
   invariants.ts               findInvariantViolations(): rules that must always hold
@@ -90,15 +90,20 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   15-tick wind-up (red "!" + glow, `windingUp` in the probe) before the swing, ~0.5 s total.
   At most 2 zombies swing at one player at once (attack tokens). Damage ramps from 40% on floor 1
   to full by floor 5. Zombies only chase players within 640 px (`ZOMBIE_DETECTION_RANGE`);
-  wanderers drift toward the exit.
+  nobody is waiting for them at the exit (no lure, spawns spread over the map).
 - Player: 90 ticks (1.8 s) invincible after a hit; move speed 3 (faster than most zombies).
 - Potions: key 7 (HP +50) / 8 (MP +30), 30-tick cooldown, start with 3 each, 30/20 gold.
   Auto-potion needs the class's auto-potion passive; without it nothing drinks for you.
   Dev builds start with 1,000,000 gold (`game-state.service.ts`), prod with 0.
-- Menus (stats/skills/shop) do NOT pause the game: open them only when no zombie is within ~200 px.
+- Menus (stats/skills/shop) do NOT pause the game and give NO damage reduction: open them only when
+  no zombie is within ~200 px, or rest on the safe spot first.
 - Revive: hold F within 60 px for 100 ticks (2 s); a hit cancels it; the downed player's bleed-out
   timer pauses while someone channels (`revivingPlayerId` on the reviver's state).
-- Menus: the first 4 s after opening one you take 30% damage (menu shield).
+- **Safe spot**: every floor has one high ledge (y 230, 5 tiles, `Platform.safe`) with its own ladder,
+  on the far side from the exit (`state().level.safeSpot`; also in `level.platforms`/`ropes`, so
+  `stepToward` routes to it). Resting there (`restingPlayerIds`): zombies don't target, hit or land
+  on you (spitter/dragon shots too), and you can't attack or use Active skills (buffs work).
+  Zombies wander when everyone rests. Climbing there is the "earned" part: the ladder is exposed.
 - Skills unlock with skill points (3 per level); warrior power-strike and assassin lucky-seven
   are level-1 skills. Ranger/Mage/Priest still have no active skills.
 - Controls: attack is J (Ctrl is unbound, all game keys preventDefault). Air control, coyote
@@ -115,11 +120,13 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   change must keep `level-geometry.spec` and `level-sync.spec` green. Look at their floor screenshots.
 - Floor exit: hangs out of jump reach (y 310 on floor 1 solo, 12 px higher per floor, 64 px higher
   per extra player, min y 150) at the left or right screen edge (the layout picks). No double jump
-  from the ground or any platform reaches it (`exit.spec` checks floors 1–4). Under the exit is an **invisible** 160 px zone (`exitStack.column*`;
-  nothing is drawn, by design: players work it out). Zombies killed in it, or by a player standing
-  in it, become one body each on a pile (16 px per body, left/center/right heap, wide footholds,
-  never fade). `exitStack`: steps, stepsNeeded (14 on floor 1 solo), reachable.
-  `probe.buildExitStack(n)` pre-builds the pile for setup.
+  from the ground or any platform reaches it (`exit.spec` checks floors 1–4). The way up is the
+  pile of the dead under it, and it is **ordinary**: corpses there behave exactly like anywhere else
+  (5 px per body, narrow 0.55-width footholds, death fling kept, never fade). Floor 1 solo needs
+  ~40+ bodies landing under the exit. Walking into a pile lifts you (corpse snap 10 px > 5 px step),
+  so a tall enough pile is climbed by walking into it and jumping. `exitPile` (probe-computed from
+  corpse footholds over the exit span): bodies, topY, reachY, reachable.
+  `probe.dropCorpses(x, n)` drops n corpses from above x for setup; they pile by normal physics.
 - Monster magnet (warrior) drags zombies, it doesn't teleport them: each braces ~3 ticks per
   100 px, then flies along a lifted, accelerating arc to the caster's spot (12–40 ticks). The host
   simulates it (`magnet-pull.ts`); `zombies[].magnetPull` in the probe is null / 0 (bracing) /
@@ -136,22 +143,19 @@ Driving tips:
 - Skill points: 1 point in every active first, then auto-potion to 3, then damage skills.
   (All-in on auto-potion left the AI with zero active skills for a whole game.)
 - Exit goal (`goal: 'exit'`): `navigation.ts` walks/jumps/climbs ropes to a platform; on the
-  ground under the beam, stay inside the column (melee: far wall facing the horde; ranged: center)
-  and fight anything in reach: kills made from inside the beam count wherever the zombie stands;
-  no dash in the beam (monster-magnet pull is great: it drags zombies in). Climbing
-  (`Brain.climbStack`): footholds are one-way, so jump straight up under one.
+  ground under the exit, stay inside the column (melee: far side facing the horde; ranged: center)
+  and fight anything in reach so bodies land under the exit; no dash there (monster-magnet pull is
+  great: it drags zombies in). Standing on the growing pile counts as being at the base.
+  A killing blow knocks the zombie back before it dies, so its body lands ~100 px beyond it, away
+  from the killer: the Brain waits with its back to the wall under the exit and strikes only
+  zombies within `PILE_STRIKE_PX` (80), no skills (they kill far away and pile bodies elsewhere).
+  Climbing (`Brain.climbPile`): walk to the highest foothold (the pile lifts you), then jump.
   Align with `walkTo` (closed loop: hold, poll x, release early for the slide). Fixed-length
   taps oscillated ±40 px forever once the player was fast (maxed stats, super speed).
   - Hold jump until the apex (`fullJump`, polls `velocityY`). A fixed 240 ms press is cut short by
     variable jump height when parallel workers drop frames: passes alone, fails in the suite.
-  - Loose (non-stack) corpses at the base count as ground; only the stack is safe
-    (`exitStack.playerSteadied`). Clear zombies adjacent on the ground first, then climb.
-  - A ready stack beats `escapeSurround`: running from the crowd walked the bot onto a ladder.
+  - A ready pile beats `escapeSurround`: running from the crowd walked the bot onto a ladder.
   - Always validate exit/climb specs with `--workers=5` (plus fairness specs) to reproduce suite load.
-  - Climb by **overlap**: prefer the highest reachable foothold already over the body and jump straight
-    up; walk (`walkTo`) only when nothing overlaps. Precise walking fails under load at max speed.
-  - Build phase: kills made from inside the beam count, so hold the column and fight anything in reach
-    (ranged classes stand at the center and shoot far).
   - The brain restocks MP potions (5) for classes with skills; the game has no MP regen.
 - Special drops open a Y/N prompt with a timer; the brain presses Y.
 
@@ -195,10 +199,9 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
 - Skills live in slots 1..6 = usable Active/Buff skills sorted by required level
   (`state().usableSkills[].slot`). Ranger/Mage/Priest currently have only passives (tests skip them).
 - Particles cap at 400: wait for effects to fade before measuring "effect appeared".
-- Probe setup helpers that inject entities (`buildExitStack`) must also register sprite instances
-  (`setFinalFrame`), or the entities are invisible in screenshots while physics still works.
-- Look at the attached "stack ready"/"stack built" canvases after exit changes: numbers passed
-  while the stack rendered as floating shelves 44 px above the bodies.
+- Probe setup helpers that inject entities (`dropCorpses`) must also register sprite instances
+  (`setState`/`setFinalFrame`), or the entities are invisible in screenshots while physics still works.
+- Look at the attached "pile built" canvas after exit changes: numbers can pass while the art is wrong.
 - Unit-test engine mocks (`zombie-system.spec.ts`, `multiplayer-sync.spec.ts`) must gain every new
   animator method; a missing one throws only on a random branch and looks like a flake.
 - `vfxQueuedBy` reads the probe VFX log. Events leave the queue as `sent` (multiplayer) or

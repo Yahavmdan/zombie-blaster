@@ -1,9 +1,9 @@
 import { CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, isZombieWindingUp } from '@shared/index';
 import { ActiveSpecialEffect, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
-import { ExitStackState, Platform, Rope } from '../engine/engine-types';
+import { Platform, Rope } from '../engine/engine-types';
 import { measureLevelGeometry } from './geometry-report';
 import { Prop } from '../engine/level-generator';
-import { CorpseSurface, corpseSurface, exitPileOffset } from '../engine/corpse-surface';
+import { CorpseSurface, corpseSurface } from '../engine/corpse-surface';
 import { magnetPullProgress } from '../engine/magnet-pull';
 import { ZombieAnimState } from '../engine/zombie-sprite-animator';
 import { GameEngine } from '../engine/game-engine';
@@ -12,6 +12,7 @@ import {
   E2eControls,
   E2eCorpseView,
   E2eDropView,
+  E2eExitPile,
   E2eEngineControls,
   E2eGeometryReport,
   E2ePlayerView,
@@ -132,6 +133,35 @@ function resolveRole(engine: GameEngine): E2eRole {
   return 'solo';
 }
 
+/** The pile under the exit, measured from the ordinary corpses lying there. */
+function exitPile(engine: GameEngine): E2eExitPile {
+  const exit: Platform = engine.exitPlatform;
+  const columnLeft: number = exit.x;
+  const columnRight: number = exit.x + exit.width;
+  const baseY: number = GAME_CONSTANTS.GROUND_Y;
+  const footholds: CorpseSurface[] = engine.zombieCorpses
+    .filter((c: ZombieCorpse): boolean => c.isGrounded)
+    .map(corpseSurface)
+    .filter((f: CorpseSurface): boolean => f.x + f.width > columnLeft && f.x < columnRight);
+  const topY: number = Math.min(baseY, ...footholds.map((f: CorpseSurface): number => f.y));
+  const reachY: number = exit.y + GAME_CONSTANTS.EXIT_REACH_PX;
+  return {
+    columnLeft,
+    columnRight,
+    centerX: (columnLeft + columnRight) / 2,
+    baseY,
+    topY,
+    reachY,
+    bodies: footholds.length,
+    reachable: topY <= reachY,
+  };
+}
+
+function safeSpotView(engine: GameEngine): { x: number; y: number; width: number } | null {
+  const spot: Platform | undefined = engine.platforms.find((p: Platform): boolean => p.safe === true);
+  return spot ? { x: spot.x, y: spot.y, width: spot.width } : null;
+}
+
 function buildSnapshot(engine: GameEngine): E2eSnapshot {
   const player: CharacterState | null = engine.player;
   const remotePlayers: E2eRemotePlayerView[] = engine.remotePlayers.map(
@@ -174,7 +204,6 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
         y: c.y,
         isGrounded: c.isGrounded,
         frozen: c.frozen,
-        anchored: c.anchored,
         footX: foothold.x,
         footWidth: foothold.width,
         footY: foothold.y,
@@ -186,7 +215,10 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
     }),
     worldDrops: engine.worldDrops.length,
     exit: { x: engine.exitPlatform.x, y: engine.exitPlatform.y, width: engine.exitPlatform.width },
-    exitStack: { ...engine.getExitStack(), playerSteadied: engine.isOnExitStack() },
+    exitPile: exitPile(engine),
+    restingPlayerIds: [...(player ? [player] : []), ...engine.remotePlayers]
+      .filter((pl: CharacterState): boolean => engine.isInSafeSpot(pl.x, pl.y))
+      .map((pl: CharacterState): string => pl.id),
     level: {
       seed: engine.layoutSeed,
       platforms: engine.platforms
@@ -211,6 +243,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
           height: p.height,
         }),
       ),
+      safeSpot: safeSpotView(engine),
     },
     drops: engine.worldDrops.map(
       (d: WorldDrop): E2eDropView => ({ id: d.id, type: d.type, x: d.x, y: d.y, value: d.value }),
@@ -251,37 +284,35 @@ const engineControls: E2eEngineControls = {
     p.velocityX = 0;
     p.velocityY = 0;
   },
-  buildExitStack(steps: number): void {
+  dropCorpses(centerX: number, count: number): void {
     const engine: GameEngine | null = currentEngine;
-    if (!engine) return;
-    for (let i: number = 0; i < steps; i++) {
-      const stack: ExitStackState = engine.getExitStack();
-      const width: number = 30;
-      const height: number = 41;
-      const side: number = stack.steps % 2 === 0 ? -1 : 1;
-      const id: string = `e2e-stack-${Date.now()}-${i}`;
-      const spriteKey: string = engine.zombieSpriteAnimator.getSpriteKey(ZombieType.Walker);
+    if (!engine || engine.isMultiplayerClient) return;
+    const width: number = 30;
+    const height: number = 41;
+    const spriteKey: string = engine.zombieSpriteAnimator.getSpriteKey(ZombieType.Walker);
+    for (let i: number = 0; i < count; i++) {
+      const id: string = `e2e-corpse-${Date.now()}-${i}`;
+      // Staggered above the screen top, a little scattered: they land one by one, like the slain.
+      const jitter: number = (Math.random() - 0.5) * 24;
       engine.zombieCorpses.push({
         id,
         type: ZombieType.Walker,
-        x: stack.centerX - width / 2 + exitPileOffset(stack.steps),
-        y: stack.topY - height,
+        x: centerX - width / 2 + jitter,
+        y: -height - i * 60,
         width,
         height,
         spriteKey,
-        facing: side,
+        facing: Math.random() < 0.5 ? -1 : 1,
         velocityX: 0,
         velocityY: 0,
-        isGrounded: true,
-        frozen: true,
-        landProcessed: true,
+        isGrounded: false,
+        frozen: false,
+        landProcessed: false,
         fadeTimer: GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS,
         maxFadeTimer: GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS,
         showBlood: false,
-        anchored: true,
-        platformHeight: stack.step,
       });
-      engine.zombieSpriteAnimator.setFinalFrame(id, spriteKey, ZombieAnimState.Dead);
+      engine.zombieSpriteAnimator.setState(id, ZombieAnimState.Dead);
     }
   },
   setLayoutSeed(seed: number): void {

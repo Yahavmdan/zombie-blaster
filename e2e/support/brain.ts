@@ -29,8 +29,8 @@ export interface BrainOptions {
   /** Buy potions from the shop when calm (default true). */
   shop?: boolean;
   /**
-   * 'exit' (default): hold the platform under the exit, slay zombies in the beam to build the
-   * corpse stack, then climb it to the next floor. 'fight': just fight wherever zombies are.
+   * 'exit' (default): hold the ground under the exit, slay zombies there so their bodies pile
+   * up, then climb the pile to the next floor. 'fight': just fight wherever zombies are.
    */
   goal?: 'exit' | 'fight';
   /** Stop early when this returns true. */
@@ -112,6 +112,8 @@ interface Foothold {
 }
 
 const RANGED_CLASSES: Set<string> = new Set<string>(['assassin']);
+/** Building the exit pile: strike zombies this close, so the knocked-back body still lands under the exit. */
+const PILE_STRIKE_PX: number = 80;
 
 export function newBrainStats(): BrainStats {
   return {
@@ -256,8 +258,8 @@ export class Brain {
     }
 
     if (await this.reviveIfSafe(s, threats)) return;
-    // A finished stack is the way out: the beam steadies climbers, so don't run from the crowd.
-    const climbOut: boolean = (this.options.goal ?? 'exit') === 'exit' && s.exitStack.reachable;
+    // A finished pile is the way out: walk into it and jump, don't run from the crowd.
+    const climbOut: boolean = (this.options.goal ?? 'exit') === 'exit' && s.exitPile.reachable;
     if (!climbOut && (await this.escapeSurround(s, near))) return;
 
     // Menus don't pause the game: only open them with nobody in striking distance.
@@ -420,45 +422,44 @@ export class Brain {
     await this.setMove(mate.x > p.x ? 1 : -1);
   }
 
-  // ── Exit (corpse stack in the beam) ──────────────────────
+  // ── Exit (corpse pile under it) ──────────────────────────
 
   /**
-   * Go to the platform under the exit and fight there so kills land in the beam; once the
-   * stack reaches the target line, climb it. Returns false when fighting elsewhere is better.
+   * Go to the ground under the exit and fight there so the slain pile up under it; once the
+   * pile reaches jump range of the exit, climb it. Returns false when fighting elsewhere is better.
    */
   private async pursueExit(s: E2eSnapshot, threats: Threat[]): Promise<boolean> {
     const p: NonNullable<E2eSnapshot['player']> = s.player!;
-    const stack: E2eSnapshot['exitStack'] = s.exitStack;
-    const base: LevelPlatform = platformUnder(s, stack.centerX, stack.baseY);
+    const pile: E2eSnapshot['exitPile'] = s.exitPile;
+    const base: LevelPlatform = platformUnder(s, pile.centerX, pile.baseY);
     const here: LevelPlatform | null = currentPlatform(s);
     const cx: number = p.x + WORLD.playerWidth / 2;
     const closeThreat: Threat | undefined = threats.find(
       (t: Threat): boolean => t.sameLevel && Math.abs(t.dx) < 70,
     );
-    const inColumn: boolean = cx > stack.columnLeft + 6 && cx < stack.columnRight - 6;
+    const inColumn: boolean = cx > pile.columnLeft + 6 && cx < pile.columnRight - 6;
 
-    if (stack.reachable) {
+    if (pile.reachable) {
       if (!this.climbing) {
         this.climbing = true;
-        this.log(`stack ready (${stack.steps} steps) — climbing to the exit`);
+        this.log(`pile ready (${pile.bodies} bodies) — climbing to the exit`);
         this.log(
-          `footholds: ${s.corpseViews
-            .filter((c: E2eCorpseView): boolean => c.anchored)
+          `footholds: ${pileFootholds(s)
             .map((c: E2eCorpseView): string => `[${Math.round(c.footX)}+${Math.round(c.footWidth)} @${Math.round(c.footY)}${c.isGrounded ? '' : ' air'}]`)
             .join(' ')}`,
         );
       }
-      // Don't fight the crowd at the base: fighting and aligning pull opposite ways. Jumping onto
-      // the stack is the escape (the beam steadies climbers).
-      await this.climbStack(s, cx);
+      // Don't fight the crowd at the base: fighting and aligning pull opposite ways. Walking into
+      // the pile lifts you onto it; jumping from its top is the escape.
+      await this.climbPile(s, cx);
       return true;
     }
     this.climbing = false;
 
     if (closeThreat && !inColumn) {
-      // Cut through a zombie that blocks the way to the beam; walk away from ones behind
-      // (handing over to fight() kited the bot away from the beam for minutes).
-      const blocking: boolean = Math.sign(closeThreat.dx) === Math.sign(stack.centerX - cx);
+      // Cut through a zombie that blocks the way to the exit; walk away from ones behind
+      // (handing over to fight() kited the bot away from the exit for minutes).
+      const blocking: boolean = Math.sign(closeThreat.dx) === Math.sign(pile.centerX - cx);
       if (blocking) {
         await this.setMove(0);
         const want: string = closeThreat.dx >= 0 ? 'right' : 'left';
@@ -469,36 +470,33 @@ export class Brain {
         return true;
       }
     }
-    if (!here || here.name !== base.name) {
+    // The pile lifts whoever stands in it: standing on it counts as being at the base.
+    const onPile: boolean = p.isGrounded && inColumn && p.y + WORLD.playerHeight < pile.baseY - 1;
+    if (!onPile && (!here || here.name !== base.name)) {
       await this.setAttack(false);
       this.move = 0;
-      await stepToward(this.me, s, base, stack.centerX);
+      await stepToward(this.me, s, base, pile.centerX);
       return true;
     }
-    // On the base: every kill made from inside the light joins the stack (and so does every
-    // zombie that dies in it). Hold the column and fight whatever comes; ranged classes shoot far.
+    // On the base: zombies slain under the exit pile up there like anywhere else. A killing blow
+    // knocks the zombie away from its killer and the body lands ~100 px further on, so wait with
+    // your back to the wall under the exit and strike only zombies close in front: their bodies
+    // land under the exit. No skills: they kill far away and pile bodies elsewhere.
     const sameLevel: Threat[] = threats.filter((t: Threat): boolean => t.sameLevel);
     const leftCount: number = sameLevel.filter(
-      (t: Threat): boolean => t.z.x + t.z.width / 2 < stack.centerX,
+      (t: Threat): boolean => t.z.x + t.z.width / 2 < pile.centerX,
     ).length;
     const hordeFromLeft: boolean = leftCount >= sameLevel.length - leftCount;
-    // Melee: the far wall facing the horde, so zombies walk deep into the light before dying.
-    const anchorX: number = RANGED_CLASSES.has(p.classId)
-      ? stack.centerX
-      : hordeFromLeft
-        ? stack.columnRight - 22
-        : stack.columnLeft + 22;
-    const reach: number = RANGED_CLASSES.has(p.classId) ? 380 : 160;
-    const target: Threat | undefined = inColumn
-      ? sameLevel.find((t: Threat): boolean => Math.abs(t.dx) < reach)
-      : sameLevel.find((t: Threat): boolean => Math.abs(t.dx) < 45);
+    const anchorX: number = hordeFromLeft ? pile.columnRight - 22 : pile.columnLeft + 22;
+    const target: Threat | undefined = sameLevel.find(
+      (t: Threat): boolean => Math.abs(t.dx) < (inColumn ? PILE_STRIKE_PX : 45),
+    );
     if (target) {
       await this.setMove(0);
       const want: string = target.dx >= 0 ? 'right' : 'left';
       if (p.facing !== want) await this.me.face(want === 'left' ? 'left' : 'right');
       await this.setAttack(true);
       this.stats.attacks++;
-      await this.castSkills(s, threats, true);
       return true;
     }
     await this.setAttack(false);
@@ -514,62 +512,46 @@ export class Brain {
   }
 
   /**
-   * Climb the corpse stack like stairs: aim for the highest foothold (a stack step or the exit
-   * itself) that one jump can reach, jump toward it and steer in the air. From the ground, walk
-   * to the lowest step first.
+   * Climb the pile under the exit. Each body is a low step, so walking into a pile lifts you onto
+   * it: walk to its highest foothold, then jump for the exit once it is within one jump.
    */
-  private async climbStack(s: E2eSnapshot, cx: number): Promise<void> {
+  private async climbPile(s: E2eSnapshot, cx: number): Promise<void> {
     const p: NonNullable<E2eSnapshot['player']> = s.player!;
     await this.setAttack(false);
     const feet: number = p.y + WORLD.playerHeight;
-    const holds: Foothold[] = s.corpseViews
-      .filter((c: E2eCorpseView): boolean => c.anchored && c.isGrounded)
-      .map(
-        (c: E2eCorpseView): Foothold => ({ x: c.footX + c.footWidth / 2, y: c.footY, width: c.footWidth }),
-      );
-    const exitHold: Foothold = { x: s.exit.x + s.exit.width / 2, y: s.exit.y, width: s.exit.width };
-    // Footholds are one-way: from under one, a straight jump lands on it if the body overlaps it.
-    const overlaps: (h: Foothold) => boolean = (h: Foothold): boolean =>
-      Math.abs(h.x - cx) < (h.width + WORLD.playerWidth) / 2 - 6;
-    const inReach: Foothold[] = [...holds, exitHold]
-      .filter((h: Foothold): boolean => h.y < feet - 4 && feet - h.y <= CLIMB_REACH_PX)
-      .sort((a: Foothold, b: Foothold): number => a.y - b.y);
-    // Prefer the highest foothold already overhead: no walking on narrow steps. On the zigzag the
-    // same-side step two up always overlaps, so walking is only needed from the ground.
-    const overhead: Foothold | undefined = inReach.find(overlaps);
-    const onStack: boolean = s.exitStack.playerSteadied && p.isGrounded;
-    const target: Foothold | undefined = overhead ?? (onStack ? undefined : inReach[0]);
+    const top: Foothold | undefined = pileFootholds(s)
+      .map((c: E2eCorpseView): Foothold => ({ x: c.footX + c.footWidth / 2, y: c.footY, width: c.footWidth }))
+      .sort((a: Foothold, b: Foothold): number => a.y - b.y)[0];
+    const exitInReach: boolean = feet > s.exit.y && feet - s.exit.y <= CLIMB_REACH_PX;
+    const underExit: boolean = cx > s.exit.x + 8 && cx < s.exit.x + s.exit.width - 8;
 
     if (Date.now() - this.lastClimbLogAt > 1_000) {
       this.lastClimbLogAt = Date.now();
       this.log(
-        `climb: x=${Math.round(cx)} vy=${p.velocityY.toFixed(1)} feet=${Math.round(feet)} aim=${target ? `(${Math.round(target.x)},${Math.round(target.y)})${overhead ? ' overhead' : ''}` : 'none'} grounded=${p.isGrounded}`,
+        `climb: x=${Math.round(cx)} vy=${p.velocityY.toFixed(1)} feet=${Math.round(feet)} top=${top ? `(${Math.round(top.x)},${Math.round(top.y)})` : 'none'} grounded=${p.isGrounded}`,
       );
     }
 
     await this.setMove(0);
     if (p.isClimbing) {
-      // Ended up on a rope: direction + jump lets go, toward the stack.
-      const toStack: string = s.exitStack.centerX > cx ? KEYS.right : KEYS.left;
-      await this.me.hold(toStack);
+      // Ended up on a rope: direction + jump lets go, toward the pile.
+      const toPile: string = s.exitPile.centerX > cx ? KEYS.right : KEYS.left;
+      await this.me.hold(toPile);
       await this.me.press(KEYS.jump, 80);
-      await this.me.release(toStack);
+      await this.me.release(toPile);
       return;
     }
     if (!p.isGrounded) return;
-    if (overhead) {
+    if (exitInReach && underExit) {
       await this.fullJump();
       return;
     }
-    if (target) {
-      await this.walkTo(target.x);
+    if (top && Math.abs(top.x - cx) > 4) {
+      await this.walkTo(top.x);
       return;
     }
-    // On a step with nothing overhead: step toward the beam center, where the zigzag overlaps.
-    if (Math.abs(s.exitStack.centerX - cx) > 6) await this.walkTo(s.exitStack.centerX);
-    else await this.fullJump();
+    await this.fullJump();
   }
-
 
   /**
    * Hold jump until the apex. A fixed-length press gets cut short by variable jump height when
@@ -662,7 +644,7 @@ export class Brain {
     await this.castSkills(s, threats);
   }
 
-  /** holdPosition: skip movement skills (dash) that would carry the fight out of the beam. */
+  /** holdPosition: skip movement skills (dash) that would carry the fight away from the exit. */
   private async castSkills(
     s: E2eSnapshot,
     threats: Threat[],
@@ -869,4 +851,12 @@ export class Brain {
     this.attacking = false;
     await this.me.releaseAll();
   }
+}
+
+/** Grounded corpses whose foothold lies under the exit: the pile players climb. */
+function pileFootholds(s: E2eSnapshot): E2eCorpseView[] {
+  return s.corpseViews.filter(
+    (c: E2eCorpseView): boolean =>
+      c.isGrounded && c.footX + c.footWidth > s.exitPile.columnLeft && c.footX < s.exitPile.columnRight,
+  );
 }
