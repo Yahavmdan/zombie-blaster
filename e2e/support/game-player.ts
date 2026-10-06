@@ -24,6 +24,7 @@ export const KEYS: {
   jump: string;
   attack: string;
   revive: string;
+  carry: string;
   openStats: string;
   openSkills: string;
   openShop: string;
@@ -38,6 +39,7 @@ export const KEYS: {
   jump: ' ',
   attack: 'j',
   revive: 'f',
+  carry: 'e',
   openStats: 'p',
   openSkills: 'o',
   openShop: 'b',

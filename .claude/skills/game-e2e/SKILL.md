@@ -182,6 +182,13 @@ Driving tips:
   - Always validate exit/climb specs with `--workers=5` (plus fairness specs) to reproduce suite load.
   - The brain restocks MP potions (5) for classes with skills; the game has no MP regen.
 - Special drops open a Y/N prompt with a timer; the brain presses Y.
+- **Carrying corpses**: `KEYS.carry` (E) picks up the nearest lying corpse within 50 px
+  (center to center; a "[E] Carry" prompt shows over it) and E again tosses it forward. While
+  carrying: 0.75x walk speed, no attacks or skills. The request is the player's own state
+  (`player.carryingCorpseId`); the host grants it as `corpseViews[].carrierId` (first come; a down
+  carrier drops it). Specs: `solo/corpse-carry.spec.ts`, `online/corpse-carry-coop.spec.ts`.
+  Setup: `dropCorpses(x, 1)`, then teleport the player onto the corpse's own spot (feet =
+  `footY + 5`). Dropped corpses often land on a platform edge, so "stand 30 px beside it" flakes.
 
 Running demos/visual checks:
 

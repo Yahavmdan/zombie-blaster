@@ -68,6 +68,8 @@ export interface CharacterState {
   isDown: boolean;
   /** Id of the downed teammate this player is channeling a revive on (pauses their bleed-out). */
   revivingPlayerId?: string | null;
+  /** Corpse this player wants to carry: their request, confirmed by the host through `ZombieCorpse.carrierId`. */
+  carryingCorpseId?: string | null;
   downTimer: number;
   unallocatedStatPoints: number;
   unallocatedSkillPoints: number;

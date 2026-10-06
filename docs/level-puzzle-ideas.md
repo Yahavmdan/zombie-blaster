@@ -29,7 +29,7 @@ ships, tick its box here and rewrite its line to match what was built.
 ## Switches and co-op
 
 - [ ] **Pressure plates**: the door is open only while something stands on the plate (a player, a
-      corpse or a crate). Solo players drag a corpse onto it with the monster magnet.
+      corpse or a crate). Players carry a corpse onto it (carry key, E) or drag one with the monster magnet.
 - [ ] **Two levers far apart**: both must be pulled within 3 seconds. Solo needs a timed dash or a
       ranged skill hit.
 - [ ] **Weight-limited elevator**: it needs enough weight to go down and a counterweight to come
@@ -80,5 +80,5 @@ ships, tick its box here and rewrite its line to match what was built.
 
 ### Suggested next
 
-- [ ] Pressure plate with corpse drag (uses the monster magnet)
+- [ ] Pressure plate with a carried corpse (uses corpse carrying, or the monster magnet)
 - [ ] Explosive barrel (uses the solid props)

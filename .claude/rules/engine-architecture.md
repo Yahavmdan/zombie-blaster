@@ -27,6 +27,8 @@ The engine is split into focused files under `src/app/engine/`.
 | `spring-puzzle-system.ts` | Floor-3 puzzle simulation: host watches every player's lever pulls, runs the countdown, launches the local player; guests launch themselves from the synced launch |
 | `boulder-puzzle-system.ts` | Floor-2 puzzle simulation: host counts gate hits (all players), rolls the boulder, crushes, breaks the wall; clients extrapolate the synced roll |
 | `magnet-pull.ts` | Monster-magnet drag (host-simulated, synced as `ZombieState.magnetPull`) |
+| `corpse-carry.ts` | Corpse carrying rules (pure): what is in reach, holding overhead, tossing, host grants/releases (`assignCarriers`) |
+| `corpse-carry-system.ts` | Carry key (pick up / toss), host grants every player's request, every client holds carried corpses on their carriers; guests hold their own pick-up while the host answers |
 | `corpse-surface.ts` | Walkable surface of a corpse (the same for every corpse, the exit pile included) |
 | `safe-spot.ts` | `restsOnSafeSpot`: who rests on the floor's safe spot (zombies can't target/hit/land; no attacking from it) |
 | `solid-blocks.ts` | Side collision with solid props (players and zombies) |
@@ -77,6 +79,7 @@ ProjectileSystem -> Physics, Vfx
 ZombieSystem     -> Physics, Combat, Projectile, Drop
 BoulderPuzzleSystem -> Combat, Vfx
 SpringPuzzleSystem  -> Vfx
+CorpseCarrySystem   -> standalone
 RenderSystem     -> reads state only (no system deps)
 ```
 

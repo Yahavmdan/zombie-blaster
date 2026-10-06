@@ -30,6 +30,7 @@ import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
 import { ZombieSpriteAnchor } from './zombie-sprite-animator';
 import { MagnetPull, ZombieCorpse } from '@shared/game-entities';
 import { magnetPullProgress } from './magnet-pull';
+import { carryableCorpse } from './corpse-carry';
 import {
   Box,
   BoulderPath,
@@ -59,6 +60,8 @@ import {
   Platform,
 } from './engine-types';
 
+/** How far (fraction of the sprite width) a lying body's middle sits behind its feet. */
+const CARRIED_BODY_SHIFT: number = 0.26;
 /** Matches the warrior-monster-magnet skill color. */
 const MAGNET_STREAK_COLOR: string = '#cc44ff';
 
@@ -107,8 +110,11 @@ export class RenderSystem {
     this.renderDragonProjectiles(ctx);
     this.renderSpitterProjectiles(ctx);
     this.renderDrops(ctx);
+    // Carried corpses rest on their carriers' heads, under the name tags.
+    this.renderCarriedCorpses(ctx);
     this.renderRemotePlayers(ctx);
     this.renderPlayer(ctx);
+    this.renderCarryPrompt(ctx);
     this.renderPlayerProjectiles(ctx);
     this.renderReviveProgress(ctx);
     this.renderPoisonOverlay(ctx);
@@ -876,10 +882,44 @@ export class RenderSystem {
     }
   }
 
+  /** A corpse on someone's head (granted, or the local player's pick-up awaiting the host). */
+  private isCarried(corpse: ZombieCorpse): boolean {
+    return corpse.carrierId !== null || corpse.id === this.e.player?.carryingCorpseId;
+  }
+
+  /** Lying corpses, drawn under the zombies. Carried ones are drawn with the players. */
   private renderZombieCorpses(ctx: CanvasRenderingContext2D): void {
+    this.drawCorpses(ctx, this.e.zombieCorpses.filter((c: ZombieCorpse): boolean => !this.isCarried(c)));
+  }
+
+  private renderCarriedCorpses(ctx: CanvasRenderingContext2D): void {
+    this.drawCorpses(ctx, this.e.zombieCorpses.filter((c: ZombieCorpse): boolean => this.isCarried(c)));
+  }
+
+  /** "[E] Carry" over the corpse the carry key would pick up. */
+  private renderCarryPrompt(ctx: CanvasRenderingContext2D): void {
+    const p: CharacterState | null = this.e.player;
+    if (!p || p.isDead || p.isDown || p.carryingCorpseId) return;
+    const corpse: ZombieCorpse | null = carryableCorpse(p, this.e.zombieCorpses);
+    if (!corpse) return;
+    const cx: number = corpse.x + corpse.width / 2;
+    const y: number = corpse.y + corpse.height - 34;
+    const label: string = `[${this.e.carryKeyLabel}] Carry`;
+    ctx.save();
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    const w: number = ctx.measureText(label).width + 10;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(cx - w / 2, y - 12, w, 16);
+    ctx.fillStyle = '#ffe08a';
+    ctx.fillText(label, cx, y);
+    ctx.restore();
+  }
+
+  private drawCorpses(ctx: CanvasRenderingContext2D, corpses: ZombieCorpse[]): void {
     if (!this.e.zombieSpriteAnimator.isLoaded()) return;
 
-    for (const corpse of this.e.zombieCorpses) {
+    for (const corpse of corpses) {
       const progress: number = corpse.fadeTimer / corpse.maxFadeTimer;
       const alpha: number = Math.min(1, progress * 2);
 
@@ -892,7 +932,9 @@ export class RenderSystem {
       const flipX: boolean = corpse.type === ZombieType.DragonBoss ? corpse.facing > 0 : corpse.facing < 0;
       const anchor: ZombieSpriteAnchor = this.e.zombieSpriteAnimator.getAnchor(corpse.spriteKey);
       const effectiveAnchorX: number = flipX ? (1 - anchor.anchorX) : anchor.anchorX;
-      const drawX: number = corpse.x + corpse.width / 2 - renderW * effectiveAnchorX;
+      // A lying body stretches behind its feet (the anchor); carried, its middle goes on the head.
+      const bodyShift: number = this.isCarried(corpse) ? (flipX ? 1 : -1) * renderW * CARRIED_BODY_SHIFT : 0;
+      const drawX: number = corpse.x + corpse.width / 2 - renderW * effectiveAnchorX + bodyShift;
       const drawY: number = corpse.y + corpse.height - renderH * anchor.anchorY;
 
       ctx.save();

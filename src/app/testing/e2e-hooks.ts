@@ -98,6 +98,7 @@ function toPlayerView(p: CharacterState): E2ePlayerView {
     skillLevels: { ...p.skillLevels },
     gold: p.inventory.gold,
     potions: { ...p.inventory.potions },
+    carryingCorpseId: p.carryingCorpseId ?? null,
   };
 }
 
@@ -248,6 +249,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
         y: c.y,
         isGrounded: c.isGrounded,
         frozen: c.frozen,
+        carrierId: c.carrierId,
         footX: foothold.x,
         footWidth: foothold.width,
         footY: foothold.y,
@@ -357,6 +359,7 @@ const engineControls: E2eEngineControls = {
         fadeTimer: GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS,
         maxFadeTimer: GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS,
         showBlood: false,
+        carrierId: null,
       });
       engine.zombieSpriteAnimator.setState(id, ZombieAnimState.Dead);
     }

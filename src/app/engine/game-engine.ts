@@ -56,6 +56,7 @@ import { ZombieSystem } from './zombie-system';
 import { BoulderPuzzleSystem } from './boulder-puzzle-system';
 import { Box, boulderPath, gateBox, gateBroken } from './boulder-puzzle';
 import { SpringPuzzleSystem } from './spring-puzzle-system';
+import { CorpseCarrySystem } from './corpse-carry-system';
 import { flingIfOnSpring, freshLaunch } from './spring-puzzle';
 import { pullZombiesToward } from './magnet-pull';
 import { exitPlatformY, generateLevel, GROUND_PLATFORM, LevelLayout, Prop } from './level-generator';
@@ -98,7 +99,7 @@ export class GameEngine implements IGameEngine {
   /** Seed for this run's floor layouts: the host picks it, clients adopt it from game-sync. */
   layoutSeed: number = Math.floor(Math.random() * 0x7fffffff);
   level: LevelLayout = generateLevel(this.layoutSeed, 1);
-  keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
+  keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
   attackCooldown: number = 0;
   attackAnimTicks: number = 0;
   attackHitPending: boolean = false;
@@ -182,6 +183,7 @@ export class GameEngine implements IGameEngine {
   dashPhase: DashPhaseState | null = null;
 
   reviveTargetId: string | null = null;
+  carryKeyLabel: string = 'E';
   reviveProgressTicks: number = 0;
 
   activeSpecialEffects: ActiveSpecialEffect[] = [];
@@ -214,6 +216,7 @@ export class GameEngine implements IGameEngine {
   private readonly zombieSystem: ZombieSystem;
   private readonly boulderPuzzleSystem: BoulderPuzzleSystem;
   private readonly springPuzzleSystem: SpringPuzzleSystem;
+  private readonly corpseCarrySystem: CorpseCarrySystem;
   private readonly renderSystem: RenderSystem;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -229,6 +232,7 @@ export class GameEngine implements IGameEngine {
     this.zombieSystem = new ZombieSystem(this, this.physicsSystem, this.combatSystem, this.projectileSystem, this.dropSystem);
     this.boulderPuzzleSystem = new BoulderPuzzleSystem(this, this.combatSystem, this.vfxSystem);
     this.springPuzzleSystem = new SpringPuzzleSystem(this, this.vfxSystem);
+    this.corpseCarrySystem = new CorpseCarrySystem(this);
     this.renderSystem = new RenderSystem(this);
 
     this.initExitPlatform();
@@ -538,6 +542,7 @@ export class GameEngine implements IGameEngine {
 
     this.vfxSystem.updateDragonImpacts();
     this.vfxSystem.updateHitMarks();
+    this.corpseCarrySystem.update();
     this.zombieSystem.updateZombieCorpses();
 
     this.dropSystem.updateDrops();
@@ -769,6 +774,10 @@ export class GameEngine implements IGameEngine {
     this.physicsSystem.updatePlayer();
 
     if (this.playerStunTicks > 0) return;
+
+    this.corpseCarrySystem.handleInput();
+    // Hands full: no attacks or skills while carrying a corpse.
+    if (this.player.carryingCorpseId) return;
 
     // Weapons down on the safe spot: zombies can't reach you there, so you can't hit them either.
     const resting: boolean = this.isInSafeSpot(this.player.x, this.player.y);
@@ -1260,6 +1269,7 @@ export class GameEngine implements IGameEngine {
     }
 
     this.zombieCorpses = [...corpses, ...pendingLocalCorpses];
+    this.corpseCarrySystem.holdCorpses();
   }
 
   private tickEntityInterpolation(): void {

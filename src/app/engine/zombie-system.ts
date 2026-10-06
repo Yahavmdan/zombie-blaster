@@ -643,6 +643,8 @@ export class ZombieSystem {
     if (idx === -1) return;
 
     const corpse: ZombieCorpse = this.e.zombieCorpses[idx];
+    // A player snatched it mid-meal: it stays on their head.
+    if (corpse.carrierId !== null) return;
     this.e.zombieSpriteAnimator.removeInstance(corpse.id);
     this.e.zombieCorpses.splice(idx, 1);
   }
@@ -1072,7 +1074,8 @@ export class ZombieSystem {
     this.revalidateGroundedCorpses();
 
     for (const corpse of this.e.zombieCorpses) {
-      if (!corpse.isGrounded) {
+      // A carried corpse rides on its carrier's head (corpse-carry), out of physics.
+      if (!corpse.isGrounded && corpse.carrierId === null) {
         corpse.x += corpse.velocityX;
         corpse.velocityX *= 0.92;
         if (Math.abs(corpse.velocityX) < 0.1) corpse.velocityX = 0;

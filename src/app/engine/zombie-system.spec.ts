@@ -124,7 +124,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     worldDrops: [],
     platforms: [groundPlatform],
     ropes: [],
-    keys: { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false },
+    keys: { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false },
     attackCooldown: 0,
     attackAnimTicks: 0,
     attackHitPending: false,
@@ -193,6 +193,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     doubleJumpAnimTicks: 0,
     dashPhase: null,
     reviveTargetId: null,
+    carryKeyLabel: 'E',
     reviveProgressTicks: 0,
     activeSpecialEffects: [],
     pendingSpecialDropConfirm: null,
@@ -260,6 +261,7 @@ function makeCorpse(overrides: Partial<ZombieCorpse> = {}): ZombieCorpse {
     fadeTimer: 999_999,
     maxFadeTimer: 999_999,
     showBlood: false,
+    carrierId: null,
     ...overrides,
   };
 }

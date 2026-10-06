@@ -12,6 +12,7 @@ import {
   input,
   inject,
   effect,
+  computed,
   isDevMode,
 } from '@angular/core';
 import { CharacterClass, CharacterState, SKILLS, SkillDefinition, SkillType, VfxEvent } from '@shared/index';
@@ -20,7 +21,7 @@ import { GameAction } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
 import { InputKeys } from '@shared/messages';
-import { KeyBindingsService } from '../../services/key-bindings.service';
+import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
 import { GameStateService } from '../../services/game-state.service';
 import { QuickSlotService } from '../../services/quick-slot.service';
 import { attachEngineProbe } from '../../testing/e2e-hooks';
@@ -68,6 +69,12 @@ export class GameCanvasComponent implements OnDestroy {
   useHpPotionHandler: (() => boolean) | null = null;
   useMpPotionHandler: (() => boolean) | null = null;
 
+  /** Key shown in the canvas's carry prompt (follows rebinding). */
+  private readonly carryKeyLabel: Signal<string> = computed((): string => {
+    const keys: string[] = this.keyBindingsService.bindings().carry;
+    return keys.length > 0 ? formatKeyName(keys[0]) : '?';
+  });
+
   readonly canvasRef: Signal<ElementRef<HTMLCanvasElement>> = viewChild.required<ElementRef<HTMLCanvasElement>>('gameCanvas');
 
   private engine: GameEngine | null = null;
@@ -75,7 +82,7 @@ export class GameCanvasComponent implements OnDestroy {
   private currentClassId: CharacterClass | null = null;
   private pendingMultiplayerHost: boolean = false;
   private pendingMultiplayerClient: boolean = false;
-  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
+  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
   private readonly boundKeyDown: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyDown(e);
   private readonly boundKeyUp: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyUp(e);
   private readonly boundMouseDown: () => void = (): void => this.onMouseDown();
@@ -86,6 +93,11 @@ export class GameCanvasComponent implements OnDestroy {
     afterNextRender((): void => {
       this.initEngine();
       this.bindInput();
+    });
+
+    effect((): void => {
+      const label: string = this.carryKeyLabel();
+      if (this.engine) this.engine.carryKeyLabel = label;
     });
 
     effect((): void => {
@@ -268,6 +280,7 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine = new GameEngine(canvas);
     this.engine.isMultiplayerHost = this.pendingMultiplayerHost;
     this.engine.isMultiplayerClient = this.pendingMultiplayerClient;
+    this.engine.carryKeyLabel = this.carryKeyLabel();
     if (isDevMode()) {
       this.detachE2eProbe = attachEngineProbe(this.engine);
     }

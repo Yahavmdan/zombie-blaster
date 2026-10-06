@@ -283,6 +283,8 @@ export interface IGameEngine {
   dashPhase: DashPhaseState | null;
 
   reviveTargetId: string | null;
+  /** Key the carry prompt shows (the player's binding). */
+  carryKeyLabel: string;
   reviveProgressTicks: number;
 
   activeSpecialEffects: ActiveSpecialEffect[];

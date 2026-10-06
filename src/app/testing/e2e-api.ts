@@ -37,6 +37,8 @@ export interface E2ePlayerView {
   skillLevels: Record<string, number>;
   gold: number;
   potions: Record<string, number>;
+  /** Corpse this player asked to carry (the host grants it through the corpse's carrierId). */
+  carryingCorpseId: string | null;
 }
 
 export interface E2eRemotePlayerView extends E2ePlayerView {
@@ -73,6 +75,8 @@ export interface E2eCorpseView {
   y: number;
   isGrounded: boolean;
   frozen: boolean;
+  /** Player carrying this corpse overhead, null when it lies in the world. */
+  carrierId: string | null;
   /** Walkable foothold on top of this corpse. */
   footX: number;
   footWidth: number;

@@ -171,6 +171,8 @@ export interface ZombieCorpse {
   fadeTimer: number;
   maxFadeTimer: number;
   showBlood: boolean;
+  /** Player carrying this corpse overhead (the host decides; null = lying in the world). */
+  carrierId: string | null;
 }
 
 export interface ShopItemDefinition {
@@ -219,6 +221,7 @@ export const ACTION_INFO: Record<string, ActionInfo> = {
   openShop: { label: 'Shop', icon: '🛒' },
   openInventory: { label: 'Inventory', icon: '🎒' },
   revive: { label: 'Revive', icon: '💖' },
+  carry: { label: 'Carry Corpse', icon: '🧟' },
   quickSlot1: { label: 'QSlot 1', icon: '❶' },
   quickSlot2: { label: 'QSlot 2', icon: '❷' },
   quickSlot3: { label: 'QSlot 3', icon: '❸' },

@@ -1504,6 +1504,7 @@ export class CombatSystem {
       fadeTimer: lingerTicks,
       maxFadeTimer: lingerTicks,
       showBlood: Math.random() < GAME_CONSTANTS.ZOMBIE_CORPSE_BLOOD_CHANCE,
+      carrierId: null,
     };
     this.e.zombieCorpses.push(corpse);
 

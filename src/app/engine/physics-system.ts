@@ -41,6 +41,7 @@ export class PhysicsSystem {
       if (darkSightPenalty) {
         speed *= (1 - darkSightPenalty.value / 100);
       }
+      if (p.carryingCorpseId) speed *= GAME_CONSTANTS.CORPSE_CARRY_SPEED_MULTIPLIER;
     }
 
     return speed;

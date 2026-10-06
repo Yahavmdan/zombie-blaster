@@ -264,6 +264,12 @@ export const GAME_CONSTANTS = {
   ZOMBIE_CORPSE_DEATH_SCATTER: 0.2, // Random horizontal scatter applied to corpses on death
   ZOMBIE_CORPSE_DIVERSE_CHANCE: 0.45, // Chance a corpse uses a different visual variant
   ZOMBIE_CORPSE_BLOOD_CHANCE: 0.3, // Chance a corpse shows a blood splatter
+  CORPSE_CARRY_RANGE: 50, // Pixels from the player's center to a lying corpse's center to pick it up
+  CORPSE_CARRY_SPEED_MULTIPLIER: 0.75, // Walking speed while carrying a corpse overhead
+  CORPSE_CARRY_CONFIRM_TICKS: 25, // A guest's pick-up the host hasn't granted by then is given up
+  CORPSE_CARRY_LIFT: 12, // Carried corpse's box bottom sits this far above the carrier's head (its lying body rests on the head)
+  CORPSE_THROW_SPEED_X: 4, // Sideways speed of a dropped corpse, in the carrier's facing direction
+  CORPSE_THROW_SPEED_Y: -3, // Upward toss of a dropped corpse (negative = up)
 
   // ─── Ropes ──────────────────────────────────────
   ROPE_CLIMB_SPEED: 3, // How fast the player moves up/down on a rope
@@ -1618,6 +1624,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   openShop: ['b'],
   openInventory: ['i'],
   revive: ['f'],
+  carry: ['e'],
   quickSlot1: ['shift'],
   quickSlot2: ['insert'],
   quickSlot3: ['home'],
