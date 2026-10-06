@@ -13,6 +13,8 @@ import {
 import {
   ActiveSpecialEffect,
   BoulderState,
+  CagePuzzleState,
+  CageState,
   SpringState,
   DropType,
   PendingSpecialDropConfirm,
@@ -31,6 +33,7 @@ import { SpriteEffectSystem } from './sprite-effect-system';
 import {
   BackgroundStar,
   BoulderPuzzleLayout,
+  CagePuzzleLayout,
   SpringPuzzleLayout,
   DamageNumber,
   DragonImpact,
@@ -56,6 +59,15 @@ import { ZombieSystem } from './zombie-system';
 import { BoulderPuzzleSystem } from './boulder-puzzle-system';
 import { Box, boulderPath, gateBox, gateBroken } from './boulder-puzzle';
 import { SpringPuzzleSystem } from './spring-puzzle-system';
+import { CagePuzzleSystem } from './cage-puzzle-system';
+import {
+  CAGE_IDS,
+  CAGE_MAX_FALL_TICKS,
+  cageSolid,
+  isCut,
+  liftOntoLandedCage,
+  newCageState,
+} from './cage-puzzle';
 import { CorpseCarrySystem } from './corpse-carry-system';
 import { flingIfOnSpring, freshLaunch } from './spring-puzzle';
 import { pullZombiesToward } from './magnet-pull';
@@ -126,6 +138,8 @@ export class GameEngine implements IGameEngine {
   boulder: BoulderState | null = null;
   springPuzzle: SpringPuzzleLayout | null = null;
   spring: SpringState | null = null;
+  cagePuzzle: CagePuzzleLayout | null = null;
+  cages: CagePuzzleState | null = null;
 
   backgroundStars: BackgroundStar[] = [];
 
@@ -216,6 +230,7 @@ export class GameEngine implements IGameEngine {
   private readonly zombieSystem: ZombieSystem;
   private readonly boulderPuzzleSystem: BoulderPuzzleSystem;
   private readonly springPuzzleSystem: SpringPuzzleSystem;
+  private readonly cagePuzzleSystem: CagePuzzleSystem;
   private readonly corpseCarrySystem: CorpseCarrySystem;
   private readonly renderSystem: RenderSystem;
 
@@ -232,6 +247,7 @@ export class GameEngine implements IGameEngine {
     this.zombieSystem = new ZombieSystem(this, this.physicsSystem, this.combatSystem, this.projectileSystem, this.dropSystem);
     this.boulderPuzzleSystem = new BoulderPuzzleSystem(this, this.combatSystem, this.vfxSystem);
     this.springPuzzleSystem = new SpringPuzzleSystem(this, this.vfxSystem);
+    this.cagePuzzleSystem = new CagePuzzleSystem(this, this.vfxSystem, this.zombieSystem);
     this.corpseCarrySystem = new CorpseCarrySystem(this);
     this.renderSystem = new RenderSystem(this);
 
@@ -268,6 +284,8 @@ export class GameEngine implements IGameEngine {
       : null;
     this.springPuzzle = this.level.springPuzzle ?? null;
     this.spring = this.springPuzzle ? { launches: 0, countdownTicks: 0, bounceTicks: 0, wobbleTicks: 0 } : null;
+    this.cagePuzzle = this.level.cagePuzzle ?? null;
+    this.cages = this.cagePuzzle ? newCageState() : null;
     this.platforms = [
       { ...GROUND_PLATFORM },
       ...this.level.platforms.map((p: Platform): Platform => ({ ...p })),
@@ -314,6 +332,27 @@ export class GameEngine implements IGameEngine {
     return this.boulderPuzzle && this.boulder && !this.boulder.wallBroken ? this.boulderPuzzle.wall : null;
   }
 
+  /**
+   * The floor-4 cages are solid while they hang (the exit cage moves with the exit) and the exit
+   * cage once it landed; a falling cage has no collision.
+   */
+  placeCages(): void {
+    this.platforms = this.platforms.filter(
+      (p: Platform): boolean => p.puzzlePart !== 'cage' && p.puzzlePart !== 'zombie-cage',
+    );
+    if (!this.cagePuzzle || !this.cages) return;
+    for (const id of CAGE_IDS) {
+      const box: Box | null = cageSolid(this.cagePuzzle, id, this.cages[id], this.exitPlatform);
+      if (box) {
+        this.platforms.push({
+          ...box,
+          solid: true,
+          puzzlePart: id === 'exitCage' ? 'cage' : 'zombie-cage',
+        });
+      }
+    }
+  }
+
   /** Clients follow the host's layout seed (sent with every game-sync). */
   syncLayoutSeed(seed: number): void {
     if (!this.isMultiplayerClient || seed === this.layoutSeed) return;
@@ -333,6 +372,7 @@ export class GameEngine implements IGameEngine {
       ? GAME_CONSTANTS.SPRING_LEDGE_Y
       : exitPlatformY(this.floor, this.remotePlayers.length);
     this.placeGate();
+    this.placeCages();
   }
 
   isInSafeSpot(x: number, y: number): boolean {
@@ -525,6 +565,7 @@ export class GameEngine implements IGameEngine {
       this.zombieSystem.updateZombies();
       this.boulderPuzzleSystem.update();
       this.springPuzzleSystem.update();
+      this.cagePuzzleSystem.update();
       this.projectileSystem.updateDragonProjectiles();
       this.projectileSystem.updateSpitterProjectiles();
       this.projectileSystem.updatePoisonEffect();
@@ -533,6 +574,7 @@ export class GameEngine implements IGameEngine {
       this.tickClientZombieVisuals();
       this.boulderPuzzleSystem.tickClient();
       this.springPuzzleSystem.tickClient();
+      this.cagePuzzleSystem.tickClient();
       this.projectileSystem.tickClientProjectileVisuals();
       this.projectileSystem.updatePoisonEffect();
       if (this.floorTransitionTimer > 0) this.floorTransitionTimer--;
@@ -802,7 +844,7 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     if (!this.player) return null;
     const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
@@ -824,6 +866,9 @@ export class GameEngine implements IGameEngine {
       layoutSeed: this.layoutSeed,
       boulder: this.boulder ? { ...this.boulder } : null,
       spring: this.spring ? { ...this.spring } : null,
+      cages: this.cages
+        ? { exitCage: { ...this.cages.exitCage }, zombieCage: { ...this.cages.zombieCage } }
+        : null,
       attacks,
       revives,
       specialDropActivations,
@@ -995,6 +1040,33 @@ export class GameEngine implements IGameEngine {
     }
   }
 
+  /**
+   * Clients follow the host's cages: hits and fall clamped, a snapped chain and a landing are
+   * one-way. When the exit cage lands, the client lifts its own player out of its column onto it
+   * (guests own their player state).
+   */
+  applyRemoteCages(state: CagePuzzleState | null): void {
+    if (!this.isMultiplayerClient || !this.cagePuzzle || !this.cages || !state) return;
+    for (const id of CAGE_IDS) {
+      const remote: CageState | undefined = state[id];
+      if (!remote || !Number.isFinite(remote.cleatHits) || !Number.isFinite(remote.fallTicks)) continue;
+      const local: CageState = this.cages[id];
+      const hits: number = Math.min(
+        GAME_CONSTANTS.CAGE_CLEAT_HITS,
+        Math.max(0, Math.round(remote.cleatHits)),
+      );
+      local.cleatHits = isCut(local) ? GAME_CONSTANTS.CAGE_CLEAT_HITS : hits;
+      const fall: number = Math.min(CAGE_MAX_FALL_TICKS, Math.max(0, Math.round(remote.fallTicks)));
+      local.fallTicks = isCut(local) ? fall : 0;
+      const landing: boolean = remote.landed === true && isCut(local) && !local.landed;
+      if (landing) local.landed = true;
+      if (landing && id === 'exitCage' && this.player) {
+        liftOntoLandedCage(this.player, this.exitPlatform);
+      }
+    }
+    this.placeCages();
+  }
+
   applyRemoteProjectiles(spitterProjectiles: SpitterProjectile[], dragonProjectiles: DragonProjectile[]): void {
     if (!this.isMultiplayerClient) return;
     this.spitterProjectiles = spitterProjectiles;
@@ -1065,6 +1137,12 @@ export class GameEngine implements IGameEngine {
           break;
         case VfxEventType.SpringLaunch:
           this.vfxSystem.spawnSpringLaunch(evt.x, evt.y);
+          break;
+        case VfxEventType.CageLand:
+          this.vfxSystem.spawnCageLand(evt.x, evt.y);
+          break;
+        case VfxEventType.CageSmash:
+          this.vfxSystem.spawnCageSmash(evt.x, evt.y);
           break;
       }
       // Other players' effects render a bit softer so your own read first.

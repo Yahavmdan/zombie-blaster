@@ -25,6 +25,8 @@ The engine is split into focused files under `src/app/engine/`.
 | `boulder-puzzle.ts` | Floor-2 puzzle rules (pure): gate box + hits, boulder path (ledge → chute → wall), rolling, crush targets, debris, `keepOutOfWall`, leaving through the opening |
 | `spring-puzzle.ts` | Floor-3 puzzle rules (pure): spring span, lever box + pulls, charge from corpses on the spring, 3-2-1 countdown + launch tick, on-spring check + fling, plate offset |
 | `spring-puzzle-system.ts` | Floor-3 puzzle simulation: host watches every player's lever pulls, runs the countdown, launches the local player; guests launch themselves from the synced launch |
+| `cage-puzzle.ts` | Floor-4 puzzle rules (pure): hanging / falling / landed cage boxes and collision, cleat box + hits, chain path, fall ticks (host lands, client only falls), what the landing exit cage lifts (`yAfterCageLands`), release spots |
+| `cage-puzzle-system.ts` | Floor-4 puzzle simulation: host counts every player's cleat hits, snaps chains, drops and lands cages (exit cage: lift the pile, zombies, drops and its own player onto it; zombie cage: smash, `spawnZombieAt` x6); guests lift themselves from the synced landing |
 | `boulder-puzzle-system.ts` | Floor-2 puzzle simulation: host counts gate hits (all players), rolls the boulder, crushes, breaks the wall; clients extrapolate the synced roll |
 | `magnet-pull.ts` | Monster-magnet drag (host-simulated, synced as `ZombieState.magnetPull`) |
 | `corpse-carry.ts` | Corpse carrying rules (pure): what is in reach, holding overhead, tossing, host grants/releases (`assignCarriers`) |
@@ -65,6 +67,14 @@ The engine is split into focused files under `src/app/engine/`.
   it fires) and measured at rest in the geometry report. Ground spawns are kept out of it. The
   generator keeps platforms, ropes and props `SPRING_CLEAR_PX` clear of it (the lever stands
   there). The charge is derived from the synced corpses.
+- Floor 4 is the hanging cages: the exit cage (`puzzlePart: 'cage'`) hangs under the exit and is
+  re-placed with it (`placeCages`, called from `repositionExitPlatform`), the zombie cage
+  (`puzzlePart: 'zombie-cage'`) hangs mid-screen over a column the generator keeps free of
+  platforms. Both are solid while they hang, have no collision while falling, and the exit cage is
+  solid on the ground once landed. They are drawn per frame (`MapRenderer.drawCage`) and measured
+  where their collision is in the geometry report. Chains are per-frame, non-walkable art. Cleats
+  stand on the highest regular ledge (open sky preferred): attacks are off on the safe spot.
+  Ground spawns are kept out of the landed cage.
 
 ## Dependency rules
 
@@ -79,6 +89,7 @@ ProjectileSystem -> Physics, Vfx
 ZombieSystem     -> Physics, Combat, Projectile, Drop
 BoulderPuzzleSystem -> Combat, Vfx
 SpringPuzzleSystem  -> Vfx
+CagePuzzleSystem    -> Vfx, Zombie
 CorpseCarrySystem   -> standalone
 RenderSystem     -> reads state only (no system deps)
 ```

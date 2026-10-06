@@ -1,6 +1,7 @@
 import { CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, isZombieWindingUp } from '@shared/index';
-import { ActiveSpecialEffect, BoulderState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
-import { BoulderPuzzleLayout, Platform, Rope, SpringPuzzleLayout } from '../engine/engine-types';
+import { ActiveSpecialEffect, BoulderState, CagePuzzleState, CageState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
+import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, Rope, SpringPuzzleLayout } from '../engine/engine-types';
+import { CageId, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
 import { chargeCorpses, leverBox } from '../engine/spring-puzzle';
 import { measureLevelGeometry } from './geometry-report';
 import { BoulderPath, boulderBox, boulderPath, gateBox } from '../engine/boulder-puzzle';
@@ -12,6 +13,8 @@ import { GameEngine } from '../engine/game-engine';
 import { SpriteAnimator } from '../engine/sprite-animator';
 import {
   E2eBoulderPuzzleView,
+  E2eCagePuzzleView,
+  E2eCageView,
   E2eSpringView,
   E2eControls,
   E2eCorpseView,
@@ -143,7 +146,15 @@ function exitPile(engine: GameEngine): E2eExitPile {
   const exit: Platform = engine.exitPlatform;
   const columnLeft: number = exit.x;
   const columnRight: number = exit.x + exit.width;
-  const baseY: number = GAME_CONSTANTS.GROUND_Y;
+  // The pile stands on the ground, or on a puzzle block standing on it under the exit (the landed cage).
+  const blocks: Platform[] = engine.platforms.filter(
+    (p: Platform): boolean =>
+      p.puzzlePart !== undefined &&
+      p.y + p.height === GAME_CONSTANTS.GROUND_Y &&
+      p.x + p.width > columnLeft &&
+      p.x < columnRight,
+  );
+  const baseY: number = Math.min(GAME_CONSTANTS.GROUND_Y, ...blocks.map((p: Platform): number => p.y));
   const footholds: CorpseSurface[] = engine.zombieCorpses
     .filter((c: ZombieCorpse): boolean => c.isGrounded)
     .map(corpseSurface)
@@ -204,6 +215,30 @@ function springView(engine: GameEngine): E2eSpringView | null {
     countdownTicks: spring.countdownTicks,
     bounceTicks: spring.bounceTicks,
     wobbleTicks: spring.wobbleTicks,
+  };
+}
+
+function cagesView(engine: GameEngine): E2eCagePuzzleView | null {
+  const puzzle: CagePuzzleLayout | null = engine.cagePuzzle;
+  const cages: CagePuzzleState | null = engine.cages;
+  if (!puzzle || !cages) return null;
+  const view: (id: CageId) => E2eCageView = (id: CageId): E2eCageView => {
+    const cage: CageState = cages[id];
+    return {
+      box: cageBox(puzzle, id, cage, engine.exitPlatform),
+      solid: cageSolid(puzzle, id, cage, engine.exitPlatform),
+      cleat: cleatBox(puzzle, id),
+      cleatHits: cage.cleatHits,
+      cut: isCut(cage),
+      fallTicks: cage.fallTicks,
+      landed: cage.landed,
+    };
+  };
+  return {
+    exitCage: view('exitCage'),
+    zombieCage: view('zombieCage'),
+    hitsNeeded: GAME_CONSTANTS.CAGE_CLEAT_HITS,
+    zombiesReleased: GAME_CONSTANTS.CAGE_ZOMBIES,
   };
 }
 
@@ -293,6 +328,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
     },
     puzzle: puzzleView(engine),
     spring: springView(engine),
+    cages: cagesView(engine),
     drops: engine.worldDrops.map(
       (d: WorldDrop): E2eDropView => ({ id: d.id, type: d.type, x: d.x, y: d.y, value: d.value }),
     ),

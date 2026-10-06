@@ -49,6 +49,11 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
   frame.drawImage(layer, 0, 0);
   renderer.drawDynamicPlatform(frame, exit.x, exit.y, exit.width, exit.height);
   if (spring) renderer.drawSpring(frame, spring, 0);
+  // The floor-4 cages are drawn per frame too (they fall): measured where their collision is.
+  const cages: Platform[] = engine.platforms.filter(
+    (p: Platform): boolean => p.puzzlePart === 'cage' || p.puzzlePart === 'zombie-cage',
+  );
+  for (const c of cages) renderer.drawCage(frame, c, c.puzzlePart === 'zombie-cage');
   const inFrame: Alpha = alphaOf(frame, w, h);
 
   const objects: Measured[] = [
@@ -99,6 +104,19 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
           },
         ]
       : []),
+    // The cages, like props: art in every column of their box, from their walkable top.
+    ...cages.map(
+      (c: Platform): Measured => ({
+        object: `${c.puzzlePart} ${c.x},${c.y} ${c.width}x${c.height}`,
+        kind: 'prop',
+        x: c.x,
+        y: c.y,
+        width: c.width,
+        height: c.height,
+        draw: (ctx: CanvasRenderingContext2D): void =>
+          renderer.drawCage(ctx, c, c.puzzlePart === 'zombie-cage'),
+      }),
+    ),
     ...engine.platforms
       .filter((p: Platform): boolean => p.y !== groundY && !p.solid)
       .map(

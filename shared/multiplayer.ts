@@ -267,6 +267,8 @@ export enum VfxEventType {
   WallBreak = 'wall-break',
   GateBreak = 'gate-break',
   SpringLaunch = 'spring-launch',
+  CageLand = 'cage-land',
+  CageSmash = 'cage-smash',
 }
 
 export interface VfxEvent {

@@ -9,7 +9,9 @@ Every floor should feel different. The floor-2 **boulder puzzle** is the referen
 implementation: copy its shape. The floor-3 **spring** (`spring-puzzle.ts`,
 `spring-puzzle-system.ts`) is the second one: a solid moving part, a countdown, a player-affecting effect
 on guests, and state derived from synced corpses. It started as a seesaw; after playtesting the
-user wanted a big spring, a 3-2-1 to get on, 30 corpses and the exit at the very top. The backlog of ideas is **`docs/level-puzzle-ideas.md`** (a
+user wanted a big spring, a 3-2-1 to get on, 30 corpses and the exit at the very top. The floor-4 **hanging cages**
+(`cage-puzzle.ts`, `cage-puzzle-system.ts`) are the third: a choice (follow the chains to the
+right cleat), a solid that falls and lands, and a punishment that spawns zombies. The backlog of ideas is **`docs/level-puzzle-ideas.md`** (a
 checklist). Pick from it, build one, then tick its box and fix its description to match what
 shipped.
 
@@ -101,6 +103,24 @@ Lessons from the spring:
   player ~170 px off the ledge. Unit-test the full flight with the real `PhysicsSystem`.
 - **Fixed exit height** on a puzzle floor: override in `repositionExitPlatform`, not in
   `exitPlatformY` (tests use it for normal floors).
+
+## Lessons from the cages
+
+- **No swinging on the safe spot.** Attacks are disabled there (`restsOnSafeSpot`), so a hit
+  target must stand on a regular ledge. The cleats pick the highest ledge with open sky above
+  (`cleatLedge`); 1 seed in 80 has none, so there is a fallback. Measure such odds with a
+  throwaway spec over 2000 seeds before relying on a layout feature.
+- **A falling solid** has no collision while it falls (removed from `platforms`), is solid again
+  where it lands, and `placeCages()` re-derives all of it from state (hanging / falling /
+  landed). Call it from `repositionExitPlatform` when it hangs off the exit.
+- **Landing on things:** what rests in the landing column rides up by the block's height
+  (`yAfterCageLands`), so a corpse pile keeps its shape and ends up on top. The host lifts
+  corpses, zombies, drops and its own player; guests lift themselves on the synced landing.
+- **Spawning from a puzzle:** `ZombieSystem.spawnZombieAt(x, groundY)` (no bosses), so the
+  puzzle system takes `ZombieSystem` as a peer.
+- **`exitPile.baseY`** is the top of any puzzle block standing on the ground under the exit, and
+  the e2e Brain hops onto that block before climbing the pile.
+- **Teleport then land checks:** wait ~500 ms after a teleport; `isGrounded` reads true for a tick.
 
 ## Multiplayer checklist (host authority)
 

@@ -95,7 +95,7 @@ export interface E2eExitPile {
   columnLeft: number;
   columnRight: number;
   centerX: number;
-  /** Ground under the exit. */
+  /** What the pile under the exit stands on: the ground, or a puzzle block standing there (the landed cage). */
   baseY: number;
   /** Highest corpse foothold in the column (baseY when there is none). */
   topY: number;
@@ -250,6 +250,31 @@ export interface E2eSpringView {
   wobbleTicks: number;
 }
 
+/** One floor-4 cage. */
+export interface E2eCageView {
+  /** The cage as drawn now (hanging, falling, landed); null once the zombie cage smashed. */
+  box: { x: number; y: number; width: number; height: number } | null;
+  /** Its collision (while it hangs, and the exit cage once it landed); null while falling. */
+  solid: { x: number; y: number; width: number; height: number } | null;
+  /** The cleat on the safe spot tying its chain. */
+  cleat: { x: number; y: number; width: number; height: number };
+  cleatHits: number;
+  /** Its chain snapped. */
+  cut: boolean;
+  fallTicks: number;
+  landed: boolean;
+}
+
+/** Floor-4 hanging cages (null on other floors). */
+export interface E2eCagePuzzleView {
+  /** The empty cage under the exit: landed, it is a step up to the exit. */
+  exitCage: E2eCageView;
+  /** The cage full of zombies mid-screen: landed, it smashes and lets them loose. */
+  zombieCage: E2eCageView;
+  hitsNeeded: number;
+  zombiesReleased: number;
+}
+
 export interface E2eSnapshot {
   at: number;
   role: E2eRole;
@@ -275,6 +300,8 @@ export interface E2eSnapshot {
   puzzle: E2eBoulderPuzzleView | null;
   /** Floor-3 spring: block, lever, charge, countdown and launches (null on other floors). */
   spring: E2eSpringView | null;
+  /** Floor-4 cages: boxes, cleats, hits, falling and landing (null on other floors). */
+  cages: E2eCagePuzzleView | null;
   drops: E2eDropView[];
   /** Ticks until the potion keys work again. */
   potionCooldownTicks: number;

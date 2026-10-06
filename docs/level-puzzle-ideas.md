@@ -20,8 +20,11 @@ ships, tick its box here and rewrite its line to match what was built.
       launches them straight up onto the exit while its corpses scatter through the air (spent:
       charge it again for another launch). Too little charge only jiggles
       the lever.
-- [ ] **Hanging cage**: shoot the rope and the cage drops to become a platform. The wrong rope
-      blocks the path.
+- [x] **Hanging cage** (floor 4): an empty cage hangs under the exit, a cage full of zombies
+      mid-screen. Their chains run from two cleats on a high ledge up to the ceiling and over to
+      the cages (random order, sometimes crossing): follow them. Three hits on a cleat snap its
+      chain. The empty cage lands under the exit as a solid step (the pile there rides up onto
+      it), so far fewer corpses are needed; the zombie cage smashes and lets 6 zombies loose.
 - [ ] **Explosive barrels**: lure zombies next to a cracked wall, shoot the barrel, and the wall
       breaks.
 - [ ] **Push crates**: push crates into stairs. Zombies can knock them over.

@@ -542,6 +542,14 @@ export class Brain {
       return;
     }
     if (!p.isGrounded) return;
+    // The pile stands on a block (the floor-4 cage under the exit): hop up onto it first.
+    if (feet > s.exitPile.baseY + 1) {
+      const toPile: string = s.exitPile.centerX > cx ? KEYS.right : KEYS.left;
+      await this.me.hold(toPile);
+      await this.fullJump();
+      await this.me.release(toPile);
+      return;
+    }
     if (exitInReach && underExit) {
       await this.fullJump();
       return;

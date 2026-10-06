@@ -147,6 +147,14 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   (`wobbleTicks`). `probe.dropCorpses` at a few x across the spring charges it. Don't teleport
   above the exit to get on the spring: you land on the exit. Specs: `solo/spring-puzzle.spec.ts`,
   `online/spring-puzzle-coop.spec.ts`. The Brain has no spring goal yet: AI players stall on floor 3.
+- **Floor 4 is the hanging-cage puzzle** (`state().cages`): `exitCage` hangs under the exit,
+  `zombieCage` mid-screen; each has `box` (as drawn, null once the zombie cage smashed), `solid`
+  (collision: hanging, or the exit cage once landed; null while falling), `cleat` (on the highest
+  regular ledge, never the safe spot: no swinging there), `cleatHits` / `hitsNeeded`, `cut`,
+  `fallTicks`, `landed`. Face the cleat, teleport beside it on its ledge, hold attack. Once the
+  exit cage landed, `exitPile.baseY` is its top, so `dropCorpses(exitPile.centerX)` builds the pile
+  on it; the Brain hops onto the cage first (`climbPile`). Specs: `solo/cage-puzzle.spec.ts`,
+  `online/cage-puzzle-coop.spec.ts`. The Brain has no cleat goal: AI players only climb normally.
 - After `teleport`, `isGrounded` can still read true from before: wait for the feet to reach the
   surface, not just `isGrounded`.
 - A failure "dev server shows a compile error overlay" right after editing source is usually the

@@ -153,6 +153,23 @@ export const GAME_CONSTANTS = {
   SPRING_WOBBLE_TICKS: 24, // The lever's jiggle after a pull with too little charge
   SPRING_FLING_WINDOW_TICKS: 10, // A client flings itself only while the synced bounce is this fresh (not on a late join)
   SPRING_CLEAR_PX: 96, // Platforms, ropes and props keep this far from the spring's open side (the lever stands there)
+  PUZZLE_CAGE_FLOOR: 4, // Floor with two hanging cages: drop the empty one under the exit as a step, not the zombie-filled one
+  CAGE_WIDTH_PX: 128, // Both cages are this wide (whole tiles: art == collision box)...
+  CAGE_HEIGHT_PX: 96, // ...and this tall: the landed cage's top is beyond double-jump reach of the exit
+  CAGE_HANG_GAP_PX: 48, // The exit cage hangs this far under the exit (room to stand on it)
+  CAGE_ZOMBIE_TOP_Y: 160, // Top of the zombie cage while it hangs mid-screen from the ceiling
+  CAGE_ZOMBIE_MIN_X: 384, // The zombie cage's left edge lies between this...
+  CAGE_ZOMBIE_MAX_X: 768, // ...and this (mid-screen, between the safe spot and the exit)
+  CAGE_CLEAR_PX: 64, // Platforms (the safe spot too) keep this far from the zombie cage's column: it falls to the ground
+  CAGE_CHAIN_ROW_Y: 112, // The chains run along the ceiling at this height...
+  CAGE_CHAIN_ROW_STEP_PX: 16, // ...one chain this far below the other
+  CAGE_CLEAT_WIDTH_PX: 12, // Each chain is tied to a cleat on a ledge (never the safe spot: no swinging there): this wide...
+  CAGE_CLEAT_HEIGHT_PX: 28, // ...and this tall
+  CAGE_CLEAT_INSET_PX: 40, // Cleat centers sit this far in from their ledge's ends
+  CAGE_CLEAT_HITS: 3, // Swings on a cleat before its chain snaps and the cage falls
+  CAGE_HIT_REACH_PX: 24, // Max gap between an attacking player's box and a cleat for the swing to hit it
+  CAGE_HIT_COOLDOWN_TICKS: 36, // One cleat hit per swing (a held attack swings every 36 ticks)
+  CAGE_ZOMBIES: 6, // Zombies the zombie cage lets loose when it smashes on the ground
   SAFE_SPOT_HEADROOM_PX: 160, // Players up to this far above the safe spot (jumping on it) still count as resting there
 
   // ─── Zombie Spawning ───────────────────────────

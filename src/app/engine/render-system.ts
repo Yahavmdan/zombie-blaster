@@ -13,6 +13,8 @@ import {
 import {
   ActiveSpecialEffect,
   BoulderState,
+  CagePuzzleState,
+  CageState,
   DropType,
   SpringState,
   PendingSpecialDropConfirm,
@@ -39,6 +41,7 @@ import {
   floorHint,
   gateBox,
   gateBroken,
+  Point,
 } from './boulder-puzzle';
 import {
   SPRING_FLOOR_HINT,
@@ -51,7 +54,16 @@ import {
   springSpan,
 } from './spring-puzzle';
 import {
+  CAGE_FLOOR_HINT,
+  CAGE_IDS,
+  cageBox,
+  chainPath,
+  cleatBox,
+  isCut,
+} from './cage-puzzle';
+import {
   BoulderPuzzleLayout,
+  CagePuzzleLayout,
   SpringPuzzleLayout,
   DashPhaseState,
   DropNotification,
@@ -101,10 +113,13 @@ export class RenderSystem {
       this.renderRopes(ctx);
       this.renderPlatforms(ctx);
     }
+    // The exit cage's chain runs down behind the exit.
+    this.renderCageChains(ctx);
     this.renderExitPlatform(ctx);
     this.renderSafeSpotMarker(ctx);
     this.renderBoulderPuzzle(ctx);
     this.renderSpringPuzzle(ctx);
+    this.renderCages(ctx);
     this.renderZombies(ctx);
     this.renderHitMarks(ctx);
     this.renderDragonProjectiles(ctx);
@@ -1690,7 +1705,11 @@ export class RenderSystem {
       ctx.shadowBlur = 0;
       ctx.font = 'bold 20px sans-serif';
       ctx.fillStyle = '#aaeeff';
-      const hint: string = this.e.springPuzzle ? SPRING_FLOOR_HINT : floorHint(this.e.boulderPuzzle);
+      const hint: string = this.e.springPuzzle
+        ? SPRING_FLOOR_HINT
+        : this.e.cagePuzzle
+          ? CAGE_FLOOR_HINT
+          : floorHint(this.e.boulderPuzzle);
       ctx.fillText(hint, GAME_CONSTANTS.CANVAS_WIDTH / 2, cy + 42);
 
       const lineWidth: number = 200;
@@ -1967,6 +1986,120 @@ export class RenderSystem {
    * A lantern and a "SAFE" sign over the floor's safe spot, so players know where they can rest.
    * Drawn from the layout every frame (not part of the geometry layer: nothing here is walkable).
    */
+  /**
+   * The floor-4 chains (not walkable): each runs from its cleat on a ledge straight up to a
+   * pulley on the ceiling, along it, and down to its cage. A snapped chain is gone, leaving a torn
+   * end on its cleat.
+   */
+  private renderCageChains(ctx: CanvasRenderingContext2D): void {
+    const puzzle: CagePuzzleLayout | null = this.e.cagePuzzle;
+    const cages: CagePuzzleState | null = this.e.cages;
+    if (!puzzle || !cages) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const id of CAGE_IDS) {
+      const path: Point[] = chainPath(puzzle, id, this.e.exitPlatform);
+      if (isCut(cages[id])) {
+        this.strokeChain(ctx, [path[0], { x: path[0].x + 4, y: path[0].y - 12 }]);
+        continue;
+      }
+      this.strokeChain(ctx, path);
+      const pulleys: Point[] = [path[1], path[2]];
+      for (const pulley of pulleys) {
+        ctx.fillStyle = '#3a3f48';
+        ctx.strokeStyle = '#9aa3ad';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(pulley.x, pulley.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  private strokeChain(ctx: CanvasRenderingContext2D, path: Point[]): void {
+    ctx.beginPath();
+    ctx.moveTo(path[0].x, path[0].y);
+    for (const p of path.slice(1)) ctx.lineTo(p.x, p.y);
+    ctx.setLineDash([]);
+    ctx.strokeStyle = '#1e2026';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.setLineDash([5, 3]);
+    ctx.strokeStyle = '#9aa3ad';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  /**
+   * The floor-4 cages where their state puts them (hanging, falling, the exit cage on the ground;
+   * the zombie cage is gone once it smashed), and the cleats on their ledge cracking per hit.
+   */
+  private renderCages(ctx: CanvasRenderingContext2D): void {
+    const puzzle: CagePuzzleLayout | null = this.e.cagePuzzle;
+    const cages: CagePuzzleState | null = this.e.cages;
+    if (!puzzle || !cages) return;
+    const t: number = performance.now() / 1000;
+    ctx.save();
+    for (const id of CAGE_IDS) {
+      const cage: CageState = cages[id];
+      const box: Box | null = cageBox(puzzle, id, cage, this.e.exitPlatform);
+      if (box) {
+        this.e.mapRenderer.drawCage(ctx, box, id === 'zombieCage');
+        if (id === 'zombieCage') this.renderCagedHands(ctx, box, t);
+        if (!isCut(cage)) {
+          ctx.strokeStyle = '#9aa3ad';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(box.x + box.width / 2, box.y - 4, 4, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      this.renderCleat(ctx, cleatBox(puzzle, id), cage);
+    }
+    ctx.restore();
+  }
+
+  /** Green arms reaching out between the zombie cage's side bars. */
+  private renderCagedHands(ctx: CanvasRenderingContext2D, box: Box, t: number): void {
+    ctx.strokeStyle = '#6abf4b';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    for (let i: number = 0; i < 2; i++) {
+      const reach: number = 8 + Math.sin(t * 5 + i * 2) * 5;
+      const y: number = box.y + 40 + i * 22;
+      ctx.beginPath();
+      ctx.moveTo(box.x + 4, y);
+      ctx.lineTo(box.x - reach, y - 4);
+      ctx.moveTo(box.x + box.width - 4, y + 10);
+      ctx.lineTo(box.x + box.width + reach, y + 6);
+      ctx.stroke();
+    }
+  }
+
+  /** An iron cleat; cracks show the hits it took, a snapped one is broken off at the top. */
+  private renderCleat(ctx: CanvasRenderingContext2D, cleat: Box, cage: CageState): void {
+    const cut: boolean = isCut(cage);
+    const top: number = cut ? cleat.y + cleat.height / 2 : cleat.y;
+    ctx.fillStyle = '#4a4f58';
+    ctx.fillRect(cleat.x, top, cleat.width, cleat.y + cleat.height - top);
+    ctx.fillStyle = '#7d8590';
+    ctx.fillRect(cleat.x - 2, top, cleat.width + 4, 4);
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 1;
+    for (let i: number = 0; i < Math.min(cage.cleatHits, GAME_CONSTANTS.CAGE_CLEAT_HITS - 1); i++) {
+      const y: number = cleat.y + 6 + i * 7;
+      ctx.beginPath();
+      ctx.moveTo(cleat.x + 2, y);
+      ctx.lineTo(cleat.x + cleat.width / 2, y + 4);
+      ctx.lineTo(cleat.x + cleat.width - 2, y + 1);
+      ctx.stroke();
+    }
+  }
+
   private renderSafeSpotMarker(ctx: CanvasRenderingContext2D): void {
     const spot: Platform | undefined = this.e.platforms.find((p: Platform): boolean => p.safe === true);
     if (!spot) return;
