@@ -10,6 +10,7 @@ import {
   OnDestroy,
   output,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { GameAction, KeyBindings } from '@shared/messages';
 import {
   QUICK_SLOT_ACTIONS,
@@ -28,7 +29,7 @@ import {
   CharacterState,
   getPotionById,
 } from '@shared/index';
-import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
+import { KeyBindingsService, formatKeyName, mouseButtonKey } from '../../services/key-bindings.service';
 import { QuickSlotService } from '../../services/quick-slot.service';
 import { GameStateService } from '../../services/game-state.service';
 
@@ -89,6 +90,7 @@ function gap(w: number = 0.5): KbKey {
     class: 'settings',
     '(document:keydown.escape)': 'onEscapeKey()',
   },
+  imports: [NgTemplateOutlet],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.css',
 })
@@ -103,7 +105,8 @@ export class SettingsComponent implements OnDestroy {
   readonly sidePanelTab: WritableSignal<'inventory' | 'skills' | null> = signal<'inventory' | 'skills' | null>(null);
   readonly openChanged: OutputEmitterRef<boolean> = output<boolean>();
 
-  private rebindHandler: ((e: KeyboardEvent) => void) | null = null;
+  private rebindKeyHandler: ((e: KeyboardEvent) => void) | null = null;
+  private rebindMouseHandler: ((e: MouseEvent) => void) | null = null;
 
   readonly mainRows: ReadonlyArray<ReadonlyArray<KbKey>> = [
     [k('escape','Esc'), gap(0.5), k('f1','F1'), k('f2','F2'), k('f3','F3'), k('f4','F4'), gap(0.25), k('f5','F5'), k('f6','F6'), k('f7','F7'), k('f8','F8'), gap(0.25), k('f9','F9'), k('f10','F10'), k('f11','F11'), k('f12','F12')],
@@ -121,6 +124,11 @@ export class SettingsComponent implements OnDestroy {
     [],
     [gap(1), k('arrowup','↑'), gap(1)],
     [k('arrowleft','←'), k('arrowdown','↓'), k('arrowright','→')],
+  ];
+
+  readonly mouseRows: ReadonlyArray<ReadonlyArray<KbKey>> = [
+    [k('mouseleft','LMB'), k('mousemiddle','MMB'), k('mouseright','RMB')],
+    [k('mouseback','M4',1.5), k('mouseforward','M5',1.5)],
   ];
 
   readonly actionChips: ReadonlyArray<ActionChip> = [
@@ -234,6 +242,10 @@ export class SettingsComponent implements OnDestroy {
     }
   }
 
+  keyName(code: string): string {
+    return formatKeyName(code);
+  }
+
   keyWidthPx(w: number): number {
     return kw(w);
   }
@@ -295,16 +307,53 @@ export class SettingsComponent implements OnDestroy {
   startRebind(action: GameAction): void {
     this.cancelRebind();
     this.rebindingAction.set(action);
-    this.rebindHandler = (e: KeyboardEvent): void => {
+    this.rebindKeyHandler = (e: KeyboardEvent): void => {
       e.preventDefault();
       e.stopImmediatePropagation();
       if (e.key !== 'Escape') {
         this.keyBindingsService.rebind(action, e.key);
       }
-      this.rebindingAction.set(null);
-      this.rebindHandler = null;
+      this.cancelRebind();
     };
-    window.addEventListener('keydown', this.rebindHandler, { capture: true, once: true });
+    this.rebindMouseHandler = (e: MouseEvent): void => {
+      const key: string | null = mouseButtonKey(e.button);
+      if (!key) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      this.keyBindingsService.rebind(action, key);
+      this.cancelRebind();
+      this.swallowRestOfClick();
+    };
+    window.addEventListener('keydown', this.rebindKeyHandler, { capture: true });
+    window.addEventListener('mousedown', this.rebindMouseHandler, { capture: true });
+  }
+
+  /**
+   * The press that rebinds a mouse button still ends in a click (and a context menu or browser
+   * back/forward for right and side buttons). Swallow those so it doesn't also press whatever
+   * the cursor is over.
+   */
+  private swallowRestOfClick(): void {
+    const swallowedEvents: readonly string[] = ['click', 'auxclick', 'contextmenu'];
+    const swallow: (e: Event) => void = (e: Event): void => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    for (const type of swallowedEvents) {
+      window.addEventListener(type, swallow, { capture: true });
+    }
+    window.addEventListener(
+      'mouseup',
+      (e: MouseEvent): void => {
+        e.preventDefault();
+        setTimeout((): void => {
+          for (const type of swallowedEvents) {
+            window.removeEventListener(type, swallow, { capture: true });
+          }
+        });
+      },
+      { capture: true, once: true },
+    );
   }
 
   onActionDragStart(event: DragEvent, action: GameAction): void {
@@ -410,9 +459,13 @@ export class SettingsComponent implements OnDestroy {
 
   private cancelRebind(): void {
     this.rebindingAction.set(null);
-    if (this.rebindHandler) {
-      window.removeEventListener('keydown', this.rebindHandler, { capture: true });
-      this.rebindHandler = null;
+    if (this.rebindKeyHandler) {
+      window.removeEventListener('keydown', this.rebindKeyHandler, { capture: true });
+      this.rebindKeyHandler = null;
+    }
+    if (this.rebindMouseHandler) {
+      window.removeEventListener('mousedown', this.rebindMouseHandler, { capture: true });
+      this.rebindMouseHandler = null;
     }
   }
 }

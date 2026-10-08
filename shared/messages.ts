@@ -58,6 +58,10 @@ export interface InputKeys {
   quickSlot6: boolean;
   quickSlot7: boolean;
   quickSlot8: boolean;
+  quickSlot9: boolean;
+  quickSlot10: boolean;
+  quickSlot11: boolean;
+  quickSlot12: boolean;
 }
 
 export interface GameStateUpdatePayload {

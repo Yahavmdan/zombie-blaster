@@ -106,7 +106,10 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   Zombies wander when everyone rests. Climbing there is the "earned" part: the ladder is exposed.
 - Skills unlock with skill points (3 per level); warrior power-strike and assassin lucky-seven
   are level-1 skills. Ranger/Mage/Priest still have no active skills.
-- Controls: attack is J (Ctrl is unbound, all game keys preventDefault). Air control, coyote
+- Controls: attack is J or left mouse (Ctrl is unbound, all game keys preventDefault). Mouse buttons are
+  bindings like keys (`mouseleft`/`mousemiddle`/`mouseright`/`mouseback`/`mouseforward`, presses count on the
+  canvas only); quick slots 9-12 sit on RMB/MMB/M4/M5, empty. `solo/mouse-controls.spec.ts` drags a
+  skill/potion onto the settings mouse and clicks the canvas with `page.mouse`. Air control, coyote
   time (5 ticks), variable jump (release early = short hop), apex hang. Only Space jumps;
   held Space hops again on every landing. W/up never jumps: it grabs a ladder (from the
   floor too) and climbs. A test that holds jump past landing gets extra hops. On ropes: left/right

@@ -23,7 +23,19 @@ const KEY_DISPLAY_MAP: Record<string, string> = {
   'end': 'End',
   'pageup': 'Pg↑',
   'pagedown': 'Pg↓',
+  'mouseleft': 'LMB',
+  'mousemiddle': 'MMB',
+  'mouseright': 'RMB',
+  'mouseback': 'M4',
+  'mouseforward': 'M5',
 };
+
+/** Binding names for mouse buttons, indexed by `MouseEvent.button`. They live in the same table as keyboard keys. */
+export const MOUSE_BUTTON_KEYS: readonly string[] = ['mouseleft', 'mousemiddle', 'mouseright', 'mouseback', 'mouseforward'];
+
+export function mouseButtonKey(button: number): string | null {
+  return MOUSE_BUTTON_KEYS[button] ?? null;
+}
 
 export function formatKeyName(key: string): string {
   return KEY_DISPLAY_MAP[key.toLowerCase()] ?? key.toUpperCase();

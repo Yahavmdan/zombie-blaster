@@ -1640,7 +1640,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   up: ['w', 'arrowup'],
   down: ['s', 'arrowdown'],
   jump: [' '],
-  attack: ['j'],
+  attack: ['j', 'mouseleft'],
   skill1: ['1'],
   skill2: ['2'],
   skill3: ['3'],
@@ -1663,6 +1663,11 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   quickSlot6: ['delete'],
   quickSlot7: ['end'],
   quickSlot8: ['pagedown'],
+  // Slots 9-12 start empty on the other mouse buttons: drop a skill or potion on them to cast it by mouse.
+  quickSlot9: ['mouseright'],
+  quickSlot10: ['mousemiddle'],
+  quickSlot11: ['mouseback'],
+  quickSlot12: ['mouseforward'],
 };
 
 // ─── Default Quick Slot Assignments ─────────────
