@@ -17,6 +17,7 @@ export type {
   E2eLevelView,
   E2ePlayerView,
   E2eRemotePlayerView,
+  E2eSpringView,
   E2eSkillView,
   E2eZombieView,
 } from '../../src/app/testing/e2e-api';

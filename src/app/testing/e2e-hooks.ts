@@ -1,6 +1,7 @@
 import { CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, isZombieWindingUp } from '@shared/index';
-import { ActiveSpecialEffect, BoulderState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
-import { BoulderPuzzleLayout, Platform, Rope } from '../engine/engine-types';
+import { ActiveSpecialEffect, BoulderState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
+import { BoulderPuzzleLayout, Platform, Rope, SpringPuzzleLayout } from '../engine/engine-types';
+import { chargeCorpses, leverBox } from '../engine/spring-puzzle';
 import { measureLevelGeometry } from './geometry-report';
 import { BoulderPath, boulderBox, boulderPath, gateBox } from '../engine/boulder-puzzle';
 import { Prop } from '../engine/level-generator';
@@ -11,6 +12,7 @@ import { GameEngine } from '../engine/game-engine';
 import { SpriteAnimator } from '../engine/sprite-animator';
 import {
   E2eBoulderPuzzleView,
+  E2eSpringView,
   E2eControls,
   E2eCorpseView,
   E2eDropView,
@@ -186,6 +188,24 @@ function puzzleView(engine: GameEngine): E2eBoulderPuzzleView | null {
   };
 }
 
+function springView(engine: GameEngine): E2eSpringView | null {
+  const puzzle: SpringPuzzleLayout | null = engine.springPuzzle;
+  const spring: SpringState | null = engine.spring;
+  if (!puzzle || !spring) return null;
+  const block: Platform = puzzle.spring;
+  return {
+    spring: { x: block.x, y: block.y, width: block.width, height: block.height },
+    side: puzzle.side,
+    lever: leverBox(puzzle),
+    charge: chargeCorpses(engine.zombieCorpses, puzzle).length,
+    chargeNeeded: GAME_CONSTANTS.SPRING_CHARGE_CORPSES,
+    launches: spring.launches,
+    countdownTicks: spring.countdownTicks,
+    bounceTicks: spring.bounceTicks,
+    wobbleTicks: spring.wobbleTicks,
+  };
+}
+
 function buildSnapshot(engine: GameEngine): E2eSnapshot {
   const player: CharacterState | null = engine.player;
   const remotePlayers: E2eRemotePlayerView[] = engine.remotePlayers.map(
@@ -270,6 +290,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
       safeSpot: safeSpotView(engine),
     },
     puzzle: puzzleView(engine),
+    spring: springView(engine),
     drops: engine.worldDrops.map(
       (d: WorldDrop): E2eDropView => ({ id: d.id, type: d.type, x: d.x, y: d.y, value: d.value }),
     ),

@@ -428,6 +428,50 @@ export class VfxSystem {
     this.triggerScreenShake(10, 4);
   }
 
+  /**
+   * The spring lets go: a dust cloud puffs out from its base and a rising streak of wind lines
+   * shoots up over it as it launches everyone.
+   */
+  spawnSpringLaunch(cx: number, topY: number): void {
+    for (let i: number = 0; i < 26; i++) {
+      const life: number = 35 + Math.floor(Math.random() * 20);
+      this.addParticle({
+        x: cx + (Math.random() - 0.5) * 160,
+        y: GAME_CONSTANTS.GROUND_Y - Math.random() * 16,
+        vx: (Math.random() - 0.5) * 6,
+        vy: -0.5 - Math.random() * 1.5,
+        life,
+        maxLife: life,
+        color: 'rgba(200, 184, 154, 0.75)',
+        size: 8 + Math.random() * 12,
+        shape: ParticleShape.Circle,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Linear,
+        scaleOverLife: true,
+      });
+    }
+    for (let i: number = 0; i < 22; i++) {
+      const life: number = 25 + Math.floor(Math.random() * 15);
+      this.addParticle({
+        x: cx + (Math.random() - 0.5) * 150,
+        y: topY - Math.random() * 30,
+        vx: 0,
+        vy: -9 - Math.random() * 6,
+        life,
+        maxLife: life,
+        color: i % 2 === 0 ? '#ffffff' : '#aaeeff',
+        size: 6 + Math.random() * 10,
+        shape: ParticleShape.Line,
+        rotation: Math.PI / 2,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Linear,
+        scaleOverLife: false,
+      });
+    }
+    this.triggerScreenShake(14, 6);
+  }
+
   /** Stone debris down the whole wall, a dust cloud at the impact, and a heavy shake. */
   spawnWallBreak(cx: number, impactY: number): void {
     const stones: string[] = ['#6b6b78', '#8a8a96', '#4a4a55', '#a89c88'];

@@ -263,3 +263,15 @@ export interface BoulderState {
   /** True once the boulder smashed the side wall and shattered (permanent for the floor). */
   wallBroken: boolean;
 }
+
+/** Floor-3 spring puzzle: the host simulates it and sends it with every game-sync (the charge is the synced corpses). */
+export interface SpringState {
+  /** Launches so far on this floor (the spring stays charged after each). */
+  launches: number;
+  /** Ticks left of the 3-2-1 after a pull with a full charge (0 = not counting). */
+  countdownTicks: number;
+  /** Ticks left of the release-and-settle bounce after a launch (0 = at rest). */
+  bounceTicks: number;
+  /** Ticks left of the lever's jiggle after a pull with too little charge. */
+  wobbleTicks: number;
+}

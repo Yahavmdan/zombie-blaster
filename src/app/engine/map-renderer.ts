@@ -283,6 +283,59 @@ export class MapRenderer {
     ctx.restore();
   }
 
+  /**
+   * The big spring: a steel base on the ground, a wide coil, and a hazard-striped plate on top
+   * whose top edge is the block's walkable top. At rest (`plateOffset` 0) the art fills exactly
+   * its collision box; the plate sinks while it winds up and shoots up on release (drawn per frame).
+   */
+  drawSpring(ctx: CanvasRenderingContext2D, block: Platform, plateOffset: number): void {
+    const plateH: number = 12;
+    const baseH: number = 6;
+    const plateY: number = block.y + plateOffset;
+    const bottom: number = block.y + block.height;
+    const coilTop: number = plateY + plateH;
+    const coilBottom: number = bottom - baseH;
+    const inset: number = 16;
+    const loops: number = 4;
+    ctx.save();
+    ctx.fillStyle = '#3a3f48';
+    ctx.fillRect(block.x + inset / 2, coilBottom, block.width - inset, baseH);
+    // The coil: flattened rings stacked from the base to the plate.
+    const step: number = (coilBottom - coilTop) / loops;
+    ctx.lineWidth = 4;
+    for (let i: number = 0; i < loops; i++) {
+      const cy: number = coilTop + step * (i + 0.5);
+      ctx.strokeStyle = i % 2 === 0 ? '#9aa3ad' : '#c3cad2';
+      ctx.beginPath();
+      ctx.ellipse(
+        block.x + block.width / 2,
+        cy,
+        block.width / 2 - inset,
+        Math.max(1, step / 2 - 1),
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+    }
+    // The plate: full width, so you see exactly where you stand.
+    ctx.fillStyle = '#2c2f36';
+    ctx.fillRect(block.x, plateY, block.width, plateH);
+    ctx.fillStyle = '#f2c230';
+    for (let x: number = block.x; x < block.x + block.width; x += 24) {
+      ctx.beginPath();
+      ctx.moveTo(x, plateY + plateH);
+      ctx.lineTo(x + 12, plateY + plateH);
+      ctx.lineTo(Math.min(x + 24, block.x + block.width), plateY + 2);
+      ctx.lineTo(Math.min(x + 12, block.x + block.width), plateY + 2);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = '#d0d4da';
+    ctx.fillRect(block.x, plateY, block.width, 2);
+    ctx.restore();
+  }
+
   /** A prop image placed so its visible art covers exactly the prop's collision box. */
   drawProp(ctx: CanvasRenderingContext2D, prop: Prop): void {
     const img: HTMLImageElement | undefined = this.propImages.get(prop.kind);

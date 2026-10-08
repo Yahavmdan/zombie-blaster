@@ -7,6 +7,7 @@ import {
 import {
   ActiveSpecialEffect,
   BoulderState,
+  SpringState,
   DropType,
   PendingSpecialDropConfirm,
   SpecialDropType,
@@ -76,9 +77,10 @@ export interface Platform {
   safe?: boolean;
   /**
    * A floor-2 puzzle solid, removed when it breaks: the side `wall` (broken by the boulder) or the
-   * `gate` holding the boulder on its ledge (broken by players' hits).
+   * `gate` holding the boulder on its ledge (broken by players' hits). The floor-3 `spring` is a
+   * solid puzzle part that stays for the whole floor.
    */
-  puzzlePart?: 'wall' | 'gate';
+  puzzlePart?: 'wall' | 'gate' | 'spring';
 }
 
 export interface Rope {
@@ -101,6 +103,18 @@ export interface BoulderPuzzleLayout {
   ledgeX: number;
 }
 
+
+/**
+ * Floor-3 puzzle: a big spring (a solid block one hop high) at the screen edge straight under the
+ * exit, which hangs at the very top. Corpses landing on it charge it; a lever beside its open side
+ * starts a 3-2-1, then the spring launches everyone standing on it (or on the corpses on it).
+ */
+export interface SpringPuzzleLayout {
+  /** The spring's solid box: its top plate is walkable, it spans the exit from the screen edge. */
+  spring: Platform;
+  /** +1: the spring is at the right screen edge (the lever on its left), -1: at the left edge. */
+  side: 1 | -1;
+}
 export interface BackgroundStar {
   x: number;
   y: number;
@@ -226,6 +240,9 @@ export interface IGameEngine {
   /** Floor-2 puzzle layout and its boulder (null on other floors). */
   boulderPuzzle: BoulderPuzzleLayout | null;
   boulder: BoulderState | null;
+  /** Floor-3 puzzle layout and its spring (null on other floors). */
+  springPuzzle: SpringPuzzleLayout | null;
+  spring: SpringState | null;
 
   backgroundStars: BackgroundStar[];
 

@@ -23,6 +23,8 @@ The engine is split into focused files under `src/app/engine/`.
 | `map-renderer.ts` | Draws scenery (backgrounds) and the level geometry layer (ground, platforms, ladders) **from the layout data only** |
 | `level-generator.ts` | Seeded per-floor layouts (platforms, ropes, exit side, safe spot + its ladder, floor-2 boulder puzzle: wall + ledge position, platforms kept out of the chute) + `levelViolations` rules; host picks the seed, clients follow it via game-sync |
 | `boulder-puzzle.ts` | Floor-2 puzzle rules (pure): gate box + hits, boulder path (ledge → chute → wall), rolling, crush targets, debris, `keepOutOfWall`, leaving through the opening |
+| `spring-puzzle.ts` | Floor-3 puzzle rules (pure): spring span, lever box + pulls, charge from corpses on the spring, 3-2-1 countdown + launch tick, on-spring check + fling, plate offset |
+| `spring-puzzle-system.ts` | Floor-3 puzzle simulation: host watches every player's lever pulls, runs the countdown, launches the local player; guests launch themselves from the synced launch |
 | `boulder-puzzle-system.ts` | Floor-2 puzzle simulation: host counts gate hits (all players), rolls the boulder, crushes, breaks the wall; clients extrapolate the synced roll |
 | `magnet-pull.ts` | Monster-magnet drag (host-simulated, synced as `ZombieState.magnetPull`) |
 | `corpse-surface.ts` | Walkable surface of a corpse (the same for every corpse, the exit pile included) |
@@ -55,6 +57,12 @@ The engine is split into focused files under `src/app/engine/`.
   so the generator keeps every platform and rope out of its span. Ledge height (player count)
   changes the path, so everything is derived from `exitPlatform.y` each tick. Leaving is
   `leavesThroughOpening`; corpses, drops and spawns go through `keepOutOfWall`.
+- Floor 3 is the spring: the exit hangs at a screen edge at the fixed `SPRING_LEDGE_Y` (100, any
+  party size), straight over a solid `puzzlePart: 'spring'` block from that screen edge (walk onto
+  its plate like a prop). It is drawn per frame (`MapRenderer.drawSpring`, the plate moves while
+  it fires) and measured at rest in the geometry report. Ground spawns are kept out of it. The
+  generator keeps platforms, ropes and props `SPRING_CLEAR_PX` clear of it (the lever stands
+  there). The charge is derived from the synced corpses.
 
 ## Dependency rules
 
@@ -68,6 +76,7 @@ CombatSystem     -> Physics, Vfx, Drop
 ProjectileSystem -> Physics, Vfx
 ZombieSystem     -> Physics, Combat, Projectile, Drop
 BoulderPuzzleSystem -> Combat, Vfx
+SpringPuzzleSystem  -> Vfx
 RenderSystem     -> reads state only (no system deps)
 ```
 

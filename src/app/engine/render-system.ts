@@ -14,6 +14,7 @@ import {
   ActiveSpecialEffect,
   BoulderState,
   DropType,
+  SpringState,
   PendingSpecialDropConfirm,
   SpecialDropDefinition,
   SpecialDropType,
@@ -39,7 +40,18 @@ import {
   gateBroken,
 } from './boulder-puzzle';
 import {
+  SPRING_FLOOR_HINT,
+  chargeCorpses,
+  countdownSeconds,
+  isBusy,
+  isCharged,
+  leverBox,
+  plateOffset,
+  springSpan,
+} from './spring-puzzle';
+import {
   BoulderPuzzleLayout,
+  SpringPuzzleLayout,
   DashPhaseState,
   DropNotification,
   IGameEngine,
@@ -89,6 +101,7 @@ export class RenderSystem {
     this.renderExitPlatform(ctx);
     this.renderSafeSpotMarker(ctx);
     this.renderBoulderPuzzle(ctx);
+    this.renderSpringPuzzle(ctx);
     this.renderZombies(ctx);
     this.renderHitMarks(ctx);
     this.renderDragonProjectiles(ctx);
@@ -1635,7 +1648,8 @@ export class RenderSystem {
       ctx.shadowBlur = 0;
       ctx.font = 'bold 20px sans-serif';
       ctx.fillStyle = '#aaeeff';
-      ctx.fillText(floorHint(this.e.boulderPuzzle), GAME_CONSTANTS.CANVAS_WIDTH / 2, cy + 42);
+      const hint: string = this.e.springPuzzle ? SPRING_FLOOR_HINT : floorHint(this.e.boulderPuzzle);
+      ctx.fillText(hint, GAME_CONSTANTS.CANVAS_WIDTH / 2, cy + 42);
 
       const lineWidth: number = 200;
       const lineY: number = cy + 64;
@@ -1728,6 +1742,79 @@ export class RenderSystem {
     if (box) this.renderBoulder(ctx, box, (puzzle.wallDir * boulder.progress) / r);
     if (!gateBroken(boulder)) this.renderGate(ctx, gateBox(puzzle, ledgeY), boulder.gateHits);
     if (boulder.wallBroken) this.renderOpeningSign(ctx, puzzle);
+  }
+
+  /**
+   * The floor-3 spring, per frame from the layout, the synced timers and the synced corpses: the
+   * spring (its plate winds down in the 3-2-1 and shoots up on release), the lever beside it
+   * (upright while waiting, thrown once pulled, jiggling on a pull without charge), the charge
+   * count, and the big 3-2-1 over the spring.
+   */
+  private renderSpringPuzzle(ctx: CanvasRenderingContext2D): void {
+    const puzzle: SpringPuzzleLayout | null = this.e.springPuzzle;
+    const spring: SpringState | null = this.e.spring;
+    if (!puzzle || !spring) return;
+    const block: Platform = puzzle.spring;
+    const [left, right]: [number, number] = springSpan(puzzle);
+    const cx: number = (left + right) / 2;
+    const t: number = performance.now() / 1000;
+    this.e.mapRenderer.drawSpring(ctx, block, plateOffset(spring));
+
+    const lever: Box = leverBox(puzzle);
+    const baseX: number = lever.x + lever.width / 2;
+    const thrown: boolean = spring.countdownTicks > 0 || spring.bounceTicks > 0;
+    const jiggle: number = spring.wobbleTicks > 0 ? Math.sin(spring.wobbleTicks * 1.3) * 6 : 0;
+    const tipX: number = baseX + (thrown ? -puzzle.side * 22 : 0) + jiggle;
+    const tipY: number = lever.y + (thrown ? 14 : 6);
+    ctx.save();
+    ctx.fillStyle = '#3a3f48';
+    ctx.fillRect(lever.x - 4, GAME_CONSTANTS.GROUND_Y - 10, lever.width + 8, 10);
+    ctx.strokeStyle = '#7d8590';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(baseX, GAME_CONSTANTS.GROUND_Y - 8);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+    ctx.fillStyle = '#d23c3c';
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    const needed: number = GAME_CONSTANTS.SPRING_CHARGE_CORPSES;
+    const count: number = chargeCorpses(this.e.zombieCorpses, puzzle).length;
+    const ready: boolean = isCharged(count);
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillStyle = ready ? '#7dff7d' : '#ffd166';
+    const label: string = `CHARGE ${Math.min(count, needed)}/${needed}`;
+    const labelY: number = block.y + block.height - 14;
+    ctx.strokeText(label, cx, labelY);
+    ctx.fillText(label, cx, labelY);
+    if (ready && !isBusy(spring)) {
+      ctx.globalAlpha = 0.7 + Math.sin(t * 6) * 0.3;
+      ctx.strokeText('PULL!', baseX, lever.y - 14);
+      ctx.fillText('PULL!', baseX, lever.y - 14);
+    }
+
+    const seconds: number = countdownSeconds(spring);
+    if (seconds > 0) {
+      const frac: number = (spring.countdownTicks % GAME_CONSTANTS.TICK_RATE) / GAME_CONSTANTS.TICK_RATE;
+      ctx.globalAlpha = 1;
+      ctx.font = `bold ${48 + Math.round(frac * 24)}px sans-serif`;
+      ctx.lineWidth = 6;
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeText(String(seconds), cx, block.y - 120);
+      ctx.fillText(String(seconds), cx, block.y - 120);
+      ctx.font = 'bold 16px sans-serif';
+      ctx.lineWidth = 3;
+      ctx.fillStyle = '#aaeeff';
+      ctx.strokeText('GET ON THE SPRING!', cx, block.y - 86);
+      ctx.fillText('GET ON THE SPRING!', cx, block.y - 86);
+    }
+    ctx.restore();
   }
 
   /** Trough floor under the boulder's path and a guard rail over it, from the ledge to the wall. */

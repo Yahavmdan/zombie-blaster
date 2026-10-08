@@ -137,6 +137,22 @@ export const GAME_CONSTANTS = {
   BOULDER_DEBRIS_PX: 96, // Wall debris lands this far out from the wall face (and crushes zombies there)
   BOULDER_WALL_TILES: 2, // Width of the breakable side wall (it spans the screen top to the ground)
   BOULDER_OPENING_CLEAR_PX: 96, // Props keep this far from the wall, so the way out stays open
+  PUZZLE_SPRING_FLOOR: 3, // Floor whose exit hangs at the very top: a corpse-charged spring under it launches players up
+  SPRING_HEIGHT_PX: 48, // The spring block (solid, at the screen edge under the exit): one hop up onto its plate
+  SPRING_LEDGE_Y: 100, // The exit on the spring floor: as high as it goes (just under the HUD), no pile gets there
+  SPRING_CHARGE_CORPSES: 30, // Corpses resting on the spring (or piled on it) before the lever arms it
+  SPRING_LAUNCH_FORCE: 23, // Upward speed (px/tick) the spring gives everyone on it: feet peak ~60 px over the exit
+  SPRING_LEVER_WIDTH_PX: 12, // The lever stands on the ground beside the spring's open side: this wide...
+  SPRING_LEVER_HEIGHT_PX: 80, // ...and this tall (hit it from the ground or from the spring)
+  SPRING_LEVER_GAP_PX: 20, // Gap between the spring's open side and the lever
+  SPRING_HIT_REACH_PX: 24, // Max gap between an attacking player's box and the lever for the swing to pull it
+  SPRING_HIT_COOLDOWN_TICKS: 36, // One lever pull per swing (a held attack swings every 36 ticks)
+  SPRING_SCATTER_MAX_PX: 360, // On launch the charge scatters through the air, landing up to this far past the spring
+  SPRING_COUNTDOWN_TICKS: 150, // 3-2-1 after a pull with a full charge: time to get on the spring
+  SPRING_BOUNCE_TICKS: 40, // The spring's release-and-settle animation after a launch
+  SPRING_WOBBLE_TICKS: 24, // The lever's jiggle after a pull with too little charge
+  SPRING_FLING_WINDOW_TICKS: 10, // A client flings itself only while the synced bounce is this fresh (not on a late join)
+  SPRING_CLEAR_PX: 96, // Platforms, ropes and props keep this far from the spring's open side (the lever stands there)
   SAFE_SPOT_HEADROOM_PX: 160, // Players up to this far above the safe spot (jumping on it) still count as resting there
 
   // ─── Zombie Spawning ───────────────────────────
