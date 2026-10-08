@@ -24,6 +24,7 @@ export const KEYS: {
   jump: string;
   attack: string;
   revive: string;
+  carry: string;
   openStats: string;
   openSkills: string;
   openShop: string;
@@ -38,6 +39,7 @@ export const KEYS: {
   jump: ' ',
   attack: 'j',
   revive: 'f',
+  carry: 'e',
   openStats: 'p',
   openSkills: 'o',
   openShop: 'b',
@@ -50,7 +52,65 @@ declare global {
   interface Window {
     /** Every WebSocket the page opened (installed by GamePlayer's init script). */
     __zbSockets?: WebSocket[];
+    /** Switches the page between a foreground and a background tab (GamePlayer's init script). */
+    __zbBackgroundTab?: (hidden: boolean) => void;
   }
+}
+
+/**
+ * Lets tests put a page in the background like a real browser tab. Playwright keeps every page
+ * visible (no tab switch, minimize or launch flag changes that), so this does what Chrome does to
+ * a hidden tab: window blur, document.hidden + visibilitychange, no animation frames, main-thread timers
+ * wake at most once a second. Worker timers and messages keep running, as in Chrome.
+ */
+function backgroundTabInitScript(): void {
+  let hidden: boolean = false;
+  const nativeRaf: (cb: FrameRequestCallback) => number = window.requestAnimationFrame.bind(window);
+  const nativeCancelRaf: (id: number) => void = window.cancelAnimationFrame.bind(window);
+  const nativeSetInterval: typeof window.setInterval = window.setInterval.bind(window);
+  const nativeSetTimeout: typeof window.setTimeout = window.setTimeout.bind(window);
+  const parked: Map<number, FrameRequestCallback> = new Map<number, FrameRequestCallback>();
+  let nextParkedId: number = -1;
+
+  window.requestAnimationFrame = (cb: FrameRequestCallback): number => {
+    if (!hidden) return nativeRaf(cb);
+    const id: number = nextParkedId--;
+    parked.set(id, cb);
+    return id;
+  };
+  window.cancelAnimationFrame = (id: number): void => {
+    if (!parked.delete(id)) nativeCancelRaf(id);
+  };
+  window.setInterval = ((handler: TimerHandler, ms?: number, ...args: unknown[]): number => {
+    let lastHiddenRun: number = 0;
+    return nativeSetInterval((): void => {
+      if (hidden) {
+        const now: number = performance.now();
+        if (now - lastHiddenRun < 1000) return;
+        lastHiddenRun = now;
+      }
+      if (typeof handler === 'function') (handler as (...a: unknown[]) => void)(...args);
+    }, ms);
+  }) as typeof window.setInterval;
+  window.setTimeout = ((handler: TimerHandler, ms?: number, ...args: unknown[]): number =>
+    nativeSetTimeout(handler, hidden ? Math.max(ms ?? 0, 1000) : ms, ...args)) as typeof window.setTimeout;
+  Object.defineProperty(document, 'hidden', { configurable: true, get: (): boolean => hidden });
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: (): DocumentVisibilityState => (hidden ? 'hidden' : 'visible'),
+  });
+
+  window.__zbBackgroundTab = (h: boolean): void => {
+    if (h === hidden) return;
+    hidden = h;
+    if (!hidden) {
+      const resumed: FrameRequestCallback[] = [...parked.values()];
+      parked.clear();
+      for (const cb of resumed) nativeRaf(cb);
+    }
+    window.dispatchEvent(new Event(hidden ? 'blur' : 'focus'));
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
 }
 
 /** Records every WebSocket the app opens so tests can simulate a dropped connection. */
@@ -125,6 +185,7 @@ export class GamePlayer {
       ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
     });
     await context.addInitScript(trackSocketsInitScript);
+    await context.addInitScript(backgroundTabInitScript);
     const page: Page = await context.newPage();
     return new GamePlayer(context, page, options.name, options.classId);
   }
@@ -266,6 +327,11 @@ export class GamePlayer {
    * Closes the game-server socket as if the network dropped; the app should auto-reconnect.
    * Sockets to the page's own host (dev-server live reload) are left alone.
    */
+  /** Puts this tab behind another one (as when the player opens a new tab) or brings it back. */
+  async setBackgroundTab(hidden: boolean): Promise<void> {
+    await this.page.evaluate((h: boolean): void => window.__zbBackgroundTab?.(h), hidden);
+  }
+
   async dropConnection(): Promise<void> {
     await this.page.evaluate((): void => {
       for (const ws of window.__zbSockets ?? []) {

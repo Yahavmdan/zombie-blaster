@@ -13,6 +13,9 @@ import {
 import {
   ActiveSpecialEffect,
   BoulderState,
+  CagePuzzleState,
+  PlateState,
+  CageState,
   DropType,
   SpringState,
   PendingSpecialDropConfirm,
@@ -30,6 +33,7 @@ import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
 import { ZombieSpriteAnchor } from './zombie-sprite-animator';
 import { MagnetPull, ZombieCorpse } from '@shared/game-entities';
 import { magnetPullProgress } from './magnet-pull';
+import { carriedIds, carryableCorpse } from './corpse-carry';
 import {
   Box,
   BoulderPath,
@@ -38,6 +42,7 @@ import {
   floorHint,
   gateBox,
   gateBroken,
+  Point,
 } from './boulder-puzzle';
 import {
   SPRING_FLOOR_HINT,
@@ -50,7 +55,18 @@ import {
   springSpan,
 } from './spring-puzzle';
 import {
+  CAGE_FLOOR_HINT,
+  CAGE_IDS,
+  cageBox,
+  chainPath,
+  cleatBox,
+  isCut,
+} from './cage-puzzle';
+import { PLATE_FLOOR_HINT, doorBox, isHeld, plateBox } from './plate-puzzle';
+import {
   BoulderPuzzleLayout,
+  CagePuzzleLayout,
+  PlatePuzzleLayout,
   SpringPuzzleLayout,
   DashPhaseState,
   DropNotification,
@@ -59,6 +75,8 @@ import {
   Platform,
 } from './engine-types';
 
+/** How far (fraction of the sprite width) a lying body's middle sits behind its feet. */
+const CARRIED_BODY_SHIFT: number = 0.26;
 /** Matches the warrior-monster-magnet skill color. */
 const MAGNET_STREAK_COLOR: string = '#cc44ff';
 
@@ -98,17 +116,24 @@ export class RenderSystem {
       this.renderRopes(ctx);
       this.renderPlatforms(ctx);
     }
+    // The exit cage's chain runs down behind the exit.
+    this.renderCageChains(ctx);
     this.renderExitPlatform(ctx);
     this.renderSafeSpotMarker(ctx);
     this.renderBoulderPuzzle(ctx);
     this.renderSpringPuzzle(ctx);
+    this.renderCages(ctx);
+    this.renderPlate(ctx);
     this.renderZombies(ctx);
     this.renderHitMarks(ctx);
     this.renderDragonProjectiles(ctx);
     this.renderSpitterProjectiles(ctx);
     this.renderDrops(ctx);
+    // Carried corpses rest on their carriers' heads, under the name tags.
+    this.renderCarriedCorpses(ctx);
     this.renderRemotePlayers(ctx);
     this.renderPlayer(ctx);
+    this.renderCarryPrompt(ctx);
     this.renderPlayerProjectiles(ctx);
     this.renderReviveProgress(ctx);
     this.renderPoisonOverlay(ctx);
@@ -876,10 +901,54 @@ export class RenderSystem {
     }
   }
 
+  /** A corpse on someone's head (granted, or the local player's pick-up awaiting the host). */
+  private isCarried(corpse: ZombieCorpse): boolean {
+    return corpse.carrierId !== null || (!!this.e.player && carriedIds(this.e.player).includes(corpse.id));
+  }
+
+  /** Lying corpses, drawn under the zombies. Carried ones are drawn with the players. */
   private renderZombieCorpses(ctx: CanvasRenderingContext2D): void {
+    this.drawCorpses(ctx, this.e.zombieCorpses.filter((c: ZombieCorpse): boolean => !this.isCarried(c)));
+  }
+
+  private renderCarriedCorpses(ctx: CanvasRenderingContext2D): void {
+    this.drawCorpses(ctx, this.e.zombieCorpses.filter((c: ZombieCorpse): boolean => this.isCarried(c)));
+  }
+
+  /**
+   * What the carry key does next: "[E] Carry" over the corpse it would pick up (with the stack
+   * count once carrying), or "[E] Throw" over the stack when nothing more can be picked up.
+   */
+  private renderCarryPrompt(ctx: CanvasRenderingContext2D): void {
+    const p: CharacterState | null = this.e.player;
+    if (!p || p.isDead || p.isDown) return;
+    const ids: string[] = carriedIds(p);
+    const next: ZombieCorpse | null =
+      ids.length < GAME_CONSTANTS.CORPSE_CARRY_MAX ? carryableCorpse(p, this.e.zombieCorpses) : null;
+    const stackTop: ZombieCorpse | undefined = this.e.zombieCorpses.find(
+      (c: ZombieCorpse): boolean => c.id === ids[ids.length - 1],
+    );
+    const anchor: ZombieCorpse | undefined = next ?? stackTop;
+    if (!anchor) return;
+    const count: string = ids.length > 0 ? ` (${ids.length}/${GAME_CONSTANTS.CORPSE_CARRY_MAX})` : '';
+    const label: string = `[${this.e.carryKeyLabel}] ${next ? `Carry${count}` : 'Throw'}`;
+    const cx: number = anchor.x + anchor.width / 2;
+    const y: number = anchor.y + anchor.height - 34;
+    ctx.save();
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    const w: number = ctx.measureText(label).width + 10;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(cx - w / 2, y - 12, w, 16);
+    ctx.fillStyle = '#ffe08a';
+    ctx.fillText(label, cx, y);
+    ctx.restore();
+  }
+
+  private drawCorpses(ctx: CanvasRenderingContext2D, corpses: ZombieCorpse[]): void {
     if (!this.e.zombieSpriteAnimator.isLoaded()) return;
 
-    for (const corpse of this.e.zombieCorpses) {
+    for (const corpse of corpses) {
       const progress: number = corpse.fadeTimer / corpse.maxFadeTimer;
       const alpha: number = Math.min(1, progress * 2);
 
@@ -892,7 +961,9 @@ export class RenderSystem {
       const flipX: boolean = corpse.type === ZombieType.DragonBoss ? corpse.facing > 0 : corpse.facing < 0;
       const anchor: ZombieSpriteAnchor = this.e.zombieSpriteAnimator.getAnchor(corpse.spriteKey);
       const effectiveAnchorX: number = flipX ? (1 - anchor.anchorX) : anchor.anchorX;
-      const drawX: number = corpse.x + corpse.width / 2 - renderW * effectiveAnchorX;
+      // A lying body stretches behind its feet (the anchor); carried, its middle goes on the head.
+      const bodyShift: number = this.isCarried(corpse) ? (flipX ? 1 : -1) * renderW * CARRIED_BODY_SHIFT : 0;
+      const drawX: number = corpse.x + corpse.width / 2 - renderW * effectiveAnchorX + bodyShift;
       const drawY: number = corpse.y + corpse.height - renderH * anchor.anchorY;
 
       ctx.save();
@@ -1648,7 +1719,13 @@ export class RenderSystem {
       ctx.shadowBlur = 0;
       ctx.font = 'bold 20px sans-serif';
       ctx.fillStyle = '#aaeeff';
-      const hint: string = this.e.springPuzzle ? SPRING_FLOOR_HINT : floorHint(this.e.boulderPuzzle);
+      const hint: string = this.e.springPuzzle
+        ? SPRING_FLOOR_HINT
+        : this.e.cagePuzzle
+          ? CAGE_FLOOR_HINT
+          : this.e.platePuzzle
+            ? PLATE_FLOOR_HINT
+            : floorHint(this.e.boulderPuzzle);
       ctx.fillText(hint, GAME_CONSTANTS.CANVAS_WIDTH / 2, cy + 42);
 
       const lineWidth: number = 200;
@@ -1699,16 +1776,21 @@ export class RenderSystem {
       return;
     }
 
+    // On the plate floor a barred door stands on the exit: the sign goes over it.
+    const plate: PlateState | null = this.e.plate;
+    if (plate) this.renderExitDoor(ctx, doorBox(exit), plate);
+    const signY: number = plate ? doorBox(exit).y : exit.y;
+
     // No hints about how to get up here: players work out that the dead pile up under it.
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'center';
     ctx.globalAlpha = pulse;
-    ctx.fillText('EXIT', exit.x + exit.width / 2, exit.y - 8);
+    ctx.fillText('EXIT', exit.x + exit.width / 2, signY - 8);
 
     const arrowCount: number = 3;
     for (let i: number = 0; i < arrowCount; i++) {
-      const arrowY: number = exit.y - 25 - i * 16 + Math.sin(t * 3 + i) * 4;
+      const arrowY: number = signY - 25 - i * 16 + Math.sin(t * 3 + i) * 4;
       const arrowAlpha: number = (1 - i / arrowCount) * pulse;
       ctx.globalAlpha = arrowAlpha;
       ctx.fillStyle = '#44ddff';
@@ -1925,6 +2007,190 @@ export class RenderSystem {
    * A lantern and a "SAFE" sign over the floor's safe spot, so players know where they can rest.
    * Drawn from the layout every frame (not part of the geometry layer: nothing here is walkable).
    */
+  /**
+   * The floor-4 chains (not walkable): each runs from its cleat on a ledge straight up to a
+   * pulley on the ceiling, along it, and down to its cage. A snapped chain is gone, leaving a torn
+   * end on its cleat.
+   */
+  private renderCageChains(ctx: CanvasRenderingContext2D): void {
+    const puzzle: CagePuzzleLayout | null = this.e.cagePuzzle;
+    const cages: CagePuzzleState | null = this.e.cages;
+    if (!puzzle || !cages) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const id of CAGE_IDS) {
+      const path: Point[] = chainPath(puzzle, id, this.e.exitPlatform);
+      if (isCut(cages[id])) {
+        this.strokeChain(ctx, [path[0], { x: path[0].x + 4, y: path[0].y - 12 }]);
+        continue;
+      }
+      this.strokeChain(ctx, path);
+      const pulleys: Point[] = [path[1], path[2]];
+      for (const pulley of pulleys) {
+        ctx.fillStyle = '#3a3f48';
+        ctx.strokeStyle = '#9aa3ad';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(pulley.x, pulley.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  private strokeChain(ctx: CanvasRenderingContext2D, path: Point[]): void {
+    ctx.beginPath();
+    ctx.moveTo(path[0].x, path[0].y);
+    for (const p of path.slice(1)) ctx.lineTo(p.x, p.y);
+    ctx.setLineDash([]);
+    ctx.strokeStyle = '#1e2026';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.setLineDash([5, 3]);
+    ctx.strokeStyle = '#9aa3ad';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  /**
+   * The floor-4 cages where their state puts them (hanging, falling, the exit cage on the ground;
+   * the zombie cage is gone once it smashed), and the cleats on their ledge cracking per hit.
+   */
+  private renderCages(ctx: CanvasRenderingContext2D): void {
+    const puzzle: CagePuzzleLayout | null = this.e.cagePuzzle;
+    const cages: CagePuzzleState | null = this.e.cages;
+    if (!puzzle || !cages) return;
+    const t: number = performance.now() / 1000;
+    ctx.save();
+    for (const id of CAGE_IDS) {
+      const cage: CageState = cages[id];
+      const box: Box | null = cageBox(puzzle, id, cage, this.e.exitPlatform);
+      if (box) {
+        this.e.mapRenderer.drawCage(ctx, box, id === 'zombieCage');
+        if (id === 'zombieCage') this.renderCagedHands(ctx, box, t);
+        if (!isCut(cage)) {
+          ctx.strokeStyle = '#9aa3ad';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(box.x + box.width / 2, box.y - 4, 4, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      this.renderCleat(ctx, cleatBox(puzzle, id), cage);
+    }
+    ctx.restore();
+  }
+
+  /**
+   * The floor-5 exit door (scenery, nothing to stand on): a dark doorway in a stone frame whose
+   * bars slide up into the lintel as it opens. Fully open, the doorway glows.
+   */
+  private renderExitDoor(ctx: CanvasRenderingContext2D, door: Box, plate: PlateState): void {
+    const open: number = plate.doorTicks / GAME_CONSTANTS.PLATE_DOOR_TICKS;
+    const post: number = 6;
+    const inner: Box = {
+      x: door.x + post,
+      y: door.y + post,
+      width: door.width - 2 * post,
+      height: door.height - post,
+    };
+    ctx.save();
+    ctx.fillStyle = open >= 1 ? 'rgba(68, 221, 255, 0.35)' : '#101018';
+    ctx.fillRect(inner.x, inner.y, inner.width, inner.height);
+    ctx.fillStyle = '#5a5f68';
+    ctx.fillRect(door.x, door.y, post, door.height);
+    ctx.fillRect(door.x + door.width - post, door.y, post, door.height);
+    ctx.fillRect(door.x, door.y, door.width, post);
+    const barsBottom: number = inner.y + inner.height * (1 - open);
+    if (barsBottom > inner.y) {
+      ctx.strokeStyle = '#9aa3ad';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let x: number = inner.x + 5; x < inner.x + inner.width; x += 9) {
+        ctx.moveTo(x, inner.y);
+        ctx.lineTo(x, barsBottom);
+      }
+      ctx.moveTo(inner.x, barsBottom - 3);
+      ctx.lineTo(inner.x + inner.width, barsBottom - 3);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * The floor-5 pressure plate, set into the top of its ledge (inside its collision box), pressed
+   * down and green while it holds the door open. Lamps over it count the weight on it.
+   */
+  private renderPlate(ctx: CanvasRenderingContext2D): void {
+    const puzzle: PlatePuzzleLayout | null = this.e.platePuzzle;
+    const plate: PlateState | null = this.e.plate;
+    if (!puzzle || !plate) return;
+    const box: Box = plateBox(puzzle);
+    const held: boolean = isHeld(plate);
+    const sink: number = held ? 3 : 0;
+    ctx.save();
+    ctx.fillStyle = '#2a2a30';
+    ctx.fillRect(box.x - 2, box.y, box.width + 4, box.height);
+    ctx.fillStyle = held ? '#4caf50' : '#c0392b';
+    ctx.fillRect(box.x, box.y + sink, box.width, box.height - sink);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.fillRect(box.x, box.y + sink, box.width, 1);
+    const needed: number = GAME_CONSTANTS.PLATE_WEIGHT_NEEDED;
+    const lit: number = Math.min(needed, plate.weight);
+    const gap: number = 18;
+    const lampsLeft: number = box.x + box.width / 2 - ((needed - 1) * gap) / 2;
+    for (let i: number = 0; i < needed; i++) {
+      ctx.beginPath();
+      ctx.arc(lampsLeft + i * gap, box.y - 58, 5, 0, Math.PI * 2);
+      ctx.fillStyle = i < lit ? (held ? '#7CFC8A' : '#ffd166') : 'rgba(40, 40, 48, 0.8)';
+      ctx.fill();
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** Green arms reaching out between the zombie cage's side bars. */
+  private renderCagedHands(ctx: CanvasRenderingContext2D, box: Box, t: number): void {
+    ctx.strokeStyle = '#6abf4b';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    for (let i: number = 0; i < 2; i++) {
+      const reach: number = 8 + Math.sin(t * 5 + i * 2) * 5;
+      const y: number = box.y + 40 + i * 22;
+      ctx.beginPath();
+      ctx.moveTo(box.x + 4, y);
+      ctx.lineTo(box.x - reach, y - 4);
+      ctx.moveTo(box.x + box.width - 4, y + 10);
+      ctx.lineTo(box.x + box.width + reach, y + 6);
+      ctx.stroke();
+    }
+  }
+
+  /** An iron cleat; cracks show the hits it took, a snapped one is broken off at the top. */
+  private renderCleat(ctx: CanvasRenderingContext2D, cleat: Box, cage: CageState): void {
+    const cut: boolean = isCut(cage);
+    const top: number = cut ? cleat.y + cleat.height / 2 : cleat.y;
+    ctx.fillStyle = '#4a4f58';
+    ctx.fillRect(cleat.x, top, cleat.width, cleat.y + cleat.height - top);
+    ctx.fillStyle = '#7d8590';
+    ctx.fillRect(cleat.x - 2, top, cleat.width + 4, 4);
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 1;
+    for (let i: number = 0; i < Math.min(cage.cleatHits, GAME_CONSTANTS.CAGE_CLEAT_HITS - 1); i++) {
+      const y: number = cleat.y + 6 + i * 7;
+      ctx.beginPath();
+      ctx.moveTo(cleat.x + 2, y);
+      ctx.lineTo(cleat.x + cleat.width / 2, y + 4);
+      ctx.lineTo(cleat.x + cleat.width - 2, y + 1);
+      ctx.stroke();
+    }
+  }
+
   private renderSafeSpotMarker(ctx: CanvasRenderingContext2D): void {
     const spot: Platform | undefined = this.e.platforms.find((p: Platform): boolean => p.safe === true);
     if (!spot) return;

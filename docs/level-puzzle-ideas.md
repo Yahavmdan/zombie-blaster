@@ -20,16 +20,22 @@ ships, tick its box here and rewrite its line to match what was built.
       launches them straight up onto the exit while its corpses scatter through the air (spent:
       charge it again for another launch). Too little charge only jiggles
       the lever.
-- [ ] **Hanging cage**: shoot the rope and the cage drops to become a platform. The wrong rope
-      blocks the path.
+- [x] **Hanging cage** (floor 4): an empty cage hangs under the exit, a cage full of zombies
+      mid-screen. Their chains run from two cleats on a high ledge up to the ceiling and over to
+      the cages (random order, sometimes crossing): follow them. Three hits on a cleat snap its
+      chain. The empty cage lands under the exit as a solid step (the pile there rides up onto
+      it), so far fewer corpses are needed; the zombie cage smashes and lets 6 zombies loose.
 - [ ] **Explosive barrels**: lure zombies next to a cracked wall, shoot the barrel, and the wall
       breaks.
 - [ ] **Push crates**: push crates into stairs. Zombies can knock them over.
 
 ## Switches and co-op
 
-- [ ] **Pressure plates**: the door is open only while something stands on the plate (a player, a
-      corpse or a crate). Solo players drag a corpse onto it with the monster magnet.
+- [x] **Pressure plate** (floor 5): a barred door stands on the exit and slides open only while the
+      plate on the highest ledge across the screen is weighed down: 3 lying corpses (carry them
+      there with E and toss them on) or one player standing on it. Only a fully open door lets you
+      out. Twist: a zombie walking over the plate kicks a corpse off (one per zombie every 4 s), so
+      clear the zombies or bring spares. In co-op a friend can hold it while the others climb out.
 - [ ] **Two levers far apart**: both must be pulled within 3 seconds. Solo needs a timed dash or a
       ranged skill hit.
 - [ ] **Weight-limited elevator**: it needs enough weight to go down and a counterweight to come
@@ -80,5 +86,5 @@ ships, tick its box here and rewrite its line to match what was built.
 
 ### Suggested next
 
-- [ ] Pressure plate with corpse drag (uses the monster magnet)
+- [x] Pressure plate with a carried corpse (floor 5)
 - [ ] Explosive barrel (uses the solid props)

@@ -107,7 +107,9 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
 - Skills unlock with skill points (3 per level); warrior power-strike and assassin lucky-seven
   are level-1 skills. Ranger/Mage/Priest still have no active skills.
 - Controls: attack is J (Ctrl is unbound, all game keys preventDefault). Air control, coyote
-  time (5 ticks), variable jump (release early = short hop), apex hang. On ropes: left/right
+  time (5 ticks), variable jump (release early = short hop), apex hang. Only Space jumps;
+  held Space hops again on every landing. W/up never jumps: it grabs a ladder (from the
+  floor too) and climbs. A test that holds jump past landing gets extra hops. On ropes: left/right
   turns, jump alone does nothing, direction + jump lets go, climbing past the top dismounts.
 - **Levels are generated per floor** (`level-generator.ts`, seed from the host): never hard-code
   platform/rope coordinates in tests. Read them from `state().level` (`levelPlatforms(s)`,
@@ -147,6 +149,21 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   (`wobbleTicks`). `probe.dropCorpses` at a few x across the spring charges it. Don't teleport
   above the exit to get on the spring: you land on the exit. Specs: `solo/spring-puzzle.spec.ts`,
   `online/spring-puzzle-coop.spec.ts`. The Brain has no spring goal yet: AI players stall on floor 3.
+- **Floor 4 is the hanging-cage puzzle** (`state().cages`): `exitCage` hangs under the exit,
+  `zombieCage` mid-screen; each has `box` (as drawn, null once the zombie cage smashed), `solid`
+  (collision: hanging, or the exit cage once landed; null while falling), `cleat` (on the highest
+  regular ledge, never the safe spot: no swinging there), `cleatHits` / `hitsNeeded`, `cut`,
+  `fallTicks`, `landed`. Face the cleat, teleport beside it on its ledge, hold attack. Once the
+  exit cage landed, `exitPile.baseY` is its top, so `dropCorpses(exitPile.centerX)` builds the pile
+  on it; the Brain hops onto the cage first (`climbPile`). Specs: `solo/cage-puzzle.spec.ts`,
+  `online/cage-puzzle-coop.spec.ts`. The Brain has no cleat goal: AI players only climb normally.
+- **Floor 5 is the pressure plate** (`state().plate`): `box` (the strip set into its ledge's top;
+  feet on `box.y` stand on it), `weight` (lying corpses 1 each, a standing player `playerWeight`),
+  `needed`, `held`, `doorTicks`, `doorOpen` (only a fully open door lets players out) and `door`
+  (the barred door standing on the exit). Stand on it (teleport) or carry corpses onto it (drop
+  one with `dropCorpses`, teleport to it, `KEYS.carry`, teleport beside the plate facing it,
+  `KEYS.attack` to throw: E beside corpses on the plate picks one up). Zombies kick corpses off it, so carry until `held`. Specs:
+  `solo/plate-puzzle.spec.ts`, `online/plate-puzzle-coop.spec.ts`. The Brain has no plate goal.
 - After `teleport`, `isGrounded` can still read true from before: wait for the feet to reach the
   surface, not just `isGrounded`.
 - A failure "dev server shows a compile error overlay" right after editing source is usually the
@@ -182,6 +199,16 @@ Driving tips:
   - Always validate exit/climb specs with `--workers=5` (plus fairness specs) to reproduce suite load.
   - The brain restocks MP potions (5) for classes with skills; the game has no MP regen.
 - Special drops open a Y/N prompt with a timer; the brain presses Y.
+- **Carrying corpses**: `KEYS.carry` (E) picks up the nearest lying corpse within 50 px
+  (center to center; a "[E] Carry" prompt shows over it) and stacks it overhead, up to 3
+  (`CORPSE_CARRY_MAX`, 9 px per level). E with nothing more to pick up (or a full stack; prompt
+  "[E] Throw") tosses the whole stack forward and it lands as a pile (each body's `footY` 5 px
+  above the one below). `KEYS.attack` always throws while carrying: use it next to a pile, where E
+  would pick up another body instead. While carrying: 0.75x walk speed, no attacks or skills. The
+  request is the player's own state (`player.carryingCorpseIds`, bottom first); the host grants
+  each as `corpseViews[].carrierId` (first come; a down carrier drops the stack). Specs: `solo/corpse-carry.spec.ts`, `online/corpse-carry-coop.spec.ts`.
+  Setup: `dropCorpses(x, 1)`, then teleport the player onto the corpse's own spot (feet =
+  `footY + 5`). Dropped corpses often land on a platform edge, so "stand 30 px beside it" flakes.
 
 Running demos/visual checks:
 
@@ -230,6 +257,12 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
   animator method; a missing one throws only on a random branch and looks like a flake.
 - `vfxQueuedBy` reads the probe VFX log. Events leave the queue as `sent` (multiplayer) or
   `discarded` (solo, drained every tick), so it works in both modes.
+- Background tabs: Playwright keeps every page visible (new tab, minimize, removing the
+  anti-throttling launch flags, raw Chrome over CDP: all still `visible`, rAF at full speed).
+  `player.setBackgroundTab(true/false)` emulates Chrome instead (init script): window blur,
+  `document.hidden` + `visibilitychange`, rAF parked, page timers capped at 1/s; worker timers
+  untouched. Online, the engine ticks from a `WorkerInterval` while hidden and the sync timer is
+  always one; solo pauses. Specs: `online/background-host.spec.ts`, `solo/background-tab.spec.ts`.
 - `dropConnection()` closes the app's sockets (init-script tracked) to test reconnect.
 - Budgets in `network-budget.spec.ts` are regression guards. Raise them only deliberately.
   Baseline numbers + optimization backlog: `docs/netcode-optimizations.md` (update after netcode changes).

@@ -336,6 +336,53 @@ export class MapRenderer {
     ctx.restore();
   }
 
+  /**
+   * A floor-4 cage: an iron frame (its top bar is the walkable top) with bars between, filling
+   * exactly its collision box. The zombie cage shows its prisoners behind the bars (drawn per
+   * frame: cages fall).
+   */
+  drawCage(
+    ctx: CanvasRenderingContext2D,
+    box: { x: number; y: number; width: number; height: number },
+    withZombies: boolean,
+  ): void {
+    const frame: number = 6;
+    const x: number = Math.round(box.x);
+    const y: number = Math.round(box.y);
+    const w: number = box.width;
+    const h: number = box.height;
+    ctx.save();
+    ctx.fillStyle = 'rgba(20, 22, 28, 0.55)';
+    ctx.fillRect(x, y, w, h);
+    if (withZombies) {
+      for (let i: number = 0; i < 3; i++) {
+        const cx: number = x + (w * (i + 0.5)) / 3;
+        const headY: number = y + 30 + (i % 2) * 6;
+        ctx.fillStyle = '#3f7a2c';
+        ctx.fillRect(cx - 10, headY + 10, 20, y + h - frame - headY - 10);
+        ctx.fillStyle = '#6abf4b';
+        ctx.beginPath();
+        ctx.arc(cx, headY, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ff4040';
+        ctx.fillRect(cx - 6, headY - 3, 3, 3);
+        ctx.fillRect(cx + 3, headY - 3, 3, 3);
+      }
+    }
+    ctx.fillStyle = '#5a5f68';
+    for (let bx: number = x + 14; bx < x + w - frame; bx += 14) {
+      ctx.fillRect(bx, y, 3, h);
+    }
+    ctx.fillStyle = '#3a3f48';
+    ctx.fillRect(x, y, w, frame);
+    ctx.fillRect(x, y + h - frame, w, frame);
+    ctx.fillRect(x, y, frame, h);
+    ctx.fillRect(x + w - frame, y, frame, h);
+    ctx.fillStyle = '#9aa3ad';
+    ctx.fillRect(x, y, w, 2);
+    ctx.restore();
+  }
+
   /** A prop image placed so its visible art covers exactly the prop's collision box. */
   drawProp(ctx: CanvasRenderingContext2D, prop: Prop): void {
     const img: HTMLImageElement | undefined = this.propImages.get(prop.kind);

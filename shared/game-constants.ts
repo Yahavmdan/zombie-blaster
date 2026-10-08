@@ -153,6 +153,34 @@ export const GAME_CONSTANTS = {
   SPRING_WOBBLE_TICKS: 24, // The lever's jiggle after a pull with too little charge
   SPRING_FLING_WINDOW_TICKS: 10, // A client flings itself only while the synced bounce is this fresh (not on a late join)
   SPRING_CLEAR_PX: 96, // Platforms, ropes and props keep this far from the spring's open side (the lever stands there)
+  PUZZLE_CAGE_FLOOR: 4, // Floor with two hanging cages: drop the empty one under the exit as a step, not the zombie-filled one
+  CAGE_WIDTH_PX: 128, // Both cages are this wide (whole tiles: art == collision box)...
+  CAGE_HEIGHT_PX: 96, // ...and this tall: the landed cage's top is beyond double-jump reach of the exit
+  CAGE_HANG_GAP_PX: 48, // The exit cage hangs this far under the exit (room to stand on it)
+  CAGE_ZOMBIE_TOP_Y: 160, // Top of the zombie cage while it hangs mid-screen from the ceiling
+  CAGE_ZOMBIE_MIN_X: 384, // The zombie cage's left edge lies between this...
+  CAGE_ZOMBIE_MAX_X: 768, // ...and this (mid-screen, between the safe spot and the exit)
+  CAGE_CLEAR_PX: 64, // Platforms (the safe spot too) keep this far from the zombie cage's column: it falls to the ground
+  CAGE_CHAIN_ROW_Y: 112, // The chains run along the ceiling at this height...
+  CAGE_CHAIN_ROW_STEP_PX: 16, // ...one chain this far below the other
+  CAGE_CLEAT_WIDTH_PX: 12, // Each chain is tied to a cleat on a ledge (never the safe spot: no swinging there): this wide...
+  CAGE_CLEAT_HEIGHT_PX: 28, // ...and this tall
+  CAGE_CLEAT_INSET_PX: 40, // Cleat centers sit this far in from their ledge's ends
+  CAGE_CLEAT_HITS: 3, // Swings on a cleat before its chain snaps and the cage falls
+  CAGE_HIT_REACH_PX: 24, // Max gap between an attacking player's box and a cleat for the swing to hit it
+  CAGE_HIT_COOLDOWN_TICKS: 36, // One cleat hit per swing (a held attack swings every 36 ticks)
+  CAGE_ZOMBIES: 6, // Zombies the zombie cage lets loose when it smashes on the ground
+  PUZZLE_PLATE_FLOOR: 5, // Floor whose exit is behind a door that a pressure plate on a far, high ledge holds open
+  PLATE_WIDTH_PX: 96, // The pressure plate is set into its ledge's top: 3 tiles wide
+  PLATE_WEIGHT_NEEDED: 3, // Weight on the plate that holds the exit door open: a lying corpse weighs 1...
+  PLATE_PLAYER_WEIGHT: 3, // ...a player standing on it this much
+  PLATE_STACK_PX: 40, // Corpses piled up to this far above the plate still press on it
+  PLATE_DOOR_TICKS: 20, // Ticks the exit door takes to slide fully open (or shut): only a fully open door lets you out
+  PLATE_DOOR_WIDTH_PX: 56, // The barred door standing on the exit: this wide...
+  PLATE_DOOR_HEIGHT_PX: 72, // ...and this tall (scenery: you walk in front of it)
+  PLATE_KICK_SPEED_X: 8, // A zombie walking over the plate kicks a corpse off it this fast sideways...
+  PLATE_KICK_SPEED_Y: -6, // ...and up (negative = up)
+  PLATE_KICK_COOLDOWN_TICKS: 240, // A zombie kicks at most one corpse this often (one per pass over the plate)
   SAFE_SPOT_HEADROOM_PX: 160, // Players up to this far above the safe spot (jumping on it) still count as resting there
 
   // ─── Zombie Spawning ───────────────────────────
@@ -264,6 +292,14 @@ export const GAME_CONSTANTS = {
   ZOMBIE_CORPSE_DEATH_SCATTER: 0.2, // Random horizontal scatter applied to corpses on death
   ZOMBIE_CORPSE_DIVERSE_CHANCE: 0.45, // Chance a corpse uses a different visual variant
   ZOMBIE_CORPSE_BLOOD_CHANCE: 0.3, // Chance a corpse shows a blood splatter
+  CORPSE_CARRY_RANGE: 50, // Pixels from the player's center to a lying corpse's center to pick it up
+  CORPSE_CARRY_SPEED_MULTIPLIER: 0.75, // Walking speed while carrying corpses overhead
+  CORPSE_CARRY_MAX: 3, // Corpses one player can carry, stacked overhead
+  CORPSE_CARRY_STACK_STEP: 9, // Each carried corpse above the bottom one rides this much higher
+  CORPSE_CARRY_CONFIRM_TICKS: 25, // A guest's pick-up the host hasn't granted by then is given up
+  CORPSE_CARRY_LIFT: 12, // Carried corpse's box bottom sits this far above the carrier's head (its lying body rests on the head)
+  CORPSE_THROW_SPEED_X: 4, // Sideways speed of a dropped corpse, in the carrier's facing direction
+  CORPSE_THROW_SPEED_Y: -3, // Upward toss of a dropped corpse (negative = up)
 
   // ─── Ropes ──────────────────────────────────────
   ROPE_CLIMB_SPEED: 3, // How fast the player moves up/down on a rope
@@ -1618,6 +1654,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   openShop: ['b'],
   openInventory: ['i'],
   revive: ['f'],
+  carry: ['e'],
   quickSlot1: ['shift'],
   quickSlot2: ['insert'],
   quickSlot3: ['home'],

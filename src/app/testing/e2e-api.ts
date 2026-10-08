@@ -37,6 +37,8 @@ export interface E2ePlayerView {
   skillLevels: Record<string, number>;
   gold: number;
   potions: Record<string, number>;
+  /** Corpses this player asked to carry, bottom of the stack first (the host grants each through the corpse's carrierId). */
+  carryingCorpseIds: string[];
 }
 
 export interface E2eRemotePlayerView extends E2ePlayerView {
@@ -73,6 +75,8 @@ export interface E2eCorpseView {
   y: number;
   isGrounded: boolean;
   frozen: boolean;
+  /** Player carrying this corpse overhead, null when it lies in the world. */
+  carrierId: string | null;
   /** Walkable foothold on top of this corpse. */
   footX: number;
   footWidth: number;
@@ -91,7 +95,7 @@ export interface E2eExitPile {
   columnLeft: number;
   columnRight: number;
   centerX: number;
-  /** Ground under the exit. */
+  /** What the pile under the exit stands on: the ground, or a puzzle block standing there (the landed cage). */
   baseY: number;
   /** Highest corpse foothold in the column (baseY when there is none). */
   topY: number;
@@ -246,6 +250,48 @@ export interface E2eSpringView {
   wobbleTicks: number;
 }
 
+/** One floor-4 cage. */
+export interface E2eCageView {
+  /** The cage as drawn now (hanging, falling, landed); null once the zombie cage smashed. */
+  box: { x: number; y: number; width: number; height: number } | null;
+  /** Its collision (while it hangs, and the exit cage once it landed); null while falling. */
+  solid: { x: number; y: number; width: number; height: number } | null;
+  /** The cleat on the safe spot tying its chain. */
+  cleat: { x: number; y: number; width: number; height: number };
+  cleatHits: number;
+  /** Its chain snapped. */
+  cut: boolean;
+  fallTicks: number;
+  landed: boolean;
+}
+
+/** Floor-4 hanging cages (null on other floors). */
+export interface E2eCagePuzzleView {
+  /** The empty cage under the exit: landed, it is a step up to the exit. */
+  exitCage: E2eCageView;
+  /** The cage full of zombies mid-screen: landed, it smashes and lets them loose. */
+  zombieCage: E2eCageView;
+  hitsNeeded: number;
+  zombiesReleased: number;
+}
+
+/** Floor-5 pressure plate and the exit door it holds open (null on other floors). */
+export interface E2ePlateView {
+  /** The plate strip set into its surface's top (feet on `box.y` stand on it). */
+  box: { x: number; y: number; width: number; height: number };
+  /** Weight on it now (a lying corpse 1, a standing player `playerWeight`). */
+  weight: number;
+  needed: number;
+  playerWeight: number;
+  /** The weight holds the door open (it slides open while held). */
+  held: boolean;
+  doorTicks: number;
+  /** Fully open: the exit lets players out. */
+  doorOpen: boolean;
+  /** The barred door standing on the exit. */
+  door: { x: number; y: number; width: number; height: number };
+}
+
 export interface E2eSnapshot {
   at: number;
   role: E2eRole;
@@ -271,6 +317,10 @@ export interface E2eSnapshot {
   puzzle: E2eBoulderPuzzleView | null;
   /** Floor-3 spring: block, lever, charge, countdown and launches (null on other floors). */
   spring: E2eSpringView | null;
+  /** Floor-4 cages: boxes, cleats, hits, falling and landing (null on other floors). */
+  cages: E2eCagePuzzleView | null;
+  /** Floor-5 plate: weight, door (null on other floors). */
+  plate: E2ePlateView | null;
   drops: E2eDropView[];
   /** Ticks until the potion keys work again. */
   potionCooldownTicks: number;

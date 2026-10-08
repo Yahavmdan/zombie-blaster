@@ -14,7 +14,9 @@ import {
   ZombieCorpse,
 } from '@shared/game-entities';
 import { BoulderPuzzleLayout, IGameEngine, Platform } from './engine-types';
-import { keepOutOfWall, leavesThroughOpening } from './boulder-puzzle';
+import { Box, keepOutOfWall, leavesThroughOpening } from './boulder-puzzle';
+import { exitCageGroundBox } from './cage-puzzle';
+import { isDoorOpen } from './plate-puzzle';
 import { PhysicsSystem } from './physics-system';
 import { CombatSystem } from './combat-system';
 import { DropSystem } from './drop-system';
@@ -643,6 +645,8 @@ export class ZombieSystem {
     if (idx === -1) return;
 
     const corpse: ZombieCorpse = this.e.zombieCorpses[idx];
+    // A player snatched it mid-meal: it stays on their head.
+    if (corpse.carrierId !== null) return;
     this.e.zombieSpriteAnimator.removeInstance(corpse.id);
     this.e.zombieCorpses.splice(idx, 1);
   }
@@ -887,15 +891,27 @@ export class ZombieSystem {
       width,
       this.e.puzzleWall(),
     );
-    // Nor inside the spring block at its screen edge (ground spawns).
+    // Nor inside the spring block at its screen edge, or the cage that landed under the exit (ground spawns).
     const spring: Platform | null = this.e.springPuzzle?.spring ?? null;
+    const cage: Box | null = this.e.cages?.exitCage.landed
+      ? exitCageGroundBox(this.e.exitPlatform)
+      : null;
     return {
-      x: plat.y === GAME_CONSTANTS.GROUND_Y ? keepOutOfWall(x, width, spring) : x,
+      x:
+        plat.y === GAME_CONSTANTS.GROUND_Y
+          ? keepOutOfWall(keepOutOfWall(x, width, spring), width, cage)
+          : x,
       y: plat.y - height,
     };
   }
 
-  private spawnZombie(): void {
+  /** Floor-4 zombie cage: a zombie climbs out of the wreck, centered on x, standing on `groundY`. */
+  spawnZombieAt(x: number, groundY: number): void {
+    this.spawnZombie({ x, groundY });
+  }
+
+  /** A new zombie: at a random spawn spot, or (released from a cage) at `at`, never a boss then. */
+  private spawnZombie(at: { x: number; groundY: number } | null = null): void {
     let type: ZombieType = ZombieType.Walker;
     const roll: number = Math.random();
     if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_TANK_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_TANK_ROLL_THRESHOLD) type = ZombieType.Tank;
@@ -905,7 +921,7 @@ export class ZombieSystem {
     const hasBoss: boolean = this.e.zombies.some(
       (z: ZombieState) => !z.isDead && (z.type === ZombieType.DragonBoss || z.type === ZombieType.Boss),
     );
-    if (!hasBoss) {
+    if (!hasBoss && !at) {
       if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_DRAGON_BOSS_MIN_WAVE && this.e.floor % GAME_CONSTANTS.ZOMBIE_DRAGON_BOSS_WAVE_INTERVAL === 0 && Math.random() < 0.02) {
         type = ZombieType.DragonBoss;
       } else if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_BOSS_MIN_WAVE && this.e.floor % GAME_CONSTANTS.ZOMBIE_BOSS_WAVE_INTERVAL === 0 && Math.random() < 0.04) {
@@ -931,7 +947,15 @@ export class ZombieSystem {
     const rolledWidth: number = Math.floor(zDef.widthMin + Math.random() * (zDef.widthMax - zDef.widthMin));
     const rolledHeight: number = Math.floor(zDef.heightMin + Math.random() * (zDef.heightMax - zDef.heightMin));
 
-    const spot: { x: number; y: number } = this.pickSpawnSpot(rolledWidth, rolledHeight);
+    const spot: { x: number; y: number } = at
+      ? {
+          x: Math.min(
+            GAME_CONSTANTS.CANVAS_WIDTH - rolledWidth,
+            Math.max(0, at.x - rolledWidth / 2),
+          ),
+          y: at.groundY - rolledHeight,
+        }
+      : this.pickSpawnSpot(rolledWidth, rolledHeight);
     const x: number = spot.x;
     const y: number = spot.y;
     const nearestSpawnTarget: TargetInfo | null = this.findNearestTarget(x + rolledWidth / 2, y + rolledHeight / 2);
@@ -1013,9 +1037,11 @@ export class ZombieSystem {
         bottom >= exit.y &&
         bottom <= exit.y + exit.height + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
         c.isGrounded;
+      // The floor-5 exit has a door: it lets players out only while it stands fully open.
+      const doorOpen: boolean = !this.e.plate || isDoorOpen(this.e.plate);
 
       const leaves: boolean =
-        puzzle && boulder ? leavesThroughOpening(c, puzzle, boulder) : onExitPlatform;
+        puzzle && boulder ? leavesThroughOpening(c, puzzle, boulder) : onExitPlatform && doorOpen;
       if (leaves) {
         this.e.onFloorComplete?.();
         this.advanceFloor();
@@ -1072,7 +1098,8 @@ export class ZombieSystem {
     this.revalidateGroundedCorpses();
 
     for (const corpse of this.e.zombieCorpses) {
-      if (!corpse.isGrounded) {
+      // A carried corpse rides on its carrier's head (corpse-carry), out of physics.
+      if (!corpse.isGrounded && corpse.carrierId === null) {
         corpse.x += corpse.velocityX;
         corpse.velocityX *= 0.92;
         if (Math.abs(corpse.velocityX) < 0.1) corpse.velocityX = 0;

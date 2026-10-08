@@ -171,6 +171,8 @@ export interface ZombieCorpse {
   fadeTimer: number;
   maxFadeTimer: number;
   showBlood: boolean;
+  /** Player carrying this corpse overhead (the host decides; null = lying in the world). */
+  carrierId: string | null;
 }
 
 export interface ShopItemDefinition {
@@ -219,6 +221,7 @@ export const ACTION_INFO: Record<string, ActionInfo> = {
   openShop: { label: 'Shop', icon: '🛒' },
   openInventory: { label: 'Inventory', icon: '🎒' },
   revive: { label: 'Revive', icon: '💖' },
+  carry: { label: 'Carry Corpse', icon: '🧟' },
   quickSlot1: { label: 'QSlot 1', icon: '❶' },
   quickSlot2: { label: 'QSlot 2', icon: '❷' },
   quickSlot3: { label: 'QSlot 3', icon: '❸' },
@@ -274,4 +277,30 @@ export interface SpringState {
   bounceTicks: number;
   /** Ticks left of the lever's jiggle after a pull with too little charge. */
   wobbleTicks: number;
+}
+
+/** One floor-4 hanging cage: its cleat takes hits until the chain snaps, then it falls. */
+export interface CageState {
+  /** Swings its cleat took; at CAGE_CLEAT_HITS the chain snaps (permanent for the floor). */
+  cleatHits: number;
+  /** Ticks it has been falling since the chain snapped (0 while it hangs). */
+  fallTicks: number;
+  /** True once it hit the ground: the exit cage stands there, the zombie cage smashed open. */
+  landed: boolean;
+}
+
+/** Floor-4 cage puzzle: the host simulates it and sends it with every game-sync. */
+export interface CagePuzzleState {
+  /** The empty cage under the exit: landed, it is a step up to the exit. */
+  exitCage: CageState;
+  /** The cage full of zombies mid-screen: landed, it smashes and lets them loose. */
+  zombieCage: CageState;
+}
+
+/** Floor-5 pressure plate: the host weighs it and sends it with every game-sync. */
+export interface PlateState {
+  /** Weight on the plate (a lying corpse 1, a standing player PLATE_PLAYER_WEIGHT). */
+  weight: number;
+  /** How far the exit door is open: 0 (shut) to PLATE_DOOR_TICKS (open, the exit lets you out). */
+  doorTicks: number;
 }

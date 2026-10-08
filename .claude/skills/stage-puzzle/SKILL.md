@@ -9,7 +9,12 @@ Every floor should feel different. The floor-2 **boulder puzzle** is the referen
 implementation: copy its shape. The floor-3 **spring** (`spring-puzzle.ts`,
 `spring-puzzle-system.ts`) is the second one: a solid moving part, a countdown, a player-affecting effect
 on guests, and state derived from synced corpses. It started as a seesaw; after playtesting the
-user wanted a big spring, a 3-2-1 to get on, 30 corpses and the exit at the very top. The backlog of ideas is **`docs/level-puzzle-ideas.md`** (a
+user wanted a big spring, a 3-2-1 to get on, 30 corpses and the exit at the very top. The floor-4 **hanging cages**
+(`cage-puzzle.ts`, `cage-puzzle-system.ts`) are the third: a choice (follow the chains to the
+right cleat), a solid that falls and lands, and a punishment that spawns zombies. The floor-5 **pressure plate** (`plate-puzzle.ts`,
+`plate-puzzle-system.ts`) is the fourth: no new collision at all (a door that is scenery plus an
+exit gate, a plate drawn inside its ledge), weight derived from synced corpses and players, and
+corpse carrying as the tool. The backlog of ideas is **`docs/level-puzzle-ideas.md`** (a
 checklist). Pick from it, build one, then tick its box and fix its description to match what
 shipped.
 
@@ -102,6 +107,35 @@ Lessons from the spring:
 - **Fixed exit height** on a puzzle floor: override in `repositionExitPlatform`, not in
   `exitPlatformY` (tests use it for normal floors).
 
+## Lessons from the cages
+
+- **No swinging on the safe spot.** Attacks are disabled there (`restsOnSafeSpot`), so a hit
+  target must stand on a regular ledge. The cleats pick the highest ledge with open sky above
+  (`cleatLedge`); 1 seed in 80 has none, so there is a fallback. Measure such odds with a
+  throwaway spec over 2000 seeds before relying on a layout feature.
+- **A falling solid** has no collision while it falls (removed from `platforms`), is solid again
+  where it lands, and `placeCages()` re-derives all of it from state (hanging / falling /
+  landed). Call it from `repositionExitPlatform` when it hangs off the exit.
+- **Landing on things:** what rests in the landing column rides up by the block's height
+  (`yAfterCageLands`), so a corpse pile keeps its shape and ends up on top. The host lifts
+  corpses, zombies, drops and its own player; guests lift themselves on the synced landing.
+- **Spawning from a puzzle:** `ZombieSystem.spawnZombieAt(x, groundY)` (no bosses), so the
+  puzzle system takes `ZombieSystem` as a peer.
+- **`exitPile.baseY`** is the top of any puzzle block standing on the ground under the exit, and
+  the e2e Brain hops onto that block before climbing the pile.
+- **Teleport then land checks:** wait ~500 ms after a teleport; `isGrounded` reads true for a tick.
+
+
+## Lessons from the pressure plate
+
+- **Puzzles without new collision are cheap.** A door drawn on the exit plus a check in
+  `checkFloorCompletion`, and a plate drawn inside its ledge's top: no `puzzlePart`, no geometry
+  report changes, no `repositionExitPlatform` work (the door box is derived from the exit).
+- **Zombie twists get harsh fast.** Zombies chase the player, so they crowd whatever the player
+  works on. The first kick (every 45 ticks, any zombie) stripped the plate in seconds; now only a
+  walking zombie kicks, once per 4 s. Watch failing e2e screenshots: they showed it.
+- **E2e with zombie pressure:** loop until the goal state (`held`), then act at once; don't leave a
+  long window (pile building) between setting a state and using it.
 ## Multiplayer checklist (host authority)
 
 - [ ] The host decides puzzle state, damage and breaks. Guests send nothing new; their

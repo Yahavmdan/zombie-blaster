@@ -5,7 +5,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, VfxEvent } from '@shared/index';
 import { SpecialDropType, SpecialDropDefinition } from '@shared/game-entities';
 import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload, HostMigratedPayload } from '@shared/multiplayer';
-import { ActiveSpecialEffect, BoulderState, SpringState, ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
+import { ActiveSpecialEffect, BoulderState, CagePuzzleState, PlateState, SpringState, ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
 import { AutoPotionChange } from '../../components/shop/shop.component';
@@ -23,6 +23,7 @@ import { QuickSlotService } from '../../services/quick-slot.service';
 import { KeyBindingsService } from '../../services/key-bindings.service';
 import { attachGameControls } from '../../testing/e2e-hooks';
 import { E2eControls } from '../../testing/e2e-api';
+import { WorkerInterval } from '../../engine/worker-interval';
 
 @Component({
   selector: 'app-game',
@@ -45,7 +46,7 @@ export class GameComponent implements OnInit, OnDestroy {
   private readonly keyBindingsService: KeyBindingsService = inject(KeyBindingsService);
   private readonly gameCanvas: Signal<GameCanvasComponent | undefined> = viewChild(GameCanvasComponent);
 
-  private syncTimer: ReturnType<typeof setInterval> | null = null;
+  private syncTimer: WorkerInterval | null = null;
   private detachE2eControls: (() => void) | null = null;
   protected isMultiplayer: boolean = false;
   private isHost: boolean = false;
@@ -149,7 +150,7 @@ export class GameComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.detachE2eControls?.();
     if (this.syncTimer) {
-      clearInterval(this.syncTimer);
+      this.syncTimer.stop();
       this.syncTimer = null;
     }
     if (this.isMultiplayer && this.roomId) {
@@ -161,8 +162,8 @@ export class GameComponent implements OnInit, OnDestroy {
     this.ws.onMessage(ServerMessageType.GameSync)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
-        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed?: number; boulder?: BoulderState | null; spring?: SpringState | null; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] } =
-          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed?: number; boulder?: BoulderState | null; spring?: SpringState | null; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] };
+        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed?: number; boulder?: BoulderState | null; spring?: SpringState | null; cages?: CagePuzzleState | null; plate?: PlateState | null; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] } =
+          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed?: number; boulder?: BoulderState | null; spring?: SpringState | null; cages?: CagePuzzleState | null; plate?: PlateState | null; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] };
 
         this.remotePlayerStates.set(payload.player.id, payload.player);
 
@@ -173,6 +174,8 @@ export class GameComponent implements OnInit, OnDestroy {
           this.gameCanvas()?.syncRemoteFloor(payload.floor);
           this.gameCanvas()?.applyRemoteBoulder(payload.boulder ?? null);
           this.gameCanvas()?.applyRemoteSpring(payload.spring ?? null);
+          this.gameCanvas()?.applyRemoteCages(payload.cages ?? null);
+          this.gameCanvas()?.applyRemotePlate(payload.plate ?? null);
           this.gameCanvas()?.applyRemoteSpecialEffects(payload.activeSpecialEffects ?? []);
           this.gameCanvas()?.applyRemoteProjectiles(payload.spitterProjectiles ?? [], payload.dragonProjectiles ?? []);
           this.floor.set(payload.floor);
@@ -275,7 +278,8 @@ export class GameComponent implements OnInit, OnDestroy {
 
     this.zone.runOutsideAngular((): void => {
       const SYNC_INTERVAL_MS: number = 50;
-      this.syncTimer = setInterval((): void => {
+      // A worker timer keeps the 50 ms pace in a background tab (page timers drop to ~1/s).
+      this.syncTimer = new WorkerInterval(SYNC_INTERVAL_MS, (): void => {
         if (!this.isMultiplayer) return;
         // Don't drain the outbound queues while the socket is down: the snapshot
         // would be dropped and its attacks, revives and effects lost. They go out
@@ -284,7 +288,7 @@ export class GameComponent implements OnInit, OnDestroy {
         const canvas: GameCanvasComponent | undefined = this.gameCanvas();
         if (!canvas) return;
 
-        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null =
+        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null =
           canvas.getStateSnapshot();
         if (!snapshot) return;
 
@@ -293,7 +297,7 @@ export class GameComponent implements OnInit, OnDestroy {
         } else {
           this.ws.send(ClientMessageType.PlayerState, { player: snapshot.player, revives: snapshot.revives, specialDropActivations: snapshot.specialDropActivations, vfxEvents: snapshot.vfxEvents, pullEvents: snapshot.pullEvents });
         }
-      }, SYNC_INTERVAL_MS);
+      });
     });
   }
 
@@ -693,7 +697,7 @@ export class GameComponent implements OnInit, OnDestroy {
 
   backToMenu(): void {
     if (this.syncTimer) {
-      clearInterval(this.syncTimer);
+      this.syncTimer.stop();
       this.syncTimer = null;
     }
     this.gameState.reset();

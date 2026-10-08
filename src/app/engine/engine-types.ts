@@ -7,6 +7,8 @@ import {
 import {
   ActiveSpecialEffect,
   BoulderState,
+  CagePuzzleState,
+  PlateState,
   SpringState,
   DropType,
   PendingSpecialDropConfirm,
@@ -78,9 +80,10 @@ export interface Platform {
   /**
    * A floor-2 puzzle solid, removed when it breaks: the side `wall` (broken by the boulder) or the
    * `gate` holding the boulder on its ledge (broken by players' hits). The floor-3 `spring` is a
-   * solid puzzle part that stays for the whole floor.
+   * solid puzzle part that stays for the whole floor. The floor-4 `cage` (the exit cage: hanging,
+   * then standing on the ground) and `zombie-cage` (while it hangs) go when their chain snaps.
    */
-  puzzlePart?: 'wall' | 'gate' | 'spring';
+  puzzlePart?: 'wall' | 'gate' | 'spring' | 'cage' | 'zombie-cage';
 }
 
 export interface Rope {
@@ -114,6 +117,38 @@ export interface SpringPuzzleLayout {
   spring: Platform;
   /** +1: the spring is at the right screen edge (the lever on its left), -1: at the left edge. */
   side: 1 | -1;
+}
+
+/**
+ * Floor-4 puzzle: two cages hang on chains. The empty exit cage hangs under the exit (derived from
+ * the exit platform, which moves with the party size); the zombie cage hangs mid-screen. Each
+ * chain runs up from a cleat on a ledge, along the ceiling, and down to its cage: hit a
+ * cleat to snap its chain. The exit cage lands under the exit as a solid step; the zombie cage
+ * smashes on the ground and lets its zombies loose.
+ */
+export interface CagePuzzleLayout {
+  /** The zombie cage while it hangs (solid: you can stand on it); it falls straight to the ground. */
+  zombieCage: Platform;
+  /** Surface the two cleats stand on: the highest regular ledge (one with open sky above preferred). */
+  cleatY: number;
+  /** Centers of the cleats tying the exit cage's and the zombie cage's chains (near the ledge's ends). */
+  exitCleatX: number;
+  zombieCleatX: number;
+  /** Ceiling heights the exit cage's and the zombie cage's chains run along. */
+  exitChainY: number;
+  zombieChainY: number;
+}
+
+/**
+ * Floor-5 puzzle: the exit has a barred door that is open only while a pressure plate is weighed
+ * down. The plate is set into the top of a high ledge on the far side from the exit (the ground
+ * there when no ledge fits): carry corpses onto it, or have a friend stand on it.
+ */
+export interface PlatePuzzleLayout {
+  /** Left edge of the plate (PLATE_WIDTH_PX wide). */
+  plateX: number;
+  /** Top of the surface the plate is set into (things standing on the plate have their feet here). */
+  plateY: number;
 }
 export interface BackgroundStar {
   x: number;
@@ -221,7 +256,6 @@ export interface IGameEngine {
   attackHitDelay: number;
   invincibilityFrames: number;
   potionCooldown: number;
-  jumpHeld: boolean;
   jumpBufferTicks: number;
   ropeJumpCooldown: number;
   platformDropTimer: number;
@@ -243,6 +277,12 @@ export interface IGameEngine {
   /** Floor-3 puzzle layout and its spring (null on other floors). */
   springPuzzle: SpringPuzzleLayout | null;
   spring: SpringState | null;
+  /** Floor-4 puzzle layout and its two cages (null on other floors). */
+  cagePuzzle: CagePuzzleLayout | null;
+  cages: CagePuzzleState | null;
+  /** Floor-5 puzzle layout and its plate and exit door (null on other floors). */
+  platePuzzle: PlatePuzzleLayout | null;
+  plate: PlateState | null;
 
   backgroundStars: BackgroundStar[];
 
@@ -283,6 +323,8 @@ export interface IGameEngine {
   dashPhase: DashPhaseState | null;
 
   reviveTargetId: string | null;
+  /** Key the carry prompt shows (the player's binding). */
+  carryKeyLabel: string;
   reviveProgressTicks: number;
 
   activeSpecialEffects: ActiveSpecialEffect[];
@@ -315,6 +357,8 @@ export interface IGameEngine {
   breakPuzzleWall(): void;
   /** The puzzle wall while it still stands, else null. */
   puzzleWall(): Platform | null;
+  /** Puts the floor-4 cages' collision where their state says (hanging, gone while falling, landed). */
+  placeCages(): void;
 
   onPlayerUpdate: ((player: CharacterState) => void) | null;
   onZombiesUpdate: ((zombies: ZombieState[]) => void) | null;

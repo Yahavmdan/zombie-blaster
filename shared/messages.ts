@@ -49,6 +49,7 @@ export interface InputKeys {
   openShop: boolean;
   openInventory: boolean;
   revive: boolean;
+  carry: boolean;
   quickSlot1: boolean;
   quickSlot2: boolean;
   quickSlot3: boolean;
