@@ -230,6 +230,10 @@ export const ACTION_INFO: Record<string, ActionInfo> = {
   quickSlot6: { label: 'QSlot 6', icon: '❻' },
   quickSlot7: { label: 'QSlot 7', icon: '❼' },
   quickSlot8: { label: 'QSlot 8', icon: '❽' },
+  quickSlot9: { label: 'QSlot 9', icon: '❾' },
+  quickSlot10: { label: 'QSlot 10', icon: '❿' },
+  quickSlot11: { label: 'QSlot 11', icon: '⓫' },
+  quickSlot12: { label: 'QSlot 12', icon: '⓬' },
 };
 
 export type QuickSlotAction =
@@ -240,7 +244,11 @@ export type QuickSlotAction =
   | 'quickSlot5'
   | 'quickSlot6'
   | 'quickSlot7'
-  | 'quickSlot8';
+  | 'quickSlot8'
+  | 'quickSlot9'
+  | 'quickSlot10'
+  | 'quickSlot11'
+  | 'quickSlot12';
 
 export const QUICK_SLOT_ACTIONS: QuickSlotAction[] = [
   'quickSlot1',
@@ -251,6 +259,10 @@ export const QUICK_SLOT_ACTIONS: QuickSlotAction[] = [
   'quickSlot6',
   'quickSlot7',
   'quickSlot8',
+  'quickSlot9',
+  'quickSlot10',
+  'quickSlot11',
+  'quickSlot12',
 ];
 
 export const QUICK_SLOT_ACTION_SET: Set<string> = new Set<string>(QUICK_SLOT_ACTIONS);

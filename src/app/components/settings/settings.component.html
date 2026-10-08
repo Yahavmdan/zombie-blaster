@@ -15,11 +15,13 @@
           <div class="kb-header-actions">
             <button
               class="kb-header-btn"
+              data-testid="game-settings-button-inventory"
               [class.kb-header-btn--active]="sidePanelTab() === 'inventory'"
               (click)="toggleSidePanel('inventory')"
             >🎒 Inventory</button>
             <button
               class="kb-header-btn"
+              data-testid="game-settings-button-skills"
               [class.kb-header-btn--active]="sidePanelTab() === 'skills'"
               (click)="toggleSidePanel('skills')"
             >📖 Skills</button>
@@ -31,30 +33,35 @@
           >✕</button>
         </div>
 
+        <ng-template #keyButton let-key>
+          <button
+            class="kb-key"
+            [class.kb-key--bound]="getKeyBinding(key.code)"
+            [class.kb-key--qs]="isQuickSlotBinding(key.code)"
+            [class.kb-key--selected]="selectedKey() === key.code"
+            [style.width.px]="keyWidthPx(key.w)"
+            [title]="getKeyBinding(key.code)?.label ?? key.label"
+            [attr.data-testid]="'game-settings-key-' + key.code"
+            (click)="onKeyClick(key.code)"
+            (contextmenu)="onKeyRightClick($event, key.code)"
+            (dragover)="onKeyDragOver($event)"
+            (drop)="onKeyDrop($event, key.code)"
+          >
+            <span class="kb-key-name">{{ key.label }}</span>
+            @if (getKeyBinding(key.code); as binding) {
+              <span class="kb-key-icon">{{ binding.icon }}</span>
+              <span class="kb-key-action">{{ binding.label }}</span>
+            }
+          </button>
+        </ng-template>
+
         <div class="kb-board">
           <div class="kb-main">
             @for (row of mainRows; track $index) {
               <div class="kb-row">
                 @for (key of row; track $index) {
                   @if (key.code) {
-                    <button
-                      class="kb-key"
-                      [class.kb-key--bound]="getKeyBinding(key.code)"
-                      [class.kb-key--qs]="isQuickSlotBinding(key.code)"
-                      [class.kb-key--selected]="selectedKey() === key.code"
-                      [style.width.px]="keyWidthPx(key.w)"
-                      [title]="getKeyBinding(key.code)?.label ?? key.label"
-                      (click)="onKeyClick(key.code)"
-                      (contextmenu)="onKeyRightClick($event, key.code)"
-                      (dragover)="onKeyDragOver($event)"
-                      (drop)="onKeyDrop($event, key.code)"
-                    >
-                      <span class="kb-key-name">{{ key.label }}</span>
-                      @if (getKeyBinding(key.code); as binding) {
-                        <span class="kb-key-icon">{{ binding.icon }}</span>
-                        <span class="kb-key-action">{{ binding.label }}</span>
-                      }
-                    </button>
+                    <ng-container *ngTemplateOutlet="keyButton; context: { $implicit: key }" />
                   } @else {
                     <span class="kb-gap" [style.width.px]="keyWidthPx(key.w)"></span>
                   }
@@ -68,24 +75,22 @@
               <div class="kb-row">
                 @for (key of row; track $index) {
                   @if (key.code) {
-                    <button
-                      class="kb-key"
-                      [class.kb-key--bound]="getKeyBinding(key.code)"
-                      [class.kb-key--qs]="isQuickSlotBinding(key.code)"
-                      [class.kb-key--selected]="selectedKey() === key.code"
-                      [style.width.px]="keyWidthPx(key.w)"
-                      [title]="getKeyBinding(key.code)?.label ?? key.label"
-                      (click)="onKeyClick(key.code)"
-                      (contextmenu)="onKeyRightClick($event, key.code)"
-                      (dragover)="onKeyDragOver($event)"
-                      (drop)="onKeyDrop($event, key.code)"
-                    >
-                      <span class="kb-key-name">{{ key.label }}</span>
-                      @if (getKeyBinding(key.code); as binding) {
-                        <span class="kb-key-icon">{{ binding.icon }}</span>
-                        <span class="kb-key-action">{{ binding.label }}</span>
-                      }
-                    </button>
+                    <ng-container *ngTemplateOutlet="keyButton; context: { $implicit: key }" />
+                  } @else {
+                    <span class="kb-gap" [style.width.px]="keyWidthPx(key.w)"></span>
+                  }
+                }
+              </div>
+            }
+          </div>
+
+          <div class="kb-mouse">
+            <span class="kb-mouse-title">MOUSE</span>
+            @for (row of mouseRows; track $index) {
+              <div class="kb-row">
+                @for (key of row; track $index) {
+                  @if (key.code) {
+                    <ng-container *ngTemplateOutlet="keyButton; context: { $implicit: key }" />
                   } @else {
                     <span class="kb-gap" [style.width.px]="keyWidthPx(key.w)"></span>
                   }
@@ -97,10 +102,10 @@
 
         <div class="kb-actions-section">
           <div class="kb-actions-hint">
-            @if (selectedKey()) {
-              Select an action to assign to <span class="kb-hint-key">{{ selectedKey() }}</span>
+            @if (selectedKey(); as key) {
+              Select an action to assign to <span class="kb-hint-key">{{ keyName(key) }}</span>
             } @else {
-              Click a key above, then pick an action · Right-click to clear
+              Click a key or mouse button above, then pick an action · Right-click to clear
             }
           </div>
           <div class="kb-actions-grid">
@@ -146,13 +151,14 @@
                   <span class="kb-qs-content-icon">{{ qs.contentIcon }}</span>
                   <span class="kb-qs-content-label">{{ qs.contentLabel }}</span>
                 }
-                <span class="kb-qs-key">{{ qs.keyLabel }}</span>
+                <span class="kb-qs-key" [attr.data-testid]="'game-settings-quickslot-key-' + qs.action">{{ qs.keyLabel }}</span>
                 <div class="kb-qs-actions">
                   @if (rebindingAction() === qs.action) {
-                    <span class="kb-listening">Press…</span>
+                    <span class="kb-listening">Press or click…</span>
                   } @else {
                     <button
                       class="kb-rebind-btn"
+                      [attr.data-testid]="'game-settings-button-rebind-' + qs.action"
                       (click)="startRebind(qs.action)"
                     >Rebind</button>
                   }
@@ -193,6 +199,7 @@
                   <div
                     class="kb-side-item"
                     draggable="true"
+                    [attr.data-testid]="'game-settings-item-' + item.id"
                     (dragstart)="onSidePanelDragStart($event, item)"
                     [title]="item.sublabel"
                   >
@@ -217,6 +224,7 @@
                   <div
                     class="kb-side-item"
                     draggable="true"
+                    [attr.data-testid]="'game-settings-item-' + item.id"
                     (dragstart)="onSidePanelDragStart($event, item)"
                     [title]="item.sublabel"
                   >

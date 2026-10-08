@@ -21,7 +21,7 @@ import { GameAction } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
 import { InputKeys } from '@shared/messages';
-import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
+import { KeyBindingsService, formatKeyName, mouseButtonKey } from '../../services/key-bindings.service';
 import { GameStateService } from '../../services/game-state.service';
 import { QuickSlotService } from '../../services/quick-slot.service';
 import { attachEngineProbe } from '../../testing/e2e-hooks';
@@ -82,13 +82,14 @@ export class GameCanvasComponent implements OnDestroy {
   private currentClassId: CharacterClass | null = null;
   private pendingMultiplayerHost: boolean = false;
   private pendingMultiplayerClient: boolean = false;
-  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
+  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false, quickSlot9: false, quickSlot10: false, quickSlot11: false, quickSlot12: false };
   private readonly boundKeyDown: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyDown(e);
   private readonly boundKeyUp: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyUp(e);
   /** Switching tabs or windows swallows the key-ups: let go of everything so nothing stays held. */
   private readonly boundBlur: () => void = (): void => this.resetAllKeys();
-  private readonly boundMouseDown: () => void = (): void => this.onMouseDown();
-  private readonly boundMouseUp: () => void = (): void => this.onMouseUp();
+  private readonly boundMouseDown: (e: MouseEvent) => void = (e: MouseEvent): void => this.onMouseDown(e);
+  private readonly boundMouseUp: (e: MouseEvent) => void = (e: MouseEvent): void => this.onMouseUp(e);
+  private readonly boundContextMenu: (e: MouseEvent) => void = (e: MouseEvent): void => this.onContextMenu(e);
   private readonly heldQuickSlotActions: Map<string, GameAction> = new Map<string, GameAction>();
 
   constructor() {
@@ -281,8 +282,9 @@ export class GameCanvasComponent implements OnDestroy {
     window.removeEventListener('keydown', this.boundKeyDown);
     window.removeEventListener('keyup', this.boundKeyUp);
     window.removeEventListener('blur', this.boundBlur);
+    window.removeEventListener('mouseup', this.boundMouseUp);
     this.canvasRef().nativeElement.removeEventListener('mousedown', this.boundMouseDown);
-    this.canvasRef().nativeElement.removeEventListener('mouseup', this.boundMouseUp);
+    this.canvasRef().nativeElement.removeEventListener('contextmenu', this.boundContextMenu);
   }
 
   private initEngine(): void {
@@ -343,8 +345,10 @@ export class GameCanvasComponent implements OnDestroy {
     window.addEventListener('keydown', this.boundKeyDown);
     window.addEventListener('keyup', this.boundKeyUp);
     window.addEventListener('blur', this.boundBlur);
+    // Mouse presses count only on the canvas (HUD buttons stay clickable); releases count anywhere so nothing stays held.
+    window.addEventListener('mouseup', this.boundMouseUp);
     this.canvasRef().nativeElement.addEventListener('mousedown', this.boundMouseDown);
-    this.canvasRef().nativeElement.addEventListener('mouseup', this.boundMouseUp);
+    this.canvasRef().nativeElement.addEventListener('contextmenu', this.boundContextMenu);
   }
 
   private onKeyDown(e: KeyboardEvent): void {
@@ -364,25 +368,29 @@ export class GameCanvasComponent implements OnDestroy {
       }
     }
 
-    const action: GameAction | null = this.keyBindingsService.getActionForKey(e.key);
-    if (!action) return;
+    // Bound keys never reach the browser: attacking on Control while moving would otherwise
+    // fire shortcuts (Ctrl+A select-all, Ctrl+D bookmark, Ctrl+P print, ...).
+    if (this.pressBinding(e.key)) e.preventDefault();
+  }
 
-    // Attack is on Control by default, so attacking while moving would otherwise fire
-    // browser shortcuts (Ctrl+A select-all, Ctrl+D bookmark, Ctrl+P print, ...).
-    e.preventDefault();
+  /** Presses whatever action a key or mouse button is bound to. Returns false when it is unbound. */
+  private pressBinding(key: string): boolean {
+    const action: GameAction | null = this.keyBindingsService.getActionForKey(key);
+    if (!action) return false;
 
     if (UI_ACTIONS.has(action)) {
       this.emitUiAction(action);
-      return;
+      return true;
     }
 
     if (QUICK_SLOT_ACTION_SET.has(action)) {
       this.handleQuickSlotKeyDown(action);
-      return;
+      return true;
     }
 
     this.keys[action] = true;
     this.engine?.setKeys({ ...this.keys });
+    return true;
   }
 
   private emitUiAction(action: GameAction): void {
@@ -412,8 +420,13 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onKeyUp(e: KeyboardEvent): void {
-    const action: GameAction | null = this.keyBindingsService.getActionForKey(e.key);
-    if (!action) return;
+    this.releaseBinding(e.key);
+  }
+
+  /** Releases whatever action a key or mouse button is bound to. Returns false when it is unbound. */
+  private releaseBinding(key: string): boolean {
+    const action: GameAction | null = this.keyBindingsService.getActionForKey(key);
+    if (!action) return false;
 
     if (QUICK_SLOT_ACTION_SET.has(action)) {
       const mappedAction: GameAction | undefined = this.heldQuickSlotActions.get(action);
@@ -425,16 +438,23 @@ export class GameCanvasComponent implements OnDestroy {
 
     this.keys[action] = false;
     this.engine?.setKeys({ ...this.keys });
+    return true;
   }
 
-  private onMouseDown(): void {
+  private onMouseDown(e: MouseEvent): void {
     if (this.inputDisabled()) return;
-    this.keys.attack = true;
-    this.engine?.setKeys({ ...this.keys });
+    const key: string | null = mouseButtonKey(e.button);
+    // preventDefault stops middle-click autoscroll on a bound button.
+    if (key && this.pressBinding(key)) e.preventDefault();
   }
 
-  private onMouseUp(): void {
-    this.keys.attack = false;
-    this.engine?.setKeys({ ...this.keys });
+  private onMouseUp(e: MouseEvent): void {
+    const key: string | null = mouseButtonKey(e.button);
+    // preventDefault on a bound side button stops the browser navigating back/forward out of the game.
+    if (key && this.releaseBinding(key)) e.preventDefault();
+  }
+
+  private onContextMenu(e: MouseEvent): void {
+    if (this.keyBindingsService.getActionForKey('mouseright')) e.preventDefault();
   }
 }
