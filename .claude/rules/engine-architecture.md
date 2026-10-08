@@ -27,13 +27,16 @@ The engine is split into focused files under `src/app/engine/`.
 | `spring-puzzle-system.ts` | Floor-3 puzzle simulation: host watches every player's lever pulls, runs the countdown, launches the local player; guests launch themselves from the synced launch |
 | `cage-puzzle.ts` | Floor-4 puzzle rules (pure): hanging / falling / landed cage boxes and collision, cleat box + hits, chain path, fall ticks (host lands, client only falls), what the landing exit cage lifts (`yAfterCageLands`), release spots |
 | `cage-puzzle-system.ts` | Floor-4 puzzle simulation: host counts every player's cleat hits, snaps chains, drops and lands cages (exit cage: lift the pile, zombies, drops and its own player onto it; zombie cage: smash, `spawnZombieAt` x6); guests lift themselves from the synced landing |
+| `plate-puzzle.ts` | Floor-5 puzzle rules (pure): plate box, what presses on it (lying corpses, standing players) and its weight, open/shut changes, door slide + door box, zombie kicks |
+| `plate-puzzle-system.ts` | Floor-5 puzzle simulation: host weighs the plate from the corpses and every player, slides the exit door, lets walking zombies kick corpses off; clients slide the door from the synced weight |
 | `boulder-puzzle-system.ts` | Floor-2 puzzle simulation: host counts gate hits (all players), rolls the boulder, crushes, breaks the wall; clients extrapolate the synced roll |
 | `magnet-pull.ts` | Monster-magnet drag (host-simulated, synced as `ZombieState.magnetPull`) |
-| `corpse-carry.ts` | Corpse carrying rules (pure): what is in reach, holding overhead, tossing, host grants/releases (`assignCarriers`) |
-| `corpse-carry-system.ts` | Carry key (pick up / toss), host grants every player's request, every client holds carried corpses on their carriers; guests hold their own pick-up while the host answers |
+| `corpse-carry.ts` | Corpse carrying rules (pure): what is in reach, a stack of up to `CORPSE_CARRY_MAX` overhead, tossing the stack so it lands as a pile, host grants/releases (`assignCarriers`) |
+| `corpse-carry-system.ts` | Carry key (pick up one more / toss the stack; attack also tosses), host grants every player's requests, every client holds carried corpses on their carriers; guests hold their own pick-ups while the host answers |
 | `corpse-surface.ts` | Walkable surface of a corpse (the same for every corpse, the exit pile included) |
 | `safe-spot.ts` | `restsOnSafeSpot`: who rests on the floor's safe spot (zombies can't target/hit/land; no attacking from it) |
 | `solid-blocks.ts` | Side collision with solid props (players and zombies) |
+| `worker-interval.ts` | `WorkerInterval`: a timer that keeps its pace in background tabs (online engine ticks while hidden, game-sync send loop) |
 | `sprite-effect-system.ts` | Sprite-sheet effects (`EFFECT_CONFIGS`), standalone |
 | `skill-animations.ts` | `SKILL_ANIMATIONS` particle definitions per skill |
 | `particle-types.ts` | `Particle`, `ParticleShape`, `FadeMode` |
@@ -75,6 +78,12 @@ The engine is split into focused files under `src/app/engine/`.
   where their collision is in the geometry report. Chains are per-frame, non-walkable art. Cleats
   stand on the highest regular ledge (open sky preferred): attacks are off on the safe spot.
   Ground spawns are kept out of the landed cage.
+- Floor 5 is the pressure plate: a barred door stands on the exit (scenery drawn per frame, not
+  collision) and the floor completes only while it is fully open (`checkFloorCompletion`). The
+  plate is a strip drawn inside the top of the highest regular ledge on the far half from the exit
+  (the ground there when none fits), so it changes no collision. Props keep clear of it. Its
+  weight comes from the synced corpses and players' positions; the host sends it with the door in
+  `plate`.
 
 ## Dependency rules
 
@@ -90,6 +99,7 @@ ZombieSystem     -> Physics, Combat, Projectile, Drop
 BoulderPuzzleSystem -> Combat, Vfx
 SpringPuzzleSystem  -> Vfx
 CagePuzzleSystem    -> Vfx, Zombie
+PlatePuzzleSystem   -> Vfx
 CorpseCarrySystem   -> standalone
 RenderSystem     -> reads state only (no system deps)
 ```

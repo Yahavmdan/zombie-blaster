@@ -16,7 +16,7 @@ import {
   isDevMode,
 } from '@angular/core';
 import { CharacterClass, CharacterState, SKILLS, SkillDefinition, SkillType, VfxEvent } from '@shared/index';
-import { BoulderState, CagePuzzleState, DropType, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
+import { BoulderState, CagePuzzleState, DropType, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
@@ -85,6 +85,8 @@ export class GameCanvasComponent implements OnDestroy {
   private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false };
   private readonly boundKeyDown: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyDown(e);
   private readonly boundKeyUp: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyUp(e);
+  /** Switching tabs or windows swallows the key-ups: let go of everything so nothing stays held. */
+  private readonly boundBlur: () => void = (): void => this.resetAllKeys();
   private readonly boundMouseDown: () => void = (): void => this.onMouseDown();
   private readonly boundMouseUp: () => void = (): void => this.onMouseUp();
   private readonly heldQuickSlotActions: Map<string, GameAction> = new Map<string, GameAction>();
@@ -201,7 +203,7 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     return this.engine?.getStateSnapshot() ?? null;
   }
 
@@ -227,6 +229,10 @@ export class GameCanvasComponent implements OnDestroy {
 
   applyRemoteCages(state: CagePuzzleState | null): void {
     this.engine?.applyRemoteCages(state);
+  }
+
+  applyRemotePlate(state: PlateState | null): void {
+    this.engine?.applyRemotePlate(state);
   }
 
   syncRemoteFloor(floor: number): void {
@@ -274,6 +280,7 @@ export class GameCanvasComponent implements OnDestroy {
     this.detachE2eProbe?.();
     window.removeEventListener('keydown', this.boundKeyDown);
     window.removeEventListener('keyup', this.boundKeyUp);
+    window.removeEventListener('blur', this.boundBlur);
     this.canvasRef().nativeElement.removeEventListener('mousedown', this.boundMouseDown);
     this.canvasRef().nativeElement.removeEventListener('mouseup', this.boundMouseUp);
   }
@@ -335,6 +342,7 @@ export class GameCanvasComponent implements OnDestroy {
   private bindInput(): void {
     window.addEventListener('keydown', this.boundKeyDown);
     window.addEventListener('keyup', this.boundKeyUp);
+    window.addEventListener('blur', this.boundBlur);
     this.canvasRef().nativeElement.addEventListener('mousedown', this.boundMouseDown);
     this.canvasRef().nativeElement.addEventListener('mouseup', this.boundMouseUp);
   }

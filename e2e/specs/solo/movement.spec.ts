@@ -156,13 +156,110 @@ test.describe('movement and physics', { tag: '@solo' }, (): void => {
       timeoutMs: 2_000,
     });
     await player.hold(KEYS.right);
+    // Let go of jump at the apex: still holding it on landing would hop again.
+    await player.probe.waitFor('apex', (s: E2eSnapshot): boolean => s.player!.velocityY >= 0, {
+      timeoutMs: 2_000,
+    });
+    await player.release(KEYS.jump);
     await player.probe.waitFor('landed', (s: E2eSnapshot): boolean => s.player!.isGrounded, {
       timeoutMs: 3_000,
     });
     await player.release(KEYS.right);
-    await player.release(KEYS.jump);
     const end: E2eSnapshot = await player.probe.state();
     expect(end.player!.x - start.player!.x, 'steered sideways in the air').toBeGreaterThan(40);
+  });
+
+  /** Teleports onto open ground with no rope in grab range and waits for the feet to land. */
+  async function standOnOpenGround(): Promise<void> {
+    const s0: E2eSnapshot = await player.probe.state();
+    const ropes: { x: number }[] = s0.level.ropes;
+    let x: number = 120;
+    while (ropes.some((r: { x: number }): boolean => Math.abs(r.x - (x + WORLD.playerWidth / 2)) < 80)) {
+      x += 40;
+    }
+    await player.probe.teleport(x, WORLD.groundY - WORLD.playerHeight - 2);
+    await player.probe.waitFor(
+      'standing on open ground',
+      (s: E2eSnapshot): boolean =>
+        s.player!.isGrounded && s.player!.velocityY === 0 && !s.player!.isClimbing,
+      { timeoutMs: 2_000 },
+    );
+  }
+
+  /**
+   * Watches `ms` and counts jumps. A held-jump hop rests on the ground for one tick only, too
+   * short to poll, so count each switch from standing/falling to rising instead.
+   */
+  async function takeoffsOver(ms: number): Promise<number> {
+    let takeoffs: number = 0;
+    let wasRising: boolean = (await player.probe.state()).player!.velocityY < 0;
+    const end: number = Date.now() + ms;
+    while (Date.now() < end) {
+      const rising: boolean = (await player.probe.state()).player!.velocityY < 0;
+      if (!wasRising && rising) takeoffs++;
+      wasRising = rising;
+      await player.wait(20);
+    }
+    return takeoffs;
+  }
+
+  test('up (W) does not jump: only the jump key does', async (): Promise<void> => {
+    await standOnOpenGround();
+    await player.hold(KEYS.up);
+    const takeoffs: number = await takeoffsOver(800);
+    await player.release(KEYS.up);
+    expect(takeoffs, 'holding W on open ground never leaves it').toBe(0);
+  });
+
+  test('holding jump keeps jumping, also while up is held', async (): Promise<void> => {
+    await standOnOpenGround();
+    await player.hold(KEYS.jump);
+    const alone: number = await takeoffsOver(2_500);
+    await player.hold(KEYS.up);
+    const withUp: number = await takeoffsOver(2_500);
+    await player.release(KEYS.up);
+    await player.release(KEYS.jump);
+    expect(alone, 'held Space hops again on every landing').toBeGreaterThanOrEqual(2);
+    expect(withUp, 'W held with Space does not cancel the jump').toBeGreaterThanOrEqual(2);
+
+    await player.probe.waitFor('landed', (s: E2eSnapshot): boolean => s.player!.isGrounded, {
+      timeoutMs: 3_000,
+    });
+    await player.hold(KEYS.up);
+    await player.wait(100);
+    await player.press(KEYS.jump, 100);
+    await player.probe.waitFor(
+      'Space jumps while W is already held',
+      (s: E2eSnapshot): boolean => !s.player!.isGrounded,
+      { timeoutMs: 1_000 },
+    );
+    await player.release(KEYS.up);
+  });
+
+  test('up (W) climbs a ladder straight from the floor', async (): Promise<void> => {
+    const s0: E2eSnapshot = await goToFloorWhere(
+      player,
+      'a rope',
+      (s: E2eSnapshot): boolean => s.level.ropes.some((r: { topY: number; bottomY: number }): boolean => r.bottomY - r.topY >= 90),
+    );
+    const rope: { x: number; topY: number; bottomY: number } = s0.level.ropes.find(
+      (r: { topY: number; bottomY: number }): boolean => r.bottomY - r.topY >= 90,
+    )!;
+    await player.probe.teleport(rope.x - WORLD.playerWidth / 2, rope.bottomY - WORLD.playerHeight - 2);
+    await player.probe.waitFor(
+      'standing at the foot of the ladder',
+      (s: E2eSnapshot): boolean => s.player!.isGrounded && s.player!.velocityY === 0,
+      { timeoutMs: 2_000 },
+    );
+    const before: E2eSnapshot = await player.probe.state();
+    await player.hold(KEYS.up);
+    await player.probe.waitFor('climbing', (s: E2eSnapshot): boolean => s.player!.isClimbing, {
+      timeoutMs: 2_000,
+    });
+    await player.wait(300);
+    await player.release(KEYS.up);
+    const after: E2eSnapshot = await player.probe.state();
+    expect(after.player!.y, 'climbed up the ladder').toBeLessThan(before.player!.y - 10);
   });
 
   test('ropes: turn while climbing, jump alone keeps you on, direction + jump lets go', async (): Promise<void> => {

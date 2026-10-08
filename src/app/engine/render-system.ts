@@ -14,6 +14,7 @@ import {
   ActiveSpecialEffect,
   BoulderState,
   CagePuzzleState,
+  PlateState,
   CageState,
   DropType,
   SpringState,
@@ -32,7 +33,7 @@ import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
 import { ZombieSpriteAnchor } from './zombie-sprite-animator';
 import { MagnetPull, ZombieCorpse } from '@shared/game-entities';
 import { magnetPullProgress } from './magnet-pull';
-import { carryableCorpse } from './corpse-carry';
+import { carriedIds, carryableCorpse } from './corpse-carry';
 import {
   Box,
   BoulderPath,
@@ -61,9 +62,11 @@ import {
   cleatBox,
   isCut,
 } from './cage-puzzle';
+import { PLATE_FLOOR_HINT, doorBox, isHeld, plateBox } from './plate-puzzle';
 import {
   BoulderPuzzleLayout,
   CagePuzzleLayout,
+  PlatePuzzleLayout,
   SpringPuzzleLayout,
   DashPhaseState,
   DropNotification,
@@ -120,6 +123,7 @@ export class RenderSystem {
     this.renderBoulderPuzzle(ctx);
     this.renderSpringPuzzle(ctx);
     this.renderCages(ctx);
+    this.renderPlate(ctx);
     this.renderZombies(ctx);
     this.renderHitMarks(ctx);
     this.renderDragonProjectiles(ctx);
@@ -899,7 +903,7 @@ export class RenderSystem {
 
   /** A corpse on someone's head (granted, or the local player's pick-up awaiting the host). */
   private isCarried(corpse: ZombieCorpse): boolean {
-    return corpse.carrierId !== null || corpse.id === this.e.player?.carryingCorpseId;
+    return corpse.carrierId !== null || (!!this.e.player && carriedIds(this.e.player).includes(corpse.id));
   }
 
   /** Lying corpses, drawn under the zombies. Carried ones are drawn with the players. */
@@ -911,15 +915,25 @@ export class RenderSystem {
     this.drawCorpses(ctx, this.e.zombieCorpses.filter((c: ZombieCorpse): boolean => this.isCarried(c)));
   }
 
-  /** "[E] Carry" over the corpse the carry key would pick up. */
+  /**
+   * What the carry key does next: "[E] Carry" over the corpse it would pick up (with the stack
+   * count once carrying), or "[E] Throw" over the stack when nothing more can be picked up.
+   */
   private renderCarryPrompt(ctx: CanvasRenderingContext2D): void {
     const p: CharacterState | null = this.e.player;
-    if (!p || p.isDead || p.isDown || p.carryingCorpseId) return;
-    const corpse: ZombieCorpse | null = carryableCorpse(p, this.e.zombieCorpses);
-    if (!corpse) return;
-    const cx: number = corpse.x + corpse.width / 2;
-    const y: number = corpse.y + corpse.height - 34;
-    const label: string = `[${this.e.carryKeyLabel}] Carry`;
+    if (!p || p.isDead || p.isDown) return;
+    const ids: string[] = carriedIds(p);
+    const next: ZombieCorpse | null =
+      ids.length < GAME_CONSTANTS.CORPSE_CARRY_MAX ? carryableCorpse(p, this.e.zombieCorpses) : null;
+    const stackTop: ZombieCorpse | undefined = this.e.zombieCorpses.find(
+      (c: ZombieCorpse): boolean => c.id === ids[ids.length - 1],
+    );
+    const anchor: ZombieCorpse | undefined = next ?? stackTop;
+    if (!anchor) return;
+    const count: string = ids.length > 0 ? ` (${ids.length}/${GAME_CONSTANTS.CORPSE_CARRY_MAX})` : '';
+    const label: string = `[${this.e.carryKeyLabel}] ${next ? `Carry${count}` : 'Throw'}`;
+    const cx: number = anchor.x + anchor.width / 2;
+    const y: number = anchor.y + anchor.height - 34;
     ctx.save();
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
@@ -1709,7 +1723,9 @@ export class RenderSystem {
         ? SPRING_FLOOR_HINT
         : this.e.cagePuzzle
           ? CAGE_FLOOR_HINT
-          : floorHint(this.e.boulderPuzzle);
+          : this.e.platePuzzle
+            ? PLATE_FLOOR_HINT
+            : floorHint(this.e.boulderPuzzle);
       ctx.fillText(hint, GAME_CONSTANTS.CANVAS_WIDTH / 2, cy + 42);
 
       const lineWidth: number = 200;
@@ -1760,16 +1776,21 @@ export class RenderSystem {
       return;
     }
 
+    // On the plate floor a barred door stands on the exit: the sign goes over it.
+    const plate: PlateState | null = this.e.plate;
+    if (plate) this.renderExitDoor(ctx, doorBox(exit), plate);
+    const signY: number = plate ? doorBox(exit).y : exit.y;
+
     // No hints about how to get up here: players work out that the dead pile up under it.
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'center';
     ctx.globalAlpha = pulse;
-    ctx.fillText('EXIT', exit.x + exit.width / 2, exit.y - 8);
+    ctx.fillText('EXIT', exit.x + exit.width / 2, signY - 8);
 
     const arrowCount: number = 3;
     for (let i: number = 0; i < arrowCount; i++) {
-      const arrowY: number = exit.y - 25 - i * 16 + Math.sin(t * 3 + i) * 4;
+      const arrowY: number = signY - 25 - i * 16 + Math.sin(t * 3 + i) * 4;
       const arrowAlpha: number = (1 - i / arrowCount) * pulse;
       ctx.globalAlpha = arrowAlpha;
       ctx.fillStyle = '#44ddff';
@@ -2059,6 +2080,76 @@ export class RenderSystem {
         }
       }
       this.renderCleat(ctx, cleatBox(puzzle, id), cage);
+    }
+    ctx.restore();
+  }
+
+  /**
+   * The floor-5 exit door (scenery, nothing to stand on): a dark doorway in a stone frame whose
+   * bars slide up into the lintel as it opens. Fully open, the doorway glows.
+   */
+  private renderExitDoor(ctx: CanvasRenderingContext2D, door: Box, plate: PlateState): void {
+    const open: number = plate.doorTicks / GAME_CONSTANTS.PLATE_DOOR_TICKS;
+    const post: number = 6;
+    const inner: Box = {
+      x: door.x + post,
+      y: door.y + post,
+      width: door.width - 2 * post,
+      height: door.height - post,
+    };
+    ctx.save();
+    ctx.fillStyle = open >= 1 ? 'rgba(68, 221, 255, 0.35)' : '#101018';
+    ctx.fillRect(inner.x, inner.y, inner.width, inner.height);
+    ctx.fillStyle = '#5a5f68';
+    ctx.fillRect(door.x, door.y, post, door.height);
+    ctx.fillRect(door.x + door.width - post, door.y, post, door.height);
+    ctx.fillRect(door.x, door.y, door.width, post);
+    const barsBottom: number = inner.y + inner.height * (1 - open);
+    if (barsBottom > inner.y) {
+      ctx.strokeStyle = '#9aa3ad';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let x: number = inner.x + 5; x < inner.x + inner.width; x += 9) {
+        ctx.moveTo(x, inner.y);
+        ctx.lineTo(x, barsBottom);
+      }
+      ctx.moveTo(inner.x, barsBottom - 3);
+      ctx.lineTo(inner.x + inner.width, barsBottom - 3);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * The floor-5 pressure plate, set into the top of its ledge (inside its collision box), pressed
+   * down and green while it holds the door open. Lamps over it count the weight on it.
+   */
+  private renderPlate(ctx: CanvasRenderingContext2D): void {
+    const puzzle: PlatePuzzleLayout | null = this.e.platePuzzle;
+    const plate: PlateState | null = this.e.plate;
+    if (!puzzle || !plate) return;
+    const box: Box = plateBox(puzzle);
+    const held: boolean = isHeld(plate);
+    const sink: number = held ? 3 : 0;
+    ctx.save();
+    ctx.fillStyle = '#2a2a30';
+    ctx.fillRect(box.x - 2, box.y, box.width + 4, box.height);
+    ctx.fillStyle = held ? '#4caf50' : '#c0392b';
+    ctx.fillRect(box.x, box.y + sink, box.width, box.height - sink);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.fillRect(box.x, box.y + sink, box.width, 1);
+    const needed: number = GAME_CONSTANTS.PLATE_WEIGHT_NEEDED;
+    const lit: number = Math.min(needed, plate.weight);
+    const gap: number = 18;
+    const lampsLeft: number = box.x + box.width / 2 - ((needed - 1) * gap) / 2;
+    for (let i: number = 0; i < needed; i++) {
+      ctx.beginPath();
+      ctx.arc(lampsLeft + i * gap, box.y - 58, 5, 0, Math.PI * 2);
+      ctx.fillStyle = i < lit ? (held ? '#7CFC8A' : '#ffd166') : 'rgba(40, 40, 48, 0.8)';
+      ctx.fill();
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
     ctx.restore();
   }

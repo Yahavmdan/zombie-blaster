@@ -14,6 +14,7 @@ import {
   ActiveSpecialEffect,
   BoulderState,
   CagePuzzleState,
+  PlateState,
   CageState,
   SpringState,
   DropType,
@@ -34,6 +35,7 @@ import {
   BackgroundStar,
   BoulderPuzzleLayout,
   CagePuzzleLayout,
+  PlatePuzzleLayout,
   SpringPuzzleLayout,
   DamageNumber,
   DragonImpact,
@@ -60,6 +62,8 @@ import { BoulderPuzzleSystem } from './boulder-puzzle-system';
 import { Box, boulderPath, gateBox, gateBroken } from './boulder-puzzle';
 import { SpringPuzzleSystem } from './spring-puzzle-system';
 import { CagePuzzleSystem } from './cage-puzzle-system';
+import { PlatePuzzleSystem } from './plate-puzzle-system';
+import { PLATE_MAX_WEIGHT, newPlateState } from './plate-puzzle';
 import {
   CAGE_IDS,
   CAGE_MAX_FALL_TICKS,
@@ -74,12 +78,15 @@ import { pullZombiesToward } from './magnet-pull';
 import { exitPlatformY, generateLevel, GROUND_PLATFORM, LevelLayout, Prop } from './level-generator';
 import { RenderSystem } from './render-system';
 import { restsOnSafeSpot } from './safe-spot';
+import { WorkerInterval } from './worker-interval';
 
 export type { Particle };
 export { ParticleShape, FadeMode };
 
 const INTERPOLATION_TICKS: number = 3;
 const MAX_EXTRAPOLATION_TICKS: number = 2;
+/** Most time one frame catches up on (~12 ticks): a long stall resumes instead of replaying every tick at once. */
+const MAX_CATCH_UP_MS: number = 250;
 
 export type {
   DamageNumber,
@@ -94,6 +101,7 @@ export class GameEngine implements IGameEngine {
   private animationFrameId: number = 0;
   private lastTimestamp: number = 0;
   private accumulator: number = 0;
+  private backgroundTicker: WorkerInterval | null = null;
   readonly fixedDt: number = 1000 / GAME_CONSTANTS.TICK_RATE;
 
   player: CharacterState | null = null;
@@ -118,7 +126,6 @@ export class GameEngine implements IGameEngine {
   attackHitDelay: number = 0;
   invincibilityFrames: number = 0;
   potionCooldown: number = 0;
-  jumpHeld: boolean = false;
   jumpBufferTicks: number = 0;
   ropeJumpCooldown: number = 0;
   platformDropTimer: number = 0;
@@ -140,6 +147,8 @@ export class GameEngine implements IGameEngine {
   spring: SpringState | null = null;
   cagePuzzle: CagePuzzleLayout | null = null;
   cages: CagePuzzleState | null = null;
+  platePuzzle: PlatePuzzleLayout | null = null;
+  plate: PlateState | null = null;
 
   backgroundStars: BackgroundStar[] = [];
 
@@ -231,6 +240,7 @@ export class GameEngine implements IGameEngine {
   private readonly boulderPuzzleSystem: BoulderPuzzleSystem;
   private readonly springPuzzleSystem: SpringPuzzleSystem;
   private readonly cagePuzzleSystem: CagePuzzleSystem;
+  private readonly platePuzzleSystem: PlatePuzzleSystem;
   private readonly corpseCarrySystem: CorpseCarrySystem;
   private readonly renderSystem: RenderSystem;
 
@@ -248,6 +258,7 @@ export class GameEngine implements IGameEngine {
     this.boulderPuzzleSystem = new BoulderPuzzleSystem(this, this.combatSystem, this.vfxSystem);
     this.springPuzzleSystem = new SpringPuzzleSystem(this, this.vfxSystem);
     this.cagePuzzleSystem = new CagePuzzleSystem(this, this.vfxSystem, this.zombieSystem);
+    this.platePuzzleSystem = new PlatePuzzleSystem(this, this.vfxSystem);
     this.corpseCarrySystem = new CorpseCarrySystem(this);
     this.renderSystem = new RenderSystem(this);
 
@@ -286,6 +297,8 @@ export class GameEngine implements IGameEngine {
     this.spring = this.springPuzzle ? { launches: 0, countdownTicks: 0, bounceTicks: 0, wobbleTicks: 0 } : null;
     this.cagePuzzle = this.level.cagePuzzle ?? null;
     this.cages = this.cagePuzzle ? newCageState() : null;
+    this.platePuzzle = this.level.platePuzzle ?? null;
+    this.plate = this.platePuzzle ? newPlateState() : null;
     this.platforms = [
       { ...GROUND_PLATFORM },
       ...this.level.platforms.map((p: Platform): Platform => ({ ...p })),
@@ -437,6 +450,8 @@ export class GameEngine implements IGameEngine {
     this.doubleJumpAnimTicks = 0;
     this.zombieSystem.startFloor();
     this.lastTimestamp = performance.now();
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+    this.onVisibilityChange();
     this.loop(this.lastTimestamp);
   }
 
@@ -445,7 +460,24 @@ export class GameEngine implements IGameEngine {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = 0;
     }
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    this.backgroundTicker?.stop();
+    this.backgroundTicker = null;
   }
+
+  /**
+   * A background tab gets no animation frames. Online, the world must not stop for the others
+   * (the host runs it), so a worker timer ticks the game while the tab is hidden. Solo pauses.
+   */
+  private readonly onVisibilityChange = (): void => {
+    const online: boolean = this.isMultiplayerHost || this.isMultiplayerClient;
+    if (document.hidden && online && !this.backgroundTicker) {
+      this.backgroundTicker = new WorkerInterval(this.fixedDt, (): void => this.advance(performance.now()));
+    } else if (!document.hidden && this.backgroundTicker) {
+      this.backgroundTicker.stop();
+      this.backgroundTicker = null;
+    }
+  };
 
   setFloor(floor: number): void {
     for (const z of this.zombies) {
@@ -461,9 +493,7 @@ export class GameEngine implements IGameEngine {
   }
 
   setKeys(keys: InputKeys): void {
-    const jumpNow: boolean = keys.jump || keys.up;
-    const jumpBefore: boolean = this.keys.jump || this.keys.up;
-    if (jumpNow && !jumpBefore) {
+    if (keys.jump && !this.keys.jump) {
       this.jumpBufferTicks = GAME_CONSTANTS.JUMP_BUFFER_TICKS;
     }
     this.keys = keys;
@@ -516,17 +546,21 @@ export class GameEngine implements IGameEngine {
   }
 
   private loop(timestamp: number): void {
-    const dt: number = timestamp - this.lastTimestamp;
-    this.lastTimestamp = timestamp;
+    this.advance(timestamp);
+    this.renderSystem.render();
+    this.animationFrameId = requestAnimationFrame((t: number) => this.loop(t));
+  }
+
+  /** Runs the fixed ticks due by `now` (frame time or the background worker's tick). */
+  private advance(now: number): void {
+    const dt: number = Math.min(Math.max(now - this.lastTimestamp, 0), MAX_CATCH_UP_MS);
+    this.lastTimestamp = now;
     this.accumulator += dt;
 
     while (this.accumulator >= this.fixedDt) {
       this.update();
       this.accumulator -= this.fixedDt;
     }
-
-    this.renderSystem.render();
-    this.animationFrameId = requestAnimationFrame((t: number) => this.loop(t));
   }
 
   private update(): void {
@@ -566,6 +600,7 @@ export class GameEngine implements IGameEngine {
       this.boulderPuzzleSystem.update();
       this.springPuzzleSystem.update();
       this.cagePuzzleSystem.update();
+      this.platePuzzleSystem.update();
       this.projectileSystem.updateDragonProjectiles();
       this.projectileSystem.updateSpitterProjectiles();
       this.projectileSystem.updatePoisonEffect();
@@ -575,6 +610,7 @@ export class GameEngine implements IGameEngine {
       this.boulderPuzzleSystem.tickClient();
       this.springPuzzleSystem.tickClient();
       this.cagePuzzleSystem.tickClient();
+      this.platePuzzleSystem.tickClient();
       this.projectileSystem.tickClientProjectileVisuals();
       this.projectileSystem.updatePoisonEffect();
       if (this.floorTransitionTimer > 0) this.floorTransitionTimer--;
@@ -817,9 +853,8 @@ export class GameEngine implements IGameEngine {
 
     if (this.playerStunTicks > 0) return;
 
-    this.corpseCarrySystem.handleInput();
-    // Hands full: no attacks or skills while carrying a corpse.
-    if (this.player.carryingCorpseId) return;
+    // Hands full: no attacks or skills while carrying corpses (attack throws them instead).
+    if (this.corpseCarrySystem.handleInput()) return;
 
     // Weapons down on the safe spot: zombies can't reach you there, so you can't hit them either.
     const resting: boolean = this.isInSafeSpot(this.player.x, this.player.y);
@@ -844,7 +879,7 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     if (!this.player) return null;
     const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
@@ -869,6 +904,7 @@ export class GameEngine implements IGameEngine {
       cages: this.cages
         ? { exitCage: { ...this.cages.exitCage }, zombieCage: { ...this.cages.zombieCage } }
         : null,
+      plate: this.plate ? { ...this.plate } : null,
       attacks,
       revives,
       specialDropActivations,
@@ -1067,6 +1103,17 @@ export class GameEngine implements IGameEngine {
     this.placeCages();
   }
 
+  /** Clients follow the host's plate: weight and door clamped (the door then slides on its own). */
+  applyRemotePlate(state: PlateState | null): void {
+    if (!this.isMultiplayerClient || !this.plate || !state) return;
+    if (!Number.isFinite(state.weight) || !Number.isFinite(state.doorTicks)) return;
+    this.plate.weight = Math.min(PLATE_MAX_WEIGHT, Math.max(0, Math.round(state.weight)));
+    this.plate.doorTicks = Math.min(
+      GAME_CONSTANTS.PLATE_DOOR_TICKS,
+      Math.max(0, Math.round(state.doorTicks)),
+    );
+  }
+
   applyRemoteProjectiles(spitterProjectiles: SpitterProjectile[], dragonProjectiles: DragonProjectile[]): void {
     if (!this.isMultiplayerClient) return;
     this.spitterProjectiles = spitterProjectiles;
@@ -1143,6 +1190,12 @@ export class GameEngine implements IGameEngine {
           break;
         case VfxEventType.CageSmash:
           this.vfxSystem.spawnCageSmash(evt.x, evt.y);
+          break;
+        case VfxEventType.DoorOpen:
+          this.vfxSystem.spawnDoorOpen(evt.x, evt.y);
+          break;
+        case VfxEventType.DoorShut:
+          this.vfxSystem.spawnDoorShut(evt.x, evt.y);
           break;
       }
       // Other players' effects render a bit softer so your own read first.

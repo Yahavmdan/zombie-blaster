@@ -8,7 +8,7 @@ import {
   VfxEvent,
   VfxEventType,
 } from '@shared/index';
-import { CagePuzzleState, SpringState, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
+import { CagePuzzleState, PlateState, SpringState, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import {
   BoulderPuzzleLayout,
   CagePuzzleLayout,
@@ -16,11 +16,13 @@ import {
   EntityInterpolation,
   IGameEngine,
   Platform,
+  PlatePuzzleLayout,
   SpringPuzzleLayout,
 } from './engine-types';
 import { BoulderPuzzleSystem } from './boulder-puzzle-system';
 import { SpringPuzzleSystem } from './spring-puzzle-system';
 import { CagePuzzleSystem } from './cage-puzzle-system';
+import { PlatePuzzleSystem } from './plate-puzzle-system';
 import { CageId, cleatBox, exitCageGroundBox, hangBox } from './cage-puzzle';
 import { ZombieSystem } from './zombie-system';
 import { leverBox, springSpan } from './spring-puzzle';
@@ -359,7 +361,6 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     attackHitDelay: 0,
     invincibilityFrames: 0,
     potionCooldown: 0,
-    jumpHeld: false,
     jumpBufferTicks: 0,
     ropeJumpCooldown: 0,
     platformDropTimer: 0,
@@ -449,6 +450,8 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     spring: null,
     cagePuzzle: null,
     cages: null,
+    platePuzzle: null,
+    plate: null,
     breakPuzzleWall: vi.fn(),
     breakPuzzleGate: vi.fn(),
     puzzleWall: vi.fn((): Platform | null => null),
@@ -1131,5 +1134,201 @@ describe('Cage puzzle (floor 4)', (): void => {
         (p: Platform): boolean => p.puzzlePart === 'cage' || p.puzzlePart === 'zombie-cage',
       ),
     ).toBe(false);
+  });
+});
+
+describe('Pressure plate puzzle (floor 5)', (): void => {
+  let engine: GameEngine;
+  const NEEDED: number = GAME_CONSTANTS.PLATE_WEIGHT_NEEDED;
+
+  interface PlateSystems {
+    plate: PlatePuzzleSystem;
+    zombies: ZombieSystem;
+  }
+
+  function systems(e: GameEngine): PlateSystems {
+    const physics: PhysicsSystem = new PhysicsSystem(e);
+    const vfx: VfxSystem = new VfxSystem(e);
+    const drops: DropSystem = new DropSystem(e, physics, vfx);
+    const combat: CombatSystem = new CombatSystem(e, physics, vfx, drops);
+    const projectiles: ProjectileSystem = new ProjectileSystem(e, physics, vfx);
+    return {
+      plate: new PlatePuzzleSystem(e, vfx),
+      zombies: new ZombieSystem(e, physics, combat, projectiles, drops),
+    };
+  }
+
+  function plateCenter(e: GameEngine): number {
+    return e.platePuzzle!.plateX + GAME_CONSTANTS.PLATE_WIDTH_PX / 2;
+  }
+
+  function corpseOnPlate(e: GameEngine, id: string, dx: number): ZombieCorpse {
+    const puzzle: PlatePuzzleLayout = e.platePuzzle!;
+    return {
+      id,
+      type: ZombieType.Walker,
+      x: plateCenter(e) + dx - 15,
+      y: puzzle.plateY - 30,
+      width: 30,
+      height: 30,
+      spriteKey: 'walker',
+      facing: 1,
+      velocityX: 0,
+      velocityY: 0,
+      isGrounded: true,
+      frozen: false,
+      landProcessed: true,
+      fadeTimer: 999,
+      maxFadeTimer: 999,
+      showBlood: false,
+      carrierId: null,
+    };
+  }
+
+  function standingOnPlate(e: GameEngine, id: string): CharacterState {
+    return makePlayer({
+      id,
+      x: plateCenter(e) - GAME_CONSTANTS.PLAYER_WIDTH / 2,
+      y: e.platePuzzle!.plateY - GAME_CONSTANTS.PLAYER_HEIGHT,
+      isGrounded: true,
+    });
+  }
+
+  function standingOnExit(e: GameEngine): CharacterState {
+    return makePlayer({
+      x: e.exitPlatform.x + 40,
+      y: e.exitPlatform.y - GAME_CONSTANTS.PLAYER_HEIGHT,
+      isGrounded: true,
+    });
+  }
+
+  function hasEvent(e: GameEngine, type: VfxEventType): boolean {
+    return e.pendingVfxEvents.some((evt: VfxEvent): boolean => evt.type === type);
+  }
+
+  beforeEach((): void => {
+    engine = new GameEngine(createMockCanvas());
+    engine.player = makePlayer();
+    engine.setFloor(GAME_CONSTANTS.PUZZLE_PLATE_FLOOR);
+  });
+
+  it('floor 5 has a plate, a shut door, and the normal exit height', (): void => {
+    expect(engine.platePuzzle).not.toBeNull();
+    expect(engine.plate).toEqual({ weight: 0, doorTicks: 0 });
+    expect(engine.exitPlatform.y).toBe(exitPlatformY(GAME_CONSTANTS.PUZZLE_PLATE_FLOOR, 0));
+  });
+
+  it('solo: three corpses on the plate open the door; the exit lets the player out only once it is fully open', (): void => {
+    const sys: PlateSystems = systems(engine);
+    engine.player = standingOnExit(engine);
+    sys.plate.update();
+    sys.zombies.checkFloorCompletion();
+    expect(engine.floor, 'the door is shut').toBe(GAME_CONSTANTS.PUZZLE_PLATE_FLOOR);
+
+    engine.zombieCorpses = [corpseOnPlate(engine, 'a', -30), corpseOnPlate(engine, 'b', 0)];
+    sys.plate.update();
+    expect(engine.plate!.weight).toBe(2);
+    expect(hasEvent(engine, VfxEventType.DoorOpen)).toBe(false);
+    engine.zombieCorpses.push(corpseOnPlate(engine, 'c', 30));
+    sys.plate.update();
+    expect(engine.plate!.weight).toBe(NEEDED);
+    expect(hasEvent(engine, VfxEventType.DoorOpen)).toBe(true);
+    sys.zombies.checkFloorCompletion();
+    expect(engine.floor, 'still sliding open').toBe(GAME_CONSTANTS.PUZZLE_PLATE_FLOOR);
+    for (let t: number = 0; t < GAME_CONSTANTS.PLATE_DOOR_TICKS; t++) sys.plate.update();
+    expect(engine.plate!.doorTicks).toBe(GAME_CONSTANTS.PLATE_DOOR_TICKS);
+    sys.zombies.checkFloorCompletion();
+    expect(engine.floor).toBe(GAME_CONSTANTS.PUZZLE_PLATE_FLOOR + 1);
+  });
+
+  it('taking the weight off slams the door shut again', (): void => {
+    const sys: PlateSystems = systems(engine);
+    engine.zombieCorpses = [0, 1, 2].map(
+      (i: number): ZombieCorpse => corpseOnPlate(engine, `c${i}`, i * 20 - 20),
+    );
+    for (let t: number = 0; t <= GAME_CONSTANTS.PLATE_DOOR_TICKS; t++) sys.plate.update();
+    engine.pendingVfxEvents.length = 0;
+    engine.zombieCorpses[0].carrierId = 'player-1';
+    sys.plate.update();
+    expect(engine.plate!.weight).toBe(NEEDED - 1);
+    expect(hasEvent(engine, VfxEventType.DoorShut)).toBe(true);
+    for (let t: number = 0; t < GAME_CONSTANTS.PLATE_DOOR_TICKS; t++) sys.plate.update();
+    expect(engine.plate!.doorTicks).toBe(0);
+  });
+
+  it('the host weighs a guest standing on the plate, and its own step onto the exit then lets everyone out', (): void => {
+    engine.isMultiplayerHost = true;
+    const sys: PlateSystems = systems(engine);
+    engine.remotePlayers = [standingOnPlate(engine, 'guest')];
+    engine.repositionExitPlatform();
+    engine.player = standingOnExit(engine);
+    for (let t: number = 0; t <= GAME_CONSTANTS.PLATE_DOOR_TICKS; t++) sys.plate.update();
+    expect(engine.plate!.weight).toBe(GAME_CONSTANTS.PLATE_PLAYER_WEIGHT);
+    sys.zombies.checkFloorCompletion();
+    expect(engine.floor).toBe(GAME_CONSTANTS.PUZZLE_PLATE_FLOOR + 1);
+  });
+
+  it('a zombie walking over the plate kicks a corpse off it (once per cooldown) and everyone sees the dust', (): void => {
+    const sys: PlateSystems = systems(engine);
+    const c: ZombieCorpse = corpseOnPlate(engine, 'a', 8);
+    const d: ZombieCorpse = corpseOnPlate(engine, 'b', -8);
+    engine.zombieCorpses = [c, d];
+    engine.zombies = [
+      makeZombie({
+        x: plateCenter(engine) - 17,
+        y: engine.platePuzzle!.plateY - 50,
+        velocityX: 1,
+        instanceWidth: 34,
+        instanceHeight: 50,
+        isGrounded: true,
+      }),
+    ];
+    sys.plate.update();
+    expect(c.isGrounded).toBe(false);
+    expect(c.velocityX).toBeGreaterThan(0);
+    expect(d.isGrounded, 'one kick at a time').toBe(true);
+    expect(hasEvent(engine, VfxEventType.HitParticles)).toBe(true);
+    sys.plate.update();
+    expect(d.isGrounded, 'cooling down').toBe(true);
+  });
+
+  it('a client follows the synced plate (bad values ignored, clamped) and slides the door itself', (): void => {
+    engine.isMultiplayerClient = true;
+    const sys: PlateSystems = systems(engine);
+    engine.applyRemotePlate({ weight: Number.NaN, doorTicks: 5 });
+    expect(engine.plate).toEqual({ weight: 0, doorTicks: 0 });
+    engine.applyRemotePlate({ weight: 1e9, doorTicks: -4 });
+    expect(engine.plate!.weight).toBeLessThan(1000);
+    expect(engine.plate!.doorTicks).toBe(0);
+    engine.applyRemotePlate({ weight: NEEDED, doorTicks: 99 });
+    expect(engine.plate!.doorTicks).toBe(GAME_CONSTANTS.PLATE_DOOR_TICKS);
+    engine.applyRemotePlate({ weight: 0, doorTicks: 3 });
+    sys.plate.tickClient();
+    expect(engine.plate!.doorTicks, 'slides shut between snapshots').toBe(2);
+    engine.applyRemotePlate(null);
+    engine.applyRemotePlate({ weight: '3' } as unknown as PlateState);
+    expect(engine.plate!.weight).toBe(0);
+  });
+
+  it('replaying the door opening and shutting shows sparks and dust', (): void => {
+    engine.replayRemoteVfxEvents([{ type: VfxEventType.DoorOpen, playerId: 'host', x: 116, y: 230 }]);
+    const afterOpen: number = engine.particles.length;
+    expect(afterOpen).toBeGreaterThan(0);
+    engine.replayRemoteVfxEvents([{ type: VfxEventType.DoorShut, playerId: 'host', x: 116, y: 230 }]);
+    expect(engine.particles.length).toBeGreaterThan(afterOpen);
+    expect(engine.screenShakeFrames).toBeGreaterThan(0);
+  });
+
+  it('the snapshot carries the plate', (): void => {
+    engine.plate!.weight = 2;
+    engine.plate!.doorTicks = 4;
+    expect(engine.getStateSnapshot()!.plate).toEqual({ weight: 2, doorTicks: 4 });
+  });
+
+  it('other floors have no plate', (): void => {
+    engine.setFloor(GAME_CONSTANTS.PUZZLE_PLATE_FLOOR + 1);
+    expect(engine.platePuzzle).toBeNull();
+    expect(engine.plate).toBeNull();
+    expect(engine.getStateSnapshot()!.plate).toBeNull();
   });
 });

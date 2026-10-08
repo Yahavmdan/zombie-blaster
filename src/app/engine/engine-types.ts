@@ -8,6 +8,7 @@ import {
   ActiveSpecialEffect,
   BoulderState,
   CagePuzzleState,
+  PlateState,
   SpringState,
   DropType,
   PendingSpecialDropConfirm,
@@ -137,6 +138,18 @@ export interface CagePuzzleLayout {
   exitChainY: number;
   zombieChainY: number;
 }
+
+/**
+ * Floor-5 puzzle: the exit has a barred door that is open only while a pressure plate is weighed
+ * down. The plate is set into the top of a high ledge on the far side from the exit (the ground
+ * there when no ledge fits): carry corpses onto it, or have a friend stand on it.
+ */
+export interface PlatePuzzleLayout {
+  /** Left edge of the plate (PLATE_WIDTH_PX wide). */
+  plateX: number;
+  /** Top of the surface the plate is set into (things standing on the plate have their feet here). */
+  plateY: number;
+}
 export interface BackgroundStar {
   x: number;
   y: number;
@@ -243,7 +256,6 @@ export interface IGameEngine {
   attackHitDelay: number;
   invincibilityFrames: number;
   potionCooldown: number;
-  jumpHeld: boolean;
   jumpBufferTicks: number;
   ropeJumpCooldown: number;
   platformDropTimer: number;
@@ -268,6 +280,9 @@ export interface IGameEngine {
   /** Floor-4 puzzle layout and its two cages (null on other floors). */
   cagePuzzle: CagePuzzleLayout | null;
   cages: CagePuzzleState | null;
+  /** Floor-5 puzzle layout and its plate and exit door (null on other floors). */
+  platePuzzle: PlatePuzzleLayout | null;
+  plate: PlateState | null;
 
   backgroundStars: BackgroundStar[];
 

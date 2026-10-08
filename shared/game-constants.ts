@@ -170,6 +170,17 @@ export const GAME_CONSTANTS = {
   CAGE_HIT_REACH_PX: 24, // Max gap between an attacking player's box and a cleat for the swing to hit it
   CAGE_HIT_COOLDOWN_TICKS: 36, // One cleat hit per swing (a held attack swings every 36 ticks)
   CAGE_ZOMBIES: 6, // Zombies the zombie cage lets loose when it smashes on the ground
+  PUZZLE_PLATE_FLOOR: 5, // Floor whose exit is behind a door that a pressure plate on a far, high ledge holds open
+  PLATE_WIDTH_PX: 96, // The pressure plate is set into its ledge's top: 3 tiles wide
+  PLATE_WEIGHT_NEEDED: 3, // Weight on the plate that holds the exit door open: a lying corpse weighs 1...
+  PLATE_PLAYER_WEIGHT: 3, // ...a player standing on it this much
+  PLATE_STACK_PX: 40, // Corpses piled up to this far above the plate still press on it
+  PLATE_DOOR_TICKS: 20, // Ticks the exit door takes to slide fully open (or shut): only a fully open door lets you out
+  PLATE_DOOR_WIDTH_PX: 56, // The barred door standing on the exit: this wide...
+  PLATE_DOOR_HEIGHT_PX: 72, // ...and this tall (scenery: you walk in front of it)
+  PLATE_KICK_SPEED_X: 8, // A zombie walking over the plate kicks a corpse off it this fast sideways...
+  PLATE_KICK_SPEED_Y: -6, // ...and up (negative = up)
+  PLATE_KICK_COOLDOWN_TICKS: 240, // A zombie kicks at most one corpse this often (one per pass over the plate)
   SAFE_SPOT_HEADROOM_PX: 160, // Players up to this far above the safe spot (jumping on it) still count as resting there
 
   // ─── Zombie Spawning ───────────────────────────
@@ -282,7 +293,9 @@ export const GAME_CONSTANTS = {
   ZOMBIE_CORPSE_DIVERSE_CHANCE: 0.45, // Chance a corpse uses a different visual variant
   ZOMBIE_CORPSE_BLOOD_CHANCE: 0.3, // Chance a corpse shows a blood splatter
   CORPSE_CARRY_RANGE: 50, // Pixels from the player's center to a lying corpse's center to pick it up
-  CORPSE_CARRY_SPEED_MULTIPLIER: 0.75, // Walking speed while carrying a corpse overhead
+  CORPSE_CARRY_SPEED_MULTIPLIER: 0.75, // Walking speed while carrying corpses overhead
+  CORPSE_CARRY_MAX: 3, // Corpses one player can carry, stacked overhead
+  CORPSE_CARRY_STACK_STEP: 9, // Each carried corpse above the bottom one rides this much higher
   CORPSE_CARRY_CONFIRM_TICKS: 25, // A guest's pick-up the host hasn't granted by then is given up
   CORPSE_CARRY_LIFT: 12, // Carried corpse's box bottom sits this far above the carrier's head (its lying body rests on the head)
   CORPSE_THROW_SPEED_X: 4, // Sideways speed of a dropped corpse, in the carrier's facing direction

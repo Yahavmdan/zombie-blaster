@@ -269,6 +269,8 @@ export enum VfxEventType {
   SpringLaunch = 'spring-launch',
   CageLand = 'cage-land',
   CageSmash = 'cage-smash',
+  DoorOpen = 'door-open',
+  DoorShut = 'door-shut',
 }
 
 export interface VfxEvent {

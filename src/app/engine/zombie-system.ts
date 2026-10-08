@@ -16,6 +16,7 @@ import {
 import { BoulderPuzzleLayout, IGameEngine, Platform } from './engine-types';
 import { Box, keepOutOfWall, leavesThroughOpening } from './boulder-puzzle';
 import { exitCageGroundBox } from './cage-puzzle';
+import { isDoorOpen } from './plate-puzzle';
 import { PhysicsSystem } from './physics-system';
 import { CombatSystem } from './combat-system';
 import { DropSystem } from './drop-system';
@@ -1036,9 +1037,11 @@ export class ZombieSystem {
         bottom >= exit.y &&
         bottom <= exit.y + exit.height + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
         c.isGrounded;
+      // The floor-5 exit has a door: it lets players out only while it stands fully open.
+      const doorOpen: boolean = !this.e.plate || isDoorOpen(this.e.plate);
 
       const leaves: boolean =
-        puzzle && boulder ? leavesThroughOpening(c, puzzle, boulder) : onExitPlatform;
+        puzzle && boulder ? leavesThroughOpening(c, puzzle, boulder) : onExitPlatform && doorOpen;
       if (leaves) {
         this.e.onFloorComplete?.();
         this.advanceFloor();

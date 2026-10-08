@@ -11,7 +11,7 @@ import {
 } from './level-generator';
 import { pushOutOfSolids } from './solid-blocks';
 import { chuteSpan } from './boulder-puzzle';
-import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, Rope, SpringPuzzleLayout } from './engine-types';
+import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, Rope, SpringPuzzleLayout } from './engine-types';
 import { springSpan } from './spring-puzzle';
 
 describe('level generator', () => {
@@ -365,5 +365,64 @@ describe('cage puzzle floor', (): void => {
     expect(has({ ...level, cagePuzzle: off }, 'zombie cage: not mid-screen')).toBe(true);
     expect(has({ ...level, cagePuzzle: undefined }, 'cage floor without cages')).toBe(true);
     expect(has({ ...generateLevel(5, 5), cagePuzzle: puzzle }, 'cages on another floor')).toBe(true);
+  });
+});
+
+describe('pressure plate floor', (): void => {
+  const PLATE_FLOOR: number = GAME_CONSTANTS.PUZZLE_PLATE_FLOOR;
+  const WIDTH: number = GAME_CONSTANTS.PLATE_WIDTH_PX;
+  const HALF: number = GAME_CONSTANTS.CANVAS_WIDTH / 2;
+
+  it('only the plate floor has a plate', (): void => {
+    for (let seed: number = 1; seed <= 200; seed++) {
+      for (let floor: number = 1; floor <= 7; floor++) {
+        const level: LevelLayout = generateLevel(seed, floor);
+        expect(level.platePuzzle !== undefined, `seed ${seed} floor ${floor}`).toBe(floor === PLATE_FLOOR);
+      }
+    }
+  });
+
+  it('the plate sits in the top of the highest regular ledge on the far half from the exit', (): void => {
+    let onLedge: number = 0;
+    for (let seed: number = 1; seed <= 2000; seed++) {
+      const level: LevelLayout = generateLevel(seed, PLATE_FLOOR);
+      const plate: PlatePuzzleLayout = level.platePuzzle!;
+      const center: number = plate.plateX + WIDTH / 2;
+      const exitCenter: number = level.exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH / 2;
+      expect(center < HALF, `seed ${seed}: across from the exit`).toBe(exitCenter >= HALF);
+      const ledge: Platform | undefined = level.platforms.find(
+        (p: Platform): boolean =>
+          p.y === plate.plateY && plate.plateX >= p.x && plate.plateX + WIDTH <= p.x + p.width,
+      );
+      if (plate.plateY === GAME_CONSTANTS.GROUND_Y) continue;
+      onLedge++;
+      expect(ledge, `seed ${seed}: the plate lies on a ledge`).toBeDefined();
+      expect(ledge!.safe, 'never the safe spot').toBeFalsy();
+      expect(plate.plateX - ledge!.x, 'centered').toBe(ledge!.x + ledge!.width - (plate.plateX + WIDTH));
+      const higherFar: Platform | undefined = level.platforms.find(
+        (p: Platform): boolean =>
+          !p.safe &&
+          p.y < plate.plateY &&
+          p.width >= WIDTH + 64 &&
+          p.x + p.width / 2 < HALF === center < HALF,
+      );
+      expect(higherFar, `seed ${seed}: no higher ledge on its side`).toBeUndefined();
+    }
+    expect(onLedge, 'nearly always up on a ledge (rarely the ground)').toBeGreaterThan(1900);
+  });
+
+  it('the rules catch a moved plate, a prop on it, a stray plate and a missing one', (): void => {
+    const level: LevelLayout = generateLevel(5, PLATE_FLOOR);
+    const plate: PlatePuzzleLayout = level.platePuzzle!;
+    const has: (l: LevelLayout, text: string) => boolean = (l: LevelLayout, text: string): boolean =>
+      levelViolations(l).some((v: string): boolean => v.includes(text));
+    expect(levelViolations(level)).toEqual([]);
+    expect(has({ ...level, platePuzzle: { ...plate, plateX: plate.plateX + 16 } }, 'plate: not where it belongs')).toBe(true);
+    const offSide: PlatePuzzleLayout = { ...plate, plateX: GAME_CONSTANTS.CANVAS_WIDTH - plate.plateX - WIDTH };
+    expect(has({ ...level, platePuzzle: offSide }, 'plate: on the exit side')).toBe(true);
+    const onPlate: Prop = { kind: 'box1', x: plate.plateX + 30, y: plate.plateY - 22, width: 28, height: 22 };
+    expect(has({ ...level, props: [...level.props, onPlate] }, 'crowds the plate')).toBe(true);
+    expect(has({ ...level, platePuzzle: undefined }, 'plate floor without a plate')).toBe(true);
+    expect(has({ ...generateLevel(5, 4), platePuzzle: plate }, 'plate on another floor')).toBe(true);
   });
 });

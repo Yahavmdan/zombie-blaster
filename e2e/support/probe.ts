@@ -11,6 +11,7 @@ export type {
   E2eBoulderPuzzleView,
   E2eCagePuzzleView,
   E2eCageView,
+  E2ePlateView,
   E2eCorpseView,
   E2eExitPile,
   E2eDropView,

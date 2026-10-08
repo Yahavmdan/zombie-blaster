@@ -1,7 +1,8 @@
 import { CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, isZombieWindingUp } from '@shared/index';
-import { ActiveSpecialEffect, BoulderState, CagePuzzleState, CageState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
-import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, Rope, SpringPuzzleLayout } from '../engine/engine-types';
+import { ActiveSpecialEffect, BoulderState, CagePuzzleState, CageState, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
+import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, Rope, SpringPuzzleLayout } from '../engine/engine-types';
 import { CageId, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
+import { doorBox, isDoorOpen, isHeld, plateBox } from '../engine/plate-puzzle';
 import { chargeCorpses, leverBox } from '../engine/spring-puzzle';
 import { measureLevelGeometry } from './geometry-report';
 import { BoulderPath, boulderBox, boulderPath, gateBox } from '../engine/boulder-puzzle';
@@ -15,6 +16,7 @@ import {
   E2eBoulderPuzzleView,
   E2eCagePuzzleView,
   E2eCageView,
+  E2ePlateView,
   E2eSpringView,
   E2eControls,
   E2eCorpseView,
@@ -101,7 +103,7 @@ function toPlayerView(p: CharacterState): E2ePlayerView {
     skillLevels: { ...p.skillLevels },
     gold: p.inventory.gold,
     potions: { ...p.inventory.potions },
-    carryingCorpseId: p.carryingCorpseId ?? null,
+    carryingCorpseIds: [...(p.carryingCorpseIds ?? [])],
   };
 }
 
@@ -242,6 +244,22 @@ function cagesView(engine: GameEngine): E2eCagePuzzleView | null {
   };
 }
 
+function plateView(engine: GameEngine): E2ePlateView | null {
+  const puzzle: PlatePuzzleLayout | null = engine.platePuzzle;
+  const plate: PlateState | null = engine.plate;
+  if (!puzzle || !plate) return null;
+  return {
+    box: plateBox(puzzle),
+    weight: plate.weight,
+    needed: GAME_CONSTANTS.PLATE_WEIGHT_NEEDED,
+    playerWeight: GAME_CONSTANTS.PLATE_PLAYER_WEIGHT,
+    held: isHeld(plate),
+    doorTicks: plate.doorTicks,
+    doorOpen: isDoorOpen(plate),
+    door: doorBox(engine.exitPlatform),
+  };
+}
+
 function buildSnapshot(engine: GameEngine): E2eSnapshot {
   const player: CharacterState | null = engine.player;
   const remotePlayers: E2eRemotePlayerView[] = engine.remotePlayers.map(
@@ -329,6 +347,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
     puzzle: puzzleView(engine),
     spring: springView(engine),
     cages: cagesView(engine),
+    plate: plateView(engine),
     drops: engine.worldDrops.map(
       (d: WorldDrop): E2eDropView => ({ id: d.id, type: d.type, x: d.x, y: d.y, value: d.value }),
     ),

@@ -296,3 +296,11 @@ export interface CagePuzzleState {
   /** The cage full of zombies mid-screen: landed, it smashes and lets them loose. */
   zombieCage: CageState;
 }
+
+/** Floor-5 pressure plate: the host weighs it and sends it with every game-sync. */
+export interface PlateState {
+  /** Weight on the plate (a lying corpse 1, a standing player PLATE_PLAYER_WEIGHT). */
+  weight: number;
+  /** How far the exit door is open: 0 (shut) to PLATE_DOOR_TICKS (open, the exit lets you out). */
+  doorTicks: number;
+}

@@ -10,6 +10,7 @@ import {
 } from '@shared/game-entities';
 import { IGameEngine, Platform, Rope } from './engine-types';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
+import { isCarrying } from './corpse-carry';
 import { pushOutOfSolids } from './solid-blocks';
 
 export class PhysicsSystem {
@@ -41,7 +42,7 @@ export class PhysicsSystem {
       if (darkSightPenalty) {
         speed *= (1 - darkSightPenalty.value / 100);
       }
-      if (p.carryingCorpseId) speed *= GAME_CONSTANTS.CORPSE_CARRY_SPEED_MULTIPLIER;
+      if (isCarrying(p)) speed *= GAME_CONSTANTS.CORPSE_CARRY_SPEED_MULTIPLIER;
     }
 
     return speed;
@@ -83,6 +84,8 @@ export class PhysicsSystem {
     const activeRope: Rope | null = this.getActiveRope();
 
     if (p.isClimbing) {
+      // No coyote jump off a rope: held jump would double the rope jump.
+      this.coyoteTicks = 0;
       this.updateClimbing(activeRope);
     } else {
       this.updateMovement(activeRope);
@@ -252,10 +255,11 @@ export class PhysicsSystem {
       this.coyoteTicks--;
     }
 
-    const jumpKeyDown: boolean = this.e.keys.up || this.e.keys.jump;
+    // Only the jump key jumps (up is for ropes). Holding it hops again on every landing.
+    const jumpKeyDown: boolean = this.e.keys.jump;
     const jumpRequested: boolean = jumpKeyDown || this.e.jumpBufferTicks > 0;
     const canJump: boolean = p.isGrounded || this.coyoteTicks > 0;
-    if (jumpRequested && !this.e.jumpHeld && canJump) {
+    if (jumpRequested && canJump) {
       if (p.isGrounded && this.e.keys.down && p.y + GAME_CONSTANTS.PLAYER_HEIGHT < GAME_CONSTANTS.GROUND_Y) {
         this.e.platformDropTimer = GAME_CONSTANTS.PLATFORM_DROP_TICKS;
         p.y += GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE + 1;
@@ -273,9 +277,12 @@ export class PhysicsSystem {
       p.velocityY *= GAME_CONSTANTS.JUMP_CUT_MULTIPLIER;
       this.jumpRising = false;
     }
-    this.e.jumpHeld = jumpKeyDown;
 
-    if (this.e.keys.up && activeRope && !p.isGrounded && this.e.ropeJumpCooldown <= 0) {
+    // Up grabs a rope in the air, or from the floor when the rope goes on above (not on its top).
+    const ropeAbove: boolean =
+      activeRope !== null && activeRope.topY <= p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+    const canGrab: boolean = !p.isGrounded || ropeAbove;
+    if (this.e.keys.up && activeRope && canGrab && this.e.ropeJumpCooldown <= 0) {
       p.isClimbing = true;
       p.velocityX = 0;
       p.velocityY = 0;

@@ -31,8 +31,11 @@ ships, tick its box here and rewrite its line to match what was built.
 
 ## Switches and co-op
 
-- [ ] **Pressure plates**: the door is open only while something stands on the plate (a player, a
-      corpse or a crate). Players carry a corpse onto it (carry key, E) or drag one with the monster magnet.
+- [x] **Pressure plate** (floor 5): a barred door stands on the exit and slides open only while the
+      plate on the highest ledge across the screen is weighed down: 3 lying corpses (carry them
+      there with E and toss them on) or one player standing on it. Only a fully open door lets you
+      out. Twist: a zombie walking over the plate kicks a corpse off (one per zombie every 4 s), so
+      clear the zombies or bring spares. In co-op a friend can hold it while the others climb out.
 - [ ] **Two levers far apart**: both must be pulled within 3 seconds. Solo needs a timed dash or a
       ranged skill hit.
 - [ ] **Weight-limited elevator**: it needs enough weight to go down and a counterweight to come
@@ -83,5 +86,5 @@ ships, tick its box here and rewrite its line to match what was built.
 
 ### Suggested next
 
-- [ ] Pressure plate with a carried corpse (uses corpse carrying, or the monster magnet)
+- [x] Pressure plate with a carried corpse (floor 5)
 - [ ] Explosive barrel (uses the solid props)

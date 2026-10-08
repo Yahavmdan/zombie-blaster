@@ -2,6 +2,7 @@ import { GAME_CONSTANTS } from '@shared/index';
 import {
   BoulderPuzzleLayout,
   CagePuzzleLayout,
+  PlatePuzzleLayout,
   Platform,
   Rope,
   SpringPuzzleLayout,
@@ -32,6 +33,8 @@ export interface LevelLayout {
   springPuzzle?: SpringPuzzleLayout;
   /** Floor-4 puzzle (two hanging cages; their cleats stand on the safe spot). */
   cagePuzzle?: CagePuzzleLayout;
+  /** Floor-5 puzzle (the pressure plate on a far, high ledge that holds the exit door open). */
+  platePuzzle?: PlatePuzzleLayout;
 }
 
 export const GROUND_PLATFORM: Platform = {
@@ -242,6 +245,8 @@ interface PropContext {
   boulderPuzzle?: BoulderPuzzleLayout;
   springPuzzle?: SpringPuzzleLayout;
   cagePuzzle?: CagePuzzleLayout;
+  /** Floor-5 puzzle (the pressure plate on a far, high ledge that holds the exit door open). */
+  platePuzzle?: PlatePuzzleLayout;
 }
 
 /** Broken rules for one prop against the rest of the layout (shared by the generator and the checks). */
@@ -325,6 +330,15 @@ function propProblems(prop: Prop, layout: PropContext): string[] {
     const cleats: number[] = [cages.exitCleatX, cages.zombieCleatX];
     for (const x of cleats) {
       if (spanGap(left, right, x - room, x + room) === 0) out.push('crowds a cleat');
+    }
+  }
+  const plate: PlatePuzzleLayout | undefined = layout.platePuzzle;
+  if (plate && restsOn === plate.plateY) {
+    // Room to stand beside the plate and toss corpses onto it.
+    const room: number = GAME_CONSTANTS.PLAYER_WIDTH;
+    const plateRight: number = plate.plateX + GAME_CONSTANTS.PLATE_WIDTH_PX;
+    if (spanGap(left, right, plate.plateX - room, plateRight + room) === 0) {
+      out.push('crowds the plate');
     }
   }
   return out;
@@ -534,6 +548,42 @@ function placeCagePuzzle(rand: Random, zombieCage: Platform, platforms: Platform
   };
 }
 
+/**
+ * The ledge the floor-5 plate is set into: the highest regular ledge (never the safe spot) on the
+ * far half of the screen from the exit, the farthest from the exit among equals; null if none.
+ */
+function plateLedge(exitX: number, platforms: Platform[]): Platform | null {
+  const half: number = GAME_CONSTANTS.CANVAS_WIDTH / 2;
+  const exitCenter: number = exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH / 2;
+  const fromExit: (p: Platform) => number = (p: Platform): number =>
+    Math.abs(p.x + p.width / 2 - exitCenter);
+  const minWidth: number = GAME_CONSTANTS.PLATE_WIDTH_PX + 2 * GAME_CONSTANTS.LEVEL_TILE_PX;
+  const ledges: Platform[] = platforms
+    .filter(
+      (p: Platform): boolean =>
+        !p.safe && p.width >= minWidth && (p.x + p.width / 2 < half) !== (exitCenter < half),
+    )
+    .sort((a: Platform, b: Platform): number => a.y - b.y || fromExit(b) - fromExit(a));
+  return ledges[0] ?? null;
+}
+
+/**
+ * Floor-5 puzzle: the pressure plate, centered in the top of its ledge, or on the ground on the
+ * far side from the exit when no ledge fits.
+ */
+function placePlatePuzzle(exitX: number, platforms: Platform[]): PlatePuzzleLayout {
+  const width: number = GAME_CONSTANTS.PLATE_WIDTH_PX;
+  const ledge: Platform | null = plateLedge(exitX, platforms);
+  if (ledge) return { plateX: ledge.x + (ledge.width - width) / 2, plateY: ledge.y };
+  const exitOnRight: boolean =
+    exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH / 2 > GAME_CONSTANTS.CANVAS_WIDTH / 2;
+  const inset: number = 5 * GAME_CONSTANTS.LEVEL_TILE_PX;
+  return {
+    plateX: exitOnRight ? inset : GAME_CONSTANTS.CANVAS_WIDTH - inset - width,
+    plateY: GAME_CONSTANTS.GROUND_Y,
+  };
+}
+
 /** The spring's span widened by its clearance: platforms, ropes and props stay out of it. */
 function springClearSpan(puzzle: SpringPuzzleLayout): [number, number] {
   const clear: number = GAME_CONSTANTS.SPRING_CLEAR_PX;
@@ -630,6 +680,8 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
   const cagePuzzle: CagePuzzleLayout | undefined = zombieCage
     ? placeCagePuzzle(rand, zombieCage, platforms)
     : undefined;
+  const platePuzzle: PlatePuzzleLayout | undefined =
+    floor === GAME_CONSTANTS.PUZZLE_PLATE_FLOOR ? placePlatePuzzle(exitX, platforms) : undefined;
   const props: Prop[] = placeProps(rand, {
     platforms,
     ropes,
@@ -637,11 +689,13 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
     boulderPuzzle,
     springPuzzle,
     cagePuzzle,
+    platePuzzle,
   });
   // Normal floors leave the keys out, so their layouts compare equal to before.
   if (boulderPuzzle) return { seed, floor, platforms, ropes, exitX, props, boulderPuzzle };
   if (springPuzzle) return { seed, floor, platforms, ropes, exitX, props, springPuzzle };
   if (cagePuzzle) return { seed, floor, platforms, ropes, exitX, props, cagePuzzle };
+  if (platePuzzle) return { seed, floor, platforms, ropes, exitX, props, platePuzzle };
   return { seed, floor, platforms, ropes, exitX, props };
 }
 
@@ -728,6 +782,24 @@ function cagePuzzleProblems(layout: LevelLayout, puzzle: CagePuzzleLayout): stri
   return out;
 }
 
+/** Broken rules of the floor-5 puzzle. */
+function platePuzzleProblems(layout: LevelLayout, puzzle: PlatePuzzleLayout): string[] {
+  const out: string[] = [];
+  const left: number = puzzle.plateX;
+  const right: number = left + GAME_CONSTANTS.PLATE_WIDTH_PX;
+  const ledge: Platform | null = plateLedge(layout.exitX, layout.platforms);
+  const surface: Platform = ledge ?? GROUND_PLATFORM;
+  const expected: PlatePuzzleLayout = placePlatePuzzle(layout.exitX, layout.platforms);
+  if (left < surface.x || right > surface.x + surface.width || left < 0 || right > GAME_CONSTANTS.CANVAS_WIDTH) {
+    out.push('plate: hangs off its surface');
+  }
+  if (left !== expected.plateX || puzzle.plateY !== expected.plateY) out.push('plate: not where it belongs');
+  const half: number = GAME_CONSTANTS.CANVAS_WIDTH / 2;
+  const exitCenter: number = layout.exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH / 2;
+  if (((left + right) / 2 < half) === (exitCenter < half)) out.push('plate: on the exit side');
+  return out;
+}
+
 /**
  * Rules every generated layout must satisfy (unit-tested over many seeds). Returns the broken
  * rules; empty means valid.
@@ -753,6 +825,11 @@ export function levelViolations(layout: LevelLayout): string[] {
   if (cageFloor && !cages) out.push('cage floor without cages');
   if (!cageFloor && cages) out.push('cages on another floor');
   if (cages) out.push(...cagePuzzleProblems(layout, cages));
+  const plate: PlatePuzzleLayout | undefined = layout.platePuzzle;
+  const plateFloor: boolean = layout.floor === GAME_CONSTANTS.PUZZLE_PLATE_FLOOR;
+  if (plateFloor && !plate) out.push('plate floor without a plate');
+  if (!plateFloor && plate) out.push('plate on another floor');
+  if (plate) out.push(...platePuzzleProblems(layout, plate));
 
   for (const p of layout.platforms) {
     const name: string = `platform ${p.x},${p.y} w${p.width}`;

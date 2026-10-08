@@ -80,7 +80,8 @@ test.describe('carrying corpses in co-op', { tag: '@online' }, (): void => {
     await guest.probe.waitFor(
       'the guest sees itself carrying it',
       (s: E2eSnapshot): boolean =>
-        s.player!.carryingCorpseId === corpse.id && findCorpse(s, corpse.id)?.carrierId === guestId,
+        s.player!.carryingCorpseIds.includes(corpse.id) &&
+        findCorpse(s, corpse.id)?.carrierId === guestId,
       { timeoutMs: 5_000 },
     );
 
@@ -122,7 +123,7 @@ test.describe('carrying corpses in co-op', { tag: '@online' }, (): void => {
       (s: E2eSnapshot): boolean => {
         const c: E2eCorpseView | undefined = findCorpse(s, corpse.id);
         return (
-          s.player!.carryingCorpseId === null &&
+          s.player!.carryingCorpseIds.length === 0 &&
           !!c &&
           c.carrierId === null &&
           c.isGrounded &&
@@ -179,7 +180,100 @@ test.describe('carrying corpses in co-op', { tag: '@online' }, (): void => {
     await guest.press(KEYS.carry, 70);
     await guest.wait(1_000);
     const after: E2eSnapshot = await guest.probe.state();
-    expect(after.player!.carryingCorpseId, 'the guest got nothing').toBeNull();
+    expect(after.player!.carryingCorpseIds, 'the guest got nothing').toEqual([]);
     expect(findCorpse(after, corpse.id)!.carrierId, 'still on the host').toBe(hostId);
+  });
+
+  test('a guest carries a stack of corpses: the host sees them stacked on the guest, and both see the thrown pile', async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }, testInfo: TestInfo): Promise<void> => {
+    test.setTimeout(120_000);
+    const session: RoomSession = await room(
+      [
+        { name: 'Host', classId: 'warrior' },
+        { name: 'Guest', classId: 'warrior' },
+      ],
+      'carry-stack',
+    );
+    const host: GamePlayer = session.host;
+    const guest: GamePlayer = session.guests[0];
+    await host.probe.setGodMode(true);
+    await guest.probe.setGodMode(true);
+    const guestId: string = (await guest.probe.state()).player!.id;
+
+    const first: E2eCorpseView = await lyingCorpse(host, guest, 500);
+    await standAt(guest, first);
+    await guest.press(KEYS.carry, 70);
+    await guest.probe.waitFor(
+      'the guest carries the first',
+      (s: E2eSnapshot): boolean => findCorpse(s, first.id)?.carrierId === guestId,
+      { timeoutMs: 5_000 },
+    );
+    const second: E2eCorpseView = await lyingCorpse(host, guest, 700);
+    await standAt(guest, second);
+    await guest.press(KEYS.carry, 70);
+    const ids: string[] = [first.id, second.id];
+
+    const hostView: E2eSnapshot = await host.probe.waitFor(
+      'on the host screen both ride on the guest, the second on top of the first',
+      (s: E2eSnapshot): boolean => {
+        const g: E2eRemotePlayerView | undefined = s.remotePlayers.find(
+          (rp: E2eRemotePlayerView): boolean => rp.id === guestId,
+        );
+        const [a, b]: (E2eCorpseView | undefined)[] = ids.map(
+          (id: string): E2eCorpseView | undefined => findCorpse(s, id),
+        );
+        return (
+          !!g &&
+          !!a &&
+          !!b &&
+          a.carrierId === guestId &&
+          b.carrierId === guestId &&
+          b.y < a.y &&
+          Math.abs(corpseCenterX(b) - (g.x + WORLD.playerWidth / 2)) < 2
+        );
+      },
+      { timeoutMs: 5_000 },
+    );
+    expect(findCorpse(hostView, second.id)!.isGrounded).toBe(false);
+    await host.attachCanvas(testInfo, 'host sees the guest carrying two');
+
+    await guest.press(KEYS.carry, 70);
+    const landed: (s: E2eSnapshot) => E2eCorpseView[] | null = (
+      s: E2eSnapshot,
+    ): E2eCorpseView[] | null => {
+      const pile: (E2eCorpseView | undefined)[] = ids.map((id: string): E2eCorpseView | undefined =>
+        findCorpse(s, id),
+      );
+      return pile.every(
+        (c: E2eCorpseView | undefined): boolean => !!c && c.carrierId === null && c.isGrounded,
+      )
+        ? (pile as E2eCorpseView[])
+        : null;
+    };
+    const onHost: E2eSnapshot = await host.probe.waitFor(
+      'the thrown stack lands on the host',
+      (s: E2eSnapshot): boolean => landed(s) !== null,
+      { timeoutMs: 5_000 },
+    );
+    const [bottom, top]: E2eCorpseView[] = landed(onHost)!;
+    expect(bottom.footY - top.footY, 'the second lies on the first').toBeCloseTo(FOOTHOLD_DEPTH, 0);
+    expect(Math.abs(corpseCenterX(top) - corpseCenterX(bottom))).toBeLessThan(top.footWidth);
+    await guest.probe.waitFor(
+      'the guest sees the same pile',
+      (s: E2eSnapshot): boolean => {
+        const pile: E2eCorpseView[] | null = landed(s);
+        return (
+          s.player!.carryingCorpseIds.length === 0 &&
+          !!pile &&
+          Math.abs(corpseCenterX(pile[0]) - corpseCenterX(bottom)) < 1 &&
+          Math.abs(pile[1].footY - top.footY) < 1
+        );
+      },
+      { timeoutMs: 5_000 },
+    );
+    await guest.attachCanvas(testInfo, 'guest sees the thrown pile');
   });
 });

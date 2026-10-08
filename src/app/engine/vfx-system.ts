@@ -476,6 +476,53 @@ export class VfxSystem {
     this.triggerScreenShake(14, 7);
   }
 
+  /** The exit door's bars grind up: sparks and dust burst from the doorway. */
+  spawnDoorOpen(cx: number, cy: number): void {
+    const colors: string[] = ['#ffd166', '#fff3c4', '#8a8f98'];
+    for (let i: number = 0; i < 24; i++) {
+      const life: number = 30 + Math.floor(Math.random() * 20);
+      this.addParticle({
+        x: cx + (Math.random() - 0.5) * GAME_CONSTANTS.PLATE_DOOR_WIDTH_PX,
+        y: cy + (Math.random() - 0.5) * GAME_CONSTANTS.PLATE_DOOR_HEIGHT_PX,
+        vx: (Math.random() - 0.5) * 4,
+        vy: -1 - Math.random() * 3,
+        life,
+        maxLife: life,
+        color: colors[i % colors.length],
+        size: 2 + Math.random() * 3,
+        shape: ParticleShape.Circle,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Linear,
+        scaleOverLife: true,
+      });
+    }
+  }
+
+  /** The exit door slams shut: a puff of grey dust at its foot and a small shake. */
+  spawnDoorShut(cx: number, cy: number): void {
+    for (let i: number = 0; i < 18; i++) {
+      const life: number = 25 + Math.floor(Math.random() * 20);
+      const side: number = i % 2 === 0 ? 1 : -1;
+      this.addParticle({
+        x: cx + side * Math.random() * GAME_CONSTANTS.PLATE_DOOR_WIDTH_PX * 0.5,
+        y: cy + GAME_CONSTANTS.PLATE_DOOR_HEIGHT_PX / 2 - Math.random() * 8,
+        vx: side * (0.5 + Math.random() * 2.5),
+        vy: -0.5 - Math.random(),
+        life,
+        maxLife: life,
+        color: 'rgba(160, 160, 170, 0.7)',
+        size: 5 + Math.random() * 7,
+        shape: ParticleShape.Circle,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Linear,
+        scaleOverLife: true,
+      });
+    }
+    this.triggerScreenShake(6, 3);
+  }
+
   /**
    * The spring lets go: a dust cloud puffs out from its base and a rising streak of wind lines
    * shoots up over it as it launches everyone.
