@@ -1,4 +1,9 @@
 @import 'tailwindcss';
+@import '@fontsource/pixelify-sans/400.css';
+@import '@fontsource/pixelify-sans/500.css';
+@import '@fontsource/pixelify-sans/700.css';
+@import './styles/tokens.css';
+@import './styles/ui-kit.css';
 
 *,
 *::before,
@@ -13,27 +18,18 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #0a0a0f;
-  color: #e0e0e0;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--ink);
+  color: var(--bone);
+  font-family: var(--font-ui);
+  font-size: var(--fs-16);
+  -webkit-font-smoothing: none;
 }
-
-@font-face {
-  font-family: 'Game Title';
-  src: local('Impact');
+button,
+input,
+select {
+  font-family: inherit;
 }
-
-:root {
-  --color-bg: #0a0a0f;
-  --color-surface: #14141f;
-  --color-surface-light: #1e1e2e;
-  --color-primary: #ff4444;
-  --color-primary-glow: #ff444488;
-  --color-secondary: #44ff88;
-  --color-accent: #ffaa22;
-  --color-xp: #8844ff;
-  --color-hp: #ff2222;
-  --color-mp: #2266ff;
-  --color-text: #e0e0e0;
-  --color-text-dim: #888899;
+img,
+canvas {
+  image-rendering: pixelated;
 }
