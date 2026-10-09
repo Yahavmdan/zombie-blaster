@@ -7,7 +7,7 @@ import {
   Direction,
 } from '@shared/index';
 import { ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
-import { EntityInterpolation, IGameEngine, Platform } from './engine-types';
+import { EntityInterpolation, IGameEngine, Platform, PlayerTint } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { CombatSystem } from './combat-system';
@@ -178,6 +178,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     dragonImpactImg: new Image(),
     spitterProjectiles: [],
     poisonEffect: null,
+    playerTints: new Map<string, PlayerTint>(),
     DRAGON_PROJ_FRAME_W: 105,
     DRAGON_PROJ_FRAME_H: 118,
     DRAGON_PROJ_FRAMES: 3,

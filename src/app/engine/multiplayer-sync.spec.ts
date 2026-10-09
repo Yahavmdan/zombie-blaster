@@ -17,6 +17,7 @@ import {
   IGameEngine,
   Platform,
   PlatePuzzleLayout,
+  PlayerTint,
   SpringPuzzleLayout,
 } from './engine-types';
 import { BoulderPuzzleSystem } from './boulder-puzzle-system';
@@ -408,6 +409,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     dragonImpactImg: new Image(),
     spitterProjectiles: [],
     poisonEffect: null,
+    playerTints: new Map<string, PlayerTint>(),
     DRAGON_PROJ_FRAME_W: 105,
     DRAGON_PROJ_FRAME_H: 118,
     DRAGON_PROJ_FRAMES: 3,
@@ -1330,5 +1332,55 @@ describe('Pressure plate puzzle (floor 5)', (): void => {
     expect(engine.platePuzzle).toBeNull();
     expect(engine.plate).toBeNull();
     expect(engine.getStateSnapshot()!.plate).toBeNull();
+  });
+});
+
+describe('Player status tints (hurt red, poison green) synced via VfxEvents', (): void => {
+  let engine: GameEngine;
+
+  beforeEach((): void => {
+    engine = new GameEngine(createMockCanvas());
+    engine.isMultiplayerClient = true;
+    engine.player = makePlayer();
+  });
+
+  it('a hit tints the local player red and queues PlayerHurt for the others', (): void => {
+    engine.applyIncomingZombieDamage(5, 1, false);
+
+    expect(engine.playerTints.get('player-1')?.hurtTicks).toBe(GAME_CONSTANTS.PLAYER_HURT_TINT_TICKS);
+    expect(engine.playerTints.get('player-1')?.poisonTicks).toBe(0);
+    const hurt: VfxEvent | undefined = engine.pendingVfxEvents.find(
+      (e: VfxEvent): boolean => e.type === VfxEventType.PlayerHurt,
+    );
+    expect(hurt?.playerId).toBe('player-1');
+  });
+
+  it('a poison hit tints the local player green for the whole poison', (): void => {
+    engine.applyIncomingZombieDamage(5, 1, true);
+
+    expect(engine.playerTints.get('player-1')?.poisonTicks).toBe(GAME_CONSTANTS.SPITTER_POISON_DURATION_TICKS);
+  });
+
+  it('replays PlayerHurt and PoisonTrigger as tints on the remote player, never on itself', (): void => {
+    engine.replayRemoteVfxEvents([
+      { type: VfxEventType.PlayerHurt, playerId: 'remote-player', x: 500, y: 400 },
+      { type: VfxEventType.PoisonTrigger, playerId: 'remote-player', x: 500, y: 400 },
+      { type: VfxEventType.PlayerHurt, playerId: 'player-1', x: 500, y: 400 },
+    ]);
+
+    expect(engine.playerTints.get('remote-player')).toEqual({
+      hurtTicks: GAME_CONSTANTS.PLAYER_HURT_TINT_TICKS,
+      poisonTicks: GAME_CONSTANTS.SPITTER_POISON_DURATION_TICKS,
+    });
+    expect(engine.playerTints.has('player-1')).toBe(false);
+  });
+
+  it('tints wear off and are dropped when both run out', (): void => {
+    const vfx: VfxSystem = new VfxSystem(engine);
+    vfx.tintPlayerHurt('remote-player');
+    for (let t: number = 0; t < GAME_CONSTANTS.PLAYER_HURT_TINT_TICKS - 1; t++) vfx.updatePlayerTints();
+    expect(engine.playerTints.get('remote-player')?.hurtTicks).toBe(1);
+    vfx.updatePlayerTints();
+    expect(engine.playerTints.has('remote-player')).toBe(false);
   });
 });

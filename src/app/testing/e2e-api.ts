@@ -39,6 +39,13 @@ export interface E2ePlayerView {
   potions: Record<string, number>;
   /** Corpses this player asked to carry, bottom of the stack first (the host grants each through the corpse's carrierId). */
   carryingCorpseIds: string[];
+  /** Status tints this client draws over the player's sprite (ticks left, 0 = off). */
+  tint: E2eTintView;
+}
+
+export interface E2eTintView {
+  hurtTicks: number;
+  poisonTicks: number;
 }
 
 export interface E2eRemotePlayerView extends E2ePlayerView {

@@ -178,6 +178,12 @@ export interface SpitterProjectile {
   trail: { x: number; y: number; life: number }[];
 }
 
+/** Remaining ticks of each status tint on a player's sprite (0 = off). */
+export interface PlayerTint {
+  hurtTicks: number;
+  poisonTicks: number;
+}
+
 export interface PoisonEffect {
   remainingTicks: number;
   tickInterval: number;
@@ -305,6 +311,8 @@ export interface IGameEngine {
 
   spitterProjectiles: SpitterProjectile[];
   poisonEffect: PoisonEffect | null;
+  /** Status tints by player id (local and remote), drawn in the shape of the sprite. */
+  playerTints: Map<string, PlayerTint>;
   readonly DRAGON_PROJ_FRAME_W: number;
   readonly DRAGON_PROJ_FRAME_H: number;
   readonly DRAGON_PROJ_FRAMES: number;
