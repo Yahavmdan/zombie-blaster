@@ -2,6 +2,9 @@ import { GAME_CONSTANTS } from '@shared/index';
 import { LooseProp } from '@shared/game-entities';
 import { BoulderPuzzleLayout, Platform, Rope } from './engine-types';
 import { Prop, PROP_ART, PropArt, propArtWidth, RAIL_ART } from './level-generator';
+import { LightningStrike } from './storm';
+import { StormSky } from './storm-sky';
+import { drawCageArt, drawSpringBlock } from './puzzle-art';
 
 interface TileBlock {
   tl: number;
@@ -29,9 +32,11 @@ const PLATFORM_BLOCK: TileBlock = {
   bl: 73, bc: 74, br: 75,
 };
 
-const BG_LAYER_PATHS: string[] = [
-  'tiles/backgrounds/1.png',
-  'tiles/backgrounds/2.png',
+/** The background art's cloud bank (drifts across the sky). */
+const CLOUD_LAYER_PATH: string = 'tiles/backgrounds/2.png';
+
+/** Refinery silhouettes, far to near. */
+const SKYLINE_LAYER_PATHS: string[] = [
   'tiles/backgrounds/3.png',
   'tiles/backgrounds/4.png',
   'tiles/backgrounds/5.png',
@@ -43,13 +48,14 @@ const LADDER_PATH: string = 'tiles/objects/Ladder1.png';
 const LADDER_TILE_WIDTH: number = 32;
 
 /**
- * Draws the level. Two layers: scenery (parallax backgrounds, never anything you can stand on)
+ * Draws the level. Two layers: scenery (the animated storm sky, never anything you can stand on)
  * and geometry (ground, platforms, ladders) composed from the current layout, the same data
  * the physics collides with. Nothing walkable or climbable is hard-coded here.
  */
 export class MapRenderer {
   private tileImages: Map<number, HTMLImageElement> = new Map();
-  private bgLayers: HTMLImageElement[] = [];
+  private cloudLayer: HTMLImageElement | null = null;
+  private skylineLayers: HTMLImageElement[] = [];
   private ladderImage: HTMLImageElement | null = null;
   /** Prop images by `PropArt.src`. */
   private propImages: Map<string, HTMLImageElement> = new Map<string, HTMLImageElement>();
@@ -59,7 +65,7 @@ export class MapRenderer {
   private looseArt: Map<string, Prop> = new Map<string, Prop>();
   /** Opaque columns of the ladder image (its art doesn't fill the tile; it is centered by these). */
   private ladderArt: { left: number; right: number } = { left: 0, right: LADDER_TILE_WIDTH - 1 };
-  private sceneryCanvas: HTMLCanvasElement | null = null;
+  private stormSky: StormSky | null = null;
   private geometryCanvas: HTMLCanvasElement | null = null;
   private platforms: Platform[] = [];
   private ropes: Rope[] = [];
@@ -80,7 +86,7 @@ export class MapRenderer {
       RAIL_ART.middle,
       RAIL_ART.right,
     ];
-    this.totalCount = tileIds.size + BG_LAYER_PATHS.length + 1 + propArts.length;
+    this.totalCount = tileIds.size + 1 + SKYLINE_LAYER_PATHS.length + 1 + propArts.length;
 
     for (const art of propArts) {
       const img: HTMLImageElement = new Image();
@@ -97,11 +103,16 @@ export class MapRenderer {
       this.tileImages.set(id, img);
     }
 
-    for (const path of BG_LAYER_PATHS) {
+    const clouds: HTMLImageElement = new Image();
+    clouds.src = CLOUD_LAYER_PATH;
+    clouds.onload = (): void => this.onAssetLoaded();
+    this.cloudLayer = clouds;
+
+    for (const path of SKYLINE_LAYER_PATHS) {
       const img: HTMLImageElement = new Image();
       img.src = path;
       img.onload = (): void => this.onAssetLoaded();
-      this.bgLayers.push(img);
+      this.skylineLayers.push(img);
     }
 
     const ladder: HTMLImageElement = new Image();
@@ -150,7 +161,7 @@ export class MapRenderer {
     this.loadCount++;
     if (this.loadCount >= this.totalCount) {
       this.loaded = true;
-      this.composeScenery();
+      this.stormSky = new StormSky(this.cloudLayer!, this.skylineLayers);
       this.composeGeometry();
     }
   }
@@ -174,18 +185,6 @@ export class MapRenderer {
     const ctx: CanvasRenderingContext2D = canvas.getContext('2d')!;
     ctx.imageSmoothingEnabled = false;
     return ctx;
-  }
-
-  private composeScenery(): void {
-    const ctx: CanvasRenderingContext2D = this.createLayer();
-    const w: number = GAME_CONSTANTS.CANVAS_WIDTH;
-    const h: number = GAME_CONSTANTS.CANVAS_HEIGHT;
-    for (const layer of this.bgLayers) {
-      ctx.drawImage(layer, 0, 0, w, h);
-    }
-    ctx.fillStyle = 'rgba(0, 0, 20, 0.35)';
-    ctx.fillRect(0, 0, w, h);
-    this.sceneryCanvas = ctx.canvas;
   }
 
   private composeGeometry(): void {
@@ -299,51 +298,7 @@ export class MapRenderer {
    * its collision box; the plate sinks while it winds up and shoots up on release (drawn per frame).
    */
   drawSpring(ctx: CanvasRenderingContext2D, block: Platform, plateOffset: number): void {
-    const plateH: number = 12;
-    const baseH: number = 6;
-    const plateY: number = block.y + plateOffset;
-    const bottom: number = block.y + block.height;
-    const coilTop: number = plateY + plateH;
-    const coilBottom: number = bottom - baseH;
-    const inset: number = 16;
-    const loops: number = 4;
-    ctx.save();
-    ctx.fillStyle = '#3a3f48';
-    ctx.fillRect(block.x + inset / 2, coilBottom, block.width - inset, baseH);
-    // The coil: flattened rings stacked from the base to the plate.
-    const step: number = (coilBottom - coilTop) / loops;
-    ctx.lineWidth = 4;
-    for (let i: number = 0; i < loops; i++) {
-      const cy: number = coilTop + step * (i + 0.5);
-      ctx.strokeStyle = i % 2 === 0 ? '#9aa3ad' : '#c3cad2';
-      ctx.beginPath();
-      ctx.ellipse(
-        block.x + block.width / 2,
-        cy,
-        block.width / 2 - inset,
-        Math.max(1, step / 2 - 1),
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.stroke();
-    }
-    // The plate: full width, so you see exactly where you stand.
-    ctx.fillStyle = '#2c2f36';
-    ctx.fillRect(block.x, plateY, block.width, plateH);
-    ctx.fillStyle = '#f2c230';
-    for (let x: number = block.x; x < block.x + block.width; x += 24) {
-      ctx.beginPath();
-      ctx.moveTo(x, plateY + plateH);
-      ctx.lineTo(x + 12, plateY + plateH);
-      ctx.lineTo(Math.min(x + 24, block.x + block.width), plateY + 2);
-      ctx.lineTo(Math.min(x + 12, block.x + block.width), plateY + 2);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.fillStyle = '#d0d4da';
-    ctx.fillRect(block.x, plateY, block.width, 2);
-    ctx.restore();
+    drawSpringBlock(ctx, block, plateOffset);
   }
 
   /**
@@ -356,51 +311,7 @@ export class MapRenderer {
     box: { x: number; y: number; width: number; height: number },
     covered: boolean,
   ): void {
-    const frame: number = 6;
-    const x: number = Math.round(box.x);
-    const y: number = Math.round(box.y);
-    const w: number = box.width;
-    const h: number = box.height;
-    ctx.save();
-    if (covered) {
-      // Tarp draped over the frame, gathered by a rope near the top, with fold lines down it.
-      ctx.fillStyle = '#4b4232';
-      ctx.fillRect(x, y, w, h);
-      ctx.fillStyle = '#5c5240';
-      for (let fx: number = x + 10; fx < x + w - 8; fx += 22) ctx.fillRect(fx, y + 14, 8, h - 20);
-      ctx.strokeStyle = '#2e281e';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let fx: number = x + 20; fx < x + w - 8; fx += 22) {
-        ctx.moveTo(fx, y + 16);
-        ctx.lineTo(fx - 3, y + h - 4);
-      }
-      ctx.stroke();
-      ctx.fillStyle = '#a08a5a';
-      ctx.fillRect(x, y + 10, w, 3);
-      ctx.fillStyle = '#3a3f48';
-      ctx.fillRect(x, y, w, frame);
-      ctx.fillStyle = '#9aa3ad';
-      ctx.fillRect(x, y, w, 2);
-      ctx.fillStyle = '#3d3528';
-      ctx.fillRect(x, y + h - 4, w, 4);
-      ctx.restore();
-      return;
-    }
-    ctx.fillStyle = 'rgba(20, 22, 28, 0.55)';
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = '#5a5f68';
-    for (let bx: number = x + 14; bx < x + w - frame; bx += 14) {
-      ctx.fillRect(bx, y, 3, h);
-    }
-    ctx.fillStyle = '#3a3f48';
-    ctx.fillRect(x, y, w, frame);
-    ctx.fillRect(x, y + h - frame, w, frame);
-    ctx.fillRect(x, y, frame, h);
-    ctx.fillRect(x + w - frame, y, frame, h);
-    ctx.fillStyle = '#9aa3ad';
-    ctx.fillRect(x, y, w, 2);
-    ctx.restore();
+    drawCageArt(ctx, box, covered);
   }
 
   /** The floor's pickable props (by id), drawn per frame with `drawLooseProp`. */
@@ -464,8 +375,10 @@ export class MapRenderer {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D): void {
-    if (this.sceneryCanvas) ctx.drawImage(this.sceneryCanvas, 0, 0);
+  /** Storm sky (clouds drift with `nowMs`, lit by `lightning`), the level geometry, then rain. */
+  render(ctx: CanvasRenderingContext2D, nowMs: number, lightning: LightningStrike | null): void {
+    this.stormSky?.drawBack(ctx, nowMs, lightning);
     if (this.geometryCanvas) ctx.drawImage(this.geometryCanvas, 0, 0);
+    this.stormSky?.drawRain(ctx, nowMs, lightning);
   }
 }

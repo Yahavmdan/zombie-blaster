@@ -162,6 +162,8 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     screenShakeIntensity: 0,
     screenFlashColor: null,
     screenFlashFrames: 0,
+    lightning: null,
+    lightningTimerMs: 0,
     spriteAnimator: { setState: vi.fn(), tick: vi.fn(), restart: vi.fn(), load: vi.fn(), isLoaded: vi.fn().mockReturnValue(false), draw: vi.fn() } as never,
     zombieSpriteAnimator: {
       getSpriteKey: vi.fn().mockReturnValue('walker'),

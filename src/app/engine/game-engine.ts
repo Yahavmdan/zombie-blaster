@@ -31,6 +31,7 @@ import { SpriteAnimator, PlayerAnimState, classToSpriteSet } from './sprite-anim
 import { ZombieSpriteAnimator, ZombieAnimState, zombieAnimState } from './zombie-sprite-animator';
 import { MapRenderer } from './map-renderer';
 import { SpriteEffectSystem } from './sprite-effect-system';
+import { LightningStrike, nextLightningDelayMs } from './storm';
 import {
   BackgroundStar,
   BoulderPuzzleLayout,
@@ -171,6 +172,8 @@ export class GameEngine implements IGameEngine {
   screenShakeIntensity: number = 0;
   screenFlashColor: string | null = null;
   screenFlashFrames: number = 0;
+  lightning: LightningStrike | null = null;
+  lightningTimerMs: number = nextLightningDelayMs(Math.random);
 
   readonly spriteAnimator: SpriteAnimator = new SpriteAnimator();
   readonly zombieSpriteAnimator: ZombieSpriteAnimator = new ZombieSpriteAnimator();
@@ -648,6 +651,8 @@ export class GameEngine implements IGameEngine {
     this.vfxSystem.updateDragonImpacts();
     this.vfxSystem.updateHitMarks();
     this.vfxSystem.updatePlayerTints();
+    // The host's sky decides when lightning strikes; guests see it through the Lightning event.
+    this.vfxSystem.updateLightning(!this.isMultiplayerClient);
     this.corpseCarrySystem.update();
     this.loosePropSystem.update();
     this.zombieSystem.updateZombieCorpses();
@@ -1233,6 +1238,9 @@ export class GameEngine implements IGameEngine {
           break;
         case VfxEventType.DoorShut:
           this.vfxSystem.spawnDoorShut(evt.x, evt.y);
+          break;
+        case VfxEventType.Lightning:
+          this.vfxSystem.strikeLightning(evt.x, evt.value!);
           break;
       }
       // Other players' effects render a bit softer so your own read first.

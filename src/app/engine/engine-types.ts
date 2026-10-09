@@ -28,6 +28,7 @@ import { SpriteAnimator } from './sprite-animator';
 import { ZombieSpriteAnimator } from './zombie-sprite-animator';
 import { MapRenderer } from './map-renderer';
 import { SpriteEffectSystem } from './sprite-effect-system';
+import { LightningStrike } from './storm';
 
 export type DashPhase = 'vanishing' | 'swishing' | 'appearing';
 
@@ -323,6 +324,10 @@ export interface IGameEngine {
   screenShakeIntensity: number;
   screenFlashColor: string | null;
   screenFlashFrames: number;
+  /** The strike lighting the sky right now (null between strikes). Drawn by MapRenderer. */
+  lightning: LightningStrike | null;
+  /** Host/solo only: ms until the next strike. */
+  lightningTimerMs: number;
 
   readonly spriteAnimator: SpriteAnimator;
   readonly zombieSpriteAnimator: ZombieSpriteAnimator;

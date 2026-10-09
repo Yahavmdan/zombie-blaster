@@ -395,6 +395,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
       spriteEffects: engine.spriteEffectSystem.getActiveEffectIds(),
       screenShakeFrames: engine.screenShakeFrames,
       screenFlashFrames: engine.screenFlashFrames,
+      lightning: engine.lightning ? { ...engine.lightning } : null,
     },
     pending: {
       vfxEvents: engine.pendingVfxEvents.length,
@@ -419,6 +420,11 @@ const engineControls: E2eEngineControls = {
     p.y = y;
     p.velocityX = 0;
     p.velocityY = 0;
+  },
+  strikeLightningNow(): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine || engine.isMultiplayerClient) return;
+    engine.lightningTimerMs = 0;
   },
   dropCorpses(centerX: number, count: number): void {
     const engine: GameEngine | null = currentEngine;

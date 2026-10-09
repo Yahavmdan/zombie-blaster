@@ -18,9 +18,13 @@ The engine is split into focused files under `src/app/engine/`.
 | `zombie-system.ts` | Zombie AI, spawning, waves, corpses, zombie collisions |
 | `projectile-system.ts` | Dragon/spitter projectiles, poison effects |
 | `drop-system.ts` | Loot drops, potion use, item pickup |
-| `vfx-system.ts` | Particles, damage numbers, screen shake/flash, skill animations, hit marks |
+| `vfx-system.ts` | Particles, damage numbers, screen shake/flash, skill animations, hit marks, lightning (`updateLightning`: host/solo schedules strikes and queues `Lightning`; `strikeLightning` is the replay entry) |
 | `render-system.ts` | All canvas drawing: background, players, zombies, projectiles, overlays |
-| `map-renderer.ts` | Draws scenery (backgrounds) and the level geometry layer (ground, platforms, ladders) **from the layout data only** |
+| `map-renderer.ts` | Draws scenery (the storm sky, via `StormSky`) and the level geometry layer (ground, platforms, ladders) **from the layout data only**; `render(ctx, nowMs, lightning)` = sky, geometry, rain |
+| `pixel-art.ts` | Pixel drawing for world objects drawn in code: `ART_PX` (2 px art grid), `PIXEL` palette (the pixel icon colours + stone/tarp), `pxRect`/`pxBar`/`pxRivet`/`pxLine`/`pxDisc`, char-grid `PixelSprite` + `drawSprite`, `outlined` (ink outline). No gradients, arcs or anti-aliased strokes |
+| `puzzle-art.ts` | Art of every puzzle part, from the boxes callers already use (art == collision): boulder (24-cell stone, 32 pre-rendered turns, light fixed top-left), chute, gate (sprite per hit), exit arrows, spring block (helical coils under a hazard plate), button, scale pan/post/dial, cable + hung pulleys, chains (face/edge links along the sagging path), cage ring, cages (tarp drape / bare bars), cleats, pressure plate + signal arm, barred stone door. RenderSystem/MapRenderer only call these |
+| `storm.ts` | Lightning rules (pure): `LightningStrike` (x + seed + age), seeded bolt path (`lightningBolt`, lands on `lightningLandingY`), flash/bolt curves, next-strike delay and x |
+| `storm-sky.ts` | `StormSky`: animated scenery, never walkable. Gradient sky + stars, blocky blood moon behind the background art's own cloud bank (`tiles/backgrounds/2.png`, tinted, drifting as a wrapping mirrored strip; a lit copy blends in with the flash; the user wants these clouds, not new drawn ones), refinery silhouettes (`tiles/backgrounds/3-5.png` tinted, red haze, blinking beacons on the tallest stacks), the bolt striking the skyline top at its x, drifting ground fog, rain over the geometry. Time-driven (`nowMs`), so clouds/rain/fog are local; only strikes are synced |
 | `level-generator.ts` | Seeded per-floor layouts (platforms, ropes, exit side, safe spot + its ladder, floor-2 boulder puzzle: wall + ledge position, platforms kept out of the chute) + `levelViolations` rules; host picks the seed, clients follow it via game-sync |
 | `boulder-puzzle.ts` | Floor-2 puzzle rules (pure): gate box + hits, boulder path (ledge → chute → wall), rolling, crush targets, debris, `keepOutOfWall`, leaving through the opening |
 | `spring-puzzle.ts` | Floor-3 puzzle rules (pure): spring span, scale pan + what rests on it and its kg (`scaleLoadKg`), cable path, button box + rise (`tickButton`) + presses, 3-2-1 countdown + launch tick, on-spring check + fling, corpse scatter, plate offset |
@@ -100,13 +104,19 @@ The engine is split into focused files under `src/app/engine/`.
   weight comes from the synced corpses and players' positions; the host sends it with the door in
   `plate`.
 
+## Storm sky
+
+- Ambient motion (clouds, fog, rain, beacons) is drawn from the frame time on each client and is not synced; it carries no gameplay.
+- Lightning is synced: only the host/solo engine counts down `lightningTimerMs` and strikes (`LIGHTNING_*` in `shared/game-constants.ts`); guests get `VfxEventType.Lightning` (`x`, `value` = seed) and draw the same bolt. RenderSystem adds the whole-screen wash (`LIGHTNING_SCREEN_FLASH_ALPHA`).
+- E2E: `probe.strikeLightningNow()` makes the host strike on the next tick; `GamePlayer.canvasLuma(y0, y1, true)` measures the sky while a strike is lit (`e2e/specs/solo/storm.spec.ts`, `e2e/specs/online/storm-sync.spec.ts`).
+
 ## Dependency rules
 
 - Systems reach engine state through `IGameEngine` (`engine-types.ts`). Systems never import `game-engine.ts`.
 - No circular deps. Current graph:
 
 ```
-PhysicsSystem, VfxSystem, SpriteEffectSystem, MapRenderer -> standalone
+PhysicsSystem, VfxSystem, SpriteEffectSystem, MapRenderer -> standalone (MapRenderer owns StormSky)
 DropSystem       -> Physics, Vfx
 CombatSystem     -> Physics, Vfx, Drop
 ProjectileSystem -> Physics, Vfx
