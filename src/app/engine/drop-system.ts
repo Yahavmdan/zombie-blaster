@@ -235,7 +235,7 @@ export class DropSystem {
       p.inventory.gold += drop.value;
       this.e.onGoldPickup?.(drop.value);
       this.vfx.spawnHitParticles(cx, cy, '#ffcc44');
-      this.vfx.addDropNotification(DropType.Gold, `+${drop.value}G`, '#ffcc44', '💰');
+      this.vfx.addDropNotification(DropType.Gold, `+${drop.value}G`, '#ffcc44', 'coin');
       this.e.pendingVfxEvents.push({
         type: VfxEventType.HitParticles,
         playerId: p.id,
@@ -248,7 +248,7 @@ export class DropSystem {
       p.inventory.potions[potionId] = (p.inventory.potions[potionId] ?? 0) + 1;
       this.e.onPotionPickup?.(DropType.HpPotion);
       this.vfx.spawnHitParticles(cx, cy, '#ff4488');
-      this.vfx.addDropNotification(DropType.HpPotion, '+1 HP Potion', '#ff4488', '❤️');
+      this.vfx.addDropNotification(DropType.HpPotion, '+1 HP Potion', '#ff4488', 'potion-hp-s');
       this.e.pendingVfxEvents.push({
         type: VfxEventType.HitParticles,
         playerId: p.id,
@@ -261,7 +261,7 @@ export class DropSystem {
       p.inventory.potions[potionId] = (p.inventory.potions[potionId] ?? 0) + 1;
       this.e.onPotionPickup?.(DropType.MpPotion);
       this.vfx.spawnHitParticles(cx, cy, '#4488ff');
-      this.vfx.addDropNotification(DropType.MpPotion, '+1 MP Potion', '#4488ff', '💧');
+      this.vfx.addDropNotification(DropType.MpPotion, '+1 MP Potion', '#4488ff', 'potion-mp-s');
       this.e.pendingVfxEvents.push({
         type: VfxEventType.HitParticles,
         playerId: p.id,
