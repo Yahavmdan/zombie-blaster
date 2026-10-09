@@ -16,6 +16,7 @@ import { ProjectileSystem } from './projectile-system';
 import { restsOnSafeSpot } from './safe-spot';
 import { corpseSurface } from './corpse-surface';
 import { CarryPose } from './corpse-carry';
+import { CorpseDrape } from './corpse-drape';
 import { ZombieSystem } from './zombie-system';
 import { SpriteAnimator } from './sprite-animator';
 import { ZombieAnimState } from './zombie-sprite-animator';
@@ -119,6 +120,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     zombies,
     zombieCorpses: [],
     carryPoses: new Map<string, CarryPose>(),
+    corpseDrapes: new Map<string, CorpseDrape>(),
     particles: [],
     damageNumbers: [],
     dropNotifications: [],

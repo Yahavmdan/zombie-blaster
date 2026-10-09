@@ -27,6 +27,7 @@ import { PlatePuzzleSystem } from './plate-puzzle-system';
 import { CageId, cleatBox, exitCageGroundBox, hangBox } from './cage-puzzle';
 import { ZombieSystem } from './zombie-system';
 import { CarryPose } from './corpse-carry';
+import { CorpseDrape } from './corpse-drape';
 import { leverBox, springSpan } from './spring-puzzle';
 import { exitPlatformY } from './level-generator';
 import { Box, BoulderPath, boulderPath, gateBox, pointAlong } from './boulder-puzzle';
@@ -350,6 +351,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     zombies,
     zombieCorpses: [],
     carryPoses: new Map<string, CarryPose>(),
+    corpseDrapes: new Map<string, CorpseDrape>(),
     particles: [],
     damageNumbers: [],
     dropNotifications: [],

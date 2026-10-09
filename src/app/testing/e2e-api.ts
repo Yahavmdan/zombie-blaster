@@ -96,6 +96,8 @@ export interface E2eCorpseView {
   lastFrame: number;
   /** How this client draws it swaying on its carrier (px / radians), null when not carried. */
   carryPose: { bob: number; sag: number; tilt: number } | null;
+  /** Deepest sag (px) of its body draped over what is under it; null when not lying in the world. */
+  drape: number | null;
 }
 
 /** Corpses piled up under the exit: ordinary corpses, nothing holds or arranges them. */

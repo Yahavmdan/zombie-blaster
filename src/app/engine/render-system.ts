@@ -30,10 +30,21 @@ import {
 } from '@shared/game-constants';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
-import { ZombieSpriteAnchor } from './zombie-sprite-animator';
+import { ZombieAnimState, ZombieSpriteAnchor } from './zombie-sprite-animator';
 import { MagnetPull, ZombieCorpse } from '@shared/game-entities';
 import { magnetPullProgress } from './magnet-pull';
 import { CarryPose, carriedIds, carryableCorpse } from './corpse-carry';
+import {
+  BODY_HALF_SPAN,
+  BODY_SHIFT,
+  CorpseDrape,
+  DRAPE_STRIP_PX,
+  corpseFlipX,
+  corpseRenderSize,
+  dropAt,
+  maxDrop,
+  shiftAt,
+} from './corpse-drape';
 import {
   Box,
   BoulderPath,
@@ -76,14 +87,17 @@ import {
   PlayerTint,
 } from './engine-types';
 
-/** How far (fraction of the sprite width) a lying body's middle sits behind its feet. */
-const CARRIED_BODY_SHIFT: number = 0.26;
-/** Half a lying body's length (fraction of the sprite width): its ends hang by the full sag. */
-const CARRIED_HALF_SPAN: number = 0.27;
-/** Width of the strips a carried body is bent in. */
-const BEND_STRIP_PX: number = 2;
-/** Strips past the body's ends (empty sprite margin) stop dropping further. */
+/** Strips past a carried body's ends (empty sprite margin) stop dropping further. */
 const BEND_MAX_REACH: number = 1.3;
+/** A lying body sagging less than this is drawn straight. */
+const MIN_DRAPE_PX: number = 0.5;
+
+/** How far one strip of a bent corpse sprite is moved. */
+interface StripOffset {
+  dx: number;
+  dy: number;
+}
+
 /** Matches the warrior-monster-magnet skill color. */
 const MAGNET_STREAK_COLOR: string = '#cc44ff';
 const HURT_TINT_COLOR: string = '#ff2020';
@@ -966,17 +980,13 @@ export class RenderSystem {
       const progress: number = corpse.fadeTimer / corpse.maxFadeTimer;
       const alpha: number = Math.min(1, progress * 2);
 
-      const corpseDef: ZombieDefinition = ZOMBIE_TYPES[corpse.type];
-      const baseRenderSize: number = corpse.type === ZombieType.DragonBoss ? 260 : corpse.type === ZombieType.Boss ? 200 : 140;
-      const baseH: number = (corpseDef.heightMin + corpseDef.heightMax) / 2;
-      const scale: number = corpse.height / baseH;
-      const renderW: number = Math.round(baseRenderSize * scale);
+      const renderW: number = corpseRenderSize(corpse);
       const renderH: number = renderW;
-      const flipX: boolean = corpse.type === ZombieType.DragonBoss ? corpse.facing > 0 : corpse.facing < 0;
+      const flipX: boolean = corpseFlipX(corpse);
       const anchor: ZombieSpriteAnchor = this.e.zombieSpriteAnimator.getAnchor(corpse.spriteKey);
       const effectiveAnchorX: number = flipX ? (1 - anchor.anchorX) : anchor.anchorX;
       // A lying body stretches behind its feet (the anchor); carried, its middle goes on the head.
-      const bodyShift: number = this.isCarried(corpse) ? (flipX ? 1 : -1) * renderW * CARRIED_BODY_SHIFT : 0;
+      const bodyShift: number = this.isCarried(corpse) ? (flipX ? 1 : -1) * renderW * BODY_SHIFT : 0;
       const drawX: number = corpse.x + corpse.width / 2 - renderW * effectiveAnchorX + bodyShift;
       const drawY: number = corpse.y + corpse.height - renderH * anchor.anchorY;
 
@@ -986,13 +996,21 @@ export class RenderSystem {
         continue;
       }
 
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      this.e.zombieSpriteAnimator.draw(
-        ctx, corpse.id, corpse.spriteKey,
-        drawX, drawY, renderW, renderH, flipX,
-      );
-      ctx.restore();
+      const drape: CorpseDrape | undefined = this.isLyingFlat(corpse) ? this.e.corpseDrapes.get(corpse.id) : undefined;
+      if (drape && maxDrop(drape) >= MIN_DRAPE_PX) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        this.drawBentCorpse(ctx, corpse, drawX, drawY, renderW, flipX, (x: number): StripOffset => ({ dx: shiftAt(drape, x), dy: dropAt(drape, x) }));
+        ctx.restore();
+      } else {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        this.e.zombieSpriteAnimator.draw(
+          ctx, corpse.id, corpse.spriteKey,
+          drawX, drawY, renderW, renderH, flipX,
+        );
+        ctx.restore();
+      }
 
       if (corpse.isGrounded) {
         if (corpse.showBlood) {
@@ -1018,27 +1036,64 @@ export class RenderSystem {
     flipX: boolean,
     alpha: number,
   ): void {
+    const pivotX: number = corpse.x + corpse.width / 2;
+    const pivotY: number = corpse.y + corpse.height;
+    const halfSpan: number = size * BODY_HALF_SPAN;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(pivotX, pivotY + Math.round(pose.bob));
+    ctx.rotate(pose.tilt);
+    ctx.translate(-pivotX, -pivotY);
+    this.drawBentCorpse(ctx, corpse, drawX, drawY, size, flipX, (x: number): StripOffset => {
+      const reach: number = Math.min(BEND_MAX_REACH, Math.abs(x - pivotX) / halfSpan);
+      return { dx: 0, dy: pose.sag * reach * reach };
+    });
+    ctx.restore();
+  }
+
+  /** The corpse shows its last death frame: fully lying down (the body a drape bends). */
+  private isLyingFlat(corpse: ZombieCorpse): boolean {
+    const anim: { state: ZombieAnimState; frame: number } | null = this.e.zombieSpriteAnimator.getInstanceFrame(corpse.id);
+    return (
+      !!anim &&
+      anim.state === ZombieAnimState.Dead &&
+      anim.frame === this.e.zombieSpriteAnimator.getFrameCount(corpse.spriteKey, ZombieAnimState.Dead) - 1
+    );
+  }
+
+  /**
+   * Draws a corpse's frame bent: in thin vertical strips, each moved by `offsetAt` of its screen x
+   * (neighboring strips moved the same are drawn as one).
+   */
+  private drawBentCorpse(
+    ctx: CanvasRenderingContext2D,
+    corpse: ZombieCorpse,
+    drawX: number,
+    drawY: number,
+    size: number,
+    flipX: boolean,
+    offsetAt: (x: number) => StripOffset,
+  ): void {
     const sprite: HTMLCanvasElement = this.bendCanvas(size);
     const spriteCtx: CanvasRenderingContext2D = sprite.getContext('2d')!;
     spriteCtx.clearRect(0, 0, size, size);
     this.e.zombieSpriteAnimator.draw(spriteCtx, corpse.id, corpse.spriteKey, 0, 0, size, size, flipX);
 
-    const pivotX: number = corpse.x + corpse.width / 2;
-    const pivotY: number = corpse.y + corpse.height;
-    const halfSpan: number = size * CARRIED_HALF_SPAN;
-    ctx.save();
-    ctx.globalAlpha = alpha;
     ctx.imageSmoothingEnabled = false;
-    ctx.translate(pivotX, pivotY + Math.round(pose.bob));
-    ctx.rotate(pose.tilt);
-    ctx.translate(-pivotX, -pivotY);
-    for (let sx: number = 0; sx < size; sx += BEND_STRIP_PX) {
-      const w: number = Math.min(BEND_STRIP_PX, size - sx);
-      const reach: number = Math.min(BEND_MAX_REACH, Math.abs(drawX + sx + w / 2 - pivotX) / halfSpan);
-      const dy: number = Math.round(pose.sag * reach * reach);
-      ctx.drawImage(sprite, sx, 0, w, size, drawX + sx, drawY + dy, w, size);
+    const rounded: (sx: number) => StripOffset = (sx: number): StripOffset => {
+      const o: StripOffset = offsetAt(drawX + sx + DRAPE_STRIP_PX / 2);
+      return { dx: Math.round(o.dx), dy: Math.round(o.dy) };
+    };
+    let runStart: number = 0;
+    let run: StripOffset = rounded(0);
+    for (let sx: number = DRAPE_STRIP_PX; sx <= size; sx += DRAPE_STRIP_PX) {
+      const next: StripOffset | null = sx < size ? rounded(sx) : null;
+      if (next && next.dx === run.dx && next.dy === run.dy) continue;
+      const w: number = Math.min(sx, size) - runStart;
+      ctx.drawImage(sprite, runStart, 0, w, size, drawX + runStart + run.dx, drawY + run.dy, w, size);
+      runStart = sx;
+      if (next) run = next;
     }
-    ctx.restore();
   }
 
   /** Scratch canvas a carried corpse's frame is drawn on before it is bent onto the screen. */
