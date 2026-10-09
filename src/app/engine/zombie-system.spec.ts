@@ -600,6 +600,8 @@ describe('Eater zombie', (): void => {
   beforeEach((): void => {
     player = makePlayer({ x: 100, y: GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT });
     engine = makeMockEngine(player, []);
+    // The exit (and the pile under it) far left, out of the way of these tests' corpses.
+    engine.exitPlatform = { x: 0, y: 130, width: 60, height: 20 };
     const physics: PhysicsSystem = new PhysicsSystem(engine);
     const vfx: VfxSystem = new VfxSystem(engine);
     const combat: CombatSystem = new CombatSystem(engine, physics, vfx, { rollDrops: vi.fn() } as never);
@@ -768,6 +770,58 @@ describe('Eater zombie', (): void => {
       expect(first.eatingTargetId).not.toBeNull();
       expect(second.eatingTargetId).not.toBeNull();
       expect(first.eatingTargetId).not.toBe(second.eatingTargetId);
+    });
+  });
+
+  describe('playtest bugs (round 4)', (): void => {
+    const safeSpot: Platform = { x: 900, y: 230, width: 160, height: 32, safe: true };
+
+    it('leaves corpses on the safe spot alone: no meal up there', (): void => {
+      engine.platforms = [...engine.platforms, safeSpot];
+      engine.zombieCorpses = [0, 1, 2].map((i: number): ZombieCorpse => makeCorpse({ id: `up${i}`, x: 920 + i * 30, y: safeSpot.y - 50, isGrounded: true }));
+      const eater: ZombieState = makeEater({ x: 300 });
+      engine.zombies = [eater];
+      zombieSystem.updateZombies();
+      expect(eater.eatingTargetId).toBeNull();
+    });
+
+    it('leaves the pile under the exit alone, and it draws no Eater', (): void => {
+      engine.exitPlatform = { x: 600, y: 130, width: 200, height: 20 };
+      engine.zombieCorpses = [0, 1, 2, 3].map((i: number): ZombieCorpse => lyingCorpse(`exit${i}`, 620 + i * 40));
+      const eater: ZombieState = makeEater({ x: 200 });
+      engine.zombies = [eater];
+      zombieSystem.updateZombies();
+      expect(eater.eatingTargetId).toBeNull();
+      engine.zombies = [];
+      for (let i: number = 0; i < GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_DELAY_MAX_TICKS * 2; i++) zombieSystem.updateSpawning();
+      expect(eatersIn(engine)).toHaveLength(0);
+    });
+
+    it('a pile of three still draws an Eater (buried bodies count as food, just later)', (): void => {
+      const step: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+      engine.zombieCorpses = [0, 1, 2].map((i: number): ZombieCorpse =>
+        makeCorpse({ id: `p${i}`, x: 1000, y: GAME_CONSTANTS.GROUND_Y - 50 - i * step, isGrounded: true }));
+      engine.eaterSpawnTimer = 1;
+      zombieSystem.updateSpawning();
+      expect(eatersIn(engine)).toHaveLength(1);
+    });
+
+    it('eats a pile from the top, not the corpse buried under it', (): void => {
+      const bottom: ZombieCorpse = lyingCorpse('bottom', 1000);
+      const top: ZombieCorpse = makeCorpse({ id: 'top', x: 1000, y: bottom.y - GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT, isGrounded: true });
+      engine.zombieCorpses = [bottom, top];
+      const eater: ZombieState = makeEater({ x: 1000 });
+      engine.zombies = [eater];
+      zombieSystem.updateZombies();
+      expect(eater.eatingTargetId).toBe('top');
+    });
+
+    it('never rides on another zombie: an Eater falling onto one lands on the ground', (): void => {
+      const walker: ZombieState = makeZombie({ id: 'walker', x: 600, reactionDelay: 100_000 });
+      const eater: ZombieState = makeEater({ x: 600, y: walker.y - 60, isGrounded: false, reactionDelay: 100_000 });
+      engine.zombies = [walker, eater];
+      for (let i: number = 0; i < 60; i++) zombieSystem.updateZombies();
+      expect(eater.y + eater.instanceHeight).toBe(GAME_CONSTANTS.GROUND_Y);
     });
   });
 

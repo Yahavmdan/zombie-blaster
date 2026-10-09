@@ -102,13 +102,17 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   per player) near a corpse, smells corpses across the whole screen, runs to them (3.5x speed,
   steering every tick; each claims its corpse, so two Eaters split up) and eats each in 2 s (100
   ticks, then the corpse is gone). Corpses on ledges: it jumps (~144 px, other zombies ~90) up
-  through the ledge overhead or leaps from a ledge's end, ledge by ledge (`eater-path.ts`). With corpses
+  through the ledge overhead or leaps from a ledge's end, ledge by ledge (`eater-path.ts`); on a head
+  or a pile it steps off toward a lower goal (only platforms are dropped through) and it never rides
+  other zombies. Never food (`eater-meals.ts`): the pile under the exit, the floor-3 scale, the floor-5
+  plate, the safe spot; piles are eaten from the top. Drop test meals with `mealGroundX` (clear of
+  the exit column), not `openGroundX`. With corpses
   around they bite a player in reach only rarely (0.4%/tick, never mid-meal). With **no corpse
   left they turn hungry**: run at the nearest player or zombie (not Eaters, not the dragon) and
   attack like any zombie; bites on zombies knock back, show red hit effects (VFX log `color`
   `#b02a22`, replayed for guests) and a kill leaves a corpse (no XP/loot): the next meal. Probe:
-  `zombies[].type === 'eater'`, `eating`, `animState` (`eating`, `run`, ...). They eat the exit
-  pile too. Rest players on the safe spot so a hungry Eater only has zombies to hunt.
+  `zombies[].type === 'eater'`, `eating`, `animState` (`eating`, `run`, ...). Lab:
+  `npm run e2e:lab -- -g eater` (stuck spells, meals, puzzle side effects, host/guest). Rest players on the safe spot so a hungry Eater only has zombies to hunt.
   Specs: `solo/eater.spec.ts`, `online/eater-coop.spec.ts`.
 - Player: 90 ticks (1.8 s) invincible after a hit; move speed 3 (faster than most zombies).
 - Potions: key 7 (HP +50) / 8 (MP +30), 30-tick cooldown, start with 3 each, 30/20 gold.
@@ -290,6 +294,12 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
   animator method; a missing one throws only on a random branch and looks like a flake.
 - `vfxQueuedBy` reads the probe VFX log. Events leave the queue as `sent` (multiplayer) or
   `discarded` (solo, drained every tick), so it works in both modes.
+- The lab config (`e2e/lab/playwright.lab.config.ts`) always reuses whatever answers on 4200/3001,
+  which may be another worktree's server or a dev server serving stale code (an old run once
+  "measured" bugs that were already fixed). Start your own: API `PORT=5551 npm run dev` (the server
+  reads `PORT`, not `API_PORT`) and `API_PORT=5551 npx ng serve --port 5550`, then run the lab with
+  `WEB_PORT=5550 API_PORT=5551`. Stopping the background shell can leave the node processes
+  listening: check the ports and kill them after.
 - Worktree slot: ports 4200/3001 may belong to the primary checkout. Run the slot's frontend on
   another port (`npx ng serve --port 4210`) and point the suite at it with
   `E2E_BASE_URL=http://localhost:4210 E2E_EXTERNAL_HAS_PROBE=1` (online specs use whatever API

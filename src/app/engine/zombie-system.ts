@@ -26,6 +26,7 @@ import { drapeCorpses } from './corpse-drape';
 import { advanceMagnetPull } from './magnet-pull';
 import { pushOutOfSolids } from './solid-blocks';
 import { EaterStep, Feet, eaterStep } from './eater-path';
+import { MealContext, isEaterFood, isEaterMeal } from './eater-meals';
 
 interface TargetInfo {
   id: string;
@@ -266,7 +267,9 @@ export class ZombieSystem {
         let bestZombieSurface: number | null = null;
         const climbRatio: number = GAME_CONSTANTS.ZOMBIE_CLIMB_WIDTH_RATIO;
         const maxStack: number = GAME_CONSTANTS.ZOMBIE_MAX_STACK_HEIGHT;
-        for (const other of this.e.zombies) {
+        // Eaters never ride on other zombies: they jump onto ledges instead.
+        const zombiesToStandOn: ZombieState[] = z.type === ZombieType.Eater ? [] : this.e.zombies;
+        for (const other of zombiesToStandOn) {
           if (other === z || other.isDead || other.spawnTimer > 0) continue;
           if (other.type === ZombieType.DragonBoss) continue;
           if (!other.isGrounded) continue;
@@ -585,10 +588,11 @@ export class ZombieSystem {
   private findNearestCorpse(z: ZombieState): ZombieCorpse | null {
     const zx: number = z.x + z.instanceWidth / 2;
     const zy: number = z.y + z.instanceHeight / 2;
+    const meals: MealContext = this.mealContext();
     let best: ZombieCorpse | null = null;
     let bestDist: number = Infinity;
     for (const corpse of this.e.zombieCorpses) {
-      if (!corpse.isGrounded || corpse.carrierId !== null) continue;
+      if (!isEaterMeal(corpse, meals)) continue;
       const claimed: boolean = this.e.zombies.some(
         (other: ZombieState): boolean => other !== z && !other.isDead && other.eatingTargetId === corpse.id,
       );
@@ -982,11 +986,12 @@ export class ZombieSystem {
     }
   }
 
-  /** Lying corpses draw Eaters: while enough of them lie uneaten, one comes every 10-20 s (capped). */
+  /** Lying corpses (whole piles count) draw Eaters: while enough lie uneaten, one comes every 10-20 s (capped). */
   private updateEaterSpawning(playerCount: number): void {
     if (this.e.floor < GAME_CONSTANTS.ZOMBIE_EATER_MIN_WAVE) return;
+    const ctx: MealContext = this.mealContext();
     const meals: ZombieCorpse[] = this.e.zombieCorpses.filter(
-      (c: ZombieCorpse): boolean => c.isGrounded && c.carrierId === null && !this.isMealClaimed(c),
+      (c: ZombieCorpse): boolean => isEaterFood(c, ctx) && !this.isMealClaimed(c),
     );
     const eaters: number = this.e.zombies.filter((z: ZombieState): boolean => !z.isDead && z.type === ZombieType.Eater).length;
     if (meals.length < GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_MIN_CORPSES || eaters >= GAME_CONSTANTS.ZOMBIE_EATER_MAX_ALIVE * playerCount) {
@@ -999,6 +1004,17 @@ export class ZombieSystem {
     const meal: ZombieCorpse = meals[Math.floor(Math.random() * meals.length)];
     const feet: { x: number; y: number } = this.pickEaterSpawnSpot(meal);
     this.spawnZombie({ x: feet.x, groundY: feet.y }, ZombieType.Eater);
+  }
+
+  /** What decides which corpses are food for an Eater on this floor. */
+  private mealContext(): MealContext {
+    return {
+      corpses: this.e.zombieCorpses,
+      platforms: this.e.platforms,
+      exitPlatform: this.e.exitPlatform,
+      springPuzzle: this.e.springPuzzle,
+      platePuzzle: this.e.platePuzzle,
+    };
   }
 
   private rollEaterSpawnDelay(): number {

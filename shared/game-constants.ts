@@ -245,6 +245,7 @@ export const GAME_CONSTANTS = {
   ZOMBIE_EATER_JUMP_COOLDOWN_TICKS: 20, // Ticks between an Eater's jumps
   ZOMBIE_EATER_LEAP_MAX_SPEED: 6, // Fastest sideways speed of a leap from one ledge across to a higher one
   ZOMBIE_EATER_LEAP_INSET_PX: 12, // A leap lands the body this far inside the near end of the ledge
+  ZOMBIE_EATER_STEP_OFF_WIDTHS: 3, // Half-widths an Eater steps aside to get off a head or a pile toward a goal below it
   ZOMBIE_EATER_LEVEL_TOLERANCE_PX: 12, // A goal within this height of its feet counts as on its level (no climbing)
   ZOMBIE_EATER_ARRIVE_THRESHOLD: 8, // Distance (px) at which an Eater starts eating
   ZOMBIE_EATER_ATTACK_CHANCE: 0.004, // Chance per tick an Eater bites a player in reach while corpses lie around (rare: ~once per 5 s beside it; never while eating)

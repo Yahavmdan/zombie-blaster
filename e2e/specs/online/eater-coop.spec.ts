@@ -3,7 +3,7 @@ import { test, expect, RoomFactory } from '../../support/fixtures';
 import { RoomSession } from '../../support/room';
 import { GamePlayer } from '../../support/game-player';
 import { E2eCorpseView, E2eSnapshot, E2eVfxLogEntry, E2eZombieView } from '../../support/probe';
-import { openGroundX } from '../../support/navigation';
+import { mealGroundX } from '../../support/navigation';
 import { WORLD } from '../../support/invariants';
 
 /** Lying corpses that draw an Eater (ZOMBIE_EATER_SPAWN_MIN_CORPSES). */
@@ -35,11 +35,11 @@ test.describe('eater zombie in co-op', { tag: '@online' }, (): void => {
     await host.probe.setGodMode(true);
     await guest.probe.setGodMode(true);
 
-    let x: number | null = openGroundX(await host.probe.state(), PILE_SPAN);
+    let x: number | null = mealGroundX(await host.probe.state(), PILE_SPAN);
     for (let seed: number = 1; x === null && seed <= 20; seed++) {
       await host.probe.setLayoutSeed(seed);
       await host.wait(300);
-      x = openGroundX(await host.probe.state(), PILE_SPAN);
+      x = mealGroundX(await host.probe.state(), PILE_SPAN);
     }
     expect(x, 'a floor layout with open ground').not.toBeNull();
 

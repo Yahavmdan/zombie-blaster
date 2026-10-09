@@ -173,6 +173,37 @@ DOOM 2016 attack tokens). Date: 2026-09-30. Items are ordered by impact.
   Getting up the exposed ladder is how players earn the rest.
   Specs: `safe-spot.spec.ts`, `safe-spot-coop.spec.ts`, `exit.spec.ts`, level rules in `level-generator.spec.ts`.
 
+## Round 4 (2026-10-10): Eater playtest
+
+Measured with `npm run e2e:lab -- -g eater` (`e2e/lab/eater.lab.ts`, 9 experiments, 60 s each per
+layout/floor; findings in `e2e/.results/lab/findings.jsonl`, stuck-spell screenshots next to them).
+
+Bugs (all fixed the same day, `fix/eater-playtest-bugs`):
+- **Drop-down loop on heads and piles (worst).** With its goal below, the Eater "drops through the
+  platform". Standing on another zombie's head or on top of a corpse pile there is no platform to
+  drop through, so it lands back on the same spot every tick: frozen in the jump pose for good
+  (layout seed 3: 0 of 3 corpses eaten in 60 s, airborne 90% of samples; exit pile: 3 stuck spells).
+  Fix: only drop when standing on a platform; on a head or a pile, walk off toward the goal.
+- **Corpses on the safe spot.** It cannot climb by the safe spot, yet keeps choosing those corpses:
+  paces under the ladder forever (0 of 3 eaten in 45 s). Worse, from a ledge close enough below it
+  jumps up and lands on a corpse lying there (seed 1), so an Eater stands on the safe spot.
+  Fix: corpses on the safe spot are never a meal.
+- **Likely: eats piles from the bottom** (from the code, not measured alone). It goes for the
+  nearest corpse by center, which can be one buried in a pile while it stands on top: the goal is
+  "below" and the drop-down loop above kicks in. Fix: only corpses with nothing lying on them.
+- **Eaters ride each other.** The regular zombie stacking lets one Eater climb on another
+  (exit pile screenshot), which then feeds the drop-down loop.
+
+Design questions (decided: Eaters leave both alone, `eater-meals.ts`):
+- **It erased the exit pile.** 2 Eaters ate a 20-body pile under the exit in 90 s (floor 1 solo
+  needs ~40). Now the exit column is never food and doesn't draw Eaters.
+- **It sabotaged puzzles.** Floor 3: the scale went 280 kg to 0. Floor 5: plate weight 4 to 0 (the
+  door shut). Now corpses on the scale and the plate are never food.
+- Hungry bites on a maxed player: 7 HP in 15 s, fine. Low gravity: highest jump feet y 253, never
+  off screen. Snatching its meal (carry) stops the meal cleanly.
+- Host vs guest animation: 24 of 250 samples differ, mostly host "jump" vs guest "idle" (the
+  drop-down loop flickering `isGrounded`); positions drift at most 43 px.
+
 ## Suggested order
 
 1. Exit gate (progression is impossible today).
