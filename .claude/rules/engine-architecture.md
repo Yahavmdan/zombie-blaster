@@ -31,11 +31,12 @@ The engine is split into focused files under `src/app/engine/`.
 | `plate-puzzle-system.ts` | Floor-5 puzzle simulation: host weighs the plate from the corpses and every player, slides the exit door, lets walking zombies kick corpses off; clients slide the door from the synced weight |
 | `boulder-puzzle-system.ts` | Floor-2 puzzle simulation: host counts gate hits (all players), rolls the boulder, crushes, breaks the wall; clients extrapolate the synced roll |
 | `magnet-pull.ts` | Monster-magnet drag (host-simulated, synced as `ZombieState.magnetPull`) |
-| `corpse-carry.ts` | Corpse carrying rules (pure): what is in reach, a stack of up to `CORPSE_CARRY_MAX` overhead, tossing the stack so it lands as a pile, host grants/releases (`assignCarriers`) |
-| `corpse-carry-system.ts` | Carry key (pick up one more / toss the stack; attack also tosses), host grants every player's requests, every client holds carried corpses on their carriers; guests hold their own pick-ups while the host answers |
+| `corpse-carry.ts` | Carrying rules (pure), corpses and loose props alike (`Carriable`): what is in reach, a stack of up to `CORPSE_CARRY_MAX` overhead, tossing the stack so it lands as a pile, host grants/releases (`assignCarriers`) |
+| `corpse-carry-system.ts` | Carry key (pick up one more / toss the stack; attack also tosses), host grants every player's requests, every client holds carried corpses/props on their carriers; guests hold their own pick-ups while the host answers |
 | `corpse-surface.ts` | Walkable surface of a corpse (the same for every corpse, the exit pile included) |
 | `safe-spot.ts` | `restsOnSafeSpot`: who rests on the floor's safe spot (zombies can't target/hit/land; no attacking from it) |
-| `solid-blocks.ts` | Side collision with solid props (players and zombies) |
+| `solid-blocks.ts` | Side collision with solid props (players and zombies); `stepUpOnto`: players step onto props up to `PROP_STEP_UP_PX` tall |
+| `loose-prop-system.ts` | Pickable props (barrels, boxes): host flies/drops/lands them, every client turns lying ones into solid platforms (`Platform.propId`); game-sync sends only props away from their spawn spot |
 | `worker-interval.ts` | `WorkerInterval`: a timer that keeps its pace in background tabs (online engine ticks while hidden, game-sync send loop) |
 | `sprite-effect-system.ts` | Sprite-sheet effects (`EFFECT_CONFIGS`), standalone |
 | `skill-animations.ts` | `SKILL_ANIMATIONS` particle definitions per skill |
@@ -49,7 +50,11 @@ The engine is split into focused files under `src/app/engine/`.
 - Never hard-code a platform, ladder or prop in a renderer, and never draw scenery that looks walkable.
   Platforms are whole tiles (`LEVEL_TILE_PX`) wide and one tile tall, so art == collision box.
 - Props (barrels, boxes, lockers, rails) are placed by the generator and are solid (`Platform.solid`):
-  stand on top, blocked at the sides (`solid-blocks.ts`, zombies hop over). A prop's box is its
+  stand on top; players walking into one up to `PROP_STEP_UP_PX` (26) tall step onto it, taller
+  stacks and puzzle solids block (`solid-blocks.ts`, zombies hop over). Barrels and boxes are
+  pickable (`isPickable`): carried and thrown like corpses, state `LooseProp` (id
+  `prop-<floor>-<index>`), drawn per frame (`MapRenderer.drawLooseProp`, not in the geometry layer)
+  and measured where they lie in the geometry report. Rails and lockers stay put. A prop's box is its
   image's measured visible pixels (`PROP_ART`); the renderer offsets the image so the art lands on the
   box. Rails are one prop of random length: left cap + 0..`RAIL_MAX_MIDDLES` middles + right cap
   (`RAIL_ART`, drawn piece by piece). New prop art: measure its opaque bounds and add it to `PROP_ART`.
@@ -102,6 +107,7 @@ SpringPuzzleSystem  -> Vfx
 CagePuzzleSystem    -> Vfx, Zombie
 PlatePuzzleSystem   -> Vfx
 CorpseCarrySystem   -> standalone
+LoosePropSystem     -> Drop
 RenderSystem     -> reads state only (no system deps)
 ```
 

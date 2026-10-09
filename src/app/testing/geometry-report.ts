@@ -2,6 +2,7 @@ import { GAME_CONSTANTS } from '@shared/index';
 import { Platform, Rope } from '../engine/engine-types';
 import { GameEngine } from '../engine/game-engine';
 import { Prop } from '../engine/level-generator';
+import { LooseProp } from '@shared/game-entities';
 import { E2eGeometryCheck, E2eGeometryReport } from './e2e-api';
 
 /** Pixels at or above this alpha count as drawn art. */
@@ -54,6 +55,12 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
     (p: Platform): boolean => p.puzzlePart === 'cage' || p.puzzlePart === 'zombie-cage',
   );
   for (const c of cages) renderer.drawCage(frame, c, c.puzzlePart === 'zombie-cage');
+  // Pickable props are drawn per frame too (they get carried and thrown): the lying ones are
+  // measured where their collision is.
+  const lyingProps: LooseProp[] = engine.looseProps.filter(
+    (p: LooseProp): boolean => p.isGrounded && p.carrierId === null,
+  );
+  for (const p of lyingProps) renderer.drawLooseProp(frame, p);
   const inFrame: Alpha = alphaOf(frame, w, h);
 
   const objects: Measured[] = [
@@ -132,7 +139,10 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
       ),
     // Props: the collision box (stand on it, bump into it) must be exactly the drawn art.
     ...engine.platforms
-      .filter((p: Platform): boolean => p.solid === true && p.puzzlePart === undefined)
+      .filter(
+        (p: Platform): boolean =>
+          p.solid === true && p.puzzlePart === undefined && p.propId === undefined,
+      )
       .map((p: Platform): Measured => {
         const prop: Prop | undefined = engine.level.props.find(
           (q: Prop): boolean => q.x === p.x && q.y === p.y,
@@ -146,6 +156,25 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
           height: p.height,
           draw: (ctx: CanvasRenderingContext2D): void => {
             if (prop) renderer.drawProp(ctx, prop);
+          },
+        };
+      }),
+    // Pickable props, wherever they lie: their box is the art too.
+    ...engine.platforms
+      .filter((p: Platform): boolean => p.propId !== undefined)
+      .map((p: Platform): Measured => {
+        const prop: LooseProp | undefined = lyingProps.find(
+          (q: LooseProp): boolean => q.id === p.propId,
+        );
+        return {
+          object: `loose prop ${p.propId} ${p.x},${p.y} ${p.width}x${p.height}`,
+          kind: 'prop',
+          x: p.x,
+          y: p.y,
+          width: p.width,
+          height: p.height,
+          draw: (ctx: CanvasRenderingContext2D): void => {
+            if (prop) renderer.drawLooseProp(ctx, prop);
           },
         };
       }),

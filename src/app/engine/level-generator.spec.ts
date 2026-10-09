@@ -3,8 +3,11 @@ import { GAME_CONSTANTS } from '@shared/index';
 import {
   exitPlatformY,
   generateLevel,
+  isPickable,
   LevelLayout,
   levelViolations,
+  lyingProp,
+  pickableProps,
   Prop,
   PROP_ART,
   PropArt,
@@ -14,7 +17,7 @@ import {
   RAIL_MAX_MIDDLES,
   railWidth,
 } from './level-generator';
-import { pushOutOfSolids } from './solid-blocks';
+import { pushOutOfSolids, stepUpOnto } from './solid-blocks';
 import { chuteSpan } from './boulder-puzzle';
 import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, Rope, SpringPuzzleLayout } from './engine-types';
 import { springSpan } from './spring-puzzle';
@@ -172,6 +175,47 @@ describe('map props', () => {
     expect(xs.size).toBeGreaterThan(20);
   });
 
+  it('floors have twice the props they used to (about 4.9 each on average)', (): void => {
+    let total: number = 0;
+    let floors: number = 0;
+    for (let seed: number = 1; seed <= 300; seed++) {
+      for (let floor: number = 1; floor <= 6; floor++) {
+        total += generateLevel(seed, floor).props.length;
+        floors++;
+      }
+    }
+    expect(total / floors).toBeGreaterThanOrEqual(2 * 4.88);
+  });
+
+  it('barrels and boxes can be picked up; rails and lockers stay put', (): void => {
+    const pickableKinds: Prop['kind'][] = ['barrel1', 'barrel2', 'barrel3', 'box1', 'box2', 'box3'];
+    for (const kind of pickableKinds) {
+      expect(isPickable({ kind, x: 0, y: 0, width: 1, height: 1 }), kind).toBe(true);
+    }
+    const fixedKinds: Prop['kind'][] = ['rail', 'locker1', 'locker2'];
+    for (const kind of fixedKinds) {
+      expect(isPickable({ kind, x: 0, y: 0, width: 1, height: 1 }), kind).toBe(false);
+    }
+
+    const level: LevelLayout = generateLevel(7, 1);
+    const pickable: Map<string, Prop> = pickableProps(level);
+    expect(pickable.size).toBe(level.props.filter(isPickable).length);
+    for (const [id, prop] of pickable) {
+      expect(id.startsWith(`prop-${level.floor}-`), 'ids name their floor').toBe(true);
+      expect(lyingProp(id, prop)).toMatchObject({
+        id,
+        x: prop.x,
+        y: prop.y,
+        width: prop.width,
+        height: prop.height,
+        isGrounded: true,
+        carrierId: null,
+      });
+    }
+    const next: Map<string, Prop> = pickableProps(generateLevel(7, 2));
+    expect([...next.keys()].some((id: string): boolean => pickable.has(id))).toBe(false);
+  });
+
   it('props sometimes stack (boxes on boxes)', (): void => {
     let stacks: number = 0;
     for (let seed: number = 1; seed <= 200; seed++) {
@@ -199,6 +243,25 @@ describe('map props', () => {
       { ...box, solid: false },
     ]);
     expect(notSolid.blocked).toBe(false);
+  });
+
+  it('walking into a low prop steps up onto it; a tall stack, a puzzle solid or no room above still block', (): void => {
+    const ground: number = GAME_CONSTANTS.GROUND_Y;
+    const feetY: number = ground - 48;
+    const barrel: Platform = { x: 100, y: ground - 25, width: 18, height: 25, solid: true };
+    expect(stepUpOnto(85, feetY, 32, 48, [barrel])).toBe(barrel.y - 48);
+    const rail: Platform = { x: 100, y: ground - 16, width: 120, height: 16, solid: true };
+    expect(stepUpOnto(85, feetY, 32, 48, [rail])).toBe(rail.y - 48);
+
+    const onTop: Platform = { x: 100, y: barrel.y - 22, width: 28, height: 22, solid: true };
+    expect(stepUpOnto(85, feetY, 32, 48, [barrel, onTop]), 'a stack is too tall').toBeNull();
+    expect(stepUpOnto(85, feetY, 32, 48, [{ ...barrel, puzzlePart: 'gate' }])).toBeNull();
+    const ceiling: Platform = { x: 60, y: barrel.y - 60, width: 100, height: 40, solid: true };
+    expect(stepUpOnto(85, feetY, 32, 48, [barrel, ceiling]), 'no room on top').toBeNull();
+    expect(stepUpOnto(40, feetY, 32, 48, [barrel]), 'not touching it').toBeNull();
+    expect(GAME_CONSTANTS.PROP_STEP_UP_PX).toBeGreaterThanOrEqual(
+      Math.max(...Object.values(PROP_ART).map(propArtHeight), propArtHeight(RAIL_ART.middle)),
+    );
   });
 
   it('a solid at a screen edge always pushes back onto the screen (a dash ending inside the puzzle wall)', (): void => {

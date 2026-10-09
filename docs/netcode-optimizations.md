@@ -12,6 +12,7 @@ Re-measure after every netcode change; `e2e/specs/online/network-budget.spec.ts`
 
 - Host sends `game-sync` 20/s. Each guest sends `player-state` 20/s (~0.9 KB), relayed to every other player.
 - Server relays everything as-is and re-serializes each message once per recipient.
+- Pickable props (barrels, boxes) ride in `game-sync` as `props`, but only the ones away from their layout spawn spot (carried, flying, thrown elsewhere): untouched floors add an empty array.
 
 ## Correctness bugs found and fixed (2026-09-30)
 

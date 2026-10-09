@@ -31,9 +31,9 @@ import {
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
 import { ZombieSpriteAnchor } from './zombie-sprite-animator';
-import { MagnetPull, ZombieCorpse } from '@shared/game-entities';
+import { LooseProp, MagnetPull, ZombieCorpse } from '@shared/game-entities';
 import { magnetPullProgress } from './magnet-pull';
-import { carriedIds, carryableCorpse } from './corpse-carry';
+import { Carriable, carriedIds, isCorpse, nearestCarriable } from './corpse-carry';
 import {
   Box,
   BoulderPath,
@@ -124,13 +124,15 @@ export class RenderSystem {
     this.renderSpringPuzzle(ctx);
     this.renderCages(ctx);
     this.renderPlate(ctx);
+    this.renderLyingProps(ctx);
     this.renderZombies(ctx);
     this.renderHitMarks(ctx);
     this.renderDragonProjectiles(ctx);
     this.renderSpitterProjectiles(ctx);
     this.renderDrops(ctx);
-    // Carried corpses rest on their carriers' heads, under the name tags.
+    // Carried corpses and props rest on their carriers' heads, under the name tags.
     this.renderCarriedCorpses(ctx);
+    this.renderCarriedProps(ctx);
     this.renderRemotePlayers(ctx);
     this.renderPlayer(ctx);
     this.renderCarryPrompt(ctx);
@@ -901,9 +903,9 @@ export class RenderSystem {
     }
   }
 
-  /** A corpse on someone's head (granted, or the local player's pick-up awaiting the host). */
-  private isCarried(corpse: ZombieCorpse): boolean {
-    return corpse.carrierId !== null || (!!this.e.player && carriedIds(this.e.player).includes(corpse.id));
+  /** A corpse or prop on someone's head (granted, or the local player's pick-up awaiting the host). */
+  private isCarried(item: Carriable): boolean {
+    return item.carrierId !== null || (!!this.e.player && carriedIds(this.e.player).includes(item.id));
   }
 
   /** Lying corpses, drawn under the zombies. Carried ones are drawn with the players. */
@@ -915,25 +917,40 @@ export class RenderSystem {
     this.drawCorpses(ctx, this.e.zombieCorpses.filter((c: ZombieCorpse): boolean => this.isCarried(c)));
   }
 
+  /** Pickable props lying (or flying) in the world, drawn like the map's other props. */
+  private renderLyingProps(ctx: CanvasRenderingContext2D): void {
+    for (const p of this.e.looseProps.filter((q: LooseProp): boolean => !this.isCarried(q))) {
+      this.e.mapRenderer.drawLooseProp(ctx, p);
+    }
+  }
+
+  private renderCarriedProps(ctx: CanvasRenderingContext2D): void {
+    for (const p of this.e.looseProps.filter((q: LooseProp): boolean => this.isCarried(q))) {
+      this.e.mapRenderer.drawLooseProp(ctx, p);
+    }
+  }
+
   /**
-   * What the carry key does next: "[E] Carry" over the corpse it would pick up (with the stack
-   * count once carrying), or "[E] Throw" over the stack when nothing more can be picked up.
+   * What the carry key does next: "[E] Carry" over the corpse or prop it would pick up (with the
+   * stack count once carrying), or "[E] Throw" over the stack when nothing more can be picked up.
    */
   private renderCarryPrompt(ctx: CanvasRenderingContext2D): void {
     const p: CharacterState | null = this.e.player;
     if (!p || p.isDead || p.isDown) return;
     const ids: string[] = carriedIds(p);
-    const next: ZombieCorpse | null =
-      ids.length < GAME_CONSTANTS.CORPSE_CARRY_MAX ? carryableCorpse(p, this.e.zombieCorpses) : null;
-    const stackTop: ZombieCorpse | undefined = this.e.zombieCorpses.find(
-      (c: ZombieCorpse): boolean => c.id === ids[ids.length - 1],
+    const items: Carriable[] = [...this.e.zombieCorpses, ...this.e.looseProps];
+    const next: Carriable | null =
+      ids.length < GAME_CONSTANTS.CORPSE_CARRY_MAX ? nearestCarriable(p, items) : null;
+    const stackTop: Carriable | undefined = items.find(
+      (c: Carriable): boolean => c.id === ids[ids.length - 1],
     );
-    const anchor: ZombieCorpse | undefined = next ?? stackTop;
+    const anchor: Carriable | undefined = next ?? stackTop;
     if (!anchor) return;
     const count: string = ids.length > 0 ? ` (${ids.length}/${GAME_CONSTANTS.CORPSE_CARRY_MAX})` : '';
     const label: string = `[${this.e.carryKeyLabel}] ${next ? `Carry${count}` : 'Throw'}`;
     const cx: number = anchor.x + anchor.width / 2;
-    const y: number = anchor.y + anchor.height - 34;
+    // A corpse's body lies low in its tall box; a prop's art fills its box.
+    const y: number = isCorpse(anchor) ? anchor.y + anchor.height - 34 : anchor.y - 6;
     ctx.save();
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';

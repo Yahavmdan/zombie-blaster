@@ -4,6 +4,7 @@ import { RoomSession } from '../../support/room';
 import { GamePlayer, KEYS } from '../../support/game-player';
 import { E2eCorpseView, E2eRemotePlayerView, E2eSnapshot } from '../../support/probe';
 import { WORLD } from '../../support/invariants';
+import { layoutWithoutPickables } from '../../support/props';
 
 /** The probe's foothold top sits this far above the corpse's feet (ZOMBIE_CORPSE_PLATFORM_HEIGHT). */
 const FOOTHOLD_DEPTH: number = 5;
@@ -66,6 +67,7 @@ test.describe('carrying corpses in co-op', { tag: '@online' }, (): void => {
     const guest: GamePlayer = session.guests[0];
     await host.probe.setGodMode(true);
     await guest.probe.setGodMode(true);
+    await layoutWithoutPickables(host, [guest], 300, 1000);
 
     const corpse: E2eCorpseView = await lyingCorpse(host, guest, 500);
     await standAt(guest, corpse);
@@ -151,6 +153,7 @@ test.describe('carrying corpses in co-op', { tag: '@online' }, (): void => {
     const guest: GamePlayer = session.guests[0];
     await host.probe.setGodMode(true);
     await guest.probe.setGodMode(true);
+    await layoutWithoutPickables(host, [guest], 300, 1000);
 
     const corpse: E2eCorpseView = await lyingCorpse(host, host, 500);
     await standAt(host, corpse);
@@ -201,6 +204,7 @@ test.describe('carrying corpses in co-op', { tag: '@online' }, (): void => {
     const guest: GamePlayer = session.guests[0];
     await host.probe.setGodMode(true);
     await guest.probe.setGodMode(true);
+    await layoutWithoutPickables(host, [guest], 300, 1000);
     const guestId: string = (await guest.probe.state()).player!.id;
 
     const first: E2eCorpseView = await lyingCorpse(host, guest, 500);

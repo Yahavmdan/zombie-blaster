@@ -22,6 +22,7 @@ import {
   SpecialDropDefinition,
   SpecialDropType,
   WorldDrop,
+  LooseProp,
   ZombieCorpse,
   ZombieState,
 } from '@shared/game-entities';
@@ -73,9 +74,17 @@ import {
   newCageState,
 } from './cage-puzzle';
 import { CorpseCarrySystem } from './corpse-carry-system';
+import { LoosePropSystem } from './loose-prop-system';
 import { flingIfOnSpring, freshLaunch } from './spring-puzzle';
 import { pullZombiesToward } from './magnet-pull';
-import { exitPlatformY, generateLevel, GROUND_PLATFORM, LevelLayout, Prop } from './level-generator';
+import {
+  exitPlatformY,
+  generateLevel,
+  GROUND_PLATFORM,
+  isPickable,
+  LevelLayout,
+  Prop,
+} from './level-generator';
 import { RenderSystem } from './render-system';
 import { restsOnSafeSpot } from './safe-spot';
 import { WorkerInterval } from './worker-interval';
@@ -109,6 +118,7 @@ export class GameEngine implements IGameEngine {
   remotePlayers: CharacterState[] = [];
   zombies: ZombieState[] = [];
   zombieCorpses: ZombieCorpse[] = [];
+  looseProps: LooseProp[] = [];
   particles: Particle[] = [];
   damageNumbers: DamageNumber[] = [];
   dropNotifications: DropNotification[] = [];
@@ -242,6 +252,7 @@ export class GameEngine implements IGameEngine {
   private readonly cagePuzzleSystem: CagePuzzleSystem;
   private readonly platePuzzleSystem: PlatePuzzleSystem;
   private readonly corpseCarrySystem: CorpseCarrySystem;
+  private readonly loosePropSystem: LoosePropSystem;
   private readonly renderSystem: RenderSystem;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -260,6 +271,7 @@ export class GameEngine implements IGameEngine {
     this.cagePuzzleSystem = new CagePuzzleSystem(this, this.vfxSystem, this.zombieSystem);
     this.platePuzzleSystem = new PlatePuzzleSystem(this, this.vfxSystem);
     this.corpseCarrySystem = new CorpseCarrySystem(this);
+    this.loosePropSystem = new LoosePropSystem(this, this.dropSystem);
     this.renderSystem = new RenderSystem(this);
 
     this.initExitPlatform();
@@ -302,8 +314,9 @@ export class GameEngine implements IGameEngine {
     this.platforms = [
       { ...GROUND_PLATFORM },
       ...this.level.platforms.map((p: Platform): Platform => ({ ...p })),
-      // Props are solid: you stand on their tops and bump into their sides.
-      ...this.level.props.map(
+      // Props are solid: you stand on their tops and step over (or bump into) their sides. The
+      // pickable ones are placed wherever they lie (LoosePropSystem).
+      ...this.fixedProps().map(
         (p: Prop): Platform => ({ x: p.x, y: p.y, width: p.width, height: p.height, solid: true }),
       ),
       // The puzzle wall is solid too, until the boulder breaks it (the gate: placeGate).
@@ -316,8 +329,14 @@ export class GameEngine implements IGameEngine {
         : []),
     ];
     this.ropes = this.level.ropes.map((r: Rope): Rope => ({ ...r }));
-    this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.level.props, this.boulderPuzzle, true);
+    this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.fixedProps(), this.boulderPuzzle, true);
+    this.loosePropSystem.reset(this.level);
     this.repositionExitPlatform();
+  }
+
+  /** The layout's props that never move (rails, lockers): part of the drawn geometry layer. */
+  private fixedProps(): Prop[] {
+    return this.level.props.filter((p: Prop): boolean => !isPickable(p));
   }
 
   /** The gate is a solid block on the ledge's edge: it moves with the ledge until it breaks. */
@@ -338,7 +357,7 @@ export class GameEngine implements IGameEngine {
     if (!this.boulderPuzzle || !this.boulder || this.boulder.wallBroken) return;
     this.boulder.wallBroken = true;
     this.platforms = this.platforms.filter((p: Platform): boolean => p.puzzlePart !== 'wall');
-    this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.level.props, this.boulderPuzzle, false);
+    this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.fixedProps(), this.boulderPuzzle, false);
   }
 
   puzzleWall(): Platform | null {
@@ -621,6 +640,7 @@ export class GameEngine implements IGameEngine {
     this.vfxSystem.updateDragonImpacts();
     this.vfxSystem.updateHitMarks();
     this.corpseCarrySystem.update();
+    this.loosePropSystem.update();
     this.zombieSystem.updateZombieCorpses();
 
     this.dropSystem.updateDrops();
@@ -879,7 +899,7 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     if (!this.player) return null;
     const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
@@ -897,6 +917,7 @@ export class GameEngine implements IGameEngine {
         .filter((z: ZombieState) => !z.isDead)
         .map((z: ZombieState): ZombieState => ({ ...z })),
       corpses: this.zombieCorpses.map((c: ZombieCorpse): ZombieCorpse => ({ ...c })),
+      props: this.loosePropSystem.moved(),
       floor: this.floor,
       layoutSeed: this.layoutSeed,
       boulder: this.boulder ? { ...this.boulder } : null,
@@ -1365,6 +1386,14 @@ export class GameEngine implements IGameEngine {
     }
   }
 
+  /** Client: the host's moved props (the rest lie on their spawn spots); lying ones are solid. */
+  applyRemoteProps(moved: LooseProp[]): void {
+    if (!this.isMultiplayerClient) return;
+    this.loosePropSystem.applyRemote(moved);
+    this.corpseCarrySystem.holdCarried();
+    this.loosePropSystem.placeSolids();
+  }
+
   applyRemoteCorpses(corpses: ZombieCorpse[]): void {
     if (!this.isMultiplayerClient) return;
 
@@ -1400,7 +1429,7 @@ export class GameEngine implements IGameEngine {
     }
 
     this.zombieCorpses = [...corpses, ...pendingLocalCorpses];
-    this.corpseCarrySystem.holdCorpses();
+    this.corpseCarrySystem.holdCarried();
   }
 
   private tickEntityInterpolation(): void {

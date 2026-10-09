@@ -216,3 +216,21 @@ export async function goToFloorWhere(
   }
   throw new Error(`no floor up to ${maxFloor} has ${description}`);
 }
+
+/**
+ * Setup (solo/host): pins the first layout seed whose current floor has what a test needs, and
+ * returns the state on it.
+ */
+export async function layoutWhere(
+  player: GamePlayer,
+  description: string,
+  wanted: (s: E2eSnapshot) => boolean,
+  maxSeed: number = 300,
+): Promise<E2eSnapshot> {
+  for (let seed: number = 1; seed <= maxSeed; seed++) {
+    await player.probe.setLayoutSeed(seed);
+    const s: E2eSnapshot = await player.probe.state();
+    if (s.level.seed === seed && wanted(s)) return s;
+  }
+  throw new Error(`no layout seed up to ${maxSeed} has ${description}`);
+}

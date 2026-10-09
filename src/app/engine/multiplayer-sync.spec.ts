@@ -347,6 +347,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     levelUpNotification: null,
     zombies,
     zombieCorpses: [],
+    looseProps: [],
     particles: [],
     damageNumbers: [],
     dropNotifications: [],

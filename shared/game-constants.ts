@@ -300,6 +300,7 @@ export const GAME_CONSTANTS = {
   CORPSE_CARRY_LIFT: 12, // Carried corpse's box bottom sits this far above the carrier's head (its lying body rests on the head)
   CORPSE_THROW_SPEED_X: 4, // Sideways speed of a dropped corpse, in the carrier's facing direction
   CORPSE_THROW_SPEED_Y: -3, // Upward toss of a dropped corpse (negative = up)
+  PROP_STEP_UP_PX: 26, // A prop this low (or lower) is stepped onto when walked into; taller stacks still block
 
   // ─── Ropes ──────────────────────────────────────
   ROPE_CLIMB_SPEED: 3, // How fast the player moves up/down on a rope

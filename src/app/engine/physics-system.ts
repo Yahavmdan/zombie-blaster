@@ -11,7 +11,7 @@ import {
 import { IGameEngine, Platform, Rope } from './engine-types';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
 import { isCarrying } from './corpse-carry';
-import { pushOutOfSolids } from './solid-blocks';
+import { pushOutOfSolids, stepUpOnto } from './solid-blocks';
 
 export class PhysicsSystem {
   /** Ticks left in which a jump still works after leaving the ground. */
@@ -141,8 +141,17 @@ export class PhysicsSystem {
     }
   }
 
-  /** Solid props stop the player walking into their sides. */
+  /** Walking into a low prop steps up onto it; taller solids stop the player at their sides. */
   private blockSideways(p: CharacterState, prevX: number): void {
+    if (p.isGrounded) {
+      const stepY: number | null = stepUpOnto(
+        p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, this.e.platforms,
+      );
+      if (stepY !== null) {
+        p.y = stepY;
+        return;
+      }
+    }
     const pushed: { x: number; blocked: boolean } = pushOutOfSolids(
       p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, prevX, this.e.platforms,
     );

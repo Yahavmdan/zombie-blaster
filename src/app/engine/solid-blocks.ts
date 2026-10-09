@@ -37,3 +37,37 @@ export function pushOutOfSolids(
   }
   return { x: nx, blocked };
 }
+
+function overlapsSides(x: number, y: number, width: number, height: number, s: Platform): boolean {
+  const bottom: number = y + height;
+  if (bottom <= s.y + ON_TOP_TOLERANCE_PX || y >= s.y + s.height) return false;
+  return x + width > s.x && x < s.x + s.width;
+}
+
+/**
+ * Walking into a low prop steps up onto it (like walking over a few corpses) instead of stopping:
+ * the y that puts the box on the highest prop it walked into, when that top is at most
+ * `PROP_STEP_UP_PX` above its feet and nothing solid is in the way up there. Null when it is too
+ * tall (a stack) or not a prop (puzzle solids always block): then it is blocked as usual.
+ */
+export function stepUpOnto(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  platforms: Platform[],
+): number | null {
+  const solids: Platform[] = platforms.filter(
+    (s: Platform): boolean => s.solid === true && overlapsSides(x, y, width, height, s),
+  );
+  if (solids.length === 0 || solids.some((s: Platform): boolean => s.puzzlePart !== undefined)) {
+    return null;
+  }
+  const top: number = Math.min(...solids.map((s: Platform): number => s.y));
+  if (y + height - top > GAME_CONSTANTS.PROP_STEP_UP_PX) return null;
+  const raised: number = top - height;
+  const roomy: boolean = !platforms.some(
+    (s: Platform): boolean => s.solid === true && overlapsSides(x, raised, width, height, s),
+  );
+  return roomy ? raised : null;
+}
