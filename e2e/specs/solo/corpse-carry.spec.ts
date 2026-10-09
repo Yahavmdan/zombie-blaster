@@ -19,6 +19,8 @@ function findCorpse(s: E2eSnapshot, id: string): E2eCorpseView | undefined {
   return s.corpseViews.find((c: E2eCorpseView): boolean => c.id === id);
 }
 
+type CarryPose = NonNullable<E2eCorpseView['carryPose']>;
+
 /** Corpses one player can carry at once (CORPSE_CARRY_MAX). */
 const MAX_CARRY: number = 3;
 
@@ -271,5 +273,59 @@ test.describe('carrying corpses', { tag: '@solo' }, (): void => {
         s.player!.carryingCorpseIds.length === 0 &&
         s.corpseViews.every((c: E2eCorpseView): boolean => c.carrierId === null),
     );
+  });
+
+  test('a carried corpse droops over the head, bounces with every step and lags a jump', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }, testInfo: TestInfo): Promise<void> => {
+    test.setTimeout(60_000);
+    const p: GamePlayer = await solo('warrior');
+    await p.probe.setGodMode(true);
+
+    const corpse: E2eCorpseView = await lyingCorpse(p, 400);
+    await p.face('right');
+    await p.probe.teleport(
+      corpseCenterX(corpse) - WORLD.playerWidth / 2,
+      corpseFeet(corpse) - WORLD.playerHeight,
+    );
+    await p.wait(300);
+    await p.press(KEYS.carry, 70);
+    await p.probe.waitFor(
+      'carrying it',
+      (s: E2eSnapshot): boolean => findCorpse(s, corpse.id)?.carrierId === s.player!.id,
+    );
+    await p.wait(500);
+    const still: CarryPose = findCorpse(await p.probe.state(), corpse.id)!.carryPose!;
+    expect(still.sag, 'the limp body hangs over the head').toBeGreaterThan(1);
+    expect(Math.abs(still.bob), 'standing still, no bounce').toBeLessThan(0.5);
+
+    const walking: CarryPose[] = [];
+    await p.hold(KEYS.right);
+    for (let i: number = 0; i < 12; i++) {
+      await p.wait(40);
+      const s: E2eSnapshot = await p.probe.state();
+      const pose: CarryPose | null = findCorpse(s, corpse.id)?.carryPose ?? null;
+      if (pose && s.player!.isGrounded) walking.push(pose);
+    }
+    await p.release(KEYS.right);
+    const bobs: number[] = walking.map((w: CarryPose): number => w.bob);
+    expect(Math.max(...bobs) - Math.min(...bobs), 'it bounces as the carrier walks').toBeGreaterThan(1);
+    expect(Math.max(...bobs), 'footfalls lift it, never push it into the head').toBeLessThan(0.5);
+    await p.attachCanvas(testInfo, 'walking with a corpse');
+
+    await p.wait(500);
+    await p.hold(KEYS.jump);
+    const pressed: CarryPose = (
+      await p.probe.waitFor(
+        'pressed down onto the head on the way up',
+        (s: E2eSnapshot): boolean =>
+          s.player!.velocityY < 0 && (findCorpse(s, corpse.id)?.carryPose?.bob ?? 0) > 0.5,
+        { timeoutMs: 3_000 },
+      )
+    ).corpseViews.find((c: E2eCorpseView): boolean => c.id === corpse.id)!.carryPose!;
+    await p.release(KEYS.jump);
+    expect(pressed.sag, 'its ends hang lower going up').toBeGreaterThan(still.sag);
   });
 });
