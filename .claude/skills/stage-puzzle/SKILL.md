@@ -8,8 +8,9 @@ description: Build a new stage/level puzzle for Zombie Blaster (a floor that nee
 Every floor should feel different. The floor-2 **boulder puzzle** is the reference
 implementation: copy its shape. The floor-3 **spring** (`spring-puzzle.ts`,
 `spring-puzzle-system.ts`) is the second one: a solid moving part, a countdown, a player-affecting effect
-on guests, and state derived from synced corpses. It started as a seesaw; after playtesting the
-user wanted a big spring, a 3-2-1 to get on, 30 corpses and the exit at the very top. The floor-4 **hanging cages**
+on guests, and a remote trigger. It started as a seesaw, then a spring charged by 30 corpses on it;
+now a **scale** on the far side, linked by a cable over the ceiling, raises the spring's button once
+it holds 1000 kg (everything has a weight in kg, see Weights below). The floor-4 **hanging cages**
 (`cage-puzzle.ts`, `cage-puzzle-system.ts`) are the third: a choice (follow the chains to the
 right cleat), a solid that falls and lands, and a punishment that spawns zombies. The floor-5 **pressure plate** (`plate-puzzle.ts`,
 `plate-puzzle-system.ts`) is the fourth: no new collision at all (a door that is scenery plus an
@@ -95,8 +96,9 @@ Lessons from the spring:
   (solid: walk onto it like a prop), drawn per frame (its plate moves when it fires) and measured
   at rest in `geometry-report.ts`. Solid ground blocks need ground spawns kept out of them
   (`pickSpawnSpot`), like the boulder wall.
-- **Derive what you can from synced state.** The spring charge is counted from `zombieCorpses`
-  (already in game-sync), so clients draw the same "CHARGE n/30" with nothing new to sync.
+- **Derive what you can from synced state**, but weigh on the host: the scale counts corpses,
+  props, zombies and every player (guests' positions only reach the host), so the host syncs one
+  number (`scaleKg`) and every client moves the button from it (`tickButton`), like the plate door.
 - **Countdowns:** the host runs the countdown and launches; clients tick it down but hold it at
   its last tick (`tickSpringClient`) so only the host decides when it fires.
 - **Effects on players:** the host can't move a guest (guests own their state). Sync a counter
@@ -106,6 +108,20 @@ Lessons from the spring:
   player ~170 px off the ledge. Unit-test the full flight with the real `PhysicsSystem`.
 - **Fixed exit height** on a puzzle floor: override in `repositionExitPlatform`, not in
   `exitPlatformY` (tests use it for normal floors).
+
+## Weights (kg): the data rule
+
+- Every body and object has a weight in kg, and the numbers live in `shared/game-constants.ts`:
+  `PLAYER_WEIGHT_KG`, `ZOMBIE_TYPES[type].weightKg` (a corpse weighs what its zombie did) and
+  `PROP_WEIGHT_KG[material]` (props map kind to material in `PROP_MATERIAL`, `level-generator.ts`;
+  `LooseProp.weightKg` is set from it, never trusted from the sync). Helpers: `weight.ts`
+  (`zombieWeightKg`, `playerLoadKg` = body + carried corpses/props).
+- A new zombie type, prop, or other thing that can rest on something gets a weight there in the
+  same change. Weight puzzles weigh in kg (the floor-5 plate still counts unitless weight: port it
+  to kg if you touch it).
+- Scale-like parts: count what rests on them up to a stack height (`SPRING_SCALE_STACK_PX` 80 <
+  the 90 px to a tier-1 ledge, so nothing on a ledge above counts). Draw a ground pan flush with the
+  ground (not sinking: the dip would show feet floating), and show the load on a gauge/readout.
 
 ## Lessons from the cages
 

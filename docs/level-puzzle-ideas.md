@@ -14,12 +14,14 @@ ships, tick its box here and rewrite its line to match what was built.
 - [x] **Boulder on a chute** (floor 2): climb the corpse pile to the boulder's ledge, break the
       gate holding it, and the boulder rolls down the chute, smashes the side wall, and you leave
       through the opening.
-- [x] **Spring** (floor 3; was "seesaw"): the exit hangs at the very top (y 100), straight over a
-      big solid spring at the screen edge. Kill zombies so 30 corpses land on the spring (they
-      charge it), pull the lever beside it: a 3-2-1 gives everyone time to hop on, then the spring
-      launches them straight up onto the exit while its corpses scatter through the air (spent:
-      charge it again for another launch). Too little charge only jiggles
-      the lever.
+- [x] **Spring + scale** (floor 3; was "seesaw", then a corpse-charged spring): the exit hangs at
+      the very top (y 100), straight over a big solid spring at the screen edge. A scale's pan lies
+      in the ground on the far side; a cable runs from it over the ceiling to the spring's button.
+      Load 1000 kg onto the scale (corpses by zombie type, boxes and barrels, zombies, players and
+      what they carry) and the cable slowly pulls the button up (it sinks back when the weight
+      goes). Hit the raised button: a 3-2-1 gives everyone time to hop on, then the spring launches
+      them straight up onto the exit; corpses lying on the spring scatter. The scale stays loaded,
+      so it can launch again.
 - [x] **Hanging cage** (floor 4): an empty cage hangs under the exit, a cage full of zombies
       mid-screen. Their chains run from two cleats on a high ledge up to the ceiling and over to
       the cages (random order, sometimes crossing): follow them. Three hits on a cleat snap its

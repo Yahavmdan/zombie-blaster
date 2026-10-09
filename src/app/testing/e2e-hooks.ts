@@ -3,7 +3,7 @@ import { ActiveSpecialEffect, BoulderState, CagePuzzleState, CageState, LoosePro
 import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, PlayerTint, Rope, SpringPuzzleLayout } from '../engine/engine-types';
 import { CageId, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
 import { doorBox, isDoorOpen, isHeld, plateBox } from '../engine/plate-puzzle';
-import { chargeCorpses, leverBox } from '../engine/spring-puzzle';
+import { buttonBox, scaleBox } from '../engine/spring-puzzle';
 import { measureLevelGeometry } from './geometry-report';
 import { BoulderPath, boulderBox, boulderPath, gateBox } from '../engine/boulder-puzzle';
 import { pickableProps, Prop } from '../engine/level-generator';
@@ -243,13 +243,15 @@ function springView(engine: GameEngine): E2eSpringView | null {
   return {
     spring: { x: block.x, y: block.y, width: block.width, height: block.height },
     side: puzzle.side,
-    lever: leverBox(puzzle),
-    charge: chargeCorpses(engine.zombieCorpses, puzzle).length,
-    chargeNeeded: GAME_CONSTANTS.SPRING_CHARGE_CORPSES,
+    button: buttonBox(puzzle),
+    buttonTicks: spring.buttonTicks,
+    buttonRiseTicks: GAME_CONSTANTS.SPRING_BUTTON_RISE_TICKS,
+    scale: scaleBox(puzzle),
+    scaleKg: spring.scaleKg,
+    scaleKgNeeded: GAME_CONSTANTS.SPRING_SCALE_KG_NEEDED,
     launches: spring.launches,
     countdownTicks: spring.countdownTicks,
     bounceTicks: spring.bounceTicks,
-    wobbleTicks: spring.wobbleTicks,
   };
 }
 

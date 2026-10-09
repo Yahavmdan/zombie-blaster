@@ -15,6 +15,7 @@ import {
   QuickSlotEntry,
   QuickSlotAction,
   QUICK_SLOT_ACTIONS,
+  PropMaterial,
 } from './game-entities';
 import { KeyBindings } from './messages';
 import { SkillDefinition, SkillType } from './skill';
@@ -38,6 +39,11 @@ export const GAME_CONSTANTS = {
   TERMINAL_VELOCITY: 25, // Maximum falling speed anything can reach
   PLATFORM_SNAP_TOLERANCE: 6, // How close (pixels) you must be to a platform edge to land on it
   PLATFORM_DROP_TICKS: 8, // How many ticks the player falls through a platform when pressing down
+
+  // ─── Weight (kg) ────────────────────────────────
+  // Every body and object has a weight, for scales, plates and anything that should feel heavy.
+  // Zombies: ZOMBIE_TYPES[type].weightKg (a corpse weighs what its zombie did). Props: PROP_WEIGHT_KG.
+  PLAYER_WEIGHT_KG: 80, // A player's body; what they carry overhead weighs on top of this
 
   // ─── Player Movement ────────────────────────────
   PLAYER_WIDTH: 32, // Player hitbox width in pixels
@@ -138,22 +144,27 @@ export const GAME_CONSTANTS = {
   BOULDER_DEBRIS_PX: 96, // Wall debris lands this far out from the wall face (and crushes zombies there)
   BOULDER_WALL_TILES: 2, // Width of the breakable side wall (it spans the screen top to the ground)
   BOULDER_OPENING_CLEAR_PX: 96, // Props keep this far from the wall, so the way out stays open
-  PUZZLE_SPRING_FLOOR: 3, // Floor whose exit hangs at the very top: a corpse-charged spring under it launches players up
+  PUZZLE_SPRING_FLOOR: 3, // Floor whose exit hangs at the very top: a spring under it, armed by a loaded scale, launches players up
   SPRING_HEIGHT_PX: 48, // The spring block (solid, at the screen edge under the exit): one hop up onto its plate
   SPRING_LEDGE_Y: 100, // The exit on the spring floor: as high as it goes (just under the HUD), no pile gets there
-  SPRING_CHARGE_CORPSES: 30, // Corpses resting on the spring (or piled on it) before the lever arms it
+  SPRING_SCALE_KG_NEEDED: 1000, // Kg on the scale before its cable pulls the spring's button up (~14 walker corpses)
+  SPRING_SCALE_WIDTH_PX: 128, // The scale's pan, set into the ground on the far side from the spring: this wide
+  SPRING_SCALE_INSET_PX: 432, // The pan's outer end sits this far from the far screen edge (just past where the safe spot can hang)
+  SPRING_SCALE_CLEAR_PX: 32, // No platform hangs over the pan or this close to it: bodies must fall onto the scale
+  SPRING_SCALE_STACK_PX: 80, // Anything resting up to this high over the pan (a pile on it) weighs on it; a tier-1 ledge (90 px) does not
+  SPRING_CABLE_Y: 112, // The cable runs along the ceiling at this height, from over the scale to over the button
+  SPRING_BUTTON_WIDTH_PX: 20, // The spring's button beside its open side: this wide...
+  SPRING_BUTTON_HEIGHT_PX: 64, // ...and this tall when fully up (hit it from the ground or from the spring)
+  SPRING_BUTTON_GAP_PX: 20, // Gap between the spring's open side and the button
+  SPRING_BUTTON_RISE_TICKS: 200, // The cable pulls the button up this slowly (4 s) while the scale holds enough; it sinks back as slowly
   SPRING_LAUNCH_FORCE: 23, // Upward speed (px/tick) the spring gives everyone on it: feet peak ~60 px over the exit
-  SPRING_LEVER_WIDTH_PX: 12, // The lever stands on the ground beside the spring's open side: this wide...
-  SPRING_LEVER_HEIGHT_PX: 80, // ...and this tall (hit it from the ground or from the spring)
-  SPRING_LEVER_GAP_PX: 20, // Gap between the spring's open side and the lever
-  SPRING_HIT_REACH_PX: 24, // Max gap between an attacking player's box and the lever for the swing to pull it
-  SPRING_HIT_COOLDOWN_TICKS: 36, // One lever pull per swing (a held attack swings every 36 ticks)
-  SPRING_SCATTER_MAX_PX: 360, // On launch the charge scatters through the air, landing up to this far past the spring
-  SPRING_COUNTDOWN_TICKS: 150, // 3-2-1 after a pull with a full charge: time to get on the spring
+  SPRING_HIT_REACH_PX: 24, // Max gap between an attacking player's box and the button for the swing to press it
+  SPRING_HIT_COOLDOWN_TICKS: 36, // One button press per swing (a held attack swings every 36 ticks)
+  SPRING_SCATTER_MAX_PX: 360, // On launch the corpses on the spring scatter through the air, landing up to this far past it
+  SPRING_COUNTDOWN_TICKS: 150, // 3-2-1 after a press on the raised button: time to get on the spring
   SPRING_BOUNCE_TICKS: 40, // The spring's release-and-settle animation after a launch
-  SPRING_WOBBLE_TICKS: 24, // The lever's jiggle after a pull with too little charge
   SPRING_FLING_WINDOW_TICKS: 10, // A client flings itself only while the synced bounce is this fresh (not on a late join)
-  SPRING_CLEAR_PX: 96, // Platforms, ropes and props keep this far from the spring's open side (the lever stands there)
+  SPRING_CLEAR_PX: 96, // Platforms, ropes and props keep this far from the spring's open side (the button stands there)
   PUZZLE_CAGE_FLOOR: 4, // Floor with two hanging cages: drop the empty one under the exit as a step, not the zombie-filled one
   CAGE_WIDTH_PX: 128, // Both cages are this wide (whole tiles: art == collision box)...
   CAGE_HEIGHT_PX: 96, // ...and this tall: the landed cage's top is beyond double-jump reach of the exit
@@ -591,6 +602,7 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     heightMin: 37, heightMax: 45,
     attackAnimTicks: 20,
     attackHitTick: 10,
+    weightKg: 70, // kg, a grown man
   },
   [ZombieType.Runner]: {
     type: ZombieType.Runner,
@@ -606,6 +618,7 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     heightMin: 33, heightMax: 45,
     attackAnimTicks: 20,
     attackHitTick: 10,
+    weightKg: 55, // kg, lean and light
   },
   [ZombieType.Tank]: {
     type: ZombieType.Tank,
@@ -621,6 +634,7 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     heightMin: 44, heightMax: 60,
     attackAnimTicks: 30,
     attackHitTick: 15,
+    weightKg: 160, // kg, a bloated heavyweight
   },
   [ZombieType.Spitter]: {
     type: ZombieType.Spitter,
@@ -636,6 +650,7 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     heightMin: 35, heightMax: 44,
     attackAnimTicks: 20,
     attackHitTick: 10,
+    weightKg: 60, // kg, bony
   },
   [ZombieType.Boss]: {
     type: ZombieType.Boss,
@@ -651,6 +666,7 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     heightMin: 60, heightMax: 77,
     attackAnimTicks: 20,
     attackHitTick: 10,
+    weightKg: 300, // kg, huge
   },
   [ZombieType.DragonBoss]: {
     type: ZombieType.DragonBoss,
@@ -666,6 +682,7 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     heightMin: 120, heightMax: 140,
     attackAnimTicks: 36,
     attackHitTick: 18,
+    weightKg: 900, // kg, a dragon
   },
   [ZombieType.Eater]: {
     type: ZombieType.Eater,
@@ -681,7 +698,16 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     heightMin: 36, heightMax: 44,
     attackAnimTicks: 20,
     attackHitTick: 10,
+    weightKg: 120, // kg, swollen from eating
   },
+};
+
+/** Weight in kg of a map prop by what it is made of (a lifted barrel or box adds it to its carrier). */
+export const PROP_WEIGHT_KG: Record<PropMaterial, number> = {
+  barrel: 45, // a full steel drum
+  box: 20, // a wooden crate
+  locker: 90, // steel, too heavy to lift (lockers stay put)
+  rail: 35, // a fence (stays put)
 };
 
 /** True while a zombie telegraphs a melee swing (before its attack animation starts). */

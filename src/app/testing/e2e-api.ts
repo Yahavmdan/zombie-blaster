@@ -261,17 +261,21 @@ export interface E2eBoulderPuzzleView {
 export interface E2eSpringView {
   /** The spring's solid box (stand on its top): at the screen edge, under the whole exit. */
   spring: { x: number; y: number; width: number; height: number };
-  /** +1: the spring is at the right screen edge (the lever on its left), -1: at the left edge. */
+  /** +1: the spring is at the right screen edge (the button on its left), -1: at the left edge. */
   side: number;
-  /** The lever on the ground beside the spring's open side. */
-  lever: { x: number; y: number; width: number; height: number };
-  /** Corpses resting on the spring (its charge), and how many arm it. */
-  charge: number;
-  chargeNeeded: number;
+  /** The button beside the spring's open side, as its box when fully up (its hit area). */
+  button: { x: number; y: number; width: number; height: number };
+  /** How far the cable has pulled the button up (buttonRiseTicks = fully up, it can be hit). */
+  buttonTicks: number;
+  buttonRiseTicks: number;
+  /** The scale's pan, set into the ground on the far side (its top is the ground). */
+  scale: { x: number; y: number; width: number; height: number };
+  /** Kg on the scale (host-weighed, synced) and how many keep the button up. */
+  scaleKg: number;
+  scaleKgNeeded: number;
   launches: number;
   countdownTicks: number;
   bounceTicks: number;
-  wobbleTicks: number;
 }
 
 /** One floor-4 cage. */

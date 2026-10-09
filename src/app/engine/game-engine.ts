@@ -78,7 +78,7 @@ import { CorpseCarrySystem } from './corpse-carry-system';
 import { LoosePropSystem } from './loose-prop-system';
 import { CarryPose } from './corpse-carry';
 import { CorpseDrape } from './corpse-drape';
-import { flingIfOnSpring, freshLaunch } from './spring-puzzle';
+import { SCALE_MAX_KG, flingIfOnSpring, freshLaunch, newSpringState } from './spring-puzzle';
 import { pullZombiesToward } from './magnet-pull';
 import {
   exitPlatformY,
@@ -312,7 +312,7 @@ export class GameEngine implements IGameEngine {
       ? { gateHits: 0, progress: 0, speed: 0, wallBroken: false }
       : null;
     this.springPuzzle = this.level.springPuzzle ?? null;
-    this.spring = this.springPuzzle ? { launches: 0, countdownTicks: 0, bounceTicks: 0, wobbleTicks: 0 } : null;
+    this.spring = this.springPuzzle ? newSpringState() : null;
     this.cagePuzzle = this.level.cagePuzzle ?? null;
     this.cages = this.cagePuzzle ? newCageState() : null;
     this.platePuzzle = this.level.platePuzzle ?? null;
@@ -1089,7 +1089,8 @@ export class GameEngine implements IGameEngine {
       state.launches,
       state.countdownTicks,
       state.bounceTicks,
-      state.wobbleTicks,
+      state.scaleKg,
+      state.buttonTicks,
     ];
     if (!numbers.every((n: number): boolean => Number.isFinite(n))) return;
     const clamp: (n: number, max: number) => number = (n: number, max: number): number =>
@@ -1099,7 +1100,8 @@ export class GameEngine implements IGameEngine {
     this.spring.launches = launches;
     this.spring.countdownTicks = clamp(state.countdownTicks, GAME_CONSTANTS.SPRING_COUNTDOWN_TICKS);
     this.spring.bounceTicks = clamp(state.bounceTicks, GAME_CONSTANTS.SPRING_BOUNCE_TICKS);
-    this.spring.wobbleTicks = clamp(state.wobbleTicks, GAME_CONSTANTS.SPRING_WOBBLE_TICKS);
+    this.spring.scaleKg = clamp(state.scaleKg, SCALE_MAX_KG);
+    this.spring.buttonTicks = clamp(state.buttonTicks, GAME_CONSTANTS.SPRING_BUTTON_RISE_TICKS);
     if (launched && freshLaunch(this.spring) && this.player) {
       flingIfOnSpring(this.player, this.springPuzzle);
     }

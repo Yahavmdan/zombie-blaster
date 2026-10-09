@@ -31,6 +31,8 @@ export interface ZombieDefinition {
   heightMax: number;
   attackAnimTicks: number;
   attackHitTick: number;
+  /** Body weight in kg (alive or as a corpse): what it puts on a scale. */
+  weightKg: number;
 }
 
 export interface ZombieState {
@@ -284,7 +286,12 @@ export interface LooseProp {
   isGrounded: boolean;
   /** Player carrying it overhead (the host decides; null = lying in the world or falling). */
   carrierId: string | null;
+  /** Weight in kg, from what it is made of (PROP_WEIGHT_KG). Clients take it from their own layout. */
+  weightKg: number;
 }
+
+/** What a map prop is made of: picks its weight (PROP_WEIGHT_KG). */
+export type PropMaterial = 'barrel' | 'box' | 'locker' | 'rail';
 
 /** Floor-2 boulder puzzle: the host simulates it and sends it with every game-sync. */
 export interface BoulderState {
@@ -298,16 +305,21 @@ export interface BoulderState {
   wallBroken: boolean;
 }
 
-/** Floor-3 spring puzzle: the host simulates it and sends it with every game-sync (the charge is the synced corpses). */
+/**
+ * Floor-3 spring puzzle: the host simulates it and sends it with every game-sync. A scale away
+ * from the spring pulls the spring's button up on a cable while it holds enough kg.
+ */
 export interface SpringState {
-  /** Launches so far on this floor (the spring stays charged after each). */
+  /** Launches so far on this floor (the button stays up while the scale stays loaded). */
   launches: number;
-  /** Ticks left of the 3-2-1 after a pull with a full charge (0 = not counting). */
+  /** Ticks left of the 3-2-1 after a hit on the raised button (0 = not counting). */
   countdownTicks: number;
   /** Ticks left of the release-and-settle bounce after a launch (0 = at rest). */
   bounceTicks: number;
-  /** Ticks left of the lever's jiggle after a pull with too little charge. */
-  wobbleTicks: number;
+  /** Kg on the scale, as the host weighs it (corpses, props, zombies, players and what they carry). */
+  scaleKg: number;
+  /** How far the button has risen: 0 = sunk in the ground, SPRING_BUTTON_RISE_TICKS = fully up. */
+  buttonTicks: number;
 }
 
 /** One floor-4 hanging cage: its cleat takes hits until the chain snaps, then it falls. */

@@ -5,6 +5,8 @@ import { E2eSpringView, E2eSnapshot, E2eVfxLogEntry } from '../../support/probe'
 import { WORLD } from '../../support/invariants';
 
 const SPRING_FLOOR: number = 3;
+/** A player's own weight (GAME_CONSTANTS.PLAYER_WEIGHT_KG). */
+const PLAYER_KG: number = 80;
 
 async function springFloor(p: GamePlayer): Promise<E2eSnapshot> {
   await p.probe.setGodMode(true);
@@ -15,26 +17,24 @@ async function springFloor(p: GamePlayer): Promise<E2eSnapshot> {
   );
 }
 
-/** Puts the player on the ground beside the lever (screen-center side), facing it. */
-async function standAtLever(p: GamePlayer, spring: E2eSpringView): Promise<void> {
+/** Puts the player on the ground beside the button (screen-center side), facing it. */
+async function standAtButton(p: GamePlayer, spring: E2eSpringView): Promise<void> {
   const x: number =
     spring.side === 1
-      ? spring.lever.x - WORLD.playerWidth - 4
-      : spring.lever.x + spring.lever.width + 4;
+      ? spring.button.x - WORLD.playerWidth - 4
+      : spring.button.x + spring.button.width + 4;
   // Face first: the turning key-press walks a step.
   await p.face(spring.side === 1 ? 'right' : 'left');
   await p.probe.teleport(x, WORLD.groundY - WORLD.playerHeight);
   await p.wait(300);
 }
 
-/** Drops corpses across the spring until it is charged (they land by normal physics). */
-async function chargeSpring(p: GamePlayer, spring: E2eSpringView): Promise<E2eSnapshot> {
-  const xs: number[] = [0.25, 0.5, 0.75].map(
-    (f: number): number => spring.spring.x + spring.spring.width * f,
-  );
+/** Drops corpses onto the scale's pan until it holds enough (they land by normal physics). */
+async function loadScale(p: GamePlayer, spring: E2eSpringView): Promise<E2eSnapshot> {
+  const cx: number = spring.scale.x + spring.scale.width / 2;
   let s: E2eSnapshot = await p.probe.state();
-  for (let batch: number = 0; batch < 6 && s.spring!.charge < spring.chargeNeeded; batch++) {
-    for (const x of xs) await p.probe.dropCorpses(x, 4);
+  for (let batch: number = 0; batch < 6 && s.spring!.scaleKg < spring.scaleKgNeeded; batch++) {
+    await p.probe.dropCorpses(cx, 6);
     await p.wait(3_000);
     s = await p.probe.state();
   }
@@ -42,7 +42,7 @@ async function chargeSpring(p: GamePlayer, spring: E2eSpringView): Promise<E2eSn
 }
 
 test.describe('spring puzzle (floor 3)', { tag: '@solo' }, (): void => {
-  test('floor 3: the exit hangs at the top, straight over a solid spring at the screen edge', async ({
+  test('floor 3: the exit hangs at the top over a solid spring; the scale lies in the ground on the far side and weighs the player', async ({
     solo,
   }: {
     solo: SoloFactory;
@@ -54,7 +54,20 @@ test.describe('spring puzzle (floor 3)', { tag: '@solo' }, (): void => {
     expect(s0.exit.y, 'the exit hangs at the spring floor height').toBe(100);
     expect(spring.spring.x, 'under the whole exit').toBeLessThanOrEqual(s0.exit.x);
     expect(spring.spring.x + spring.spring.width).toBeGreaterThanOrEqual(s0.exit.x + s0.exit.width);
-    expect(spring.charge).toBe(0);
+    expect(spring.scale.y, 'the pan is flush with the ground').toBe(WORLD.groundY);
+    const panCenter: number = spring.scale.x + spring.scale.width / 2;
+    expect(Math.sign(panCenter - WORLD.width / 2), 'the scale is on the far half').toBe(-spring.side);
+    expect(spring.buttonTicks, 'the button starts sunk').toBe(0);
+
+    await p.probe.teleport(
+      panCenter - WORLD.playerWidth / 2,
+      WORLD.groundY - WORLD.playerHeight - 20,
+    );
+    const weighed: E2eSnapshot = await p.probe.waitFor(
+      'the scale weighs the player',
+      (st: E2eSnapshot): boolean => st.player!.isGrounded && st.spring!.scaleKg >= PLAYER_KG,
+    );
+    expect(weighed.spring!.buttonTicks, 'one player is far too light').toBe(0);
 
     await p.probe.teleport(
       spring.spring.x + spring.spring.width / 2 - WORLD.playerWidth / 2,
@@ -70,7 +83,7 @@ test.describe('spring puzzle (floor 3)', { tag: '@solo' }, (): void => {
     );
   });
 
-  test('an uncharged lever only jiggles; charge the spring with corpses, pull, hop on: 3-2-1 and up to the exit', async ({
+  test('a sunk button does nothing; load the scale with corpses, the cable raises the button, hit it, hop on: 3-2-1 and up to the exit', async ({
     solo,
   }: {
     solo: SoloFactory;
@@ -80,47 +93,51 @@ test.describe('spring puzzle (floor 3)', { tag: '@solo' }, (): void => {
     const s0: E2eSnapshot = await springFloor(p);
     const spring: E2eSpringView = s0.spring!;
 
-    await standAtLever(p, spring);
+    await standAtButton(p, spring);
     await p.hold(KEYS.attack);
-    const jiggled: E2eSnapshot = await p.probe.waitFor(
-      'the uncharged lever jiggles',
-      (st: E2eSnapshot): boolean => st.spring!.wobbleTicks > 0,
-      { timeoutMs: 5_000 },
-    );
+    await p.wait(1_500);
     await p.release(KEYS.attack);
-    expect(jiggled.spring!.countdownTicks, 'no countdown without a charge').toBe(0);
+    const idle: E2eSnapshot = await p.probe.state();
+    expect(idle.spring!.countdownTicks, 'no countdown while the button is sunk').toBe(0);
 
-    const charged: E2eSnapshot = await chargeSpring(p, spring);
-    expect(charged.spring!.charge, 'corpses on the spring charge it').toBeGreaterThanOrEqual(
-      spring.chargeNeeded,
+    const loaded: E2eSnapshot = await loadScale(p, spring);
+    expect(loaded.spring!.scaleKg, 'corpses on the pan weigh it down').toBeGreaterThanOrEqual(
+      spring.scaleKgNeeded,
     );
-    await p.attachCanvas(testInfo, 'charged spring');
+    const up: E2eSnapshot = await p.probe.waitFor(
+      'the cable pulls the button fully up',
+      (st: E2eSnapshot): boolean => st.spring!.buttonTicks >= spring.buttonRiseTicks,
+      { timeoutMs: 10_000 },
+    );
+    expect(up.spring!.countdownTicks).toBe(0);
+    await p.attachCanvas(testInfo, 'loaded scale, button up');
 
-    await standAtLever(p, spring);
+    await standAtButton(p, spring);
     await p.probe.clearVfxLog();
     await p.hold(KEYS.attack);
     await p.probe.waitFor(
-      'the pull starts the 3-2-1',
+      'the press starts the 3-2-1',
       (st: E2eSnapshot): boolean => st.spring!.countdownTicks > 0,
       { timeoutMs: 5_000 },
     );
     await p.release(KEYS.attack);
     await p.attachCanvas(testInfo, 'countdown');
-    // Setup: drop onto the pile on the spring from below the exit (climbing piles is covered elsewhere).
+    // Setup: drop onto the spring from below the exit (walking there is covered elsewhere).
     await p.probe.teleport(
       spring.spring.x + spring.spring.width / 2 - WORLD.playerWidth / 2,
       spring.spring.y - 200,
     );
-    const flying: E2eSnapshot = await p.probe.waitFor(
+    await p.probe.waitFor(
       'the spring launches the player',
       (st: E2eSnapshot): boolean => st.spring!.launches === 1 && st.player!.y < 300,
       { timeoutMs: 8_000 },
     );
-    expect(flying.spring!.charge, 'the charge scattered through the air (spent)').toBeLessThan(
-      spring.chargeNeeded,
-    );
     const log: E2eVfxLogEntry[] = await p.probe.vfxLog();
     expect(log.some((e: E2eVfxLogEntry): boolean => e.type === 'spring-launch')).toBe(true);
+    const after: E2eSnapshot = await p.probe.state();
+    expect(after.spring!.scaleKg, 'the launch leaves the scale loaded').toBeGreaterThanOrEqual(
+      spring.scaleKgNeeded,
+    );
 
     await p.probe.waitFor(
       'landing on the exit ends the floor',

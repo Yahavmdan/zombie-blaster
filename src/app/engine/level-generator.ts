@@ -1,5 +1,5 @@
-import { GAME_CONSTANTS } from '@shared/index';
-import { LooseProp } from '@shared/game-entities';
+import { GAME_CONSTANTS, PROP_WEIGHT_KG } from '@shared/index';
+import { LooseProp, PropMaterial } from '@shared/game-entities';
 import {
   BoulderPuzzleLayout,
   CagePuzzleLayout,
@@ -87,8 +87,8 @@ interface TierRules {
   minTiles: number;
   maxTiles: number;
   exitGap: number;
-  /** A horizontal span no platform may overlap (a puzzle's chute or spring), or null. */
-  avoid: [number, number] | null;
+  /** Horizontal spans no platform may overlap (a puzzle's chute, spring or scale column). */
+  avoid: Array<[number, number]>;
 }
 
 function exitGapFor(tierIndex: number): number {
@@ -118,7 +118,7 @@ function tryPlace(
     const x: number = Math.round(randomInt(rand, tile, maxX) / 16) * 16;
     const candidate: Platform = { x, y: rules.y, width, height: tile };
     if (spanGap(x, x + width, exitX, exitRight) < rules.exitGap) continue;
-    if (rules.avoid && x < rules.avoid[1] && x + width > rules.avoid[0]) continue;
+    if (rules.avoid.some(([a, b]: [number, number]): boolean => x < b && x + width > a)) continue;
     if (
       sameTier.some(
         (p: Platform): boolean => platformGap(p, candidate) < GAME_CONSTANTS.LEVEL_PLATFORM_GAP_PX,
@@ -240,6 +240,23 @@ export function railWidth(middles: number): number {
   );
 }
 
+/** What each prop is made of: its weight is PROP_WEIGHT_KG[material] (shared/game-constants.ts). */
+export const PROP_MATERIAL: Record<PropKind, PropMaterial> = {
+  barrel1: 'barrel',
+  barrel2: 'barrel',
+  barrel3: 'barrel',
+  box1: 'box',
+  box2: 'box',
+  box3: 'box',
+  locker1: 'locker',
+  locker2: 'locker',
+  rail: 'rail',
+};
+
+export function propWeightKg(kind: PropKind): number {
+  return PROP_WEIGHT_KG[PROP_MATERIAL[kind]];
+}
+
 const PROP_KINDS: PropKind[] = [...(Object.keys(PROP_ART) as SinglePropKind[]), 'rail'];
 const STACKABLE: SinglePropKind[] = ['box1', 'box2', 'box3'];
 
@@ -294,6 +311,7 @@ export function lyingProp(id: string, prop: Prop): LooseProp {
     velocityY: 0,
     isGrounded: true,
     carrierId: null,
+    weightKg: propWeightKg(prop.kind),
   };
 }
 
@@ -389,6 +407,9 @@ function propProblems(prop: Prop, layout: PropContext): string[] {
     if (spanGap(left, right, block.x, block.x + block.width) < GAME_CONSTANTS.SPRING_CLEAR_PX) {
       out.push('crowds the spring');
     }
+    // Nothing stands on the scale but what players load onto it.
+    const pan: [number, number] = [spring.scaleX, spring.scaleX + GAME_CONSTANTS.SPRING_SCALE_WIDTH_PX];
+    if (groundLevel && spanGap(left, right, pan[0], pan[1]) === 0) out.push('on the scale');
   }
   const cages: CagePuzzleLayout | undefined = layout.cagePuzzle;
   if (cages && restsOn === cages.cleatY) {
@@ -535,15 +556,28 @@ function placeBoulderPuzzle(rand: Random, wallOnRight: boolean): BoulderPuzzleLa
 
 /**
  * Floor-3 puzzle: a big spring block from the exit's screen edge to the exit's inner edge, so the
- * exit (which hangs at the very top) is straight above it.
+ * exit (which hangs at the very top) is straight above it. The scale's pan is set into the ground
+ * on the far side of the floor.
  */
 function placeSpringPuzzle(exitX: number, exitOnRight: boolean): SpringPuzzleLayout {
   const height: number = GAME_CONSTANTS.SPRING_HEIGHT_PX;
   const y: number = GAME_CONSTANTS.GROUND_Y - height;
   const exitRight: number = exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH;
   return exitOnRight
-    ? { spring: { x: exitX, y, width: GAME_CONSTANTS.CANVAS_WIDTH - exitX, height }, side: 1 }
-    : { spring: { x: 0, y, width: exitRight, height }, side: -1 };
+    ? {
+        spring: { x: exitX, y, width: GAME_CONSTANTS.CANVAS_WIDTH - exitX, height },
+        side: 1,
+        scaleX: farScaleX(1),
+      }
+    : { spring: { x: 0, y, width: exitRight, height }, side: -1, scaleX: farScaleX(-1) };
+}
+
+/** Left edge of the scale's pan: inset from the screen edge opposite the spring. */
+function farScaleX(side: 1 | -1): number {
+  const inset: number = GAME_CONSTANTS.SPRING_SCALE_INSET_PX;
+  return side === 1
+    ? inset
+    : GAME_CONSTANTS.CANVAS_WIDTH - inset - GAME_CONSTANTS.SPRING_SCALE_WIDTH_PX;
 }
 
 /** Floor-4 puzzle, first part: the zombie cage hangs mid-screen (its cleats need the safe spot). */
@@ -657,6 +691,12 @@ function placePlatePuzzle(exitX: number, platforms: Platform[]): PlatePuzzleLayo
   };
 }
 
+/** The scale's pan widened by its clearance: no platform hangs over it (bodies would land there). */
+function scaleClearSpan(puzzle: SpringPuzzleLayout): [number, number] {
+  const clear: number = GAME_CONSTANTS.SPRING_SCALE_CLEAR_PX;
+  return [puzzle.scaleX - clear, puzzle.scaleX + GAME_CONSTANTS.SPRING_SCALE_WIDTH_PX + clear];
+}
+
 /** The spring's span widened by its clearance: platforms, ropes and props stay out of it. */
 function springClearSpan(puzzle: SpringPuzzleLayout): [number, number] {
   const clear: number = GAME_CONSTANTS.SPRING_CLEAR_PX;
@@ -681,13 +721,13 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
     floor === GAME_CONSTANTS.PUZZLE_SPRING_FLOOR ? placeSpringPuzzle(exitX, exitOnRight) : undefined;
   const zombieCage: Platform | null =
     floor === GAME_CONSTANTS.PUZZLE_CAGE_FLOOR ? placeZombieCage(rand) : null;
-  const avoid: [number, number] | null = boulderPuzzle
-    ? chuteSpan(boulderPuzzle)
+  const avoid: Array<[number, number]> = boulderPuzzle
+    ? [chuteSpan(boulderPuzzle)]
     : springPuzzle
-      ? springClearSpan(springPuzzle)
+      ? [springClearSpan(springPuzzle), scaleClearSpan(springPuzzle)]
       : zombieCage
-        ? zombieCageClearSpan(zombieCage)
-        : null;
+        ? [zombieCageClearSpan(zombieCage)]
+        : [];
 
   const tier1: Platform[] = [];
   const tier1Count: number = randomInt(rand, 2, 3);
@@ -815,6 +855,14 @@ function springPuzzleProblems(layout: LevelLayout, puzzle: SpringPuzzleLayout): 
   if ((puzzle.side === 1) !== atRight) out.push('spring: side does not match its edge');
   const exitRight: number = layout.exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH;
   if (block.x > layout.exitX || right < exitRight) out.push('spring: not under the whole exit');
+  if (puzzle.scaleX !== farScaleX(puzzle.side)) out.push('scale: not on the far side of the floor');
+  const [panFrom, panTo]: [number, number] = scaleClearSpan(puzzle);
+  for (const p of layout.platforms) {
+    if (p.x < panTo && p.x + p.width > panFrom) out.push(`platform ${p.x},${p.y}: over the scale`);
+  }
+  for (const r of layout.ropes) {
+    if (r.x > panFrom && r.x < panTo) out.push(`rope at ${r.x}: over the scale`);
+  }
   const [from, to]: [number, number] = springClearSpan(puzzle);
   for (const p of layout.platforms) {
     if (p.x < to && p.x + p.width > from) out.push(`platform ${p.x},${p.y}: over the spring`);

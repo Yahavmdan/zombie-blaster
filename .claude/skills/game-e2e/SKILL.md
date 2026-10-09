@@ -154,13 +154,15 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   pile, then hold attack at the gate), `online/boulder-puzzle-coop.spec.ts`. The Brain climbs to the
   ledge but has no gate/wall goal yet: AI players stall on floor 2.
 - **Floor 3 is the spring puzzle**: the exit hangs at y 100 (no pile reaches it) straight over a
-  solid spring block at the screen edge (`spring.spring`, `side`). Corpses resting on it (or piled
-  on it) charge it (`spring.charge` / `chargeNeeded`, 30). Attacking the lever beside it (`lever`,
-  on the ground at the spring's open side; facing it) with a full charge starts a 3-2-1
-  (`countdownTicks`), then everyone standing on the spring or its pile flies straight up onto the
-  exit (`launches`, `bounceTicks`) while the charge corpses scatter up and out past the spring (spent).
-  Too little charge only jiggles the lever
-  (`wobbleTicks`). `probe.dropCorpses` at a few x across the spring charges it. Don't teleport
+  solid spring block at the screen edge (`spring.spring`, `side`). A scale's pan lies in the ground
+  on the far half (`spring.scale`, top = ground). The host weighs it (`scaleKg` /
+  `scaleKgNeeded`, 1000 kg; synced): lying corpses by zombie type, props, standing zombies, players
+  plus what they carry. While loaded the cable raises the button beside the spring's open side
+  (`button`, `buttonTicks` up to `buttonRiseTicks`, 200 ticks); it sinks back as slowly when the
+  weight goes. Attacking the fully raised button (facing it) starts a 3-2-1 (`countdownTicks`),
+  then everyone standing on the spring flies straight up onto the exit (`launches`,
+  `bounceTicks`); corpses lying on the spring scatter, the scale's load stays. A sunk button does
+  nothing. `probe.dropCorpses(scale center, n)` loads it (walker 70 kg: ~15). Don't teleport
   above the exit to get on the spring: you land on the exit. Specs: `solo/spring-puzzle.spec.ts`,
   `online/spring-puzzle-coop.spec.ts`. The Brain has no spring goal yet: AI players stall on floor 3.
 - **Floor 4 is the hanging-cage puzzle** (`state().cages`): `exitCage` hangs under the exit,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CharacterState, Direction, GAME_CONSTANTS } from '@shared/index';
+import { CharacterState, Direction, GAME_CONSTANTS, PROP_WEIGHT_KG } from '@shared/index';
 import { LooseProp, ZombieCorpse, ZombieType } from '@shared/game-entities';
 import {
   assignCarriers,
@@ -237,6 +237,7 @@ function barrel(id: string, cx: number, overrides: Partial<LooseProp> = {}): Loo
     velocityY: 0,
     isGrounded: true,
     carrierId: null,
+    weightKg: PROP_WEIGHT_KG.barrel,
     ...overrides,
   };
 }
