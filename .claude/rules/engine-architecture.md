@@ -31,8 +31,8 @@ The engine is split into focused files under `src/app/engine/`.
 | `plate-puzzle-system.ts` | Floor-5 puzzle simulation: host weighs the plate from the corpses and every player, slides the exit door, lets walking zombies kick corpses off; clients slide the door from the synced weight |
 | `boulder-puzzle-system.ts` | Floor-2 puzzle simulation: host counts gate hits (all players), rolls the boulder, crushes, breaks the wall; clients extrapolate the synced roll |
 | `magnet-pull.ts` | Monster-magnet drag (host-simulated, synced as `ZombieState.magnetPull`) |
-| `corpse-carry.ts` | Corpse carrying rules (pure): what is in reach, a stack of up to `CORPSE_CARRY_MAX` overhead, tossing the stack so it lands as a pile, host grants/releases (`assignCarriers`) |
-| `corpse-carry-system.ts` | Carry key (pick up one more / toss the stack; attack also tosses), host grants every player's requests, every client holds carried corpses on their carriers; guests hold their own pick-ups while the host answers |
+| `corpse-carry.ts` | Corpse carrying rules (pure): what is in reach, a stack of up to `CORPSE_CARRY_MAX` overhead, tossing the stack so it lands as a pile, host grants/releases (`assignCarriers`), carried-body sway (`carrySway`/`easeCarryPose`, drawing only) |
+| `corpse-carry-system.ts` | Carry key (pick up one more / toss the stack; attack also tosses), host grants every player's requests, every client holds carried corpses on their carriers; guests hold their own pick-ups while the host answers; eases `carryPoses` each tick (RenderSystem bends the sprite in strips by it) |
 | `corpse-surface.ts` | Walkable surface of a corpse (the same for every corpse, the exit pile included) |
 | `safe-spot.ts` | `restsOnSafeSpot`: who rests on the floor's safe spot (zombies can't target/hit/land; no attacking from it) |
 | `solid-blocks.ts` | Side collision with solid props (players and zombies) |

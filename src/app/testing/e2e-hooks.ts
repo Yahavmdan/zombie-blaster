@@ -312,6 +312,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
         animState: anim ? anim.state : null,
         frame: anim ? anim.frame : null,
         lastFrame: engine.zombieSpriteAnimator.getFrameCount(c.spriteKey, ZombieAnimState.Dead) - 1,
+        carryPose: engine.carryPoses.get(c.id) ?? null,
       };
     }),
     worldDrops: engine.worldDrops.length,

@@ -33,7 +33,7 @@ import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
 import { ZombieSpriteAnchor } from './zombie-sprite-animator';
 import { MagnetPull, ZombieCorpse } from '@shared/game-entities';
 import { magnetPullProgress } from './magnet-pull';
-import { carriedIds, carryableCorpse } from './corpse-carry';
+import { CarryPose, carriedIds, carryableCorpse } from './corpse-carry';
 import {
   Box,
   BoulderPath,
@@ -78,6 +78,12 @@ import {
 
 /** How far (fraction of the sprite width) a lying body's middle sits behind its feet. */
 const CARRIED_BODY_SHIFT: number = 0.26;
+/** Half a lying body's length (fraction of the sprite width): its ends hang by the full sag. */
+const CARRIED_HALF_SPAN: number = 0.27;
+/** Width of the strips a carried body is bent in. */
+const BEND_STRIP_PX: number = 2;
+/** Strips past the body's ends (empty sprite margin) stop dropping further. */
+const BEND_MAX_REACH: number = 1.3;
 /** Matches the warrior-monster-magnet skill color. */
 const MAGNET_STREAK_COLOR: string = '#cc44ff';
 const HURT_TINT_COLOR: string = '#ff2020';
@@ -86,6 +92,8 @@ const POISON_TINT_COLOR: string = '#30ff50';
 const POISON_TINT_FADE_TICKS: number = 20;
 
 export class RenderSystem {
+  private bendSprite: HTMLCanvasElement | null = null;
+
   constructor(private readonly e: IGameEngine) {}
 
   private getTwinMimicPercent(p: CharacterState): number {
@@ -973,6 +981,12 @@ export class RenderSystem {
       const drawX: number = corpse.x + corpse.width / 2 - renderW * effectiveAnchorX + bodyShift;
       const drawY: number = corpse.y + corpse.height - renderH * anchor.anchorY;
 
+      const pose: CarryPose | undefined = this.isCarried(corpse) ? this.e.carryPoses.get(corpse.id) : undefined;
+      if (pose) {
+        this.drawSwayingCorpse(ctx, corpse, pose, drawX, drawY, renderW, flipX, alpha);
+        continue;
+      }
+
       ctx.save();
       ctx.globalAlpha = alpha;
       this.e.zombieSpriteAnimator.draw(
@@ -988,6 +1002,54 @@ export class RenderSystem {
         this.renderCorpseFlies(ctx, corpse);
       }
     }
+  }
+
+  /**
+   * A carried body draped over the head: drawn in thin vertical strips, each dropped by the pose's
+   * sag (growing with the square of its distance from the head) so the ends hang, then bobbed and
+   * tilted about the head.
+   */
+  private drawSwayingCorpse(
+    ctx: CanvasRenderingContext2D,
+    corpse: ZombieCorpse,
+    pose: CarryPose,
+    drawX: number,
+    drawY: number,
+    size: number,
+    flipX: boolean,
+    alpha: number,
+  ): void {
+    const sprite: HTMLCanvasElement = this.bendCanvas(size);
+    const spriteCtx: CanvasRenderingContext2D = sprite.getContext('2d')!;
+    spriteCtx.clearRect(0, 0, size, size);
+    this.e.zombieSpriteAnimator.draw(spriteCtx, corpse.id, corpse.spriteKey, 0, 0, size, size, flipX);
+
+    const pivotX: number = corpse.x + corpse.width / 2;
+    const pivotY: number = corpse.y + corpse.height;
+    const halfSpan: number = size * CARRIED_HALF_SPAN;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(pivotX, pivotY + Math.round(pose.bob));
+    ctx.rotate(pose.tilt);
+    ctx.translate(-pivotX, -pivotY);
+    for (let sx: number = 0; sx < size; sx += BEND_STRIP_PX) {
+      const w: number = Math.min(BEND_STRIP_PX, size - sx);
+      const reach: number = Math.min(BEND_MAX_REACH, Math.abs(drawX + sx + w / 2 - pivotX) / halfSpan);
+      const dy: number = Math.round(pose.sag * reach * reach);
+      ctx.drawImage(sprite, sx, 0, w, size, drawX + sx, drawY + dy, w, size);
+    }
+    ctx.restore();
+  }
+
+  /** Scratch canvas a carried corpse's frame is drawn on before it is bent onto the screen. */
+  private bendCanvas(size: number): HTMLCanvasElement {
+    if (!this.bendSprite) this.bendSprite = document.createElement('canvas');
+    if (this.bendSprite.width < size || this.bendSprite.height < size) {
+      this.bendSprite.width = size;
+      this.bendSprite.height = size;
+    }
+    return this.bendSprite;
   }
 
   private renderCorpseFlies(ctx: CanvasRenderingContext2D, corpse: ZombieCorpse): void {

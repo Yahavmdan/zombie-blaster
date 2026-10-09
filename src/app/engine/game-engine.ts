@@ -74,6 +74,7 @@ import {
   newCageState,
 } from './cage-puzzle';
 import { CorpseCarrySystem } from './corpse-carry-system';
+import { CarryPose } from './corpse-carry';
 import { flingIfOnSpring, freshLaunch } from './spring-puzzle';
 import { pullZombiesToward } from './magnet-pull';
 import { exitPlatformY, generateLevel, GROUND_PLATFORM, LevelLayout, Prop } from './level-generator';
@@ -110,6 +111,7 @@ export class GameEngine implements IGameEngine {
   remotePlayers: CharacterState[] = [];
   zombies: ZombieState[] = [];
   zombieCorpses: ZombieCorpse[] = [];
+  readonly carryPoses: Map<string, CarryPose> = new Map<string, CarryPose>();
   particles: Particle[] = [];
   damageNumbers: DamageNumber[] = [];
   dropNotifications: DropNotification[] = [];
