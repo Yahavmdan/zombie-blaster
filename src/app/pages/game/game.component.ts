@@ -24,11 +24,12 @@ import { KeyBindingsService } from '../../services/key-bindings.service';
 import { attachGameControls } from '../../testing/e2e-hooks';
 import { E2eControls } from '../../testing/e2e-api';
 import { WorkerInterval } from '../../engine/worker-interval';
+import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
 
 @Component({
   selector: 'app-game',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule],
+  imports: [PixelIconComponent, GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule],
   host: {
     class: 'game-page',
   },

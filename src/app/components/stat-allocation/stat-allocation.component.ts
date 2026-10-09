@@ -18,6 +18,8 @@ import {
   ClassStatWeights,
 } from '@shared/index';
 import { GameStateService } from '../../services/game-state.service';
+import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { PixelIconId } from '@shared/pixel-icon';
 
 export interface StatPreviewDelta {
   attack: number;
@@ -32,7 +34,7 @@ export interface StatPreviewDelta {
 export interface StatRow {
   key: keyof CharacterStats;
   label: string;
-  icon: string;
+  icon: PixelIconId;
   currentValue: number;
   baseValue: number;
   allocatedValue: number;
@@ -43,6 +45,7 @@ export interface StatRow {
 
 @Component({
   selector: 'app-stat-allocation',
+  imports: [PixelIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'stat-allocation',
@@ -78,14 +81,14 @@ export class StatAllocationComponent {
     const w: ClassStatWeights = this.classWeights();
     const base: CharacterStats = CHARACTER_CLASSES[p.classId].baseStats;
 
-    const stats: { key: keyof CharacterStats; label: string; icon: string }[] = [
-      { key: 'str', label: 'STR', icon: '💪' },
-      { key: 'dex', label: 'DEX', icon: '🏃' },
-      { key: 'int', label: 'INT', icon: '🧠' },
-      { key: 'luk', label: 'LUK', icon: '🍀' },
+    const stats: { key: keyof CharacterStats; label: string; icon: PixelIconId }[] = [
+      { key: 'str', label: 'STR', icon: 'fist' },
+      { key: 'dex', label: 'DEX', icon: 'boot' },
+      { key: 'int', label: 'INT', icon: 'brain' },
+      { key: 'luk', label: 'LUK', icon: 'clover' },
     ];
 
-    return stats.map((s: { key: keyof CharacterStats; label: string; icon: string }): StatRow => ({
+    return stats.map((s: { key: keyof CharacterStats; label: string; icon: PixelIconId }): StatRow => ({
       key: s.key,
       label: s.label,
       icon: s.icon,

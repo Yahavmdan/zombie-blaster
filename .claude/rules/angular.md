@@ -38,5 +38,9 @@ load(): void {
 ## Styling
 
 - Component `.css` files are the norm (Tailwind is imported in `styles.css` but templates don't use it yet).
+- Build on the UI kit: add `px-panel` / `px-btn px-btn--primary` / `px-bar` / `px-chip` / `px-input` classes in the template and keep only layout in the component CSS. Values via `var(--…)` tokens only (no hex, no rem, type scale `--fs-12…--fs-64`, nothing under 12px), `border-radius: 0`, animations with `steps()`.
+- Modals: `.px-overlay` > `.px-panel` with a 3px accent `border-top` > `.px-header` (24px icon, title, `px-btn px-close`) > body with `px-scroll` and a `max-height` that clears the bottom quick-slot tray (~72px).
+- Icon sizes 16/24/32/48 keep the 16px grids crisp (12 blurs).
+- Full recipes (new modal, HUD element, icon, canvas text) and the screenshot tool: `pixel-ui` skill.
 - Keep HUD/menu styles apart from canvas rendering.
 - Prefer path aliases (`@shared/*`) over deep relative imports.

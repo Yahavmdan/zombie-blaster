@@ -1,48 +1,69 @@
-<div class="inv-overlay" (click)="onClose()">
-  <div class="inv-panel" (click)="$event.stopPropagation()">
-    <div class="inv-header">
-      <h2 class="inv-title">🎒 INVENTORY</h2>
-      <div class="inv-gold">💰 {{ gold() }}G</div>
+<div class="inv-overlay px-overlay" (click)="onClose()">
+  <div class="inv-panel px-panel" (click)="$event.stopPropagation()">
+    <div class="inv-header px-header">
+      <app-pixel-icon [icon]="'bag'" [size]="24" />
+      <h2 class="inv-title">Inventory</h2>
+      <div class="inv-gold px-chip"><app-pixel-icon [icon]="'coin'" [size]="16" /> {{ gold() }}</div>
       <button
-        class="inv-close"
+        class="inv-close px-btn px-close"
         (click)="onClose()"
         data-testid="inventory-panel-button-close"
-      >✕</button>
+      ><app-pixel-icon [icon]="'close'" [size]="16" /></button>
     </div>
 
-    <div class="inv-player-info">
-      <span class="inv-player-icon">{{ classIcon() }}</span>
-      <span class="inv-player-name">{{ player().name }}</span>
-      <span class="inv-player-class">{{ className() }}</span>
-      <span class="inv-player-level">Lv.{{ player().level }}</span>
-    </div>
-
-    <div class="inv-section">
-      <h3 class="inv-section-title">🧪 Potions</h3>
-      @if (rows().length > 0) {
-        <div class="inv-items">
-          @for (row of rows(); track row.potion.id) {
-            <div class="inv-item" draggable="true" (dragstart)="onPotionDragStart($event, row.potion.id)">
-              <span class="inv-item-icon">{{ row.potion.icon }}</span>
-              <div class="inv-item-info">
-                <span class="inv-item-name">{{ row.potion.name }}</span>
-                <span class="inv-item-desc">{{ row.potion.description }}</span>
-              </div>
-              <span class="inv-item-count">x{{ row.count }}</span>
-            </div>
-          }
+    <div class="inv-body px-scroll">
+      <div class="inv-player-info">
+        <div class="inv-player-portrait px-panel--inset">
+          <app-pixel-icon [icon]="classIcon()" [size]="24" />
         </div>
-      } @else {
-        <div class="inv-empty">No potions in inventory</div>
-      }
-    </div>
+        <span class="inv-player-name">{{ player().name }}</span>
+        <span class="inv-player-class">{{ className() }}</span>
+        <span class="inv-player-level px-chip">Lv. {{ player().level }}</span>
+      </div>
 
-    <div class="inv-summary">
-      <span class="inv-summary-item">Total items: {{ totalItems() }}</span>
-    </div>
+      <div class="inv-section">
+        <h3 class="inv-section-title"><app-pixel-icon [icon]="'flask'" [size]="16" /> Potions</h3>
+        <div class="inv-content">
+          <div class="inv-items">
+            @for (row of rows(); track row.potion.id) {
+              <div
+                class="inv-item px-panel--inset"
+                [class.inv-item--active]="activeId() === row.potion.id"
+                draggable="true"
+                tabindex="0"
+                [attr.title]="row.potion.name"
+                (dragstart)="onPotionDragStart($event, row.potion.id)"
+                (mouseenter)="hoveredId.set(row.potion.id)"
+                (focus)="hoveredId.set(row.potion.id)"
+              >
+                <app-pixel-icon [icon]="row.potion.icon" [size]="32" />
+                <span class="inv-item-count">{{ row.count }}</span>
+              </div>
+            }
+            @for (slot of emptySlots(); track slot) {
+              <div class="inv-item inv-item--empty px-panel--inset"></div>
+            }
+          </div>
 
-    <div class="inv-hint">
-      Drag items to Quick Slots | Press <span class="inv-hint-key">I</span> or click outside to close
+          <div class="inv-detail px-panel--inset">
+            @if (detail(); as item) {
+              <span class="inv-item-name">{{ item.potion.name }}</span>
+              <span class="inv-item-desc">{{ item.potion.description }}</span>
+              <span class="inv-item-owned">Carrying: {{ item.count }}</span>
+            } @else {
+              <span class="inv-empty">No potions in inventory</span>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="inv-summary">
+        <span class="px-label">Total items: {{ totalItems() }}</span>
+      </div>
+
+      <div class="inv-hint px-label">
+        Drag items to quick slots. Press <span class="inv-hint-key">I</span> or click outside to close
+      </div>
     </div>
   </div>
 </div>

@@ -13,9 +13,9 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { UpperCasePipe } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
+  CHARACTER_CLASSES,
   CharacterClass,
   GameMode,
   RoomInfo,
@@ -37,13 +37,15 @@ import type {
 } from '@shared/multiplayer';
 import { WebSocketService, ConnectionStatus } from '../../services/websocket.service';
 import { GameStateService } from '../../services/game-state.service';
+import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { PixelIconId } from '@shared/pixel-icon';
 
 type LobbyView = 'browser' | 'room';
 
 @Component({
   selector: 'app-lobby',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, UpperCasePipe],
+  imports: [PixelIconComponent, FormsModule],
   host: {
     class: 'lobby-page',
   },
@@ -88,6 +90,12 @@ export class LobbyComponent implements OnInit, OnDestroy {
 
   readonly isConnected: Signal<boolean> = computed((): boolean => {
     return this.connectionStatus() === 'connected';
+  });
+
+  /** Sentence-case connection state for the status chip. */
+  readonly connectionLabel: Signal<string> = computed((): string => {
+    const status: string = this.connectionStatus();
+    return status.charAt(0).toUpperCase() + status.slice(1);
   });
 
   newRoomNameInput: string = '';
@@ -288,15 +296,8 @@ export class LobbyComponent implements OnInit, OnDestroy {
     });
   }
 
-  getClassIcon(classId: CharacterClass): string {
-    const icons: Record<CharacterClass, string> = {
-      [CharacterClass.Warrior]: '⚔️',
-      [CharacterClass.Ranger]: '🏹',
-      [CharacterClass.Mage]: '🔮',
-      [CharacterClass.Assassin]: '🗡️',
-      [CharacterClass.Priest]: '✨',
-    };
-    return icons[classId] ?? '❓';
+  getClassIcon(classId: CharacterClass): PixelIconId {
+    return CHARACTER_CLASSES[classId]?.icon ?? 'spark';
   }
 
   private clearError(): void {

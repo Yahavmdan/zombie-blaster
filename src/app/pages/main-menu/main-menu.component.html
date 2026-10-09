@@ -1,67 +1,71 @@
 <div class="menu-backdrop">
-  <div class="menu-content">
-    <div class="title-group">
-      <h1 class="game-title">ZOMBIE</h1>
-      <h1 class="game-title game-title--accent">BLASTER</h1>
-      <p class="subtitle">Survive the undead horde</p>
-    </div>
+  <div class="parallax" aria-hidden="true">
+    <div class="layer layer--sky"></div>
+    <div class="layer layer--smog"></div>
+    <div class="layer layer--far"></div>
+    <div class="layer layer--mid"></div>
+    <div class="layer layer--near"></div>
+    <div class="dusk"></div>
+  </div>
 
-    <div class="menu-buttons">
-      <button
-        class="menu-btn menu-btn--primary"
-        data-testid="menu-main-button-singleplayer"
-        (click)="onSinglePlayer()"
-      >
-        NEW GAME
-      </button>
-      <button
-        class="menu-btn menu-btn--multiplayer"
-        data-testid="menu-main-button-multiplayer"
-        (click)="onMultiplayer()"
-      >
-        MULTIPLAYER
-      </button>
-      <button
-        class="menu-btn"
-        data-testid="menu-main-button-howtoplay"
-        (click)="toggleHelp()"
-      >
-        HOW TO PLAY
-      </button>
+  <div class="menu-content">
+    <div class="menu-main">
+      <div class="title-group">
+        <h1 class="game-title px-title">ZOMBIE</h1>
+        <h1 class="game-title game-title--accent px-title">BLASTER</h1>
+        <p class="subtitle">The undead took the factory. Take it back.</p>
+      </div>
+
+      <div class="menu-buttons">
+        <button
+          class="menu-btn px-btn px-btn--lg px-btn--primary"
+          data-testid="menu-main-button-singleplayer"
+          (click)="onSinglePlayer()"
+        >
+          New game
+        </button>
+        <button
+          class="menu-btn px-btn px-btn--lg"
+          data-testid="menu-main-button-multiplayer"
+          (click)="onMultiplayer()"
+        >
+          Multiplayer
+        </button>
+        <button
+          class="menu-btn px-btn px-btn--lg px-btn--ghost"
+          data-testid="menu-main-button-howtoplay"
+          (click)="toggleHelp()"
+        >
+          How to play
+        </button>
+      </div>
     </div>
 
     @if (showHelp) {
-      <div class="help-panel">
-        <h3>Controls</h3>
-        <div class="help-grid">
-          <span class="key">A / D</span><span>Move left / right</span>
-          <span class="key">W / SPACE</span><span>Jump (W also climbs ladders)</span>
-          <span class="key">J / CLICK</span><span>Attack</span>
-          <span class="key">1 – 6</span><span>Skills</span>
-          <span class="key">7 / 8</span><span>HP / MP potion</span>
-          <span class="key">F</span><span>Revive a downed teammate (hold)</span>
-          <span class="key">P · O · B · I</span><span>Stats · Skills · Shop · Inventory</span>
-          <span class="key">ESC</span><span>Close menus</span>
+      <div class="help-panel px-panel">
+        <h3 class="px-header">Controls</h3>
+        <div class="help-body">
+          <div class="help-grid">
+            <span class="key">A / D</span><span>Move left / right</span>
+            <span class="key">W / SPACE</span><span>Jump (W also climbs ladders)</span>
+            <span class="key">J / CLICK</span><span>Attack</span>
+            <span class="key">1 – 6</span><span>Skills</span>
+            <span class="key">7 / 8</span><span>HP / MP potion</span>
+            <span class="key">F</span><span>Revive a downed teammate (hold)</span>
+            <span class="key">P · O · B · I</span><span>Stats · Skills · Shop · Inventory</span>
+            <span class="key">ESC</span><span>Close menus</span>
+          </div>
+          <p class="help-tip">Reach the EXIT to go up a floor. It hangs out of jump reach... but the dead pile up.</p>
+          <p class="help-tip">Menus don't pause the game. Climb to the SAFE ledge to rest: zombies can't reach you there, and you can't fight from it.</p>
         </div>
-        <p class="help-tip">Reach the EXIT to go up a floor. It hangs out of jump reach... but the dead pile up.</p>
-        <p class="help-tip">Menus don't pause the game. Climb to the SAFE ledge to rest: zombies can't reach you there, and you can't fight from it.</p>
-      </div>
-    }
-
-    <div class="version-tag">v0.2.0 — Single Player &amp; Multiplayer</div>
-  </div>
-
-  <div class="floating-zombies">
-    @for (z of floatingZombies; track z.id) {
-      <div
-        class="floating-zombie"
-        [style.left.px]="z.x"
-        [style.top.px]="z.y"
-        [style.animation-delay]="z.delay + 's'"
-        [style.opacity]="z.opacity"
-      >
-        {{ z.emoji }}
       </div>
     }
   </div>
+
+  <div class="ground" aria-hidden="true">
+    <div class="walker walker--back"></div>
+    <div class="walker walker--front"></div>
+  </div>
+
+  <div class="version-tag">v0.2.0 · single player &amp; multiplayer</div>
 </div>

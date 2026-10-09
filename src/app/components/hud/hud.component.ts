@@ -2,12 +2,14 @@ import { Component, ChangeDetectionStrategy, InputSignal, OutputEmitterRef, Sign
 import { DecimalPipe } from '@angular/common';
 import { ActiveBuff, CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost, getSkillHpCost, KeyBindings, GameAction, getTotalPotionsByCategory } from '@shared/index';
 import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
+import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { PixelIconId } from '@shared/pixel-icon';
 
 export interface SkillSlot {
   id: string;
   key: string;
   name: string;
-  icon: string;
+  icon: PixelIconId;
   mpCost: number;
   hpCost: number;
   locked: boolean;
@@ -16,7 +18,7 @@ export interface SkillSlot {
 
 export interface ActiveBuffDisplay {
   skillName: string;
-  icon: string;
+  icon: PixelIconId;
   color: string;
   remainingPercent: number;
   remainingSec: number;
@@ -25,7 +27,7 @@ export interface ActiveBuffDisplay {
 @Component({
   selector: 'app-hud',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe],
+  imports: [PixelIconComponent, DecimalPipe],
   host: {
     class: 'hud',
   },
@@ -44,7 +46,7 @@ export class HudComponent {
   readonly shopRequested: OutputEmitterRef<void> = output<void>();
   readonly inventoryRequested: OutputEmitterRef<void> = output<void>();
 
-  readonly classIcon: Signal<string> = computed((): string => {
+  readonly classIcon: Signal<PixelIconId> = computed((): PixelIconId => {
     return CHARACTER_CLASSES[this.playerData().classId].icon;
   });
 
@@ -137,7 +139,7 @@ export class HudComponent {
         const skill: SkillDefinition | undefined = SKILLS.find((s: SkillDefinition) => s.id === buff.skillId);
         return {
           skillName: skill?.name ?? 'Buff',
-          icon: skill?.icon ?? '✨',
+          icon: skill?.icon ?? 'spark',
           color: skill?.color ?? '#ffffff',
           remainingPercent: (buff.remainingMs / buff.totalDurationMs) * 100,
           remainingSec: Math.ceil(buff.remainingMs / 1000),

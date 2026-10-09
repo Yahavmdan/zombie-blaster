@@ -1,62 +1,67 @@
 <div class="hud-container">
-  <div class="hud-left">
+  <div class="hud-left px-panel">
     <div class="player-info">
-      <span class="player-class-icon">{{ classIcon() }}</span>
+      <div class="player-portrait px-panel--inset">
+        <app-pixel-icon class="player-class-icon" [icon]="classIcon()" [size]="32" />
+      </div>
       <div class="player-identity">
-        <span class="player-name">{{ playerData().name }}</span>
-        <span class="player-level">Lv. {{ playerData().level }}</span>
+        <div class="player-nameplate">
+          <span class="player-name">{{ playerData().name }}</span>
+          <span class="player-level">Lv. {{ playerData().level }}</span>
+        </div>
+        <div class="bar hp-bar px-bar">
+          <div class="bar-fill px-bar__fill" [style.width.%]="hpPercent()"></div>
+          <span class="bar-label px-bar__label">HP {{ playerData().hp }}/{{ playerData().derived.maxHp }}</span>
+        </div>
+        <div class="bar mp-bar px-bar">
+          <div class="bar-fill px-bar__fill" [style.width.%]="mpPercent()"></div>
+          <span class="bar-label px-bar__label">MP {{ playerData().mp }}/{{ playerData().derived.maxMp }}</span>
+        </div>
       </div>
     </div>
 
-    <div class="bar-group">
-      <div class="bar hp-bar">
-        <div class="bar-fill hp-fill" [style.width.%]="hpPercent()"></div>
-        <span class="bar-label">HP {{ playerData().hp }} / {{ playerData().derived.maxHp }}</span>
+    <div class="xp-row">
+      <span class="xp-tag">XP</span>
+      <div class="bar xp-bar px-bar">
+        <div class="bar-fill px-bar__fill" [style.width.%]="xpPercent()"></div>
       </div>
-      <div class="bar mp-bar">
-        <div class="bar-fill mp-fill" [style.width.%]="mpPercent()"></div>
-        <span class="bar-label">MP {{ playerData().mp }} / {{ playerData().derived.maxMp }}</span>
-      </div>
-      <div class="bar xp-bar">
-        <div class="bar-fill xp-fill" [style.width.%]="xpPercent()"></div>
-        <span class="bar-label">XP {{ playerData().xp }} / {{ playerData().xpToNext }}</span>
-      </div>
+      <span class="xp-value">{{ playerData().xp }}/{{ playerData().xpToNext }}</span>
     </div>
   </div>
 
   <div class="hud-center">
-    <div class="wave-info">
-      <span class="wave-label">FLOOR</span>
+    <div class="wave-info px-panel">
+      <span class="wave-label">Floor</span>
       <span class="wave-number">{{ floor() }}</span>
     </div>
   </div>
 
   <div class="hud-right">
-    <div class="score-display">
-      <span class="score-label">SCORE</span>
+    <div class="score-display px-panel">
+      <span class="score-label">Score</span>
       <span class="score-value">{{ score() }}</span>
     </div>
     <div class="stats-mini">
-      <span class="stat-mini">ATK {{ playerData().derived.attack }}</span>
-      <span class="stat-mini">DEF {{ playerData().derived.defense }}</span>
-      <span class="stat-mini">CRIT {{ playerData().derived.critRate | number:'1.0-0' }}%</span>
+      <span class="stat-mini px-chip">ATK <span class="stat-value">{{ playerData().derived.attack }}</span></span>
+      <span class="stat-mini px-chip">DEF <span class="stat-value">{{ playerData().derived.defense }}</span></span>
+      <span class="stat-mini px-chip">CRIT <span class="stat-value">{{ playerData().derived.critRate | number:'1.0-0' }}%</span></span>
     </div>
     @if (hasStatPoints()) {
       <button
-        class="sp-indicator"
+        class="sp-indicator px-btn px-btn--accent px-btn--sm"
         (click)="onOpenStatPanel()"
         data-testid="hud-sp-button-open"
       >
-        SP: {{ unallocatedStatPoints() }}
+        Stat points: {{ unallocatedStatPoints() }}
       </button>
     }
     @if (hasSkillPoints()) {
       <button
-        class="skp-indicator"
+        class="skp-indicator px-btn px-btn--accent px-btn--sm"
         (click)="onOpenSkillTree()"
         data-testid="hud-skp-button-open"
       >
-        SKP: {{ unallocatedSkillPoints() }}
+        Skill points: {{ unallocatedSkillPoints() }}
       </button>
     }
   </div>
@@ -66,64 +71,64 @@
   @if (activeBuffs().length > 0) {
     <div class="active-buffs">
       @for (buff of activeBuffs(); track buff.skillName) {
-        <div class="buff-indicator">
-          <span class="buff-icon">{{ buff.icon }}</span>
-          <div class="buff-timer-bar">
-            <div class="buff-timer-fill" [style.width.%]="buff.remainingPercent" [style.background]="buff.color"></div>
+        <div class="buff-indicator px-panel">
+          <app-pixel-icon class="buff-icon" [icon]="buff.icon" [size]="16" />
+          <div class="buff-timer-bar px-bar" [style.--bar-color]="buff.color">
+            <div class="px-bar__fill" [style.width.%]="buff.remainingPercent"></div>
           </div>
           <span class="buff-timer-text">{{ buff.remainingSec }}s</span>
         </div>
       }
     </div>
   }
-  <div class="action-bar">
+  <div class="action-bar px-panel">
     <div class="skill-slots">
       @for (slot of skillSlots(); track slot.key) {
         <div
-          class="skill-slot"
+          class="skill-slot slot-cell px-panel--inset"
           [class.skill-slot--locked]="slot.locked"
           [class.skill-slot--buff]="slot.isBuff"
           draggable="true"
           (dragstart)="onSkillDragStart($event, slot)"
         >
-          <span class="skill-key">{{ slot.key }}</span>
-          <span class="skill-icon">{{ slot.icon }}</span>
+          <span class="slot-key">{{ slot.key }}</span>
+          <app-pixel-icon class="slot-icon" [icon]="slot.icon" [size]="24" />
         </div>
       }
     </div>
     <div class="bar-divider"></div>
     <div class="inventory-bar">
-      <div class="inv-item inv-item--hp" data-testid="hud-inv-hp" draggable="true" (dragstart)="onPotionDragStart($event, 'hp')">
-        <span class="inv-key">{{ hpPotionKey() }}</span>
-        <span class="inv-icon">❤️</span>
-        <span class="inv-count">{{ hpPotions() }}</span>
+      <div class="inv-item slot-cell px-panel--inset" data-testid="hud-inv-hp" draggable="true" (dragstart)="onPotionDragStart($event, 'hp')">
+        <span class="slot-key">{{ hpPotionKey() }}</span>
+        <app-pixel-icon class="slot-icon" [icon]="'potion-hp-s'" [size]="24" />
+        <span class="slot-count">{{ hpPotions() }}</span>
       </div>
-      <div class="inv-item inv-item--mp" data-testid="hud-inv-mp" draggable="true" (dragstart)="onPotionDragStart($event, 'mp')">
-        <span class="inv-key">{{ mpPotionKey() }}</span>
-        <span class="inv-icon">💧</span>
-        <span class="inv-count">{{ mpPotions() }}</span>
+      <div class="inv-item slot-cell px-panel--inset" data-testid="hud-inv-mp" draggable="true" (dragstart)="onPotionDragStart($event, 'mp')">
+        <span class="slot-key">{{ mpPotionKey() }}</span>
+        <app-pixel-icon class="slot-icon" [icon]="'potion-mp-s'" [size]="24" />
+        <span class="slot-count">{{ mpPotions() }}</span>
       </div>
-      <div class="inv-item inv-item--gold" data-testid="hud-inv-gold">
-        <span class="inv-icon">💰</span>
-        <span class="inv-count">{{ gold() }}G</span>
+      <div class="inv-item slot-cell px-panel--inset" data-testid="hud-inv-gold">
+        <app-pixel-icon class="slot-icon" [icon]="'coin'" [size]="24" />
+        <span class="slot-count">{{ gold() }}G</span>
       </div>
       <button
-        class="inv-item inv-item--shop"
+        class="inv-item slot-cell slot-cell--button px-panel--inset"
         data-testid="hud-inv-button-shop"
         (click)="onOpenShop()"
       >
-        <span class="inv-key">{{ shopKey() }}</span>
-        <span class="inv-icon">🏪</span>
-        <span class="inv-count">Shop</span>
+        <span class="slot-key">{{ shopKey() }}</span>
+        <app-pixel-icon class="slot-icon" [icon]="'shop'" [size]="24" />
+        <span class="slot-count">Shop</span>
       </button>
       <button
-        class="inv-item inv-item--inventory"
+        class="inv-item slot-cell slot-cell--button px-panel--inset"
         data-testid="hud-inv-button-inventory"
         (click)="onOpenInventory()"
       >
-        <span class="inv-key">{{ inventoryKey() }}</span>
-        <span class="inv-icon">🎒</span>
-        <span class="inv-count">Inv</span>
+        <span class="slot-key">{{ inventoryKey() }}</span>
+        <app-pixel-icon class="slot-icon" [icon]="'bag'" [size]="24" />
+        <span class="slot-count">Inv</span>
       </button>
     </div>
   </div>

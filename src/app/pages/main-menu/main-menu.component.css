@@ -5,22 +5,87 @@
 }
 
 .menu-backdrop {
+  /* one tile of the 576x324 parallax art scaled to the backdrop height */
+  --tile-w: calc(100vh * 576 / 324);
+  --ground-h: 44px;
   width: 100%;
   height: 100%;
-  background: linear-gradient(160deg, #0a0a1a 0%, #1a0a0a 50%, #0a0a0f 100%);
+  background: var(--ink);
   display: flex;
   justify-content: center;
   align-items: center;
+  padding-bottom: var(--ground-h);
   position: relative;
   overflow: hidden;
 }
 
+/* Parallax: the same layers the game draws behind every floor */
+.parallax {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  background-repeat: repeat-x;
+  background-size: auto 100%;
+  background-position: 0 0;
+  image-rendering: pixelated;
+}
+
+.layer--sky {
+  background-image: url('/tiles/backgrounds/1.png');
+}
+
+.layer--smog {
+  background-image: url('/tiles/backgrounds/2.png');
+  animation: drift 180s steps(576) infinite;
+}
+
+.layer--far {
+  background-image: url('/tiles/backgrounds/3.png');
+  animation: drift 360s steps(576) infinite;
+}
+
+.layer--mid {
+  background-image: url('/tiles/backgrounds/4.png');
+}
+
+.layer--near {
+  background-image: url('/tiles/backgrounds/5.png');
+}
+
+.dusk {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--ink) 58%, transparent);
+}
+
+@keyframes drift {
+  from {
+    background-position-x: 0;
+  }
+  to {
+    background-position-x: calc(-1 * var(--tile-w));
+  }
+}
+
+/* Menu */
 .menu-content {
-  z-index: 10;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 48px;
+}
+
+.menu-main {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2rem;
+  gap: 32px;
 }
 
 .title-group {
@@ -28,140 +93,144 @@
 }
 
 .game-title {
-  font-family: Impact, 'Arial Black', sans-serif;
-  font-size: 5rem;
+  font-size: var(--fs-64);
   line-height: 1;
-  letter-spacing: 0.2em;
-  color: #e0e0e0;
-  text-shadow: 0 0 20px rgba(255, 68, 68, 0.3);
+  letter-spacing: 0.05em;
+  color: var(--bone);
+  text-shadow:
+    -2px 0 0 var(--ink),
+    2px 0 0 var(--ink),
+    0 -2px 0 var(--ink),
+    0 2px 0 var(--ink),
+    4px 4px 0 var(--ink),
+    6px 6px 0 var(--ink);
 }
 
 .game-title--accent {
-  color: #ff4444;
-  text-shadow:
-    0 0 20px rgba(255, 68, 68, 0.5),
-    0 0 60px rgba(255, 68, 68, 0.2);
+  color: var(--blood-hi);
 }
 
 .subtitle {
-  margin-top: 0.5rem;
-  font-size: 1.1rem;
-  color: #888899;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
+  margin-top: 14px;
+  font-size: var(--fs-16);
+  color: var(--bone);
+  text-shadow:
+    -2px 0 0 var(--ink),
+    2px 0 0 var(--ink),
+    0 -2px 0 var(--ink),
+    0 2px 0 var(--ink);
 }
 
 .menu-buttons {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  min-width: 280px;
+  gap: 12px;
+  width: 260px;
 }
 
-.menu-btn {
-  padding: 0.9rem 2rem;
-  font-size: 1.1rem;
-  font-weight: 700;
-  letter-spacing: 0.15em;
-  border: 2px solid #333;
-  border-radius: 4px;
-  background: #14141f;
-  color: #e0e0e0;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-transform: uppercase;
-}
-
-.menu-btn:hover {
-  border-color: #ff4444;
-  background: #1e1e2e;
-  color: #ffffff;
-  box-shadow: 0 0 20px rgba(255, 68, 68, 0.15);
-}
-
-.menu-btn--primary {
-  background: #ff4444;
-  border-color: #ff4444;
-  color: #ffffff;
-  font-size: 1.3rem;
-}
-
-.menu-btn--primary:hover {
-  background: #ff6666;
-  border-color: #ff6666;
-  box-shadow: 0 0 30px rgba(255, 68, 68, 0.3);
-}
-
-.menu-btn--multiplayer {
-  background: #2244aa;
-  border-color: #2244aa;
-  color: #ffffff;
-  font-size: 1.15rem;
-}
-
-.menu-btn--multiplayer:hover {
-  background: #3366cc;
-  border-color: #3366cc;
-  box-shadow: 0 0 30px rgba(34, 68, 170, 0.4);
-}
-
+/* How to play */
 .help-panel {
-  background: #14141fcc;
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 1.5rem;
-  max-width: 360px;
+  width: 400px;
 }
 
-.help-panel h3 {
-  color: #ff4444;
-  margin-bottom: 0.75rem;
-  font-size: 1rem;
-  letter-spacing: 0.1em;
+.help-panel .px-header {
+  margin: 0;
+}
+
+.help-body {
+  padding: 14px 16px 16px;
 }
 
 .help-grid {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 0.4rem 1rem;
-  font-size: 0.9rem;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: var(--fs-14);
 }
 
 .key {
-  background: #2a2a3a;
-  padding: 0.15rem 0.5rem;
-  border-radius: 3px;
-  font-family: monospace;
-  font-size: 0.8rem;
-  color: #ffaa22;
+  justify-self: start;
+  padding: 2px 6px;
+  font-size: var(--fs-12);
+  color: var(--gold);
+  background: var(--ink-2);
+  border: var(--px) solid var(--ink);
+  box-shadow: var(--bevel);
 }
 
 .help-tip {
-  margin-top: 0.75rem;
-  font-size: 0.85rem;
-  color: #888899;
+  margin-top: 12px;
+  font-size: var(--fs-14);
+  line-height: 1.35;
+  color: var(--bone-dim);
 }
 
+/* Ground strip with zombies walking across it */
+.ground {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  height: var(--ground-h);
+  background: repeating-conic-gradient(var(--ink) 0 25%, var(--ink-2) 0 50%) 0 0 / 4px 4px;
+  border-top: 4px solid var(--panel-2);
+  box-shadow: inset 0 2px 0 var(--panel-3);
+}
+
+.walker {
+  /* zombie_1/Walk.png: 1280x128, 10 frames of 128x128 */
+  --frame: 128px;
+  --frames: 10;
+  --scale: 2;
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 2px);
+  width: calc(var(--frame) * var(--scale));
+  height: calc(var(--frame) * var(--scale));
+  background-image: url('/sprites/zombies/zombie_1/Walk.png');
+  background-repeat: no-repeat;
+  background-size: calc(var(--frame) * var(--frames) * var(--scale)) 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+  animation:
+    walk-frames 1.2s steps(10) infinite,
+    walk-across 40s steps(400) -14s infinite;
+}
+
+.walker--back {
+  --scale: 1.5;
+  bottom: calc(100% + 12px);
+  filter: brightness(0.5);
+  animation:
+    walk-frames 1.5s steps(10) infinite,
+    walk-across 60s steps(400) -40s infinite;
+}
+
+@keyframes walk-frames {
+  from {
+    background-position-x: 0;
+  }
+  to {
+    background-position-x: calc(-1 * var(--frame) * var(--frames) * var(--scale));
+  }
+}
+
+@keyframes walk-across {
+  from {
+    transform: translateX(-260px);
+  }
+  to {
+    transform: translateX(calc(100vw + 20px));
+  }
+}
 
 .version-tag {
-  font-size: 0.75rem;
-  color: #555566;
-}
-
-.floating-zombies {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.floating-zombie {
-  position: absolute;
-  font-size: 2rem;
-  animation: float 8s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-20px); }
+  right: 16px;
+  bottom: 12px;
+  z-index: 3;
+  font-size: var(--fs-12);
+  color: var(--bone-faint);
 }

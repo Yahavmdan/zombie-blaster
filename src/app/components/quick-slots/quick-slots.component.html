@@ -1,11 +1,11 @@
-<div class="qs-container">
-  <div class="qs-title">QUICK SLOT</div>
+<div class="qs-container px-panel">
   <div class="qs-grid">
     @for (slot of displaySlots(); track slot.action) {
       <div
-        class="qs-slot"
+        class="qs-slot px-panel--inset"
         [class.qs-slot--empty]="slot.isEmpty"
         [class.qs-slot--depleted]="!slot.isEmpty && slot.count === 0"
+        [class.qs-slot--buff]="slot.isBuff"
         [title]="slot.isEmpty ? 'Drag a skill or potion here' : slot.label"
         (dragover)="onDragOver($event)"
         (drop)="onDrop($event, slot.action)"
@@ -14,7 +14,7 @@
       >
         <span class="qs-key">{{ slot.keyLabel }}</span>
         @if (!slot.isEmpty) {
-          <span class="qs-icon">{{ slot.icon }}</span>
+          <app-pixel-icon class="qs-icon" [icon]="slot.icon" [size]="24" />
           @if (slot.count !== null) {
             <span class="qs-count">{{ slot.count }}</span>
           }

@@ -44,67 +44,69 @@
 
     @if (showDevTools()) {
       <button
-        class="dev-toggle-btn"
-        [class.dev-toggle-btn--active]="devDialogOpen()"
+        class="dev-toggle-btn px-btn px-btn--sm px-btn--ghost"
+        [class.px-btn--primary]="devDialogOpen()"
         data-testid="game-dev-button-toggle-dialog"
         (click)="toggleDevDialog()"
       >
-        DEV
+        Dev
       </button>
     }
 
     @if (showDevTools() && devDialogOpen()) {
       <div class="dev-backdrop" (click)="closeDevDialog()"></div>
-      <div class="dev-dialog">
-        <div class="dev-dialog__header">
-          <span class="dev-dialog__title">Dev Tools</span>
+      <div class="dev-dialog px-panel">
+        <div class="px-header">
+          <app-pixel-icon [icon]="'gear'" [size]="24" />
+          <span class="dev-dialog__title">Dev tools</span>
           <button
-            class="dev-dialog__close"
+            class="px-btn px-close"
             data-testid="game-dev-button-close-dialog"
+            aria-label="Close"
             (click)="closeDevDialog()"
           >
-            &times;
+            <app-pixel-icon [icon]="'close'" [size]="16" />
           </button>
         </div>
 
-        <div class="dev-dialog__body">
+        <div class="dev-dialog__body px-scroll">
           <!-- Debug Toggles -->
           <section class="dev-section">
-            <h3 class="dev-section__title">Debug</h3>
+            <h3 class="dev-section__title px-label">Debug</h3>
             <div class="dev-section__row">
               <button
-                class="dev-toggle"
-                [class.dev-toggle--on]="godMode()"
+                class="px-btn px-btn--sm px-btn--ghost"
+                [class.px-btn--good]="godMode()"
                 data-testid="game-dev-button-god-mode"
                 (click)="devToggleGodMode()"
               >
-                {{ godMode() ? 'GOD ON' : 'GOD OFF' }}
+                {{ godMode() ? 'God mode on' : 'God mode off' }}
               </button>
               <button
-                class="dev-toggle"
-                [class.dev-toggle--on]="showCollisionBoxes()"
+                class="px-btn px-btn--sm px-btn--ghost"
+                [class.px-btn--good]="showCollisionBoxes()"
                 data-testid="game-dev-button-collision-boxes"
                 (click)="devToggleCollisionBoxes()"
               >
-                {{ showCollisionBoxes() ? 'BOXES ON' : 'BOXES OFF' }}
+                {{ showCollisionBoxes() ? 'Boxes on' : 'Boxes off' }}
               </button>
             </div>
           </section>
 
           <!-- Character Class -->
           <section class="dev-section">
-            <h3 class="dev-section__title">Character Class</h3>
+            <h3 class="dev-section__title px-label">Character class</h3>
             <div class="dev-section__row dev-section__row--wrap">
               @for (cls of devClassList; track cls.id) {
                 <button
-                  class="dev-class-btn"
+                  class="dev-class-btn px-btn px-btn--sm px-btn--ghost"
                   [class.dev-class-btn--selected]="p.classId === cls.id"
                   [style.--cls-color]="cls.color"
                   [attr.data-testid]="'game-dev-class-btn-' + cls.id"
                   (click)="devSelectClass(cls.id)"
                 >
-                  <span class="dev-class-btn__icon">{{ cls.icon }}</span>
-                  <span class="dev-class-btn__name">{{ cls.name }}</span>
+                  <app-pixel-icon [icon]="cls.icon" [size]="24" />
+                  <span>{{ cls.name }}</span>
                 </button>
               }
             </div>
@@ -112,38 +114,38 @@
 
           <!-- Progression -->
           <section class="dev-section">
-            <h3 class="dev-section__title">Progression</h3>
+            <h3 class="dev-section__title px-label">Progression</h3>
             <div class="dev-section__row">
               <button
-                class="dev-btn dev-btn--level"
+                class="px-btn px-btn--sm px-btn--accent"
                 data-testid="game-dev-button-level-up"
                 (click)="devLevelUp()"
               >
-                Level Up ({{ devPlayerLevel() }})
+                Level up ({{ devPlayerLevel() }})
               </button>
               <button
-                class="dev-btn dev-btn--skills"
+                class="px-btn px-btn--sm"
                 data-testid="game-dev-button-max-skills"
                 (click)="devMaxAllSkills()"
               >
-                Max All Skills
+                Max all skills
               </button>
               <button
-                class="dev-btn dev-btn--maxout"
+                class="px-btn px-btn--sm px-btn--primary"
                 data-testid="game-dev-button-max-out"
                 (click)="devMaxOutPlayer()"
               >
-                Max Out
+                Max out
               </button>
             </div>
           </section>
 
           <!-- World -->
           <section class="dev-section">
-            <h3 class="dev-section__title">World</h3>
+            <h3 class="dev-section__title px-label">World</h3>
             <div class="dev-section__row">
               <input
-                class="dev-floor-input"
+                class="dev-floor-input px-input"
                 type="number"
                 min="1"
                 data-testid="game-dev-input-floor"
@@ -151,30 +153,29 @@
                 (ngModelChange)="devFloorInput.set($event)"
               />
               <button
-                class="dev-btn dev-btn--floor"
+                class="px-btn px-btn--sm px-btn--good"
                 data-testid="game-dev-button-set-floor"
                 (click)="devSetFloor()"
               >
-                Set Floor
+                Set floor
               </button>
             </div>
           </section>
 
           <!-- Special Drops -->
           <section class="dev-section">
-            <h3 class="dev-section__title">Special Drops</h3>
+            <h3 class="dev-section__title px-label">Special drops</h3>
             <div class="dev-section__row dev-section__row--wrap">
               @for (def of specialDropDefs; track def.type) {
                 <button
-                  class="dev-drop-btn"
-                  [style.border-color]="def.color"
-                  [style.box-shadow]="'0 0 6px ' + def.color + '66'"
+                  class="dev-drop-btn px-btn px-btn--sm px-btn--ghost"
+                  [style.--drop-color]="def.color"
                   [title]="def.description + ' (' + (def.durationTicks / 50) + 's)'"
                   data-testid="game-dev-button-special-drop"
                   (click)="activateSpecialDrop(def.type)"
                 >
-                  <span class="dev-drop-btn__icon">{{ def.icon }}</span>
-                  <span class="dev-drop-btn__name">{{ def.name }}</span>
+                  <app-pixel-icon [icon]="def.icon" [size]="16" />
+                  <span>{{ def.name }}</span>
                 </button>
               }
             </div>
@@ -219,39 +220,43 @@
 
     @if (isGameOver()) {
       <div class="game-over-overlay">
-        <div class="game-over-panel">
-          <h1 class="game-over-title">GAME OVER</h1>
-          <div class="game-over-stats">
+        <div class="game-over-panel px-panel">
+          <h1 class="game-over-title px-header px-title">
+            <app-pixel-icon [icon]="'skull'" [size]="32" />
+            Game over
+          </h1>
+          <div class="game-over-stats px-panel--inset">
             <div class="go-stat">
-              <span class="go-stat-label">Final Score</span>
+              <span class="px-label">Final score</span>
               <span class="go-stat-value go-stat-value--score">{{ score() }}</span>
             </div>
             <div class="go-stat">
-              <span class="go-stat-label">Floor Reached</span>
+              <span class="px-label">Floor reached</span>
               <span class="go-stat-value">{{ floor() }}</span>
             </div>
             <div class="go-stat">
-              <span class="go-stat-label">Level</span>
+              <span class="px-label">Level</span>
               <span class="go-stat-value">{{ currentPlayerDisplay().level }}</span>
             </div>
           </div>
           <div class="game-over-actions">
             @if (!isMultiplayer) {
               <button
-                class="go-btn go-btn--primary"
+                class="px-btn px-btn--primary"
                 data-testid="game-gameover-button-retry"
                 (click)="retry()"
               >
-                TRY AGAIN
+                Try again
               </button>
             }
             <button
-              class="go-btn"
-              [class.go-btn--primary]="isMultiplayer"
+              class="px-btn"
+              [class.px-btn--primary]="isMultiplayer"
+              [class.px-btn--ghost]="!isMultiplayer"
               data-testid="game-gameover-button-menu"
               (click)="backToMenu()"
             >
-              MAIN MENU
+              Main menu
             </button>
           </div>
         </div>
@@ -260,13 +265,16 @@
   </div>
 } @else {
   <div class="no-player">
-    <p>No character selected.</p>
-    <button
-      class="go-btn go-btn--primary"
-      data-testid="game-nochar-button-select"
-      (click)="backToMenu()"
-    >
-      SELECT CHARACTER
-    </button>
+    <div class="no-player__panel px-panel">
+      <app-pixel-icon [icon]="'zombie'" [size]="48" />
+      <p>No character selected.</p>
+      <button
+        class="px-btn px-btn--primary"
+        data-testid="game-nochar-button-select"
+        (click)="backToMenu()"
+      >
+        Select character
+      </button>
+    </div>
   </div>
 }

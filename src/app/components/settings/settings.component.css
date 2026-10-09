@@ -9,41 +9,19 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 36px;
-  height: 36px;
-  background: rgba(20, 20, 30, 0.7);
-  border: 1px solid #444;
-  border-radius: 6px;
-  color: #ccc;
-  font-size: 1.2rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: border-color 0.2s, color 0.2s;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  --btn-bg: var(--panel-3);
   z-index: 42;
 }
 
-.settings-toggle:hover {
-  border-color: #ffcc44;
-  color: #ffcc44;
-}
-
 .settings-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.65);
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding-top: 24px;
+  padding-top: 16px;
   z-index: 41;
-  animation: kb-fade-in 0.15s ease;
-}
-
-@keyframes kb-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
 
 /* ─── Layout ─── */
@@ -52,93 +30,66 @@
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  max-height: 95vh;
+  max-height: calc(100vh - 112px);
 }
 
-/* ─── Panel ─── */
-
-.kb-panel {
-  background: #12121e;
-  border: 1px solid #333;
-  border-radius: 10px;
-  max-height: 95vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
-  padding: 0;
-}
-
-.kb-header {
+.kb-panel,
+.kb-side-panel {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-bottom: 1px solid #222;
+  flex-direction: column;
+  max-height: calc(100vh - 112px);
+  border-top: var(--border) solid var(--steel-hi);
 }
 
 .kb-title {
-  font-size: 0.85rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  color: #ffcc44;
   margin: 0;
+  font-size: var(--fs-20);
   white-space: nowrap;
 }
 
 .kb-header-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   margin-left: auto;
 }
 
-.kb-header-btn {
-  padding: 3px 8px;
-  font-size: 0.55rem;
-  font-weight: 700;
-  border: 1px solid #444;
-  border-radius: 4px;
-  background: #1a1a2a;
-  color: #999;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+.kb-header-btn,
+.kb-side-tab {
   white-space: nowrap;
 }
 
-.kb-header-btn:hover {
-  border-color: #55aaff;
-  color: #55aaff;
+.kb-header-btn:not(.kb-header-btn--active),
+.kb-side-tab:not(.kb-side-tab--active) {
+  --btn-bg: var(--panel-2);
+  --btn-fg: var(--bone-dim);
 }
 
-.kb-header-btn--active {
-  border-color: #44aaff;
-  color: #44aaff;
-  background: rgba(68, 170, 255, 0.1);
+.kb-header-btn--active,
+.kb-side-tab--active {
+  --btn-bg: var(--steel-hi);
 }
 
 .kb-close {
-  background: none;
-  border: none;
-  color: #888;
-  font-size: 1rem;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: color 0.15s;
   margin-left: 4px;
 }
 
-.kb-close:hover {
-  color: #fff;
+.kb-body {
+  overflow: auto;
+  max-height: calc(100vh - 80px);
+  min-height: 0;
 }
 
-/* ─── Keyboard Board ─── */
+/* ─── Keyboard board ─── */
 
 .kb-board {
   display: flex;
   gap: 12px;
-  padding: 12px 16px 8px;
+  padding: 12px 16px 10px;
 }
 
-.kb-main, .kb-nav, .kb-mouse {
+.kb-main,
+.kb-nav,
+.kb-mouse {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -146,218 +97,166 @@
 
 .kb-mouse {
   padding-left: 12px;
-  border-left: 1px solid #3a3a55;
+  border-left: var(--px) solid var(--ink);
 }
 
 .kb-mouse-title {
-  height: 34px;
+  height: 36px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   padding-bottom: 4px;
-  font-family: monospace;
-  font-size: 0.55rem;
-  font-weight: 700;
-  letter-spacing: 0.15em;
-  color: #8888aa;
+  font-size: var(--fs-12);
+  color: var(--bone-dim);
 }
 
 .kb-row {
   display: flex;
   gap: 2px;
-  height: 34px;
+  height: 36px;
 }
 
 .kb-gap {
   flex-shrink: 0;
 }
 
-/* ─── Keyboard Keys ─── */
+/* ─── Keycaps: pixel keys with a darker bottom edge ─── */
+
+.kb-key,
+.kb-qs-key {
+  background: var(--panel-3);
+  border: var(--px) solid var(--ink);
+  box-shadow:
+    inset 0 -3px 0 var(--panel),
+    inset 2px 2px 0 rgb(255 255 255 / 0.12);
+  color: var(--bone-dim);
+}
 
 .kb-key {
   position: relative;
   flex-shrink: 0;
-  height: 34px;
-  background: #1c1c30;
-  border: 1px solid #3a3a55;
-  border-bottom-width: 3px;
-  border-radius: 3px;
+  height: 36px;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 1px 2px;
+  justify-content: flex-end;
+  flex-direction: column;
+  padding: 0 2px 4px;
   overflow: hidden;
-  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
-  color: #777;
-  font-family: monospace;
+  cursor: pointer;
 }
 
 .kb-key:hover {
-  border-color: #55aaff;
-  background: rgba(68, 170, 255, 0.08);
+  background: var(--edge-light);
+}
+
+.kb-key:active {
+  padding-bottom: 2px;
+  box-shadow:
+    inset 0 -1px 0 var(--panel),
+    inset 2px 2px 0 rgb(0 0 0 / 0.3);
 }
 
 .kb-key--bound {
-  background: rgba(180, 60, 80, 0.25);
-  border-color: rgba(200, 80, 100, 0.6);
-  color: #ddd;
-}
-
-.kb-key--bound:hover {
-  background: rgba(180, 60, 80, 0.35);
-  border-color: #cc6688;
+  background: var(--steel);
+  color: var(--bone);
 }
 
 .kb-key--qs {
-  background: rgba(60, 120, 180, 0.2);
-  border-color: rgba(80, 140, 200, 0.5);
-}
-
-.kb-key--qs:hover {
-  background: rgba(60, 120, 180, 0.3);
-  border-color: #5599cc;
+  background: var(--mp);
 }
 
 .kb-key--selected {
-  border-color: #ffcc44 !important;
-  background: rgba(255, 204, 68, 0.15) !important;
-  box-shadow: 0 0 8px rgba(255, 204, 68, 0.4);
+  outline: var(--px) solid var(--gold);
+  outline-offset: -2px;
+  color: var(--gold);
 }
 
 .kb-key-name {
   position: absolute;
-  top: 1px;
+  top: 2px;
   left: 3px;
-  font-size: 0.45rem;
-  font-weight: 700;
-  color: inherit;
+  font-size: var(--fs-12);
   line-height: 1;
+  white-space: nowrap;
   pointer-events: none;
 }
 
 .kb-key-icon {
-  font-size: 0.7rem;
-  line-height: 1;
   pointer-events: none;
-  margin-top: 2px;
 }
 
+/* Keys are icon-only; the action name lives in the title tooltip. */
 .kb-key-action {
-  font-size: 0.38rem;
-  font-weight: 600;
-  color: #ccc;
-  line-height: 1;
-  pointer-events: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  display: none;
 }
 
-/* ─── Action Picker ─── */
+/* ─── Action picker ─── */
 
-.kb-actions-section {
-  padding: 8px 16px;
-  border-top: 1px solid #222;
+.kb-actions-section,
+.kb-qs-section,
+.kb-footer {
+  padding: 10px 16px;
+  border-top: var(--px) solid var(--ink);
 }
 
 .kb-actions-hint {
-  font-size: 0.6rem;
-  color: #666;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+  font-size: var(--fs-12);
+  color: var(--bone-dim);
   text-align: center;
 }
 
 .kb-hint-key {
-  color: #ffcc44;
-  font-weight: 700;
-  font-family: monospace;
-  text-transform: uppercase;
+  color: var(--gold);
 }
 
 .kb-actions-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 4px;
   justify-content: center;
+  max-width: 840px;
+  margin: 0 auto;
 }
 
 .kb-action-chip {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px 8px;
-  background: #1a1a2e;
-  border: 1px solid #444;
-  border-radius: 4px;
-  color: #ccc;
-  font-size: 0.6rem;
-  font-weight: 600;
+  color: var(--bone);
   cursor: pointer;
-  transition: border-color 0.12s, background 0.12s, color 0.12s;
   white-space: nowrap;
 }
 
 .kb-action-chip:hover {
-  border-color: #ffcc44;
-  color: #ffcc44;
-  background: rgba(255, 204, 68, 0.08);
+  border-color: var(--gold);
 }
 
 .kb-action-chip--disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: default;
 }
 
 .kb-action-chip--disabled:hover {
-  border-color: #444;
-  color: #ccc;
-  background: #1a1a2e;
+  border-color: var(--ink);
 }
 
 .kb-action-chip--clear {
-  border-color: #553333;
-  color: #aa6666;
+  color: var(--blood-hi);
 }
 
-.kb-action-chip--clear:hover {
-  border-color: #ff4444;
-  color: #ff6666;
-  background: rgba(255, 68, 68, 0.08);
-}
-
-.kb-chip-icon {
-  font-size: 0.7rem;
-  line-height: 1;
-}
-
-.kb-chip-label {
-  line-height: 1;
-}
-
-/* ─── Quick Slot Keys ─── */
-
-.kb-qs-section {
-  padding: 8px 16px;
-  border-top: 1px solid #222;
-}
+/* ─── Quick slot keys ─── */
 
 .kb-qs-title {
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  color: #44aaff;
-  margin: 0 0 4px;
+  margin: 0 0 8px;
+  font-size: var(--fs-14);
+  color: var(--steel-hi);
   text-align: center;
+  text-shadow: var(--text-shadow);
 }
 
 .kb-qs-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 3px;
-  max-width: 420px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  max-width: 840px;
   margin: 0 auto;
 }
 
@@ -365,206 +264,108 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
-  padding: 4px 3px;
-  background: rgba(30, 30, 50, 0.9);
-  border: 1px solid rgba(80, 80, 130, 0.5);
-  border-radius: 4px;
-  transition: border-color 0.15s, background 0.15s;
-  min-height: 52px;
-}
-
-.kb-qs-cell:hover {
-  border-color: #44aaff;
-  background: rgba(68, 170, 255, 0.06);
-}
-
-.kb-qs-cell--active {
-  border-color: #ffcc44;
-  background: rgba(255, 204, 68, 0.08);
+  gap: 4px;
+  padding: 6px 4px;
+  min-width: 0;
 }
 
 .kb-qs-cell--filled {
-  border-color: rgba(100, 160, 220, 0.6);
-  background: rgba(40, 60, 90, 0.5);
+  border-color: var(--mp);
+}
+
+.kb-qs-cell--active {
+  border-color: var(--gold);
 }
 
 .kb-qs-num {
-  font-size: 0.5rem;
-  font-weight: 700;
-  color: #555;
-  line-height: 1;
-}
-
-.kb-qs-content-icon {
-  font-size: 0.85rem;
+  font-size: var(--fs-12);
+  color: var(--bone-faint);
   line-height: 1;
 }
 
 .kb-qs-content-label {
-  font-size: 0.4rem;
-  font-weight: 600;
-  color: #bbb;
+  max-width: 100%;
+  font-size: var(--fs-12);
   line-height: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 80px;
-  text-align: center;
 }
 
 .kb-qs-key {
-  font-size: 0.55rem;
-  font-weight: 700;
-  font-family: monospace;
-  color: #ddd;
-  background: #1e1e30;
-  border: 1px solid #444;
-  border-bottom-width: 2px;
-  border-radius: 3px;
-  padding: 1px 5px;
-  min-width: 24px;
+  min-width: 28px;
+  padding: 2px 6px 5px;
+  font-size: var(--fs-12);
+  line-height: 1;
   text-align: center;
-  line-height: 1.2;
-}
-
-.kb-qs-actions {
-  margin-top: 1px;
+  color: var(--bone);
 }
 
 .kb-rebind-btn {
-  padding: 1px 6px;
-  font-size: 0.5rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  border: 1px solid #555;
-  border-radius: 3px;
-  background: #1a1a2a;
-  color: #ccc;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-
-.kb-rebind-btn:hover {
-  border-color: #ffcc44;
-  color: #ffcc44;
+  padding: 2px 8px;
+  font-size: var(--fs-12);
 }
 
 .kb-listening {
-  font-size: 0.55rem;
-  color: #ffcc44;
-  font-weight: 600;
-  animation: kb-pulse 1s ease-in-out infinite;
+  font-size: var(--fs-12);
+  color: var(--gold);
+  animation: kb-blink 0.8s steps(2) infinite;
 }
 
-@keyframes kb-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+@keyframes kb-blink {
+  50% {
+    opacity: 0.3;
+  }
 }
 
 /* ─── Footer ─── */
 
 .kb-footer {
-  padding: 8px 16px;
-  border-top: 1px solid #222;
   display: flex;
   justify-content: center;
-  gap: 8px;
 }
 
-.kb-footer-btn {
-  padding: 5px 16px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  border: 1px solid #444;
-  border-radius: 4px;
-  background: #1a1a2a;
-  color: #999;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-
-.kb-footer-btn:hover {
-  border-color: #ff6644;
-  color: #ff6644;
-}
-
-/* ─── Side Panel ─── */
+/* ─── Side panel ─── */
 
 .kb-side-panel {
-  background: #12121e;
-  border: 1px solid #333;
-  border-radius: 10px;
-  width: 220px;
-  max-height: 95vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
-  animation: kb-fade-in 0.15s ease;
+  width: 240px;
 }
 
 .kb-side-header {
   display: flex;
-  gap: 2px;
-  padding: 8px 8px 0;
+  gap: 4px;
+  padding: 8px;
+  background: var(--panel-2);
+  border-bottom: var(--border) solid var(--ink);
 }
 
 .kb-side-tab {
   flex: 1;
-  padding: 5px 4px;
-  font-size: 0.55rem;
-  font-weight: 700;
-  border: 1px solid #333;
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
-  background: #16162a;
-  color: #777;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.kb-side-tab:hover {
-  color: #bbb;
-  background: #1a1a30;
-}
-
-.kb-side-tab--active {
-  color: #44aaff;
-  background: #1a1a30;
-  border-color: #44aaff;
-  border-bottom: 1px solid #1a1a30;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .kb-side-body {
   flex: 1;
-  overflow-y: auto;
+  overflow: auto;
+  max-height: calc(100vh - 80px);
+  min-height: 120px;
   padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  border-top: 1px solid #333;
-  min-height: 120px;
-  max-height: 400px;
+  gap: 4px;
 }
 
 .kb-side-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 6px 8px;
-  background: #1a1a2e;
-  border: 1px solid #3a3a55;
-  border-radius: 5px;
   cursor: grab;
-  transition: border-color 0.12s, background 0.12s;
 }
 
 .kb-side-item:hover {
-  border-color: #55aaff;
-  background: rgba(68, 170, 255, 0.08);
+  border-color: var(--edge-light);
 }
 
 .kb-side-item:active {
@@ -572,8 +373,6 @@
 }
 
 .kb-side-item-icon {
-  font-size: 1.1rem;
-  line-height: 1;
   flex-shrink: 0;
 }
 
@@ -582,46 +381,41 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+}
+
+.kb-side-item-name,
+.kb-side-item-desc {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
 }
 
 .kb-side-item-name {
-  font-size: 0.6rem;
-  font-weight: 700;
-  color: #ddd;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: var(--fs-14);
 }
 
-.kb-side-item-desc {
-  font-size: 0.45rem;
-  color: #777;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.kb-side-item-desc,
+.kb-side-empty,
+.kb-side-hint {
+  font-size: var(--fs-12);
+  color: var(--bone-dim);
 }
 
 .kb-side-item-count {
-  font-size: 0.6rem;
-  font-weight: 700;
-  color: #ffcc44;
   flex-shrink: 0;
+  font-size: var(--fs-12);
+  color: var(--gold);
 }
 
 .kb-side-empty {
   padding: 20px 8px;
   text-align: center;
-  font-size: 0.55rem;
-  color: #555;
 }
 
 .kb-side-hint {
-  padding: 6px 8px;
-  border-top: 1px solid #222;
-  font-size: 0.5rem;
-  color: #555;
+  padding: 8px;
+  border-top: var(--px) solid var(--ink);
   text-align: center;
 }

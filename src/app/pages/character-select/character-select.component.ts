@@ -16,11 +16,13 @@ import {
 import { GameStateService } from '../../services/game-state.service';
 import { KeyBindingsService } from '../../services/key-bindings.service';
 import { QuickSlotService } from '../../services/quick-slot.service';
+import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { classToSpriteSet, SpriteSet } from '../../engine/sprite-animator';
 
 @Component({
   selector: 'app-character-select',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule],
+  imports: [PixelIconComponent, ReactiveFormsModule],
   host: {
     class: 'character-select',
   },
@@ -89,7 +91,7 @@ export class CharacterSelectComponent implements OnInit {
   });
 
   readonly startButtonLabel: Signal<string> = computed((): string => {
-    return this.isMultiplayer() ? 'FIND LOBBY' : 'START GAME';
+    return this.isMultiplayer() ? 'Find lobby' : 'Start game';
   });
 
   ngOnInit(): void {
@@ -99,6 +101,13 @@ export class CharacterSelectComponent implements OnInit {
     } else {
       this.gameMode.set(GameMode.SinglePlayer);
     }
+  }
+
+  /** CSS background for the class's in-game idle sheet (sprites/<set>/<Set>_idle.png). */
+  idleSprite(classId: CharacterClass): string {
+    const set: SpriteSet = classToSpriteSet(classId);
+    const fileSet: string = set.charAt(0).toUpperCase() + set.slice(1);
+    return `url('/sprites/${set}/${fileSet}_idle.png')`;
   }
 
   selectClass(classId: CharacterClass): void {

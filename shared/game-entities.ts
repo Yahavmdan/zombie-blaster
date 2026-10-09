@@ -1,3 +1,5 @@
+import { PixelIconId } from './pixel-icon';
+
 export enum ZombieType {
   Walker = 'walker',
   Runner = 'runner',
@@ -105,7 +107,7 @@ export interface PotionDefinition {
   id: string;
   name: string;
   description: string;
-  icon: string;
+  icon: PixelIconId;
   category: PotionCategory;
   mode: PotionMode;
   value: number;
@@ -129,7 +131,7 @@ export interface SpecialDropDefinition {
   name: string;
   description: string;
   funnyDescription: string;
-  icon: string;
+  icon: PixelIconId;
   color: string;
   highlightColor: string;
   durationTicks: number;
@@ -181,7 +183,7 @@ export interface ShopItemDefinition {
   id: string;
   name: string;
   description: string;
-  icon: string;
+  icon: PixelIconId;
   price: number;
   potionId: string;
 }
@@ -200,42 +202,42 @@ export interface QuickSlotEntry {
 
 export interface ActionInfo {
   label: string;
-  icon: string;
+  icon: PixelIconId;
 }
 
 export const ACTION_INFO: Record<string, ActionInfo> = {
-  left: { label: 'Move Left', icon: '←' },
-  right: { label: 'Move Right', icon: '→' },
-  up: { label: 'Up / Climb', icon: '↑' },
-  down: { label: 'Down', icon: '↓' },
-  jump: { label: 'Jump', icon: '⬆' },
-  attack: { label: 'Attack', icon: '⚔' },
-  skill1: { label: 'Skill 1', icon: '①' },
-  skill2: { label: 'Skill 2', icon: '②' },
-  skill3: { label: 'Skill 3', icon: '③' },
-  skill4: { label: 'Skill 4', icon: '④' },
-  skill5: { label: 'Skill 5', icon: '⑤' },
-  skill6: { label: 'Skill 6', icon: '⑥' },
-  openStats: { label: 'Stats', icon: '📊' },
-  openSkills: { label: 'Skills', icon: '📖' },
-  useHpPotion: { label: 'HP Potion', icon: '❤' },
-  useMpPotion: { label: 'MP Potion', icon: '💧' },
-  openShop: { label: 'Shop', icon: '🛒' },
-  openInventory: { label: 'Inventory', icon: '🎒' },
-  revive: { label: 'Revive', icon: '💖' },
-  carry: { label: 'Carry Corpse', icon: '🧟' },
-  quickSlot1: { label: 'QSlot 1', icon: '❶' },
-  quickSlot2: { label: 'QSlot 2', icon: '❷' },
-  quickSlot3: { label: 'QSlot 3', icon: '❸' },
-  quickSlot4: { label: 'QSlot 4', icon: '❹' },
-  quickSlot5: { label: 'QSlot 5', icon: '❺' },
-  quickSlot6: { label: 'QSlot 6', icon: '❻' },
-  quickSlot7: { label: 'QSlot 7', icon: '❼' },
-  quickSlot8: { label: 'QSlot 8', icon: '❽' },
-  quickSlot9: { label: 'QSlot 9', icon: '❾' },
-  quickSlot10: { label: 'QSlot 10', icon: '❿' },
-  quickSlot11: { label: 'QSlot 11', icon: '⓫' },
-  quickSlot12: { label: 'QSlot 12', icon: '⓬' },
+  left: { label: 'Move Left', icon: 'arrow-left' },
+  right: { label: 'Move Right', icon: 'arrow-right' },
+  up: { label: 'Up / Climb', icon: 'arrow-up' },
+  down: { label: 'Down', icon: 'arrow-down' },
+  jump: { label: 'Jump', icon: 'spring' },
+  attack: { label: 'Attack', icon: 'sword' },
+  skill1: { label: 'Skill 1', icon: 'spark' },
+  skill2: { label: 'Skill 2', icon: 'spark' },
+  skill3: { label: 'Skill 3', icon: 'spark' },
+  skill4: { label: 'Skill 4', icon: 'spark' },
+  skill5: { label: 'Skill 5', icon: 'spark' },
+  skill6: { label: 'Skill 6', icon: 'spark' },
+  openStats: { label: 'Stats', icon: 'chart' },
+  openSkills: { label: 'Skills', icon: 'book' },
+  useHpPotion: { label: 'HP Potion', icon: 'heart' },
+  useMpPotion: { label: 'MP Potion', icon: 'mana' },
+  openShop: { label: 'Shop', icon: 'shop' },
+  openInventory: { label: 'Inventory', icon: 'bag' },
+  revive: { label: 'Revive', icon: 'revive' },
+  carry: { label: 'Carry Corpse', icon: 'zombie' },
+  quickSlot1: { label: 'QSlot 1', icon: 'slot' },
+  quickSlot2: { label: 'QSlot 2', icon: 'slot' },
+  quickSlot3: { label: 'QSlot 3', icon: 'slot' },
+  quickSlot4: { label: 'QSlot 4', icon: 'slot' },
+  quickSlot5: { label: 'QSlot 5', icon: 'slot' },
+  quickSlot6: { label: 'QSlot 6', icon: 'slot' },
+  quickSlot7: { label: 'QSlot 7', icon: 'slot' },
+  quickSlot8: { label: 'QSlot 8', icon: 'slot' },
+  quickSlot9: { label: 'QSlot 9', icon: 'slot' },
+  quickSlot10: { label: 'QSlot 10', icon: 'slot' },
+  quickSlot11: { label: 'QSlot 11', icon: 'slot' },
+  quickSlot12: { label: 'QSlot 12', icon: 'slot' },
 };
 
 export type QuickSlotAction =

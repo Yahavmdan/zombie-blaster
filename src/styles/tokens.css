@@ -1,0 +1,52 @@
+:root {
+  /* palette: grimy industrial, warm darks, one hot accent */
+  --ink: #0e0d0b;
+  --ink-2: #1b1916;
+  --panel: #2a2622;
+  --panel-2: #3a332c;
+  --panel-3: #4a4137;
+  --edge-light: #6e6152;
+  --bone: #e8dcc2;
+  --bone-dim: #a89c84;
+  --bone-faint: #6f6656;
+  --blood: #b8322a;
+  --blood-hi: #e0503f;
+  --rust: #c9762c;
+  --gold: #f2c14e;
+  --toxic: #8fbf3a;
+  --toxic-hi: #b5e05a;
+  --steel: #4f5d68;
+  --steel-hi: #6f8190;
+  --hp: #c9302c;
+  --hp-hi: #ef5a46;
+  --mp: #3a74c9;
+  --mp-hi: #5f9bef;
+  --xp: #8fbf3a;
+  --xp-hi: #b5e05a;
+  --overlay: rgb(14 13 11 / 0.72);
+
+  /* class accents (muted, readable on --panel) */
+  --class-warrior: #d0503c;
+  --class-ranger: #7fb04a;
+  --class-mage: #6f8fe0;
+  --class-assassin: #b06fd0;
+  --class-priest: #e8c25a;
+
+  /* type */
+  --font-ui: 'Pixelify Sans', ui-monospace, monospace;
+  --fs-12: 12px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-28: 28px;
+  --fs-40: 40px;
+  --fs-64: 64px;
+
+  /* pixel geometry */
+  --px: 2px;
+  --border: 3px;
+  --shadow-drop: 4px 4px 0 rgb(0 0 0 / 0.55);
+  --bevel: inset 2px 2px 0 rgb(255 255 255 / 0.14), inset -2px -2px 0 rgb(0 0 0 / 0.38);
+  --bevel-pressed: inset 2px 2px 0 rgb(0 0 0 / 0.38), inset -2px -2px 0 rgb(255 255 255 / 0.1);
+  --text-shadow: 2px 2px 0 var(--ink);
+}

@@ -30,6 +30,8 @@ No ESLint and no lint script. Prettier is installed, but most existing files are
 
 Changed `shared/`? It compiles into both apps: run the frontend build and the server build.
 
+New or restyled UI (screen, dialog, HUD element, icon, canvas text)? Use the `pixel-ui` skill. New icons are drawn in `tools/pixel-icons/drafts.mjs` and built with `npm run icons`.
+
 New stage or floor puzzle? Use the `stage-puzzle` skill. Its backlog is `docs/level-puzzle-ideas.md`, and the floor-2 boulder puzzle is the reference implementation.
 
 ## Hard rules
@@ -39,6 +41,7 @@ New stage or floor puzzle? Use the `stage-puzzle` skill. Its backlog is `docs/le
 - **Shared types live in `shared/`.** Never duplicate a type between client and server.
 - **Game data lives in `shared/game-constants.ts`** (the global variables file). Every tunable number and physical property of a new feature (sizes, speeds, timings, thresholds) goes there, not into the module that uses it. Every body and object has a weight in kg there (`PLAYER_WEIGHT_KG`, `ZOMBIE_TYPES[type].weightKg`, `PROP_WEIGHT_KG`); a new zombie type, prop or other physical thing gets its weight in the same change (helpers: `src/app/engine/weight.ts`). When you add a new kind of data, document it here and in the skill that covers the feature.
 - **What you see is what you stand on.** Level art (platforms, ladders, exit, ground) is drawn only from the level layout that physics collides with, never hard-coded in a renderer. Changing art, tiles, layouts or collision requires `level-geometry.spec.ts` + `level-sync.spec.ts` to pass (they compare rendered pixels with collision). Details: `.claude/rules/engine-architecture.md`.
+- **Pixel UI kit.** UI is pixel art, not a generic dark dashboard: colours, font sizes and shadows come from `src/styles/tokens.css`, shared pieces from the `.px-*` classes in `src/styles/ui-kit.css` (panel, header, btn, bar, chip, input, overlay). Square corners, hard offset shadows, no blur/glow, sentence-case copy. Icons are `PixelIconId`s (`shared/pixel-icon.ts`) drawn with `<app-pixel-icon>` in templates and `drawPixelIcon` on canvas; never emoji. New icon = a 16x16 grid in `tools/pixel-icons/drafts.mjs`, built into the generated `src/app/ui/pixel-icons.ts` by `npm run icons`. Canvas text uses `pixelFont`/`fillOutlinedText` from `src/app/engine/canvas-text.ts`. `e2e/specs/smoke/ui-style.spec.ts` guards this. Use the `pixel-ui` skill before designing or restyling any UI.
 - **Multiplayer VFX gate.** Every visual effect must be seen by all players. Push a `VfxEvent` to `pendingVfxEvents` alongside every local VFX call. Use the `multiplayer-vfx-sync` skill before touching any effect.
 - **Host authority.** Zombie state, damage and loot are decided by the host's simulation. Non-host clients own only their own player state; for the shared world they send requests, never results. The server validates every incoming message and never trusts its shape.
 - **Every gameplay feature gets E2E coverage.** New or changed mechanics, skills, VFX, dialogs, sync or server messages ship with a spec in `e2e/` in the same change; anything other players should see gets an online test proving they see it. Use the `game-e2e` skill. Details: `.claude/rules/e2e.md`.
