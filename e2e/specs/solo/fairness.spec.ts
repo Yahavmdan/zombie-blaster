@@ -57,6 +57,13 @@ test.describe('crowd fairness', { tag: '@solo' }, (): void => {
     ];
     // Wind-up (15 ticks = 300 ms) then the swing's own 200 ms lead-in before the hit.
     expect(typical, 'median visible wind-up').toBeGreaterThanOrEqual(240);
+
+    await p.probe.waitFor(
+      'a zombie winding up',
+      (s: E2eSnapshot): boolean => s.zombies.some((z: E2eZombieView): boolean => z.windingUp),
+      { timeoutMs: 15_000, intervalMs: 20 },
+    );
+    await p.attachCanvas(testInfo, 'wind-up telegraph: "!" over the head');
   });
 
   test('at most two zombies swing at the same player at once', async ({

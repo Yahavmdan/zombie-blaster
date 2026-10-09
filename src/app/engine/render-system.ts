@@ -807,24 +807,25 @@ export class RenderSystem {
     ctx.restore();
   }
 
-  /** Wind-up warning: pulsing red glow and "!" so players can react before the hit lands. */
+  /** Wind-up warning: a big pulsing "!" over the zombie's head so players can react before the hit lands. */
   private renderAttackTelegraph(ctx: CanvasRenderingContext2D, z: ZombieState): void {
     const cx: number = z.x + z.instanceWidth / 2;
     const pulse: number = 0.5 + Math.sin(performance.now() / 45) * 0.5;
+    const scale: number = 1 + pulse * 0.2;
     ctx.save();
-    ctx.globalAlpha = 0.25 + pulse * 0.25;
-    ctx.fillStyle = '#ff3333';
-    ctx.beginPath();
-    ctx.ellipse(cx, z.y + z.instanceHeight / 2, z.instanceWidth * 0.8, z.instanceHeight * 0.6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 0.9;
-    ctx.font = 'bold 20px sans-serif';
+    ctx.translate(cx, z.y - 8);
+    ctx.scale(scale, scale);
+    ctx.font = 'bold 34px sans-serif';
     ctx.textAlign = 'center';
-    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = '#ff0000';
+    ctx.shadowBlur = 8 + pulse * 8;
+    ctx.lineWidth = 6;
     ctx.strokeStyle = '#1a0000';
-    ctx.strokeText('!', cx, z.y - 8);
-    ctx.fillStyle = '#ff4444';
-    ctx.fillText('!', cx, z.y - 8);
+    ctx.strokeText('!', 0, 0);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = pulse > 0.5 ? '#ffdd33' : '#ff3030';
+    ctx.fillText('!', 0, 0);
     ctx.restore();
   }
 
