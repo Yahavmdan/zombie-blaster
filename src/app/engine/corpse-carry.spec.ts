@@ -4,6 +4,9 @@ import { ZombieCorpse, ZombieType } from '@shared/game-entities';
 import {
   assignCarriers,
   carryableCorpse,
+  CarryPose,
+  carrySway,
+  easeCarryPose,
   holdCarriedCorpses,
   holdOverhead,
   tossCorpse,
@@ -217,5 +220,68 @@ describe('carrying a stack', (): void => {
     );
     assignCarriers(stack, [player('p', 100, { carryingCorpseIds: ['a', 'b'], isDown: true })]);
     expect(stack.every((c: ZombieCorpse): boolean => c.carrierId === null)).toBe(true);
+  });
+});
+
+describe('carried corpses sway', (): void => {
+  /** A carrier on the ground at x walking at vx (px/tick). */
+  function walker(x: number, vx: number): CharacterState {
+    return player('p', x + PW / 2, { velocityX: vx, isGrounded: true });
+  }
+
+  /** Poses over one full stride (two footfalls), sampled every pixel walked. */
+  function stride(level: number): CarryPose[] {
+    return Array.from({ length: 88 }, (_: unknown, x: number): CarryPose => carrySway(walker(x, 2.25), level));
+  }
+
+  it('standing still, the body just droops over the head', (): void => {
+    const pose: CarryPose = carrySway(walker(137, 0), 0);
+    expect(pose.bob).toBeCloseTo(0, 5);
+    expect(pose.tilt).toBeCloseTo(0, 5);
+    expect(pose.sag).toBeGreaterThan(0);
+  });
+
+  it('walking bounces it up on every footfall and rocks it side to side', (): void => {
+    const poses: CarryPose[] = stride(0);
+    const bobs: number[] = poses.map((p: CarryPose): number => p.bob);
+    expect(Math.max(...bobs)).toBeLessThanOrEqual(0);
+    expect(Math.min(...bobs)).toBeLessThan(-2);
+    const tilts: number[] = poses.map((p: CarryPose): number => p.tilt);
+    expect(Math.min(...tilts)).toBeLessThan(-0.02);
+    expect(Math.max(...tilts)).toBeGreaterThan(0.02);
+    const sags: number[] = poses.map((p: CarryPose): number => p.sag);
+    expect(Math.max(...sags) - Math.min(...sags), 'the ends swing').toBeGreaterThan(2);
+  });
+
+  it('a body higher up the stack follows a little late and a little wider', (): void => {
+    const bottom: CarryPose[] = stride(0);
+    const top: CarryPose[] = stride(2);
+    expect(bottom[0].bob).toBeCloseTo(0, 5);
+    expect(top[0].bob).toBeLessThan(-0.5);
+    const lowest: (poses: CarryPose[]) => number = (poses: CarryPose[]): number =>
+      Math.min(...poses.map((p: CarryPose): number => p.bob));
+    expect(lowest(top)).toBeLessThan(lowest(bottom));
+  });
+
+  it('in the air it lags the jump: pressed down going up, floating coming down', (): void => {
+    const rising: CarryPose = carrySway({ x: 0, velocityX: 0, velocityY: -8, isGrounded: false }, 0);
+    const falling: CarryPose = carrySway({ x: 0, velocityX: 0, velocityY: 8, isGrounded: false }, 0);
+    const rest: CarryPose = carrySway(walker(0, 0), 0);
+    expect(rising.bob).toBeGreaterThan(0);
+    expect(rising.sag).toBeGreaterThan(rest.sag);
+    expect(falling.bob).toBeLessThan(0);
+    expect(falling.sag).toBeLessThan(rest.sag);
+  });
+
+  it('a body eases into its pose instead of snapping', (): void => {
+    const target: CarryPose = { bob: -2, sag: 4, tilt: 0.03 };
+    let pose: CarryPose = { bob: 0, sag: 0, tilt: 0 };
+    pose = easeCarryPose(pose, target);
+    expect(pose.bob).toBeLessThan(0);
+    expect(pose.bob).toBeGreaterThan(-2);
+    for (let i: number = 0; i < 40; i++) pose = easeCarryPose(pose, target);
+    expect(pose.bob).toBeCloseTo(-2, 3);
+    expect(pose.sag).toBeCloseTo(4, 3);
+    expect(pose.tilt).toBeCloseTo(0.03, 3);
   });
 });

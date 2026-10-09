@@ -87,6 +87,8 @@ export interface E2eCorpseView {
   frame: number | null;
   /** Last frame of the death animation = fully lying down. */
   lastFrame: number;
+  /** How this client draws it swaying on its carrier (px / radians), null when not carried. */
+  carryPose: { bob: number; sag: number; tilt: number } | null;
 }
 
 /** Corpses piled up under the exit: ordinary corpses, nothing holds or arranges them. */

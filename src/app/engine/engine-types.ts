@@ -18,6 +18,7 @@ import {
   ZombieState,
   ZombieType,
 } from '@shared/game-entities';
+import { CarryPose } from './corpse-carry';
 import { InputKeys } from '@shared/messages';
 import { Particle } from './particle-types';
 import { SpriteAnimator } from './sprite-animator';
@@ -241,6 +242,8 @@ export interface IGameEngine {
   remotePlayers: CharacterState[];
   zombies: ZombieState[];
   zombieCorpses: ZombieCorpse[];
+  /** How each carried corpse sways on its carrier this tick (drawing only). */
+  readonly carryPoses: Map<string, CarryPose>;
   particles: Particle[];
   damageNumbers: DamageNumber[];
   dropNotifications: DropNotification[];

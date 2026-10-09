@@ -204,12 +204,12 @@ Driving tips:
 - Special drops open a Y/N prompt with a timer; the brain presses Y.
 - **Carrying corpses**: `KEYS.carry` (E) picks up the nearest lying corpse within 50 px
   (center to center; a "[E] Carry" prompt shows over it) and stacks it overhead, up to 3
-  (`CORPSE_CARRY_MAX`, 9 px per level). E with nothing more to pick up (or a full stack; prompt
+  (`CORPSE_CARRY_MAX`, 5 px per level: bodies rest on each other). E with nothing more to pick up (or a full stack; prompt
   "[E] Throw") tosses the whole stack forward and it lands as a pile (each body's `footY` 5 px
   above the one below). `KEYS.attack` always throws while carrying: use it next to a pile, where E
   would pick up another body instead. While carrying: 0.75x walk speed, no attacks or skills. The
   request is the player's own state (`player.carryingCorpseIds`, bottom first); the host grants
-  each as `corpseViews[].carrierId` (first come; a down carrier drops the stack). Specs: `solo/corpse-carry.spec.ts`, `online/corpse-carry-coop.spec.ts`.
+  each as `corpseViews[].carrierId` (first come; a down carrier drops the stack). Carried bodies sway (drawing only, box unchanged): `corpseViews[].carryPose` {bob, sag, tilt} eases each tick toward `carrySway(carrier, level)` (bob per footfall by distance walked, droop at the ends, rock; in the air pressed down going up). Specs: `solo/corpse-carry.spec.ts`, `online/corpse-carry-coop.spec.ts`.
   Setup: `dropCorpses(x, 1)`, then teleport the player onto the corpse's own spot (feet =
   `footY + 5`). Dropped corpses often land on a platform edge, so "stand 30 px beside it" flakes.
 
@@ -248,6 +248,7 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
 ## Gotchas
 
 - Headless pages still render; `attachCanvas` gives real frames. `KEYS.attack` is `j`.
+- `attachCanvas` images live only in the HTML report: `--reporter=line` drops them. To eyeball small art (carried corpses), a throwaway spec can `page.screenshot({ path, clip })` around `state().player` and you upscale the crop (System.Drawing, NearestNeighbor); delete the spec after.
 - Physics gotcha: tiny velocities snap to 0 (`PLAYER_MIN_VELOCITY`); any per-tick acceleration
   smaller than that must skip the snap (air control was silently dead until fixed).
 - Skills live in slots 1..6 = usable Active/Buff skills sorted by required level
