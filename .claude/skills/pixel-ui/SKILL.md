@@ -117,6 +117,22 @@ Angular build budget is 6 kB per component CSS: reusing the kit keeps you under 
 3. `npm run e2e:smoke` (includes `ui-style.spec.ts`: pixel font loaded, no emoji, pixel icons in HUD and every panel) plus the
    specs that touch your screen (`ui.spec.ts`, `coop-and-ui.spec.ts`, `mouse-controls.spec.ts`, `online/lobby.spec.ts`).
 
+## World objects drawn in code (puzzle parts)
+
+Things in the world that have no sprite sheet (boulder, spring, cages, chains, door...) follow the
+same art rules, in `src/app/engine/puzzle-art.ts` with the helpers in `pixel-art.ts`:
+- Draw on the 2 px art grid (`ART_PX`) with the `PIXEL` palette (the icon colours); outline in ink,
+  light top-left, dark bottom-right, a rivet or a white pixel for shine. No `arc`, gradients,
+  `ellipse` or round line caps: use `pxDisc`, `pxLine`, `pxBar`.
+- Small fixed pieces are char-grid `PixelSprite`s (gate per hit, arrows, chain links, gauge face).
+  Rotating art (the boulder) is pre-rendered per angle on its cell grid, so pixels stay square.
+- Art that is also collision (spring block, cages) must still fill exactly its box: keep the ink
+  outline inside the box. `level-geometry.spec.ts` checks it.
+- Judge it zoomed: crop the canvas screenshot 3x with `sharp` (nearest) and look at each object.
+- The user wanted "more real, less goofy": real mechanisms read better than symbols (coil springs
+  on a guide rod, not stacked ellipses; a tarp draped from a knot, not even stripes; cables in
+  straight runs over pulleys hung from the roof, not a smooth arc).
+
 ## Pitfalls already hit
 
 - `innerText` applies `text-transform`: e2e reading labels sees what the user sees (the menu spec expects `New game`).

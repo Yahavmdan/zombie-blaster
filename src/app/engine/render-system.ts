@@ -92,6 +92,22 @@ import {
   PlayerTint,
 } from './engine-types';
 import { drawPixelIcon } from '../ui/pixel-icon-raster';
+import { lightningFlash } from './storm';
+import {
+  drawBoulder,
+  drawButton,
+  drawCable,
+  drawCageRing,
+  drawChain,
+  drawChute,
+  drawCleatArt,
+  drawExitArrows,
+  drawExitDoorArt,
+  drawGate,
+  drawPlateArt,
+  drawScalePan,
+  drawScalePost,
+} from './puzzle-art';
 import {
   CANVAS_BLOOD_HI,
   CANVAS_BONE,
@@ -162,7 +178,7 @@ export class RenderSystem {
     }
 
     if (this.e.mapRenderer.isLoaded()) {
-      this.e.mapRenderer.render(ctx);
+      this.e.mapRenderer.render(ctx, performance.now(), this.e.lightning);
     } else {
       this.renderBackground(ctx);
       this.renderRopes(ctx);
@@ -206,6 +222,8 @@ export class RenderSystem {
 
     ctx.restore();
 
+    this.renderLightningFlash(ctx);
+
     if (this.e.screenFlashFrames > 0 && this.e.screenFlashColor) {
       ctx.globalAlpha = this.e.screenFlashFrames / 10;
       ctx.fillStyle = this.e.screenFlashColor;
@@ -213,6 +231,15 @@ export class RenderSystem {
       ctx.globalAlpha = 1;
       this.e.screenFlashFrames--;
     }
+  }
+
+  /** A strike washes the whole screen, players and zombies included, for a moment. */
+  private renderLightningFlash(ctx: CanvasRenderingContext2D): void {
+    if (!this.e.lightning) return;
+    const flash: number = lightningFlash(this.e.lightning.ageMs);
+    if (flash <= 0) return;
+    ctx.fillStyle = `rgba(230, 228, 255, ${flash * GAME_CONSTANTS.LIGHTNING_SCREEN_FLASH_ALPHA})`;
+    ctx.fillRect(0, 0, GAME_CONSTANTS.CANVAS_WIDTH, GAME_CONSTANTS.CANVAS_HEIGHT);
   }
 
   private renderBackground(ctx: CanvasRenderingContext2D): void {
@@ -1930,22 +1957,7 @@ export class RenderSystem {
     const puzzle: SpringPuzzleLayout | null = this.e.springPuzzle;
     const spring: SpringState | null = this.e.spring;
     if (!puzzle || !spring) return;
-    const path: Point[] = cablePath(puzzle, spring);
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    this.strokeChain(ctx, path);
-    const pulleys: Point[] = [path[0], path[1], path[2]];
-    for (const pulley of pulleys) {
-      ctx.fillStyle = '#3a3f48';
-      ctx.strokeStyle = '#9aa3ad';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(pulley.x, pulley.y, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-    ctx.restore();
+    drawCable(ctx, cablePath(puzzle, spring), 3);
   }
 
   /**
@@ -1965,59 +1977,26 @@ export class RenderSystem {
     this.e.mapRenderer.drawSpring(ctx, block, plateOffset(spring));
     ctx.save();
 
-    // The button: a shaft and a red cap pulled up out of its housing in the ground.
+    // The button: a red cap on a shaft, pulled up out of its housing in the ground by the cable.
     const button: Box = buttonBox(puzzle);
     const buttonX: number = button.x + button.width / 2;
-    const capY: number = buttonTopY(puzzle, spring);
-    ctx.fillStyle = '#7d8590';
-    ctx.fillRect(buttonX - 4, capY, 8, ground - capY);
-    ctx.fillStyle = isButtonUp(spring) ? '#ff4d4d' : '#a33a3a';
-    ctx.fillRect(button.x - 2, capY - 4, button.width + 4, 10);
-    ctx.fillStyle = '#3a3f48';
-    ctx.fillRect(button.x - 6, ground - 8, button.width + 12, 8);
+    drawButton(ctx, button, buttonTopY(puzzle, spring), ground, isButtonUp(spring));
 
-    // The scale: the pan set into the ground, its post and gauge at the inner end.
+    // The scale: the pan set into the ground, its girder post and dial at the inner end.
     const pan: Box = scaleBox(puzzle);
     const loaded: boolean = isLoaded(spring);
-    ctx.fillStyle = '#5b6470';
-    ctx.fillRect(pan.x, pan.y, pan.width, pan.height);
-    ctx.fillStyle = loaded ? '#7dff7d' : '#ffd166';
-    ctx.fillRect(pan.x, pan.y, pan.width, 2);
-    const postX: number = scalePostX(puzzle);
-    const postTop: number = scalePostTopY();
-    ctx.fillStyle = '#3a3f48';
-    ctx.fillRect(postX - 3, postTop, 6, ground - postTop);
-    const gaugeY: number = ground - 56;
-    ctx.fillStyle = '#e8e4d8';
-    ctx.strokeStyle = '#3a3f48';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(postX, gaugeY, 15, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    const angle: number = Math.PI * (0.75 + 1.5 * gaugeFraction(spring));
-    ctx.strokeStyle = '#d23c3c';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(postX, gaugeY);
-    ctx.lineTo(postX + Math.cos(angle) * 12, gaugeY + Math.sin(angle) * 12);
-    ctx.stroke();
+    drawScalePan(ctx, pan, loaded);
+    drawScalePost(ctx, scalePostX(puzzle), scalePostTopY(), ground, ground - 56, gaugeFraction(spring));
 
     ctx.font = pixelFont(14, 700);
     ctx.textAlign = 'center';
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = CANVAS_INK;
-    ctx.fillStyle = loaded ? '#7dff7d' : '#ffd166';
+    const readout: string = loaded ? '#7dff7d' : '#ffd166';
     const needed: number = GAME_CONSTANTS.SPRING_SCALE_KG_NEEDED;
     const label: string = `${Math.round(spring.scaleKg)} / ${needed} kg`;
-    const panX: number = pan.x + pan.width / 2;
-    ctx.strokeText(label, panX, ground + 28);
-    ctx.fillText(label, panX, ground + 28);
-    if (isButtonUp(spring) && !isBusy(spring)) {
-      ctx.globalAlpha = 0.7 + Math.sin(t * 6) * 0.3;
-      ctx.fillStyle = '#7dff7d';
-      ctx.strokeText('Hit!', buttonX, button.y - 16);
-      ctx.fillText('Hit!', buttonX, button.y - 16);
+    fillOutlinedText(ctx, label, pan.x + pan.width / 2, ground + 28, readout);
+    // A 2-frame blink, like the rest of the pixel UI.
+    if (isButtonUp(spring) && !isBusy(spring) && Math.floor(t * 3) % 2 === 0) {
+      fillOutlinedText(ctx, 'Hit!', buttonX, button.y - 16, '#7dff7d');
     }
 
     const seconds: number = countdownSeconds(spring);
@@ -2041,105 +2020,28 @@ export class RenderSystem {
 
   /** Trough floor under the boulder's path and a guard rail over it, from the ledge to the wall. */
   private renderChute(ctx: CanvasRenderingContext2D, path: BoulderPath, r: number): void {
-    const x0: number = path.edge.x;
     const x1: number = path.end.x + Math.sign(path.end.x - path.edge.x) * r;
-    const floorY0: number = path.edge.y + r;
-    const floorY1: number = path.end.y + r;
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#3c4048';
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.moveTo(x0, floorY0 + 4);
-    ctx.lineTo(x1, floorY1 + 4);
-    ctx.stroke();
-    ctx.strokeStyle = '#7d8590';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(x0, floorY0 - 2 * r - 6);
-    ctx.lineTo(x1, floorY1 - 2 * r - 6);
-    ctx.stroke();
-    ctx.strokeStyle = '#555c66';
-    for (let i: number = 1; i < 6; i++) {
-      const t: number = i / 6;
-      const px: number = x0 + (x1 - x0) * t;
-      const py: number = floorY0 + (floorY1 - floorY0) * t;
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(px, py - 2 * r - 6);
-      ctx.stroke();
-    }
-    ctx.restore();
+    drawChute(ctx, path.edge.x, path.edge.y + r, x1, path.end.y + r, 2 * r + 6);
   }
 
   /** The small wooden wall holding the boulder; one more crack per hit. */
   private renderGate(ctx: CanvasRenderingContext2D, gate: Box, hits: number): void {
-    ctx.save();
-    ctx.fillStyle = '#7a5230';
-    ctx.fillRect(gate.x, gate.y, gate.width, gate.height);
-    ctx.fillStyle = '#a0703c';
-    for (let y: number = gate.y + 2; y < gate.y + gate.height; y += 10) {
-      ctx.fillRect(gate.x + 2, y, gate.width - 4, 6);
-    }
-    ctx.strokeStyle = 'rgba(20, 10, 5, 0.9)';
-    ctx.lineWidth = 2;
-    for (let i: number = 0; i < hits; i++) {
-      const y: number = gate.y + 8 + i * 11;
-      ctx.beginPath();
-      ctx.moveTo(gate.x + 2, y);
-      ctx.lineTo(gate.x + gate.width / 2, y + 6);
-      ctx.lineTo(gate.x + gate.width - 2, y + 2);
-      ctx.stroke();
-    }
-    ctx.restore();
+    drawGate(ctx, gate, hits);
   }
 
   private renderBoulder(ctx: CanvasRenderingContext2D, box: Box, angle: number): void {
-    const r: number = box.width / 2;
-    ctx.save();
-    ctx.translate(box.x + r, box.y + r);
-    ctx.rotate(angle);
-    const stone: CanvasGradient = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 2, 0, 0, r);
-    stone.addColorStop(0, '#a3a0a8');
-    stone.addColorStop(1, '#4d4a55');
-    ctx.fillStyle = stone;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(20, 20, 25, 0.7)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.6, -r * 0.1);
-    ctx.lineTo(-r * 0.1, r * 0.2);
-    ctx.lineTo(r * 0.4, -r * 0.3);
-    ctx.moveTo(-r * 0.1, r * 0.2);
-    ctx.lineTo(0, r * 0.7);
-    ctx.stroke();
-    ctx.restore();
+    drawBoulder(ctx, box, angle);
   }
 
   private renderOpeningSign(ctx: CanvasRenderingContext2D, puzzle: BoulderPuzzleLayout): void {
     const wall: Platform = puzzle.wall;
-    const t: number = performance.now() / 1000;
     const signX: number = wall.x + wall.width / 2;
     const signY: number = GAME_CONSTANTS.GROUND_Y - 70;
-    const dir: number = puzzle.wallDir;
     ctx.save();
-    ctx.globalAlpha = 0.6 + Math.sin(t * 2) * 0.2;
-    ctx.fillStyle = CANVAS_BONE;
     ctx.font = pixelFont(14, 700);
     ctx.textAlign = 'center';
-    ctx.fillText('EXIT', signX, signY);
-    ctx.fillStyle = '#44ddff';
-    for (let i: number = 0; i < 3; i++) {
-      const ax: number = signX - dir * 12 + dir * i * 12 + Math.sin(t * 3 + i) * 2;
-      ctx.beginPath();
-      ctx.moveTo(ax + dir * 8, signY + 18);
-      ctx.lineTo(ax, signY + 10);
-      ctx.lineTo(ax, signY + 26);
-      ctx.closePath();
-      ctx.fill();
-    }
+    fillOutlinedText(ctx, 'Exit', signX, signY, CANVAS_BONE);
+    drawExitArrows(ctx, signX, signY + 8, puzzle.wallDir, performance.now());
     ctx.restore();
   }
 
@@ -2156,40 +2058,16 @@ export class RenderSystem {
     const puzzle: CagePuzzleLayout | null = this.e.cagePuzzle;
     const cages: CagePuzzleState | null = this.e.cages;
     if (!puzzle || !cages) return;
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
     cages.cages.forEach((cage: CageState, i: number): void => {
       const path: Point[] = chainPath(puzzle, i, this.e.exitPlatform);
       if (isCut(cage)) {
-        this.strokeChain(ctx, [path[0], { x: path[0].x + 4, y: path[0].y - 12 }]);
+        drawChain(ctx, [path[0], { x: path[0].x + 4, y: path[0].y - 14 }]);
         return;
       }
-      this.strokeChain(ctx, path);
+      drawChain(ctx, path);
     });
-    ctx.restore();
   }
 
-  /** A chain along `path`, its corners rounded off (it sags through its kinks). */
-  private strokeChain(ctx: CanvasRenderingContext2D, path: Point[]): void {
-    ctx.beginPath();
-    ctx.moveTo(path[0].x, path[0].y);
-    for (let i: number = 1; i < path.length - 1; i++) {
-      const mid: Point = { x: (path[i].x + path[i + 1].x) / 2, y: (path[i].y + path[i + 1].y) / 2 };
-      ctx.quadraticCurveTo(path[i].x, path[i].y, mid.x, mid.y);
-    }
-    const last: Point = path[path.length - 1];
-    ctx.lineTo(last.x, last.y);
-    ctx.setLineDash([]);
-    ctx.strokeStyle = '#1e2026';
-    ctx.lineWidth = 5;
-    ctx.stroke();
-    ctx.setLineDash([5, 3]);
-    ctx.strokeStyle = '#9aa3ad';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
 
   /**
    * The floor-4 cages where their state puts them (hanging and falling under their tarps, the
@@ -2205,13 +2083,7 @@ export class RenderSystem {
       const box: Box | null = cageBox(puzzle, i, cage, this.e.exitPlatform);
       if (box) {
         this.e.mapRenderer.drawCage(ctx, box, !cage.landed);
-        if (!isCut(cage)) {
-          ctx.strokeStyle = '#9aa3ad';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(box.x + box.width / 2, box.y - 4, 4, 0, Math.PI * 2);
-          ctx.stroke();
-        }
+        if (!isCut(cage)) drawCageRing(ctx, box.x + box.width / 2, box.y);
       }
       this.renderCleat(ctx, cleatBox(puzzle, i), cage);
     });
@@ -2223,35 +2095,7 @@ export class RenderSystem {
    * bars slide up into the lintel as it opens. Fully open, the doorway glows.
    */
   private renderExitDoor(ctx: CanvasRenderingContext2D, door: Box, plate: PlateState): void {
-    const open: number = plate.doorTicks / GAME_CONSTANTS.PLATE_DOOR_TICKS;
-    const post: number = 6;
-    const inner: Box = {
-      x: door.x + post,
-      y: door.y + post,
-      width: door.width - 2 * post,
-      height: door.height - post,
-    };
-    ctx.save();
-    ctx.fillStyle = open >= 1 ? 'rgba(68, 221, 255, 0.35)' : '#101018';
-    ctx.fillRect(inner.x, inner.y, inner.width, inner.height);
-    ctx.fillStyle = '#5a5f68';
-    ctx.fillRect(door.x, door.y, post, door.height);
-    ctx.fillRect(door.x + door.width - post, door.y, post, door.height);
-    ctx.fillRect(door.x, door.y, door.width, post);
-    const barsBottom: number = inner.y + inner.height * (1 - open);
-    if (barsBottom > inner.y) {
-      ctx.strokeStyle = '#9aa3ad';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      for (let x: number = inner.x + 5; x < inner.x + inner.width; x += 9) {
-        ctx.moveTo(x, inner.y);
-        ctx.lineTo(x, barsBottom);
-      }
-      ctx.moveTo(inner.x, barsBottom - 3);
-      ctx.lineTo(inner.x + inner.width, barsBottom - 3);
-      ctx.stroke();
-    }
-    ctx.restore();
+    drawExitDoorArt(ctx, door, plate.doorTicks / GAME_CONSTANTS.PLATE_DOOR_TICKS);
   }
 
   /**
@@ -2262,50 +2106,13 @@ export class RenderSystem {
     const puzzle: PlatePuzzleLayout | null = this.e.platePuzzle;
     const plate: PlateState | null = this.e.plate;
     if (!puzzle || !plate) return;
-    const box: Box = plateBox(puzzle);
-    const held: boolean = isHeld(plate);
-    const sink: number = held ? 3 : 0;
-    ctx.save();
-    ctx.fillStyle = '#2a2a30';
-    ctx.fillRect(box.x - 2, box.y, box.width + 4, box.height);
-    ctx.fillStyle = held ? '#4caf50' : '#c0392b';
-    ctx.fillRect(box.x, box.y + sink, box.width, box.height - sink);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-    ctx.fillRect(box.x, box.y + sink, box.width, 1);
-    const needed: number = GAME_CONSTANTS.PLATE_WEIGHT_NEEDED;
-    const lit: number = Math.min(needed, plate.weight);
-    const gap: number = 18;
-    const lampsLeft: number = box.x + box.width / 2 - ((needed - 1) * gap) / 2;
-    for (let i: number = 0; i < needed; i++) {
-      ctx.beginPath();
-      ctx.arc(lampsLeft + i * gap, box.y - 58, 5, 0, Math.PI * 2);
-      ctx.fillStyle = i < lit ? (held ? '#7CFC8A' : '#ffd166') : 'rgba(40, 40, 48, 0.8)';
-      ctx.fill();
-      ctx.strokeStyle = '#111';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-    ctx.restore();
+    drawPlateArt(ctx, plateBox(puzzle), isHeld(plate), plate.weight, GAME_CONSTANTS.PLATE_WEIGHT_NEEDED);
   }
 
   /** An iron cleat; cracks show the hits it took, a snapped one is broken off at the top. */
   private renderCleat(ctx: CanvasRenderingContext2D, cleat: Box, cage: CageState): void {
-    const cut: boolean = isCut(cage);
-    const top: number = cut ? cleat.y + cleat.height / 2 : cleat.y;
-    ctx.fillStyle = '#4a4f58';
-    ctx.fillRect(cleat.x, top, cleat.width, cleat.y + cleat.height - top);
-    ctx.fillStyle = '#7d8590';
-    ctx.fillRect(cleat.x - 2, top, cleat.width + 4, 4);
-    ctx.strokeStyle = '#ffd166';
-    ctx.lineWidth = 1;
-    for (let i: number = 0; i < Math.min(cage.cleatHits, GAME_CONSTANTS.CAGE_CLEAT_HITS - 1); i++) {
-      const y: number = cleat.y + 6 + i * 7;
-      ctx.beginPath();
-      ctx.moveTo(cleat.x + 2, y);
-      ctx.lineTo(cleat.x + cleat.width / 2, y + 4);
-      ctx.lineTo(cleat.x + cleat.width - 2, y + 1);
-      ctx.stroke();
-    }
+    const hits: number = Math.min(cage.cleatHits, GAME_CONSTANTS.CAGE_CLEAT_HITS - 1);
+    drawCleatArt(ctx, cleat, hits, isCut(cage));
   }
 
   private renderSafeSpotMarker(ctx: CanvasRenderingContext2D): void {

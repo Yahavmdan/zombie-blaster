@@ -9,9 +9,16 @@ import {
   expect,
 } from '@playwright/test';
 import { GameProbe } from './probe';
+import type { E2eLightningView } from './probe';
 import { NetMonitor } from './net-monitor';
 
 export type ClassId = 'warrior' | 'ranger' | 'mage' | 'assassin' | 'priest';
+
+/** Sky brightness on one screen, and the lightning strike lighting it when measured during one. */
+export interface SkyLuma {
+  luma: number;
+  strike: E2eLightningView | null;
+}
 
 export const ALL_CLASSES: ClassId[] = ['warrior', 'ranger', 'mage', 'assassin', 'priest'];
 
@@ -352,6 +359,57 @@ export class GamePlayer {
             (new URL(ws.url).host !== location.host || new URL(ws.url).pathname === '/ws') &&
             ws.readyState === WebSocket.OPEN,
         ).length,
+    );
+  }
+
+  /**
+   * Mean luminance (0-255) of the game canvas rows `y0`..`y1`. With `duringStrike`, it first waits
+   * (in the page, frame by frame) for a lightning strike on this screen and measures the frame
+   * drawn after it; `strike` is the strike as that screen had it (null without `duringStrike`).
+   */
+  async canvasLuma(
+    y0: number,
+    y1: number,
+    duringStrike: boolean = false,
+    timeoutMs: number = 5_000,
+  ): Promise<SkyLuma> {
+    return this.page.evaluate(
+      (args: [number, number, boolean, number]): Promise<SkyLuma> =>
+        new Promise<SkyLuma>(
+          (resolve: (v: SkyLuma) => void, reject: (e: Error) => void): void => {
+            const top: number = args[0];
+            const bottom: number = args[1];
+            const timeout: number = args[3];
+            const measure: () => number = (): number => {
+              const canvas: HTMLCanvasElement = document.querySelector('canvas')!;
+              const data: Uint8ClampedArray = canvas
+                .getContext('2d')!
+                .getImageData(0, top, canvas.width, bottom - top).data;
+              let sum: number = 0;
+              for (let i: number = 0; i < data.length; i += 4) {
+                sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+              }
+              return sum / (data.length / 4);
+            };
+            if (!args[2]) {
+              resolve({ luma: measure(), strike: null });
+              return;
+            }
+            const deadline: number = performance.now() + timeout;
+            const poll: () => void = (): void => {
+              const strike: E2eLightningView | null = window.__zbE2e?.getState()?.vfx.lightning ?? null;
+              if (strike) {
+                requestAnimationFrame((): void => resolve({ luma: measure(), strike }));
+              } else if (performance.now() > deadline) {
+                reject(new Error('no lightning strike on this screen'));
+              } else {
+                requestAnimationFrame(poll);
+              }
+            };
+            poll();
+          },
+        ),
+      [y0, y1, duringStrike, timeoutMs] as [number, number, boolean, number],
     );
   }
 
