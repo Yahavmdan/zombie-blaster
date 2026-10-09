@@ -17,6 +17,8 @@ import {
 const GROUND_Y: number = GAME_CONSTANTS.GROUND_Y;
 const GROUND: DrapeSurface = { x: 0, y: GROUND_Y, width: GAME_CONSTANTS.CANVAS_WIDTH };
 const STEP: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
+/** Steepest a body bends (MAX_SLOPE in corpse-drape.ts). */
+const MAX_BEND_SLOPE: number = 0.65;
 
 /** A lying walker whose feet (box center) are at cx and underside at bottom; facing -1 = body to the left (mirrored sprite). */
 function corpse(id: string, cx: number, bottom: number, facing: number = -1): ZombieCorpse {
@@ -72,7 +74,7 @@ describe('draping corpses', (): void => {
       const drop: number = dropAt(drape, x);
       const before: number = dropAt(drape, x + DRAPE_STRIP_PX);
       expect(drop).toBeGreaterThanOrEqual(before);
-      expect(drop - before).toBeLessThanOrEqual(DRAPE_STRIP_PX * 0.8 + 1e-9);
+      expect(drop - before).toBeLessThanOrEqual(DRAPE_STRIP_PX * MAX_BEND_SLOPE + 1e-9);
     }
     expect(
       shiftAt(drape, headX(c)),
@@ -112,5 +114,47 @@ describe('draping corpses', (): void => {
     const falling: ZombieCorpse = { ...corpse('f', 500, 300), isGrounded: false };
     const drapes: Map<string, CorpseDrape> = drapeCorpses([carried, falling], [GROUND]);
     expect(drapes.size).toBe(0);
+  });
+
+  it('random piles: no strip rises above the feet or jumps steeper than a body bends', (): void => {
+    let seed: number = 7;
+    const random: () => number = (): number => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    const ledges: DrapeSurface[] = [
+      GROUND,
+      { x: 300, y: 530, width: 160 },
+      { x: 600, y: 430, width: 96 },
+    ];
+    for (let round: number = 0; round < 40; round++) {
+      // Bodies stacked the way physics piles them: each on a foothold of one below, or on a ledge.
+      const pile: ZombieCorpse[] = [];
+      for (let n: number = 0; n < 25; n++) {
+        const cx: number = 250 + random() * 500;
+        const onLedge: DrapeSurface | undefined = ledges
+          .filter((l: DrapeSurface): boolean => cx >= l.x && cx < l.x + l.width)
+          .sort((a: DrapeSurface, b: DrapeSurface): number => a.y - b.y)[0];
+        const below: ZombieCorpse[] = pile.filter(
+          (c: ZombieCorpse): boolean => Math.abs(c.x + c.width / 2 - cx) < 8,
+        );
+        const top: number = Math.min(
+          onLedge ? onLedge.y : GROUND_Y,
+          ...below.map((c: ZombieCorpse): number => c.y + c.height - STEP),
+        );
+        pile.push(corpse(`c${n}`, cx, top, random() < 0.5 ? -1 : 1));
+      }
+      for (const [id, drape] of drapeCorpses(pile, ledges)) {
+        drape.drops.forEach((drop: number, i: number): void => {
+          expect(drop, `${id} strip ${i} never above its feet`).toBeGreaterThanOrEqual(0);
+          if (i > 0) {
+            expect(
+              Math.abs(drop - drape.drops[i - 1]),
+              `${id} strip ${i}: no jump between neighbours`,
+            ).toBeLessThanOrEqual(DRAPE_STRIP_PX * MAX_BEND_SLOPE + 1e-9);
+          }
+        });
+      }
+    }
   });
 });

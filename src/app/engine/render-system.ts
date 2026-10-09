@@ -91,6 +91,8 @@ import {
 const BEND_MAX_REACH: number = 1.3;
 /** A lying body sagging less than this is drawn straight. */
 const MIN_DRAPE_PX: number = 0.5;
+/** Strips of a bent body sloping less than this are drawn unturned (and merged). */
+const FLAT_STRIP_RAD: number = 0.05;
 
 /** How far one strip of a bent corpse sprite is moved. */
 interface StripOffset {
@@ -1064,7 +1066,8 @@ export class RenderSystem {
 
   /**
    * Draws a corpse's frame bent: in thin vertical strips, each moved by `offsetAt` of its screen x
-   * (neighboring strips moved the same are drawn as one).
+   * and turned along the bend about the body's underside, so a hanging part keeps its thickness
+   * instead of being sheared thin. Flat neighbors moved the same are drawn as one.
    */
   private drawBentCorpse(
     ctx: CanvasRenderingContext2D,
@@ -1081,20 +1084,44 @@ export class RenderSystem {
     this.e.zombieSpriteAnimator.draw(spriteCtx, corpse.id, corpse.spriteKey, 0, 0, size, size, flipX);
 
     ctx.imageSmoothingEnabled = false;
-    const rounded: (sx: number) => StripOffset = (sx: number): StripOffset => {
-      const o: StripOffset = offsetAt(drawX + sx + DRAPE_STRIP_PX / 2);
-      return { dx: Math.round(o.dx), dy: Math.round(o.dy) };
-    };
+    const count: number = Math.ceil(size / DRAPE_STRIP_PX);
+    const offsets: StripOffset[] = Array.from({ length: count }, (_: unknown, k: number): StripOffset =>
+      offsetAt(drawX + k * DRAPE_STRIP_PX + DRAPE_STRIP_PX / 2),
+    );
+    const base: DOMMatrix = ctx.getTransform();
+    const pivotY: number = corpse.y + corpse.height;
     let runStart: number = 0;
-    let run: StripOffset = rounded(0);
-    for (let sx: number = DRAPE_STRIP_PX; sx <= size; sx += DRAPE_STRIP_PX) {
-      const next: StripOffset | null = sx < size ? rounded(sx) : null;
-      if (next && next.dx === run.dx && next.dy === run.dy) continue;
-      const w: number = Math.min(sx, size) - runStart;
-      ctx.drawImage(sprite, runStart, 0, w, size, drawX + runStart + run.dx, drawY + run.dy, w, size);
-      runStart = sx;
-      if (next) run = next;
+    let run: StripOffset | null = null;
+    const flushRun: (end: number) => void = (end: number): void => {
+      if (run && end > runStart) {
+        ctx.drawImage(sprite, runStart, 0, end - runStart, size, drawX + runStart + run.dx, drawY + run.dy, end - runStart, size);
+      }
+      run = null;
+    };
+    for (let k: number = 0; k < count; k++) {
+      const sx: number = k * DRAPE_STRIP_PX;
+      const w: number = Math.min(DRAPE_STRIP_PX, size - sx);
+      const before: StripOffset = offsets[Math.max(0, k - 1)];
+      const after: StripOffset = offsets[Math.min(count - 1, k + 1)];
+      const span: number = (Math.min(count - 1, k + 1) - Math.max(0, k - 1)) * DRAPE_STRIP_PX;
+      const angle: number = span > 0 ? Math.atan((after.dy - before.dy) / span) : 0;
+      const dx: number = Math.round(offsets[k].dx);
+      const dy: number = Math.round(offsets[k].dy);
+      if (Math.abs(angle) < FLAT_STRIP_RAD) {
+        if (run && run.dx === dx && run.dy === dy) continue;
+        flushRun(sx);
+        runStart = sx;
+        run = { dx, dy };
+        continue;
+      }
+      flushRun(sx);
+      // Turned about this strip's spot on the body's underside; a pixel wider so no seams open.
+      ctx.translate(drawX + sx + offsets[k].dx + w / 2, pivotY + offsets[k].dy);
+      ctx.rotate(angle);
+      ctx.drawImage(sprite, sx, 0, w, size, -w / 2 - 0.5, drawY - pivotY, w + 1, size);
+      ctx.setTransform(base);
     }
+    flushRun(size);
   }
 
   /** Scratch canvas a carried corpse's frame is drawn on before it is bent onto the screen. */

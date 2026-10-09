@@ -19,11 +19,11 @@ export const DRAPE_STRIP_PX: number = 2;
 /** A body lying on another is this thick (the pile's step per body). */
 const BODY_THICKNESS_PX: number = GAME_CONSTANTS.ZOMBIE_CORPSE_PLATFORM_HEIGHT;
 /** Steepest bend, in px dropped per px along the body... */
-const MAX_SLOPE: number = 0.8;
+const MAX_SLOPE: number = 0.65;
 /** ...reached gradually: a body curves over an edge, it doesn't fold at a hinge. */
 const SLOPE_GAIN_PER_PX: number = 0.07;
 /** A body bends down at most this far (fraction of the sprite width): it is only so long. */
-const MAX_DROP_RATIO: number = 0.5;
+const MAX_DROP_RATIO: number = 0.4;
 /** Something this close above a body's underside still counts as under it. */
 const SUPPORT_EPSILON_PX: number = 1;
 
@@ -151,11 +151,15 @@ function bendAway(drape: CorpseDrape, gaps: number[], from: number, dir: number)
     const prevDrop: number = inside ? drops[i - dir] : 0;
     const prevShift: number = inside ? shifts[i - dir] : 0;
     slope = Math.min(MAX_SLOPE, slope + SLOPE_GAIN_PER_PX * DRAPE_STRIP_PX);
-    drops[i] = Math.min(gaps[i], prevDrop + slope * DRAPE_STRIP_PX);
-    // Resting on something again: the bend starts over from there.
-    slope = (drops[i] - prevDrop) / DRAPE_STRIP_PX;
-    // Keep the body's length: a strip going down covers less ground, so the rest moves in.
-    shifts[i] = prevShift - dir * DRAPE_STRIP_PX * (1 - 1 / Math.hypot(1, slope));
+    // Something higher under it lifts the body back up, but no steeper than it bends and never
+    // above its feet (it may sink into a body there a little: piles overlap).
+    const lowestRise: number = Math.max(0, prevDrop - MAX_SLOPE * DRAPE_STRIP_PX);
+    drops[i] = Math.max(lowestRise, Math.min(gaps[i], prevDrop + slope * DRAPE_STRIP_PX));
+    const step: number = (drops[i] - prevDrop) / DRAPE_STRIP_PX;
+    // Resting on something again: the bend starts over, flat, from there.
+    slope = Math.max(0, step);
+    // Keep the body's length: a sloped strip covers less ground, so the rest moves in.
+    shifts[i] = prevShift - dir * DRAPE_STRIP_PX * (1 - 1 / Math.hypot(1, step));
   }
 }
 
