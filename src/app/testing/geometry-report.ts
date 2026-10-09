@@ -1,6 +1,7 @@
 import { GAME_CONSTANTS } from '@shared/index';
 import { Platform, Rope } from '../engine/engine-types';
 import { GameEngine } from '../engine/game-engine';
+import { EXIT_CAGE } from '../engine/cage-puzzle';
 import { Prop } from '../engine/level-generator';
 import { LooseProp } from '@shared/game-entities';
 import { E2eGeometryCheck, E2eGeometryReport } from './e2e-api';
@@ -52,9 +53,12 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
   if (spring) renderer.drawSpring(frame, spring, 0);
   // The floor-4 cages are drawn per frame too (they fall): measured where their collision is.
   const cages: Platform[] = engine.platforms.filter(
-    (p: Platform): boolean => p.puzzlePart === 'cage' || p.puzzlePart === 'zombie-cage',
+    (p: Platform): boolean => p.puzzlePart === 'cage' || p.puzzlePart === 'hanging-cage',
   );
-  for (const c of cages) renderer.drawCage(frame, c, c.puzzlePart === 'zombie-cage');
+  // Covered while they hang; the exit cage stands bare once it landed.
+  const covered: (c: Platform) => boolean = (c: Platform): boolean =>
+    c.puzzlePart === 'hanging-cage' || engine.cages?.cages[EXIT_CAGE]?.landed !== true;
+  for (const c of cages) renderer.drawCage(frame, c, covered(c));
   // Pickable props are drawn per frame too (they get carried and thrown): the lying ones are
   // measured where their collision is.
   const lyingProps: LooseProp[] = engine.looseProps.filter(
@@ -121,7 +125,7 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
         width: c.width,
         height: c.height,
         draw: (ctx: CanvasRenderingContext2D): void =>
-          renderer.drawCage(ctx, c, c.puzzlePart === 'zombie-cage'),
+          renderer.drawCage(ctx, c, covered(c)),
       }),
     ),
     ...engine.platforms

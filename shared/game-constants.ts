@@ -165,23 +165,30 @@ export const GAME_CONSTANTS = {
   SPRING_BOUNCE_TICKS: 40, // The spring's release-and-settle animation after a launch
   SPRING_FLING_WINDOW_TICKS: 10, // A client flings itself only while the synced bounce is this fresh (not on a late join)
   SPRING_CLEAR_PX: 96, // Platforms, ropes and props keep this far from the spring's open side (the button stands there)
-  PUZZLE_CAGE_FLOOR: 4, // Floor with two hanging cages: drop the empty one under the exit as a step, not the zombie-filled one
-  CAGE_WIDTH_PX: 128, // Both cages are this wide (whole tiles: art == collision box)...
+  PUZZLE_CAGE_FLOOR: 4, // Floor with 4-5 covered cages on tangled chains: drop the one under the exit as a step; the others hide zombies, loot or nothing
+  CAGE_WIDTH_PX: 128, // The exit cage is this wide (whole tiles: art == collision box)...
   CAGE_HEIGHT_PX: 96, // ...and this tall: the landed cage's top is beyond double-jump reach of the exit
   CAGE_HANG_GAP_PX: 48, // The exit cage hangs this far under the exit (room to stand on it)
-  CAGE_ZOMBIE_TOP_Y: 160, // Top of the zombie cage while it hangs mid-screen from the ceiling
-  CAGE_ZOMBIE_MIN_X: 384, // The zombie cage's left edge lies between this...
-  CAGE_ZOMBIE_MAX_X: 768, // ...and this (mid-screen, between the safe spot and the exit)
-  CAGE_CLEAR_PX: 64, // Platforms (the safe spot too) keep this far from the zombie cage's column: it falls to the ground
-  CAGE_CHAIN_ROW_Y: 112, // The chains run along the ceiling at this height...
-  CAGE_CHAIN_ROW_STEP_PX: 16, // ...one chain this far below the other
+  CAGE_COUNT_MIN: 4, // Cages on the floor (the exit cage included): at least this many...
+  CAGE_COUNT_MAX: 5, // ...and at most this many
+  CAGE_MID_SIZE_PX: 96, // The other cages are this wide and tall (whole tiles)...
+  CAGE_MID_TOP_Y: 160, // ...and hang with their tops at this height, mid-screen
+  CAGE_MID_GAP_PX: 32, // They keep this far from each other and from the safe spot...
+  CAGE_EXIT_CLEAR_PX: 64, // ...and this far from the exit's span
+  CAGE_CHAIN_TOP_Y: 40, // The tangled chains wind through the ceiling band between this height...
+  CAGE_CHAIN_BOTTOM_Y: 136, // ...and this one
+  CAGE_CHAIN_KINKS: 3, // Points each chain winds through in that band (more = more tangled)
   CAGE_CLEAT_WIDTH_PX: 12, // Each chain is tied to a cleat on a ledge (never the safe spot: no swinging there): this wide...
   CAGE_CLEAT_HEIGHT_PX: 28, // ...and this tall
-  CAGE_CLEAT_INSET_PX: 40, // Cleat centers sit this far in from their ledge's ends
+  CAGE_CLEAT_INSET_PX: 40, // Cleats sit at least this far in from their ledge's ends...
+  CAGE_CLEAT_SPACING_PX: 64, // ...and this far apart (a swing reaches only one)
   CAGE_CLEAT_HITS: 3, // Swings on a cleat before its chain snaps and the cage falls
   CAGE_HIT_REACH_PX: 24, // Max gap between an attacking player's box and a cleat for the swing to hit it
   CAGE_HIT_COOLDOWN_TICKS: 36, // One cleat hit per swing (a held attack swings every 36 ticks)
-  CAGE_ZOMBIES: 6, // Zombies the zombie cage lets loose when it smashes on the ground
+  CAGE_ZOMBIE_CAGES: 2, // Cages hiding zombies (any of them, the exit cage too)...
+  CAGE_LOOT_CAGES: 1, // ...hiding loot; the rest are empty
+  CAGE_ZOMBIES: 4, // Zombies a zombie cage lets loose when it lands
+  CAGE_LOOT_GOLD: 120, // Gold in a loot cage (plus an HP and an MP potion)
   PUZZLE_PLATE_FLOOR: 5, // Floor whose exit is behind a door that a pressure plate on a far, high ledge holds open
   PLATE_WIDTH_PX: 96, // The pressure plate is set into its ledge's top: 3 tiles wide
   PLATE_WEIGHT_NEEDED: 3, // Weight on the plate that holds the exit door open: a lying corpse weighs 1...

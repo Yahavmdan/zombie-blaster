@@ -67,7 +67,7 @@ import { CagePuzzleSystem } from './cage-puzzle-system';
 import { PlatePuzzleSystem } from './plate-puzzle-system';
 import { PLATE_MAX_WEIGHT, newPlateState } from './plate-puzzle';
 import {
-  CAGE_IDS,
+  EXIT_CAGE,
   CAGE_MAX_FALL_TICKS,
   cageSolid,
   isCut,
@@ -274,7 +274,7 @@ export class GameEngine implements IGameEngine {
     this.zombieSystem = new ZombieSystem(this, this.physicsSystem, this.combatSystem, this.projectileSystem, this.dropSystem);
     this.boulderPuzzleSystem = new BoulderPuzzleSystem(this, this.combatSystem, this.vfxSystem);
     this.springPuzzleSystem = new SpringPuzzleSystem(this, this.vfxSystem);
-    this.cagePuzzleSystem = new CagePuzzleSystem(this, this.vfxSystem, this.zombieSystem);
+    this.cagePuzzleSystem = new CagePuzzleSystem(this, this.vfxSystem, this.zombieSystem, this.dropSystem);
     this.platePuzzleSystem = new PlatePuzzleSystem(this, this.vfxSystem);
     this.corpseCarrySystem = new CorpseCarrySystem(this);
     this.loosePropSystem = new LoosePropSystem(this, this.dropSystem);
@@ -314,7 +314,7 @@ export class GameEngine implements IGameEngine {
     this.springPuzzle = this.level.springPuzzle ?? null;
     this.spring = this.springPuzzle ? newSpringState() : null;
     this.cagePuzzle = this.level.cagePuzzle ?? null;
-    this.cages = this.cagePuzzle ? newCageState() : null;
+    this.cages = this.cagePuzzle ? newCageState(this.cagePuzzle) : null;
     this.platePuzzle = this.level.platePuzzle ?? null;
     this.plate = this.platePuzzle ? newPlateState() : null;
     this.platforms = [
@@ -376,19 +376,20 @@ export class GameEngine implements IGameEngine {
    */
   placeCages(): void {
     this.platforms = this.platforms.filter(
-      (p: Platform): boolean => p.puzzlePart !== 'cage' && p.puzzlePart !== 'zombie-cage',
+      (p: Platform): boolean => p.puzzlePart !== 'cage' && p.puzzlePart !== 'hanging-cage',
     );
     if (!this.cagePuzzle || !this.cages) return;
-    for (const id of CAGE_IDS) {
-      const box: Box | null = cageSolid(this.cagePuzzle, id, this.cages[id], this.exitPlatform);
+    const puzzle: CagePuzzleLayout = this.cagePuzzle;
+    this.cages.cages.forEach((cage: CageState, i: number): void => {
+      const box: Box | null = cageSolid(puzzle, i, cage, this.exitPlatform);
       if (box) {
         this.platforms.push({
           ...box,
           solid: true,
-          puzzlePart: id === 'exitCage' ? 'cage' : 'zombie-cage',
+          puzzlePart: i === EXIT_CAGE ? 'cage' : 'hanging-cage',
         });
       }
-    }
+    });
   }
 
   /** Clients follow the host's layout seed (sent with every game-sync). */
@@ -931,7 +932,7 @@ export class GameEngine implements IGameEngine {
       boulder: this.boulder ? { ...this.boulder } : null,
       spring: this.spring ? { ...this.spring } : null,
       cages: this.cages
-        ? { exitCage: { ...this.cages.exitCage }, zombieCage: { ...this.cages.zombieCage } }
+        ? { cages: this.cages.cages.map((c: CageState): CageState => ({ ...c })) }
         : null,
       plate: this.plate ? { ...this.plate } : null,
       attacks,
@@ -1114,10 +1115,11 @@ export class GameEngine implements IGameEngine {
    */
   applyRemoteCages(state: CagePuzzleState | null): void {
     if (!this.isMultiplayerClient || !this.cagePuzzle || !this.cages || !state) return;
-    for (const id of CAGE_IDS) {
-      const remote: CageState | undefined = state[id];
-      if (!remote || !Number.isFinite(remote.cleatHits) || !Number.isFinite(remote.fallTicks)) continue;
-      const local: CageState = this.cages[id];
+    const remotes: unknown = state.cages;
+    if (!Array.isArray(remotes)) return;
+    this.cages.cages.forEach((local: CageState, i: number): void => {
+      const remote: CageState | undefined = remotes[i] as CageState | undefined;
+      if (!remote || !Number.isFinite(remote.cleatHits) || !Number.isFinite(remote.fallTicks)) return;
       const hits: number = Math.min(
         GAME_CONSTANTS.CAGE_CLEAT_HITS,
         Math.max(0, Math.round(remote.cleatHits)),
@@ -1127,10 +1129,10 @@ export class GameEngine implements IGameEngine {
       local.fallTicks = isCut(local) ? fall : 0;
       const landing: boolean = remote.landed === true && isCut(local) && !local.landed;
       if (landing) local.landed = true;
-      if (landing && id === 'exitCage' && this.player) {
+      if (landing && i === EXIT_CAGE && this.player) {
         liftOntoLandedCage(this.player, this.exitPlatform);
       }
-    }
+    });
     this.placeCages();
   }
 
@@ -1224,7 +1226,7 @@ export class GameEngine implements IGameEngine {
           this.vfxSystem.spawnCageLand(evt.x, evt.y);
           break;
         case VfxEventType.CageSmash:
-          this.vfxSystem.spawnCageSmash(evt.x, evt.y);
+          this.vfxSystem.spawnCageSmash(evt.x, evt.y, evt.value === 1);
           break;
         case VfxEventType.DoorOpen:
           this.vfxSystem.spawnDoorOpen(evt.x, evt.y);

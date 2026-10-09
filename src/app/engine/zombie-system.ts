@@ -15,7 +15,7 @@ import {
 } from '@shared/game-entities';
 import { BoulderPuzzleLayout, IGameEngine, Platform } from './engine-types';
 import { Box, keepOutOfWall, leavesThroughOpening } from './boulder-puzzle';
-import { exitCageGroundBox } from './cage-puzzle';
+import { EXIT_CAGE, exitCageGroundBox } from './cage-puzzle';
 import { isDoorOpen } from './plate-puzzle';
 import { PhysicsSystem } from './physics-system';
 import { CombatSystem } from './combat-system';
@@ -897,7 +897,7 @@ export class ZombieSystem {
     );
     // Nor inside the spring block at its screen edge, or the cage that landed under the exit (ground spawns).
     const spring: Platform | null = this.e.springPuzzle?.spring ?? null;
-    const cage: Box | null = this.e.cages?.exitCage.landed
+    const cage: Box | null = this.e.cages?.cages[EXIT_CAGE]?.landed
       ? exitCageGroundBox(this.e.exitPlatform)
       : null;
     return {
@@ -909,7 +909,7 @@ export class ZombieSystem {
     };
   }
 
-  /** Floor-4 zombie cage: a zombie climbs out of the wreck, centered on x, standing on `groundY`. */
+  /** Floor-4 cage: a zombie climbs out of it, centered on x, standing on `groundY`. */
   spawnZombieAt(x: number, groundY: number): void {
     this.spawnZombie({ x, groundY });
   }

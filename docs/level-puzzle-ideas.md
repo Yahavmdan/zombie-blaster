@@ -22,11 +22,13 @@ ships, tick its box here and rewrite its line to match what was built.
       goes). Hit the raised button: a 3-2-1 gives everyone time to hop on, then the spring launches
       them straight up onto the exit; corpses lying on the spring scatter. The scale stays loaded,
       so it can launch again.
-- [x] **Hanging cage** (floor 4): an empty cage hangs under the exit, a cage full of zombies
-      mid-screen. Their chains run from two cleats on a high ledge up to the ceiling and over to
-      the cages (random order, sometimes crossing): follow them. Three hits on a cleat snap its
-      chain. The empty cage lands under the exit as a solid step (the pile there rides up onto
-      it), so far fewer corpses are needed; the zombie cage smashes and lets 6 zombies loose.
+- [x] **Hanging cages** (floor 4): 4-5 tarp-covered cages hang on chains: one under the exit,
+      the rest mid-screen. Every chain runs from its own cleat on a ledge up into the ceiling,
+      where all the identical chains tangle, so nobody knows which cleat drops which cage, nor
+      what each one hides (2 zombie cages, 1 loot, the rest empty; the exit cage too). Three hits
+      on a cleat snap its chain. The exit cage lands under the exit as a solid step (the pile there
+      rides up onto it) and spills its content on top; any other cage falls onto what is under it
+      and smashes, letting 4 zombies loose, popping gold and potions, or nothing.
 - [ ] **Explosive barrels**: lure zombies next to a cracked wall, shoot the barrel, and the wall
       breaks.
 - [ ] **Push crates**: push crates into stairs. Zombies can knock them over.

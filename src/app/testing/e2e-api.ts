@@ -280,11 +280,17 @@ export interface E2eSpringView {
 
 /** One floor-4 cage. */
 export interface E2eCageView {
-  /** The cage as drawn now (hanging, falling, landed); null once the zombie cage smashed. */
+  /** The exit cage (hangs under the exit; landed, it is a step up to it). */
+  exit: boolean;
+  /** What it hides under its tarp (players can't see it; tests can). */
+  content: 'zombies' | 'loot' | 'empty';
+  /** The cage as drawn now (hanging, falling, landed); null once a mid-screen cage smashed. */
   box: { x: number; y: number; width: number; height: number } | null;
   /** Its collision (while it hangs, and the exit cage once it landed); null while falling. */
   solid: { x: number; y: number; width: number; height: number } | null;
-  /** The cleat on the safe spot tying its chain. */
+  /** Top of what it lands on (the ground, or a platform under a mid-screen cage). */
+  landY: number;
+  /** The cleat tying its chain (on a ledge, or the ground). */
   cleat: { x: number; y: number; width: number; height: number };
   cleatHits: number;
   /** Its chain snapped. */
@@ -295,12 +301,11 @@ export interface E2eCageView {
 
 /** Floor-4 hanging cages (null on other floors). */
 export interface E2eCagePuzzleView {
-  /** The empty cage under the exit: landed, it is a step up to the exit. */
-  exitCage: E2eCageView;
-  /** The cage full of zombies mid-screen: landed, it smashes and lets them loose. */
-  zombieCage: E2eCageView;
+  /** All cages: [0] is the exit cage, the rest hang mid-screen. */
+  cages: E2eCageView[];
   hitsNeeded: number;
-  zombiesReleased: number;
+  /** Zombies a zombie cage lets loose. */
+  zombiesPerCage: number;
 }
 
 /** Floor-5 pressure plate and the exit door it holds open (null on other floors). */

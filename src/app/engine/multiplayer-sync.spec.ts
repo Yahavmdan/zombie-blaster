@@ -8,10 +8,11 @@ import {
   VfxEvent,
   VfxEventType,
 } from '@shared/index';
-import { CagePuzzleState, PlateState, SpringState, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
+import { CagePuzzleState, CageState, DropType, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import {
   BoulderPuzzleLayout,
   CagePuzzleLayout,
+  HangingCage,
   DamageNumber,
   EntityInterpolation,
   IGameEngine,
@@ -24,7 +25,7 @@ import { BoulderPuzzleSystem } from './boulder-puzzle-system';
 import { SpringPuzzleSystem } from './spring-puzzle-system';
 import { CagePuzzleSystem } from './cage-puzzle-system';
 import { PlatePuzzleSystem } from './plate-puzzle-system';
-import { CageId, cleatBox, exitCageGroundBox, hangBox } from './cage-puzzle';
+import { EXIT_CAGE, cleatBox, exitCageGroundBox, hangBox, landTop } from './cage-puzzle';
 import { ZombieSystem } from './zombie-system';
 import { CarryPose } from './corpse-carry';
 import { CorpseDrape } from './corpse-drape';
@@ -975,16 +976,16 @@ describe('Cage puzzle (floor 4)', (): void => {
     const drops: DropSystem = new DropSystem(e, physics, vfx);
     const combat: CombatSystem = new CombatSystem(e, physics, vfx, drops);
     const projectiles: ProjectileSystem = new ProjectileSystem(e, physics, vfx);
-    return new CagePuzzleSystem(e, vfx, new ZombieSystem(e, physics, combat, projectiles, drops));
+    return new CagePuzzleSystem(e, vfx, new ZombieSystem(e, physics, combat, projectiles, drops), drops);
   }
 
-  /** A player up on the ledge left of a cage's cleat, facing it, attacking. */
-  function playerAtCleat(e: GameEngine, id: CageId, playerId: string = 'player-1'): CharacterState {
-    const cleat: Box = cleatBox(e.cagePuzzle!, id);
+  /** A player on the surface left of a cage's cleat, facing it, attacking. */
+  function playerAtCleat(e: GameEngine, i: number, playerId: string = 'player-1'): CharacterState {
+    const cleat: Box = cleatBox(e.cagePuzzle!, i);
     return makePlayer({
       id: playerId,
       x: cleat.x - GAME_CONSTANTS.PLAYER_WIDTH - 4,
-      y: e.cagePuzzle!.cleatY - GAME_CONSTANTS.PLAYER_HEIGHT,
+      y: e.cagePuzzle!.cages[i].cleatY - GAME_CONSTANTS.PLAYER_HEIGHT,
       facing: Direction.Right,
       isAttacking: true,
       isGrounded: true,
@@ -997,8 +998,20 @@ describe('Cage puzzle (floor 4)', (): void => {
     for (let t: number = 0; t < swing * (GAME_CONSTANTS.CAGE_CLEAT_HITS - 1) + 1; t++) sys.update();
   }
 
-  function cagePlatforms(e: GameEngine, part: 'cage' | 'zombie-cage'): Platform[] {
+  /** Snaps cage i's chain and lets it land. */
+  function drop(sys: CagePuzzleSystem, i: number): void {
+    engine.player = playerAtCleat(engine, i);
+    snap(sys);
+    engine.player = makePlayer({ x: 1240 });
+    for (let t: number = 0; t < 100 && !engine.cages!.cages[i].landed; t++) sys.update();
+  }
+
+  function cagePlatforms(e: GameEngine, part: 'cage' | 'hanging-cage'): Platform[] {
     return e.platforms.filter((p: Platform): boolean => p.puzzlePart === part);
+  }
+
+  function smashEvent(e: GameEngine): VfxEvent | undefined {
+    return e.pendingVfxEvents.find((evt: VfxEvent): boolean => evt.type === VfxEventType.CageSmash);
   }
 
   function hasEvent(e: GameEngine, type: VfxEventType): boolean {
@@ -1027,25 +1040,31 @@ describe('Cage puzzle (floor 4)', (): void => {
     };
   }
 
+  function fresh(): CageState {
+    return { cleatHits: 0, fallTicks: 0, landed: false };
+  }
+
   beforeEach((): void => {
     engine = new GameEngine(createMockCanvas());
     engine.player = makePlayer();
     engine.setFloor(GAME_CONSTANTS.PUZZLE_CAGE_FLOOR);
   });
 
-  it('floor 4: both cages hang solid; the exit cage hangs under the exit and moves with it', (): void => {
+  it('floor 4: 4-5 cages hang solid; the exit cage hangs under the exit and moves with it', (): void => {
     const puzzle: CagePuzzleLayout = engine.cagePuzzle!;
-    expect(engine.cages).toEqual({
-      exitCage: { cleatHits: 0, fallTicks: 0, landed: false },
-      zombieCage: { cleatHits: 0, fallTicks: 0, landed: false },
-    });
+    const count: number = puzzle.cages.length;
+    expect(count).toBeGreaterThanOrEqual(GAME_CONSTANTS.CAGE_COUNT_MIN);
+    expect(count).toBeLessThanOrEqual(GAME_CONSTANTS.CAGE_COUNT_MAX);
+    expect(engine.cages).toEqual({ cages: puzzle.cages.map(fresh) });
     expect(engine.exitPlatform.y).toBe(exitPlatformY(GAME_CONSTANTS.PUZZLE_CAGE_FLOOR, 0));
     expect(cagePlatforms(engine, 'cage')).toEqual([
-      { ...hangBox(puzzle, 'exitCage', engine.exitPlatform), solid: true, puzzlePart: 'cage' },
+      { ...hangBox(puzzle, EXIT_CAGE, engine.exitPlatform), solid: true, puzzlePart: 'cage' },
     ]);
-    expect(cagePlatforms(engine, 'zombie-cage')).toEqual([
-      { ...puzzle.zombieCage, solid: true, puzzlePart: 'zombie-cage' },
-    ]);
+    expect(cagePlatforms(engine, 'hanging-cage')).toEqual(
+      puzzle.cages
+        .slice(1)
+        .map((c: HangingCage): Platform => ({ ...c.hang!, solid: true, puzzlePart: 'hanging-cage' })),
+    );
     engine.remotePlayers = [makePlayer({ id: 'guest' })];
     engine.repositionExitPlatform();
     expect(cagePlatforms(engine, 'cage')[0].y).toBe(
@@ -1053,7 +1072,8 @@ describe('Cage puzzle (floor 4)', (): void => {
     );
   });
 
-  it('three hits on the exit cleat drop the exit cage under the exit: the pile and the player ride up onto it', (): void => {
+  it('three hits on the exit cage cleat drop it under the exit: the pile and the player ride up onto it', (): void => {
+    engine.cagePuzzle!.cages[EXIT_CAGE].content = 'empty';
     const sys: CagePuzzleSystem = systemFor(engine);
     const exit: Platform = engine.exitPlatform;
     const ground: Box = exitCageGroundBox(exit);
@@ -1063,10 +1083,11 @@ describe('Cage puzzle (floor 4)', (): void => {
       corpseAt('stacked', cx, GAME_CONSTANTS.GROUND_Y - 5),
       corpseAt('beside', ground.x + ground.width + 60, GAME_CONSTANTS.GROUND_Y),
     ];
-    engine.player = playerAtCleat(engine, 'exitCage');
+    engine.player = playerAtCleat(engine, EXIT_CAGE);
     snap(sys);
-    expect(engine.cages!.exitCage.cleatHits).toBe(GAME_CONSTANTS.CAGE_CLEAT_HITS);
-    expect(engine.cages!.exitCage.landed).toBe(false);
+    const cage: CageState = engine.cages!.cages[EXIT_CAGE];
+    expect(cage.cleatHits).toBe(GAME_CONSTANTS.CAGE_CLEAT_HITS);
+    expect(cage.landed).toBe(false);
     expect(hasEvent(engine, VfxEventType.HitParticles)).toBe(true);
     expect(cagePlatforms(engine, 'cage'), 'no collision while it falls').toEqual([]);
     // A player waiting under the exit when it comes down.
@@ -1076,47 +1097,79 @@ describe('Cage puzzle (floor 4)', (): void => {
       isGrounded: true,
     });
     engine.player = waiting;
-    for (let t: number = 0; t < 100 && !engine.cages!.exitCage.landed; t++) sys.update();
-    expect(engine.cages!.exitCage.landed).toBe(true);
+    for (let t: number = 0; t < 100 && !cage.landed; t++) sys.update();
+    expect(cage.landed).toBe(true);
     expect(hasEvent(engine, VfxEventType.CageLand)).toBe(true);
     expect(cagePlatforms(engine, 'cage')).toEqual([{ ...ground, solid: true, puzzlePart: 'cage' }]);
-    expect(cagePlatforms(engine, 'zombie-cage'), 'the other cage still hangs').toHaveLength(1);
+    expect(cagePlatforms(engine, 'hanging-cage'), 'the others still hang').toHaveLength(
+      engine.cagePuzzle!.cages.length - 1,
+    );
     const byId: (id: string) => ZombieCorpse = (id: string): ZombieCorpse =>
       engine.zombieCorpses.find((c: ZombieCorpse): boolean => c.id === id)!;
     expect(byId('under').y + byId('under').height).toBe(ground.y);
     expect(byId('stacked').y + byId('stacked').height).toBe(ground.y - 5);
     expect(byId('beside').y + byId('beside').height).toBe(GAME_CONSTANTS.GROUND_Y);
     expect(waiting.y + GAME_CONSTANTS.PLAYER_HEIGHT).toBe(ground.y);
-    expect(engine.zombies.length, 'no zombies let loose').toBe(0);
+    expect(engine.zombies.length, 'it was empty').toBe(0);
+    expect(engine.worldDrops.length).toBe(0);
   });
 
-  it('cutting the zombie cage smashes it on the ground and lets its zombies loose', (): void => {
-    const sys: CagePuzzleSystem = systemFor(engine);
-    const puzzle: CagePuzzleLayout = engine.cagePuzzle!;
-    engine.player = playerAtCleat(engine, 'zombieCage');
-    snap(sys);
-    expect(cagePlatforms(engine, 'zombie-cage')).toEqual([]);
-    for (let t: number = 0; t < 100 && !engine.cages!.zombieCage.landed; t++) sys.update();
-    expect(engine.cages!.zombieCage.landed).toBe(true);
-    expect(hasEvent(engine, VfxEventType.CageSmash)).toBe(true);
+  it('an exit cage hiding zombies still stands as a step; they climb out on top of it', (): void => {
+    engine.cagePuzzle!.cages[EXIT_CAGE].content = 'zombies';
+    drop(systemFor(engine), EXIT_CAGE);
+    const ground: Box = exitCageGroundBox(engine.exitPlatform);
+    expect(cagePlatforms(engine, 'cage')).toEqual([{ ...ground, solid: true, puzzlePart: 'cage' }]);
     expect(engine.zombies.length).toBe(GAME_CONSTANTS.CAGE_ZOMBIES);
-    const cageCx: number = puzzle.zombieCage.x + puzzle.zombieCage.width / 2;
+    for (const z of engine.zombies) expect(z.y + z.instanceHeight).toBe(ground.y);
+  });
+
+  it('a mid cage hiding zombies smashes where it lands and lets them loose there (once)', (): void => {
+    const puzzle: CagePuzzleLayout = engine.cagePuzzle!;
+    puzzle.cages[1].content = 'zombies';
+    const sys: CagePuzzleSystem = systemFor(engine);
+    drop(sys, 1);
+    expect(engine.cages!.cages[1].landed).toBe(true);
+    expect(cagePlatforms(engine, 'hanging-cage')).toHaveLength(puzzle.cages.length - 2);
+    expect(smashEvent(engine)?.value, 'with gore').toBe(1);
+    expect(engine.zombies.length).toBe(GAME_CONSTANTS.CAGE_ZOMBIES);
+    const hang: Platform = puzzle.cages[1].hang!;
     for (const z of engine.zombies) {
-      expect(z.y + z.instanceHeight).toBe(GAME_CONSTANTS.GROUND_Y);
-      expect(Math.abs(z.x + z.instanceWidth / 2 - cageCx)).toBeLessThan(100);
+      expect(z.y + z.instanceHeight).toBe(puzzle.cages[1].landY);
+      expect(Math.abs(z.x + z.instanceWidth / 2 - (hang.x + hang.width / 2))).toBeLessThan(hang.width);
       expect([ZombieType.Boss, ZombieType.DragonBoss]).not.toContain(z.type);
     }
-    expect(engine.cages!.exitCage.cleatHits, 'the exit cage still hangs').toBe(0);
+    expect(engine.cages!.cages[EXIT_CAGE].cleatHits, 'the exit cage still hangs').toBe(0);
     for (let t: number = 0; t < 100; t++) sys.update();
     expect(engine.zombies.length, 'released once').toBe(GAME_CONSTANTS.CAGE_ZOMBIES);
+  });
+
+  it('a loot cage pops gold and potions; an empty one only smashes', (): void => {
+    const puzzle: CagePuzzleLayout = engine.cagePuzzle!;
+    puzzle.cages[1].content = 'loot';
+    puzzle.cages[2].content = 'empty';
+    const sys: CagePuzzleSystem = systemFor(engine);
+    drop(sys, 1);
+    expect(engine.worldDrops.map((d: WorldDrop): DropType => d.type).sort()).toEqual(
+      [DropType.Gold, DropType.HpPotion, DropType.MpPotion].sort(),
+    );
+    const top: number = landTop(puzzle, 1, engine.exitPlatform);
+    for (const d of engine.worldDrops) expect(d.y).toBeGreaterThan(top);
+    expect(engine.zombies.length).toBe(0);
+    engine.pendingVfxEvents.length = 0;
+    engine.worldDrops = [];
+    drop(sys, 2);
+    expect(smashEvent(engine)?.value, 'no gore').toBe(0);
+    expect(engine.worldDrops.length).toBe(0);
+    expect(engine.zombies.length).toBe(0);
   });
 
   it("the host counts a guest's swings at a cleat", (): void => {
     engine.isMultiplayerHost = true;
     const sys: CagePuzzleSystem = systemFor(engine);
-    engine.remotePlayers = [playerAtCleat(engine, 'exitCage', 'guest')];
+    engine.remotePlayers = [playerAtCleat(engine, 2, 'guest')];
     snap(sys);
-    expect(engine.cages!.exitCage.cleatHits).toBe(GAME_CONSTANTS.CAGE_CLEAT_HITS);
+    expect(engine.cages!.cages[2].cleatHits).toBe(GAME_CONSTANTS.CAGE_CLEAT_HITS);
+    expect(engine.cages!.cages[1].cleatHits, 'only that cleat').toBe(0);
   });
 
   it('a client follows the synced cages: NaN ignored, clamped, snaps and landings one-way, and lifts its own player', (): void => {
@@ -1127,51 +1180,55 @@ describe('Cage puzzle (floor 4)', (): void => {
       y: GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT,
       isGrounded: true,
     });
-    const hanging: CagePuzzleState = {
-      exitCage: { cleatHits: 1, fallTicks: 0, landed: false },
-      zombieCage: { cleatHits: 0, fallTicks: 0, landed: false },
-    };
-    engine.applyRemoteCages({ ...hanging, exitCage: { cleatHits: Number.NaN, fallTicks: 0, landed: false } });
-    expect(engine.cages!.exitCage.cleatHits).toBe(0);
-    engine.applyRemoteCages(hanging);
-    expect(engine.cages!.exitCage.cleatHits).toBe(1);
-    engine.applyRemoteCages({ ...hanging, exitCage: { cleatHits: 99, fallTicks: 9_999, landed: false } });
-    expect(engine.cages!.exitCage.cleatHits).toBe(GAME_CONSTANTS.CAGE_CLEAT_HITS);
-    expect(engine.cages!.exitCage.fallTicks).toBeLessThan(100);
+    const n: number = engine.cagePuzzle!.cages.length;
+    const withExit: (exit: CageState) => CagePuzzleState = (exit: CageState): CagePuzzleState => ({
+      cages: [exit, ...Array.from({ length: n - 1 }, fresh)],
+    });
+    const exitCage: () => CageState = (): CageState => engine.cages!.cages[EXIT_CAGE];
+    engine.applyRemoteCages(withExit({ cleatHits: Number.NaN, fallTicks: 0, landed: false }));
+    expect(exitCage().cleatHits).toBe(0);
+    engine.applyRemoteCages(withExit({ cleatHits: 1, fallTicks: 0, landed: false }));
+    expect(exitCage().cleatHits).toBe(1);
+    engine.applyRemoteCages(withExit({ cleatHits: 99, fallTicks: 9_999, landed: false }));
+    expect(exitCage().cleatHits).toBe(GAME_CONSTANTS.CAGE_CLEAT_HITS);
+    expect(exitCage().fallTicks).toBeLessThan(100);
     expect(cagePlatforms(engine, 'cage'), 'falling: no collision').toEqual([]);
-    engine.applyRemoteCages(hanging);
-    expect(engine.cages!.exitCage.cleatHits, 'a snapped chain stays snapped').toBe(
-      GAME_CONSTANTS.CAGE_CLEAT_HITS,
-    );
-    const landed: CagePuzzleState = {
-      ...hanging,
-      exitCage: { cleatHits: GAME_CONSTANTS.CAGE_CLEAT_HITS, fallTicks: 20, landed: true },
-    };
+    engine.applyRemoteCages(withExit({ cleatHits: 1, fallTicks: 0, landed: false }));
+    expect(exitCage().cleatHits, 'a snapped chain stays snapped').toBe(GAME_CONSTANTS.CAGE_CLEAT_HITS);
+    const landed: CagePuzzleState = withExit({
+      cleatHits: GAME_CONSTANTS.CAGE_CLEAT_HITS,
+      fallTicks: 20,
+      landed: true,
+    });
     engine.applyRemoteCages(landed);
-    expect(engine.cages!.exitCage.landed).toBe(true);
+    expect(exitCage().landed).toBe(true);
     expect(cagePlatforms(engine, 'cage')).toEqual([{ ...ground, solid: true, puzzlePart: 'cage' }]);
     expect(engine.player.y + GAME_CONSTANTS.PLAYER_HEIGHT, 'its own player rode up').toBe(ground.y);
     engine.applyRemoteCages(landed);
     expect(engine.player.y + GAME_CONSTANTS.PLAYER_HEIGHT, 'lifted once').toBe(ground.y);
-    engine.applyRemoteCages({
-      ...hanging,
-      exitCage: { cleatHits: GAME_CONSTANTS.CAGE_CLEAT_HITS, fallTicks: 20, landed: false },
-    });
-    expect(engine.cages!.exitCage.landed, 'landing is one-way').toBe(true);
-    engine.applyRemoteCages({ exitCage: null, zombieCage: 7 } as unknown as CagePuzzleState);
-    expect(engine.cages!.zombieCage.cleatHits).toBe(0);
+    engine.applyRemoteCages(
+      withExit({ cleatHits: GAME_CONSTANTS.CAGE_CLEAT_HITS, fallTicks: 20, landed: false }),
+    );
+    expect(exitCage().landed, 'landing is one-way').toBe(true);
+    engine.applyRemoteCages({ cages: [null, 7] } as unknown as CagePuzzleState);
+    engine.applyRemoteCages({ cages: 'x' } as unknown as CagePuzzleState);
+    expect(engine.cages!.cages[1]).toEqual(fresh());
   });
 
   it('a client lets a snapped cage fall between snapshots but never lands it', (): void => {
     engine.isMultiplayerClient = true;
     const sys: CagePuzzleSystem = systemFor(engine);
+    const n: number = engine.cagePuzzle!.cages.length;
     engine.applyRemoteCages({
-      exitCage: { cleatHits: 0, fallTicks: 0, landed: false },
-      zombieCage: { cleatHits: GAME_CONSTANTS.CAGE_CLEAT_HITS, fallTicks: 0, landed: false },
+      cages: [
+        fresh(),
+        { cleatHits: GAME_CONSTANTS.CAGE_CLEAT_HITS, fallTicks: 0, landed: false },
+        ...Array.from({ length: n - 2 }, fresh),
+      ],
     });
     for (let t: number = 0; t < 200; t++) sys.tickClient();
-    expect(engine.cages!.zombieCage.fallTicks).toBeGreaterThan(0);
-    expect(engine.cages!.zombieCage.landed).toBe(false);
+    expect(engine.cages!.cages[1].fallTicks).toBeGreaterThan(0);
+    expect(engine.cages!.cages[1].landed).toBe(false);
     expect(engine.zombies.length).toBe(0);
   });
 
@@ -1182,12 +1239,14 @@ describe('Cage puzzle (floor 4)', (): void => {
     expect(engine.particles.length).toBeGreaterThan(0);
     expect(engine.screenShakeFrames).toBeGreaterThan(0);
     const before: number = engine.particles.length;
-    engine.replayRemoteVfxEvents([{ type: VfxEventType.CageSmash, playerId: 'host', x: 600, y: 572 }]);
+    engine.replayRemoteVfxEvents([
+      { type: VfxEventType.CageSmash, playerId: 'host', x: 600, y: 572, value: 1 },
+    ]);
     expect(engine.particles.length).toBeGreaterThan(before);
   });
 
   it('the snapshot carries the cages', (): void => {
-    engine.cages!.exitCage.cleatHits = 2;
+    engine.cages!.cages[1].cleatHits = 2;
     expect(engine.getStateSnapshot()!.cages).toEqual(engine.cages);
   });
 
@@ -1197,7 +1256,7 @@ describe('Cage puzzle (floor 4)', (): void => {
     expect(engine.cages).toBeNull();
     expect(
       engine.platforms.some(
-        (p: Platform): boolean => p.puzzlePart === 'cage' || p.puzzlePart === 'zombie-cage',
+        (p: Platform): boolean => p.puzzlePart === 'cage' || p.puzzlePart === 'hanging-cage',
       ),
     ).toBe(false);
   });

@@ -73,7 +73,6 @@ import {
 } from './spring-puzzle';
 import {
   CAGE_FLOOR_HINT,
-  CAGE_IDS,
   cageBox,
   chainPath,
   cleatBox,
@@ -2233,9 +2232,9 @@ export class RenderSystem {
    * Drawn from the layout every frame (not part of the geometry layer: nothing here is walkable).
    */
   /**
-   * The floor-4 chains (not walkable): each runs from its cleat on a ledge straight up to a
-   * pulley on the ceiling, along it, and down to its cage. A snapped chain is gone, leaving a torn
-   * end on its cleat.
+   * The floor-4 chains (not walkable): each runs from its cleat straight up into the ceiling band,
+   * winds through its kinks, tangled with the others, and comes down to its cage. All alike, so
+   * nobody can follow one. A snapped chain is gone, leaving a torn end on its cleat.
    */
   private renderCageChains(ctx: CanvasRenderingContext2D): void {
     const puzzle: CagePuzzleLayout | null = this.e.cagePuzzle;
@@ -2244,31 +2243,27 @@ export class RenderSystem {
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    for (const id of CAGE_IDS) {
-      const path: Point[] = chainPath(puzzle, id, this.e.exitPlatform);
-      if (isCut(cages[id])) {
+    cages.cages.forEach((cage: CageState, i: number): void => {
+      const path: Point[] = chainPath(puzzle, i, this.e.exitPlatform);
+      if (isCut(cage)) {
         this.strokeChain(ctx, [path[0], { x: path[0].x + 4, y: path[0].y - 12 }]);
-        continue;
+        return;
       }
       this.strokeChain(ctx, path);
-      const pulleys: Point[] = [path[1], path[2]];
-      for (const pulley of pulleys) {
-        ctx.fillStyle = '#3a3f48';
-        ctx.strokeStyle = '#9aa3ad';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(pulley.x, pulley.y, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      }
-    }
+    });
     ctx.restore();
   }
 
+  /** A chain along `path`, its corners rounded off (it sags through its kinks). */
   private strokeChain(ctx: CanvasRenderingContext2D, path: Point[]): void {
     ctx.beginPath();
     ctx.moveTo(path[0].x, path[0].y);
-    for (const p of path.slice(1)) ctx.lineTo(p.x, p.y);
+    for (let i: number = 1; i < path.length - 1; i++) {
+      const mid: Point = { x: (path[i].x + path[i + 1].x) / 2, y: (path[i].y + path[i + 1].y) / 2 };
+      ctx.quadraticCurveTo(path[i].x, path[i].y, mid.x, mid.y);
+    }
+    const last: Point = path[path.length - 1];
+    ctx.lineTo(last.x, last.y);
     ctx.setLineDash([]);
     ctx.strokeStyle = '#1e2026';
     ctx.lineWidth = 5;
@@ -2281,21 +2276,19 @@ export class RenderSystem {
   }
 
   /**
-   * The floor-4 cages where their state puts them (hanging, falling, the exit cage on the ground;
-   * the zombie cage is gone once it smashed), and the cleats on their ledge cracking per hit.
+   * The floor-4 cages where their state puts them (hanging and falling under their tarps, the
+   * exit cage standing bare on the ground; any other is gone once it smashed), and the cleats
+   * cracking per hit.
    */
   private renderCages(ctx: CanvasRenderingContext2D): void {
     const puzzle: CagePuzzleLayout | null = this.e.cagePuzzle;
     const cages: CagePuzzleState | null = this.e.cages;
     if (!puzzle || !cages) return;
-    const t: number = performance.now() / 1000;
     ctx.save();
-    for (const id of CAGE_IDS) {
-      const cage: CageState = cages[id];
-      const box: Box | null = cageBox(puzzle, id, cage, this.e.exitPlatform);
+    cages.cages.forEach((cage: CageState, i: number): void => {
+      const box: Box | null = cageBox(puzzle, i, cage, this.e.exitPlatform);
       if (box) {
-        this.e.mapRenderer.drawCage(ctx, box, id === 'zombieCage');
-        if (id === 'zombieCage') this.renderCagedHands(ctx, box, t);
+        this.e.mapRenderer.drawCage(ctx, box, !cage.landed);
         if (!isCut(cage)) {
           ctx.strokeStyle = '#9aa3ad';
           ctx.lineWidth = 2;
@@ -2304,8 +2297,8 @@ export class RenderSystem {
           ctx.stroke();
         }
       }
-      this.renderCleat(ctx, cleatBox(puzzle, id), cage);
-    }
+      this.renderCleat(ctx, cleatBox(puzzle, i), cage);
+    });
     ctx.restore();
   }
 
@@ -2377,23 +2370,6 @@ export class RenderSystem {
       ctx.stroke();
     }
     ctx.restore();
-  }
-
-  /** Green arms reaching out between the zombie cage's side bars. */
-  private renderCagedHands(ctx: CanvasRenderingContext2D, box: Box, t: number): void {
-    ctx.strokeStyle = '#6abf4b';
-    ctx.lineWidth = 4;
-    ctx.lineCap = 'round';
-    for (let i: number = 0; i < 2; i++) {
-      const reach: number = 8 + Math.sin(t * 5 + i * 2) * 5;
-      const y: number = box.y + 40 + i * 22;
-      ctx.beginPath();
-      ctx.moveTo(box.x + 4, y);
-      ctx.lineTo(box.x - reach, y - 4);
-      ctx.moveTo(box.x + box.width - 4, y + 10);
-      ctx.lineTo(box.x + box.width + reach, y + 6);
-      ctx.stroke();
-    }
   }
 
   /** An iron cleat; cracks show the hits it took, a snapped one is broken off at the top. */

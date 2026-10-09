@@ -328,16 +328,14 @@ export interface CageState {
   cleatHits: number;
   /** Ticks it has been falling since the chain snapped (0 while it hangs). */
   fallTicks: number;
-  /** True once it hit the ground: the exit cage stands there, the zombie cage smashed open. */
+  /** True once it landed: the exit cage stands there, any other cage smashed open. */
   landed: boolean;
 }
 
 /** Floor-4 cage puzzle: the host simulates it and sends it with every game-sync. */
 export interface CagePuzzleState {
-  /** The empty cage under the exit: landed, it is a step up to the exit. */
-  exitCage: CageState;
-  /** The cage full of zombies mid-screen: landed, it smashes and lets them loose. */
-  zombieCage: CageState;
+  /** One per cage, in layout order: [0] the exit cage, then the cages hanging mid-screen. */
+  cages: CageState[];
 }
 
 /** Floor-5 pressure plate: the host weighs it and sends it with every game-sync. */
