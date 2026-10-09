@@ -1,19 +1,21 @@
 <div class="select-backdrop">
   <div class="select-container">
-    <h1 class="select-title">CHOOSE YOUR CLASS</h1>
-    @if (isMultiplayer()) {
-      <div class="mode-badge mode-badge--multi">MULTIPLAYER</div>
-    } @else {
-      <div class="mode-badge mode-badge--single">SINGLE PLAYER</div>
-    }
+    <div class="title-row">
+      <h1 class="select-title px-title">Choose your class</h1>
+      @if (isMultiplayer()) {
+        <div class="mode-badge mode-badge--multi px-chip">Multiplayer</div>
+      } @else {
+        <div class="mode-badge mode-badge--single px-chip">Single player</div>
+      }
+    </div>
 
     <div class="name-input-row">
-      <label for="player-name" class="name-label">Character Name</label>
+      <label for="player-name" class="name-label">Character name</label>
       <input
         id="player-name"
         [formControl]="nameControl"
-        class="name-input"
-        placeholder="Enter name..."
+        class="name-input px-input"
+        placeholder="Enter a name"
         maxlength="16"
         data-testid="charselect-name-input-name"
       />
@@ -22,20 +24,23 @@
     <div class="class-grid">
       @for (cls of classList; track cls.id) {
         <button
-          class="class-card"
+          class="class-card px-panel"
           [class.class-card--selected]="selectedClass() === cls.id"
-          [style.--class-color]="cls.color"
+          [style.--class-color]="'var(--class-' + cls.id + ')'"
           (click)="selectClass(cls.id)"
           [attr.data-testid]="'charselect-class-button-' + cls.id"
         >
-          <div class="class-icon">{{ cls.icon }}</div>
+          <div class="class-portrait px-panel--inset">
+            <div class="class-sprite" [style.background-image]="idleSprite(cls.id)"></div>
+            <app-pixel-icon class="class-icon" [icon]="cls.icon" [size]="24" />
+          </div>
           <div class="class-name">{{ cls.name }}</div>
           <div class="class-desc">{{ cls.description }}</div>
           <div class="class-stats">
-            <span class="stat">STR {{ cls.baseStats.str }}</span>
-            <span class="stat">DEX {{ cls.baseStats.dex }}</span>
-            <span class="stat">INT {{ cls.baseStats.int }}</span>
-            <span class="stat">LUK {{ cls.baseStats.luk }}</span>
+            <span class="stat px-chip">STR {{ cls.baseStats.str }}</span>
+            <span class="stat px-chip">DEX {{ cls.baseStats.dex }}</span>
+            <span class="stat px-chip">INT {{ cls.baseStats.int }}</span>
+            <span class="stat px-chip">LUK {{ cls.baseStats.luk }}</span>
           </div>
         </button>
       }
@@ -43,19 +48,18 @@
 
     @if (selectedClassDef()) {
       @if (statFocus(); as focus) {
-        <div class="stat-focus-banner">
-          <span class="stat-focus-label">Primary: <strong>{{ focus.primary }}</strong></span>
-          <span class="stat-focus-divider">|</span>
-          <span class="stat-focus-label">Secondary: <strong>{{ focus.secondary }}</strong></span>
+        <div class="stat-focus-banner px-panel--inset">
+          <span class="stat-focus-label">Primary <strong>{{ focus.primary }}</strong></span>
+          <span class="stat-focus-label">Secondary <strong>{{ focus.secondary }}</strong></span>
+          <span class="stat-focus-tip">{{ focus.tip }}</span>
         </div>
-        <p class="stat-focus-tip">{{ focus.tip }}</p>
       }
-      <div class="skill-preview">
-        <h3 class="skill-title">Starting Skills</h3>
+      <div class="skill-preview px-panel">
+        <h3 class="skill-title px-header">Starting skills</h3>
         <div class="skill-list">
           @for (skill of classSkills(); track skill.id) {
-            <div class="skill-card">
-              <span class="skill-icon">{{ skill.icon }}</span>
+            <div class="skill-card px-panel--inset">
+              <app-pixel-icon class="skill-icon" [icon]="skill.icon" [size]="24" />
               <div>
                 <div class="skill-name">{{ skill.name }}</div>
                 <div class="skill-desc">{{ skill.description }}</div>
@@ -68,16 +72,14 @@
 
     <div class="action-row">
       <button
-        class="back-btn"
+        class="back-btn px-btn px-btn--lg px-btn--ghost"
         data-testid="charselect-nav-button-back"
         (click)="goBack()"
       >
-        BACK
+        Back
       </button>
       <button
-        class="start-btn"
-        [class.start-btn--disabled]="!canStart()"
-        [class.start-btn--multi]="isMultiplayer()"
+        class="start-btn px-btn px-btn--lg px-btn--primary"
         [disabled]="!canStart()"
         data-testid="charselect-nav-button-start"
         (click)="startGame()"
