@@ -18,6 +18,7 @@ export type {
   E2eGeometryCheck,
   E2eGeometryReport,
   E2eLevelView,
+  E2eLightningView,
   E2ePlayerView,
   E2eRemotePlayerView,
   E2eSpringView,
@@ -117,6 +118,11 @@ export class GameProbe {
           strayExample: null,
         },
     );
+  }
+
+  /** Solo/host only: the sky strikes on the next tick, through the normal scheduler. */
+  async strikeLightningNow(): Promise<void> {
+    await this.page.evaluate((): void => window.__zbE2e?.engine?.strikeLightningNow());
   }
 
   /** Setup only (solo/host): drops N corpses from above x; they pile up by the normal corpse physics. */

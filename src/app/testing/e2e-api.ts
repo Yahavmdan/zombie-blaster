@@ -74,6 +74,10 @@ export interface E2eZombieView {
   magnetPull: number | null;
   /** Ticks until this zombie can start its next attack. */
   attackCooldown: number;
+  /** Eater: true while it eats a corpse (host-simulated, synced). */
+  eating: boolean;
+  /** Sprite animation this client renders for the zombie (`walk`, `eating`, ...). */
+  animState: string | null;
 }
 
 export interface E2eCorpseView {
@@ -145,6 +149,14 @@ export interface E2eVfxCounts {
   spriteEffects: string[];
   screenShakeFrames: number;
   screenFlashFrames: number;
+  /** The lightning strike lighting the sky (null between strikes). */
+  lightning: E2eLightningView | null;
+}
+
+export interface E2eLightningView {
+  x: number;
+  seed: number;
+  ageMs: number;
 }
 
 export interface E2ePendingQueues {
@@ -174,6 +186,8 @@ export interface E2eVfxLogEntry {
   type: string;
   playerId: string;
   animationKey?: string;
+  /** Color the effect is drawn in (hit particles, damage numbers), when it has one. */
+  color?: string;
   /** Replay only: true when the event came from this client and was skipped. */
   skippedOwn?: boolean;
   particlesAdded?: number;
@@ -397,6 +411,8 @@ export interface E2eEngineControls {
    * height, off the floor for good (synced to guests), so carrying there finds only corpses.
    */
   clearPickables(from: number, to: number): void;
+  /** Solo/host only: the sky strikes on the next tick (the normal scheduler path, event included). */
+  strikeLightningNow(): void;
 }
 
 export interface ZbE2eApi {

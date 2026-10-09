@@ -57,10 +57,10 @@ export function exitPlatformY(floor: number, extraPlayers: number): number {
   );
 }
 
-type Random = () => number;
+export type Random = () => number;
 
 /** Small, fast, deterministic PRNG (mulberry32). */
-function seededRandom(seed: number): Random {
+export function seededRandom(seed: number): Random {
   let a: number = seed >>> 0;
   return (): number => {
     a = (a + 0x6d2b79f5) >>> 0;

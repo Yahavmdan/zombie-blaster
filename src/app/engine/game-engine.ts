@@ -8,7 +8,6 @@ import {
   SkillType,
   VfxEvent,
   VfxEventType,
-  isZombieWindingUp,
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
@@ -29,9 +28,10 @@ import {
 import { InputKeys } from '@shared/messages';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { SpriteAnimator, PlayerAnimState, classToSpriteSet } from './sprite-animator';
-import { ZombieSpriteAnimator, ZombieAnimState } from './zombie-sprite-animator';
+import { ZombieSpriteAnimator, ZombieAnimState, zombieAnimState } from './zombie-sprite-animator';
 import { MapRenderer } from './map-renderer';
 import { SpriteEffectSystem } from './sprite-effect-system';
+import { LightningStrike, nextLightningDelayMs } from './storm';
 import {
   BackgroundStar,
   BoulderPuzzleLayout,
@@ -156,6 +156,7 @@ export class GameEngine implements IGameEngine {
 
   floor: number = 1;
   spawnTimer: number = 0;
+  eaterSpawnTimer: number = 0;
   floorTransitionTimer: number = 0;
   exitPlatform: Platform = { x: 0, y: 0, width: 0, height: 0 };
   boulderPuzzle: BoulderPuzzleLayout | null = null;
@@ -173,6 +174,8 @@ export class GameEngine implements IGameEngine {
   screenShakeIntensity: number = 0;
   screenFlashColor: string | null = null;
   screenFlashFrames: number = 0;
+  lightning: LightningStrike | null = null;
+  lightningTimerMs: number = nextLightningDelayMs(Math.random);
 
   readonly spriteAnimator: SpriteAnimator = new SpriteAnimator();
   readonly zombieSpriteAnimator: ZombieSpriteAnimator = new ZombieSpriteAnimator();
@@ -661,6 +664,8 @@ export class GameEngine implements IGameEngine {
     this.vfxSystem.updateBarrelBlasts();
     this.vfxSystem.updateHitMarks();
     this.vfxSystem.updatePlayerTints();
+    // The host's sky decides when lightning strikes; guests see it through the Lightning event.
+    this.vfxSystem.updateLightning(!this.isMultiplayerClient);
     this.corpseCarrySystem.update();
     this.loosePropSystem.update();
     this.zombieSystem.updateZombieCorpses();
@@ -994,10 +999,10 @@ export class GameEngine implements IGameEngine {
             z.id, ZombieAnimState.Dead, spriteKey, z.spawnTimer,
           );
         } else {
-          this.zombieSpriteAnimator.setState(z.id, this.deriveZombieAnimState(z));
+          this.zombieSpriteAnimator.setState(z.id, zombieAnimState(z));
         }
       } else if (!z.isDead && z.spawnTimer <= 0) {
-        this.zombieSpriteAnimator.setState(z.id, this.deriveZombieAnimState(z));
+        this.zombieSpriteAnimator.setState(z.id, zombieAnimState(z));
       }
 
       if (!z.isDead) {
@@ -1256,6 +1261,9 @@ export class GameEngine implements IGameEngine {
           break;
         case VfxEventType.DoorShut:
           this.vfxSystem.spawnDoorShut(evt.x, evt.y);
+          break;
+        case VfxEventType.Lightning:
+          this.vfxSystem.strikeLightning(evt.x, evt.value!);
           break;
       }
       // Other players' effects render a bit softer so your own read first.
@@ -1559,13 +1567,4 @@ export class GameEngine implements IGameEngine {
     return PlayerAnimState.Idle;
   }
 
-  private deriveZombieAnimState(z: ZombieState): ZombieAnimState {
-    if (z.isDead) return ZombieAnimState.Dead;
-    if (z.magnetPull) return ZombieAnimState.Hurt;
-    if (isZombieWindingUp(z)) return ZombieAnimState.Idle;
-    if (z.attackAnimTimer > 0) return ZombieAnimState.Attack;
-    if (z.knockbackFrames > 0) return ZombieAnimState.Hurt;
-    if (Math.abs(z.velocityX) > 0.1) return ZombieAnimState.Walk;
-    return ZombieAnimState.Idle;
-  }
 }

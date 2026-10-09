@@ -229,11 +229,28 @@ export const GAME_CONSTANTS = {
   ZOMBIE_BOSS_WAVE_INTERVAL: 5, // A Boss spawns every N waves
   ZOMBIE_DRAGON_BOSS_MIN_WAVE: 10, // First wave the Dragon Boss can spawn
   ZOMBIE_DRAGON_BOSS_WAVE_INTERVAL: 10, // Dragon Boss spawns every N waves
-  ZOMBIE_EATER_MIN_WAVE: 11, // First wave that Eater zombies can appear
-  ZOMBIE_EATER_ROLL_THRESHOLD: 0.82, // Chance (0-1) a spawn is NOT an Eater when eligible
-  ZOMBIE_EATER_EATING_TICKS: 180, // Ticks it takes an Eater to consume a corpse
-  ZOMBIE_EATER_DETECT_RANGE: 600, // Distance (px) at which an Eater detects a corpse
+  // Eaters never come with the regular spawns: lying corpses draw them, and they come to eat.
+  ZOMBIE_EATER_MIN_WAVE: 1, // First floor Eaters can appear on
+  ZOMBIE_EATER_SPAWN_MIN_CORPSES: 3, // Lying, unclaimed corpses on the floor that draw an Eater
+  ZOMBIE_EATER_SPAWN_DELAY_MIN_TICKS: 500, // Shortest wait (10 s) for the next Eater while corpses lie around
+  ZOMBIE_EATER_SPAWN_DELAY_MAX_TICKS: 1000, // Longest wait (20 s) for the next Eater while corpses lie around
+  ZOMBIE_EATER_MAX_ALIVE: 2, // Eaters alive at once, per player up
+  ZOMBIE_EATER_SPAWN_MIN_DIST: 150, // An Eater rises at least this far (px) from the corpse it comes for
+  ZOMBIE_EATER_SPAWN_TRIES: 8, // Spawn spots tried to find one within ZOMBIE_EATER_DETECT_RANGE of a corpse
+  ZOMBIE_EATER_EATING_TICKS: 100, // Ticks (2 s) an Eater eats before the corpse is gone
+  ZOMBIE_EATER_DETECT_RANGE: 1500, // Distance (px) at which an Eater smells a corpse: the whole 1280x720 screen
+  ZOMBIE_EATER_RUN_SPEED_MULT: 3.5, // An Eater runs to its goal (meal or prey) this many times its crawling speed
+  ZOMBIE_EATER_JUMP_FORCE: -12, // An Eater's jump (negative = up): ~144 px, a ledge above it in one leap (other zombies: -9.5, ~90 px)
+  ZOMBIE_EATER_JUMP_MARGIN_PX: 14, // Height it keeps spare when judging which ledge one jump reaches
+  ZOMBIE_EATER_JUMP_COOLDOWN_TICKS: 20, // Ticks between an Eater's jumps
+  ZOMBIE_EATER_LEAP_MAX_SPEED: 6, // Fastest sideways speed of a leap from one ledge across to a higher one
+  ZOMBIE_EATER_LEAP_INSET_PX: 12, // A leap lands the body this far inside the near end of the ledge
+  ZOMBIE_EATER_STEP_OFF_WIDTHS: 3, // Half-widths an Eater steps aside to get off a head or a pile toward a goal below it
+  ZOMBIE_EATER_LEVEL_TOLERANCE_PX: 12, // A goal within this height of its feet counts as on its level (no climbing)
   ZOMBIE_EATER_ARRIVE_THRESHOLD: 8, // Distance (px) at which an Eater starts eating
+  ZOMBIE_EATER_ATTACK_CHANCE: 0.004, // Chance per tick an Eater bites a player in reach while corpses lie around (rare: ~once per 5 s beside it; never while eating)
+  // With no corpse to smell, an Eater turns hungry: it runs at the nearest player or zombie and attacks like any zombie.
+  ZOMBIE_EATER_BITE_COLOR: '#b02a22', // Hit particles and damage numbers of an Eater biting a zombie
 
   // ─── Dragon Boss ─────────────────────────────
   DRAGON_HOVER_Y_OFFSET: 140, // How high above the ground the dragon hovers
@@ -356,6 +373,26 @@ export const GAME_CONSTANTS = {
   DEATH_PARTICLE_UP_BIAS: 3, // Extra upward push on death particles
   DEATH_PARTICLE_LIFE: 45, // Lifetime of death particles in ticks
   PARTICLE_GRAVITY: 0.15, // Downward pull on particles each tick
+
+  // ─── Storm Sky (scenery, never walkable) ─────────
+  STORM_CLOUD_SPEED_PX_S: 14, // The background clouds' drift speed (pixels per second, to the left)
+  STORM_FOG_SPEED_PX_S: 12, // Ground fog drift speed (pixels per second, to the right)
+  STORM_RAIN_DROP_COUNT: 160, // Rain streaks on screen at once
+  STORM_RAIN_FALL_PX_S: 950, // Rain fall speed (pixels per second)
+  STORM_RAIN_SLANT: 0.22, // Rain sideways drift per pixel fallen (wind)
+  STORM_RAIN_LENGTH_PX: 14, // Length of a rain streak
+  LIGHTNING_MIN_INTERVAL_MS: 9000, // Shortest wait between two lightning strikes (host decides)
+  LIGHTNING_MAX_INTERVAL_MS: 22000, // Longest wait between two lightning strikes
+  LIGHTNING_DURATION_MS: 700, // How long a strike lights the sky (bolt + afterglow)
+  LIGHTNING_EDGE_MARGIN_PX: 90, // A bolt lands at least this far from the screen edges
+  LIGHTNING_TOP_Y: 100, // Where a bolt leaves the cloud base
+  LIGHTNING_MIN_LENGTH_PX: 200, // A bolt reaches at least this far down, even onto the tallest stack
+  LIGHTNING_SEGMENT_PX: 22, // Vertical step between two kinks of a bolt
+  LIGHTNING_JITTER_PX: 26, // Sideways reach of each kink
+  LIGHTNING_MAX_BRANCHES: 3, // Forks off the main bolt
+  LIGHTNING_SCREEN_FLASH_ALPHA: 0.22, // Whole-screen white flash at the peak of a strike
+  LIGHTNING_SHAKE_FRAMES: 14, // Thunder rumble length (frames)
+  LIGHTNING_SHAKE_INTENSITY: 3, // Thunder rumble strength (pixels)
 
   // ─── Damage Numbers ────────────────────────────
   DAMAGE_NUMBER_LIFE_TICKS: 60, // How many ticks a floating damage number stays visible
@@ -711,11 +748,11 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     type: ZombieType.Eater,
     name: 'Eater',
     hpMin: 35, hpMax: 60,
-    damageMinLow: 0, damageMinHigh: 0,
-    damageMaxLow: 0, damageMaxHigh: 0,
+    damageMinLow: 20, damageMinHigh: 30,
+    damageMaxLow: 35, damageMaxHigh: 50,
     speedMin: 0.5, speedMax: 0.9,
     knockbackMin: 5, knockbackMax: 9,
-    hesitationMin: 999, hesitationMax: 999,
+    hesitationMin: 0, hesitationMax: 0, // no hesitation: its rare bites roll ZOMBIE_EATER_ATTACK_CHANCE
     xpRewardMin: 8, xpRewardMax: 15,
     widthMin: 24, widthMax: 34,
     heightMin: 36, heightMax: 44,

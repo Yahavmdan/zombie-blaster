@@ -9,6 +9,7 @@ import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { SKILL_ANIMATIONS, SkillAnimation } from './skill-animations';
 import { BarrelBlastFx, DamageNumber, DropNotification, IGameEngine, PlayerTint } from './engine-types';
 import { PixelIconId } from '@shared/pixel-icon';
+import { lightningStrikeX, nextLightningDelayMs } from './storm';
 
 export class VfxSystem {
   constructor(private readonly e: IGameEngine) {}
@@ -115,6 +116,38 @@ export class VfxSystem {
   triggerScreenFlash(color: string, frames: number): void {
     this.e.screenFlashColor = color;
     this.e.screenFlashFrames = frames;
+  }
+
+  /** Lights the sky with the bolt for `x`/`seed` and rumbles the screen (local; replay entry point). */
+  strikeLightning(x: number, seed: number): void {
+    this.e.lightning = { x, seed, ageMs: 0 };
+    this.triggerScreenShake(GAME_CONSTANTS.LIGHTNING_SHAKE_FRAMES, GAME_CONSTANTS.LIGHTNING_SHAKE_INTENSITY);
+  }
+
+  /**
+   * Ages the strike on screen. The scheduler (host or solo) also counts down to the next strike,
+   * plays it and queues the Lightning event so every guest draws the same bolt.
+   */
+  updateLightning(isScheduler: boolean): void {
+    const tickMs: number = 1000 / GAME_CONSTANTS.TICK_RATE;
+    if (this.e.lightning) {
+      this.e.lightning.ageMs += tickMs;
+      if (this.e.lightning.ageMs >= GAME_CONSTANTS.LIGHTNING_DURATION_MS) this.e.lightning = null;
+    }
+    if (!isScheduler) return;
+    this.e.lightningTimerMs -= tickMs;
+    if (this.e.lightningTimerMs > 0) return;
+    this.e.lightningTimerMs = nextLightningDelayMs(Math.random);
+    const x: number = lightningStrikeX(Math.random);
+    const seed: number = Math.floor(Math.random() * 0x7fffffff);
+    this.strikeLightning(x, seed);
+    this.e.pendingVfxEvents.push({
+      type: VfxEventType.Lightning,
+      playerId: this.e.player?.id ?? '',
+      x,
+      y: GAME_CONSTANTS.LIGHTNING_TOP_Y,
+      value: seed,
+    });
   }
 
   triggerSkillAnimation(animationKey: string, x: number, y: number, facing: Direction, level: number): void {

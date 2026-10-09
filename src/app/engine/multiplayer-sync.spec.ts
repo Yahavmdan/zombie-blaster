@@ -270,6 +270,53 @@ describe('Damage numbers synced via VfxEvents (not HP-delta fallback)', () => {
   });
 });
 
+describe('Lightning: the host strikes, every guest draws the same bolt', () => {
+  let engine: GameEngine;
+  let vfx: VfxSystem;
+
+  beforeEach(() => {
+    engine = new GameEngine(createMockCanvas());
+    engine.player = makePlayer();
+    vfx = new VfxSystem(engine);
+  });
+
+  it('the host strikes when its timer runs out and queues the Lightning event', () => {
+    engine.isMultiplayerHost = true;
+    engine.lightningTimerMs = 0;
+
+    vfx.updateLightning(true);
+
+    expect(engine.lightning).not.toBeNull();
+    expect(engine.screenShakeFrames).toBe(GAME_CONSTANTS.LIGHTNING_SHAKE_FRAMES);
+    const sent: VfxEvent[] = engine.pendingVfxEvents.filter(
+      (e: VfxEvent): boolean => e.type === VfxEventType.Lightning,
+    );
+    expect(sent.length).toBe(1);
+    expect(sent[0].x).toBe(engine.lightning!.x);
+    expect(sent[0].value).toBe(engine.lightning!.seed);
+    expect(engine.lightningTimerMs).toBeGreaterThanOrEqual(GAME_CONSTANTS.LIGHTNING_MIN_INTERVAL_MS);
+    expect(engine.lightningTimerMs).toBeLessThanOrEqual(GAME_CONSTANTS.LIGHTNING_MAX_INTERVAL_MS);
+  });
+
+  it('a guest never strikes on its own; it replays the host strike and lets it fade', () => {
+    engine.isMultiplayerClient = true;
+    engine.lightningTimerMs = 0;
+    vfx.updateLightning(false);
+    expect(engine.lightning).toBeNull();
+    expect(engine.pendingVfxEvents.length).toBe(0);
+
+    engine.replayRemoteVfxEvents([
+      { type: VfxEventType.Lightning, playerId: 'host', x: 420, y: 100, value: 777 },
+    ]);
+    expect(engine.lightning).toEqual({ x: 420, seed: 777, ageMs: 0 });
+    expect(engine.screenShakeFrames).toBe(GAME_CONSTANTS.LIGHTNING_SHAKE_FRAMES);
+
+    const ticks: number = Math.ceil(GAME_CONSTANTS.LIGHTNING_DURATION_MS / (1000 / GAME_CONSTANTS.TICK_RATE));
+    for (let i: number = 0; i < ticks; i++) vfx.updateLightning(false);
+    expect(engine.lightning).toBeNull();
+  });
+});
+
 describe('Combat system pushes VfxEvents with crit info for zombie damage', () => {
   let engine: IGameEngine;
   let combat: CombatSystem;
@@ -382,6 +429,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     autoPotionCooldown: 0,
     floor: 1,
     spawnTimer: 999,
+    eaterSpawnTimer: 999,
     floorTransitionTimer: 0,
     exitPlatform: {
       x: (GAME_CONSTANTS.CANVAS_WIDTH - 250) / 2,
@@ -394,6 +442,8 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     screenShakeIntensity: 0,
     screenFlashColor: null,
     screenFlashFrames: 0,
+    lightning: null,
+    lightningTimerMs: 0,
     spriteAnimator: { setState: vi.fn(), tick: vi.fn(), restart: vi.fn(), load: vi.fn(), isLoaded: vi.fn().mockReturnValue(false), draw: vi.fn() } as never,
     zombieSpriteAnimator: {
       getSpriteKey: vi.fn().mockReturnValue('zombie_1'),

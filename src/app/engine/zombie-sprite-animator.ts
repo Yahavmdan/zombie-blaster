@@ -1,4 +1,5 @@
-import { ZombieType } from '@shared/game-entities';
+import { ZombieState, ZombieType } from '@shared/game-entities';
+import { isZombieWindingUp } from '@shared/game-constants';
 
 export enum ZombieAnimState {
   Idle = 'idle',
@@ -7,7 +8,6 @@ export enum ZombieAnimState {
   Jump = 'jump',
   Attack = 'attack',
   AttackAlt1 = 'attack-alt-1',
-  AttackAlt2 = 'attack-alt-2',
   Dead = 'dead',
   Hurt = 'hurt',
   Eating = 'eating',
@@ -40,7 +40,6 @@ type ZombieAnimConfigs = Record<ZombieAnimState, ZombieSpriteConfig | undefined>
   [ZombieAnimState.Jump]?: ZombieSpriteConfig;
   [ZombieAnimState.Attack]: ZombieSpriteConfig;
   [ZombieAnimState.AttackAlt1]?: ZombieSpriteConfig;
-  [ZombieAnimState.AttackAlt2]?: ZombieSpriteConfig;
   [ZombieAnimState.Dead]: ZombieSpriteConfig;
   [ZombieAnimState.Hurt]: ZombieSpriteConfig;
 };
@@ -60,7 +59,7 @@ const ZOMBIE_SPRITE_ANCHORS: Record<string, ZombieSpriteAnchor> = {
   zombie_3: { anchorX: 0.47, anchorY: 0.992 },
   zombie_4: { anchorX: 0.49, anchorY: 0.992 },
   dragon_boss: { anchorX: 0.50, anchorY: 0.994 },
-  wild_zombie: { anchorX: 0.50, anchorY: 0.992 },
+  eater: { anchorX: 0.54, anchorY: 0.992 },
 };
 
 const ZOMBIE_SPRITE_KEY_MAP: Record<ZombieType, string> = {
@@ -70,7 +69,7 @@ const ZOMBIE_SPRITE_KEY_MAP: Record<ZombieType, string> = {
   [ZombieType.Tank]: 'zombie_4',
   [ZombieType.Boss]: 'zombie_3',
   [ZombieType.DragonBoss]: 'dragon_boss',
-  [ZombieType.Eater]: 'wild_zombie',
+  [ZombieType.Eater]: 'eater',
 };
 
 const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
@@ -83,7 +82,6 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Run]: undefined,
     [ZombieAnimState.Jump]: undefined,
     [ZombieAnimState.AttackAlt1]: undefined,
-    [ZombieAnimState.AttackAlt2]: undefined,
     [ZombieAnimState.Eating]: undefined,
   },
   zombie_2: {
@@ -95,7 +93,6 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Run]: undefined,
     [ZombieAnimState.Jump]: undefined,
     [ZombieAnimState.AttackAlt1]: undefined,
-    [ZombieAnimState.AttackAlt2]: undefined,
     [ZombieAnimState.Eating]: undefined,
   },
   zombie_3: {
@@ -107,7 +104,6 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Run]: undefined,
     [ZombieAnimState.Jump]: undefined,
     [ZombieAnimState.AttackAlt1]: undefined,
-    [ZombieAnimState.AttackAlt2]: undefined,
     [ZombieAnimState.Eating]: undefined,
   },
   zombie_4: {
@@ -119,7 +115,6 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Run]: undefined,
     [ZombieAnimState.Jump]: undefined,
     [ZombieAnimState.AttackAlt1]: undefined,
-    [ZombieAnimState.AttackAlt2]: undefined,
     [ZombieAnimState.Eating]: undefined,
   },
   dragon_boss: {
@@ -131,22 +126,41 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Run]: undefined,
     [ZombieAnimState.Jump]: undefined,
     [ZombieAnimState.AttackAlt1]: undefined,
-    [ZombieAnimState.AttackAlt2]: undefined,
     [ZombieAnimState.Eating]: undefined,
   },
-  wild_zombie: {
-    [ZombieAnimState.Idle]: { src: 'sprites/zombies/wild_zombie/Idle.png', frameCount: 9, frameDurationTicks: 8, loop: true, frameWidth: 96, frameHeight: 96 },
-    [ZombieAnimState.Walk]: { src: 'sprites/zombies/wild_zombie/Walk.png', frameCount: 10, frameDurationTicks: 6, loop: true, frameWidth: 96, frameHeight: 96 },
-    [ZombieAnimState.Run]: { src: 'sprites/zombies/wild_zombie/Run.png', frameCount: 8, frameDurationTicks: 5, loop: true, frameWidth: 96, frameHeight: 96 },
-    [ZombieAnimState.Jump]: { src: 'sprites/zombies/wild_zombie/Jump.png', frameCount: 6, frameDurationTicks: 6, loop: false, frameWidth: 96, frameHeight: 96 },
-    [ZombieAnimState.Attack]: { src: 'sprites/zombies/wild_zombie/Attack_1.png', frameCount: 4, frameDurationTicks: 5, loop: false, frameWidth: 96, frameHeight: 96 },
-    [ZombieAnimState.AttackAlt1]: { src: 'sprites/zombies/wild_zombie/Attack_2.png', frameCount: 4, frameDurationTicks: 5, loop: false, frameWidth: 96, frameHeight: 96 },
-    [ZombieAnimState.AttackAlt2]: { src: 'sprites/zombies/wild_zombie/Attack_3.png', frameCount: 4, frameDurationTicks: 5, loop: false, frameWidth: 96, frameHeight: 96 },
-    [ZombieAnimState.Dead]: { src: 'sprites/zombies/wild_zombie/Dead.png', frameCount: 5, frameDurationTicks: 8, loop: false, frameWidth: 96, frameHeight: 96 },
-    [ZombieAnimState.Hurt]: { src: 'sprites/zombies/wild_zombie/Hurt.png', frameCount: 5, frameDurationTicks: 6, loop: false, frameWidth: 96, frameHeight: 96 },
-    [ZombieAnimState.Eating]: { src: 'sprites/zombies/wild_zombie/Eating.png', frameCount: 11, frameDurationTicks: 6, loop: true, frameWidth: 96, frameHeight: 96 },
+  // Crawls on all fours (art: generate-eater-sprites.cjs).
+  eater: {
+    [ZombieAnimState.Idle]: { src: 'sprites/zombies/eater/Idle.png', frameCount: 8, frameDurationTicks: 9, loop: true },
+    [ZombieAnimState.Walk]: { src: 'sprites/zombies/eater/Walk.png', frameCount: 10, frameDurationTicks: 6, loop: true },
+    [ZombieAnimState.Run]: { src: 'sprites/zombies/eater/Run.png', frameCount: 8, frameDurationTicks: 2, loop: true },
+    [ZombieAnimState.Jump]: { src: 'sprites/zombies/eater/Jump.png', frameCount: 6, frameDurationTicks: 6, loop: false },
+    [ZombieAnimState.Attack]: { src: 'sprites/zombies/eater/Attack_1.png', frameCount: 6, frameDurationTicks: 3, loop: false },
+    [ZombieAnimState.AttackAlt1]: { src: 'sprites/zombies/eater/Attack_2.png', frameCount: 6, frameDurationTicks: 3, loop: false },
+    [ZombieAnimState.Dead]: { src: 'sprites/zombies/eater/Dead.png', frameCount: 6, frameDurationTicks: 8, loop: false },
+    [ZombieAnimState.Hurt]: { src: 'sprites/zombies/eater/Hurt.png', frameCount: 4, frameDurationTicks: 5, loop: false },
+    [ZombieAnimState.Eating]: { src: 'sprites/zombies/eater/Eating.png', frameCount: 10, frameDurationTicks: 5, loop: true },
   },
 };
+
+/** An Eater bites (Attack) or rakes with its claws (AttackAlt1): fixed per zombie, so host and guests agree. */
+function eaterClaws(z: ZombieState): boolean {
+  return z.id.charCodeAt(z.id.length - 1) % 2 === 0;
+}
+
+/** The animation a zombie shows for its state: the host and every guest derive it the same way. */
+export function zombieAnimState(z: ZombieState): ZombieAnimState {
+  const isEater: boolean = z.type === ZombieType.Eater;
+  if (z.isDead) return ZombieAnimState.Dead;
+  if (z.magnetPull) return ZombieAnimState.Hurt;
+  if (isEater && z.eatingTimer > 0) return ZombieAnimState.Eating;
+  if (isZombieWindingUp(z)) return ZombieAnimState.Idle;
+  if (z.attackAnimTimer > 0) return isEater && eaterClaws(z) ? ZombieAnimState.AttackAlt1 : ZombieAnimState.Attack;
+  if (z.knockbackFrames > 0) return ZombieAnimState.Hurt;
+  if (isEater && !z.isGrounded) return ZombieAnimState.Jump;
+  if (isEater && Math.abs(z.velocityX) > z.instanceSpeed * 0.9) return ZombieAnimState.Run;
+  if (Math.abs(z.velocityX) > 0.1) return ZombieAnimState.Walk;
+  return ZombieAnimState.Idle;
+}
 
 interface ZombieAnimInstance {
   state: ZombieAnimState;
