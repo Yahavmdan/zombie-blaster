@@ -8,7 +8,6 @@ import {
   output,
   computed,
 } from '@angular/core';
-import { UpperCasePipe } from '@angular/common';
 import {
   CharacterState,
   SkillDefinition,
@@ -26,6 +25,8 @@ import {
   getPassiveEffectValue,
   getAutoPotionSuccessChance,
 } from '@shared/index';
+import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { PixelIconId } from '@shared/pixel-icon';
 
 export interface SkillTreeNode {
   skill: SkillDefinition;
@@ -42,7 +43,7 @@ export interface SkillTreeNode {
 
 @Component({
   selector: 'app-skill-tree',
-  imports: [UpperCasePipe],
+  imports: [PixelIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'skill-tree',
@@ -62,7 +63,7 @@ export class SkillTreeComponent {
     return CHARACTER_CLASSES[this.player().classId].name;
   });
 
-  readonly classIcon: Signal<string> = computed((): string => {
+  readonly classIcon: Signal<PixelIconId> = computed((): PixelIconId => {
     return CHARACTER_CLASSES[this.player().classId].icon;
   });
 

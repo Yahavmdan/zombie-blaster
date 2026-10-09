@@ -32,6 +32,8 @@ import {
 import { KeyBindingsService, formatKeyName, mouseButtonKey } from '../../services/key-bindings.service';
 import { QuickSlotService } from '../../services/quick-slot.service';
 import { GameStateService } from '../../services/game-state.service';
+import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { PixelIconId } from '@shared/pixel-icon';
 
 export interface KbKey {
   code: string;
@@ -42,20 +44,20 @@ export interface KbKey {
 interface KeyBinding {
   action: GameAction;
   label: string;
-  icon: string;
+  icon: PixelIconId;
 }
 
 interface ActionChip {
   action: GameAction;
   label: string;
-  icon: string;
+  icon: PixelIconId;
 }
 
 interface QuickSlotBindingDisplay {
   action: QuickSlotAction;
   slotNumber: number;
   keyLabel: string;
-  contentIcon: string;
+  contentIcon: PixelIconId;
   contentLabel: string;
   isEmpty: boolean;
 }
@@ -63,7 +65,7 @@ interface QuickSlotBindingDisplay {
 export interface SidePanelItem {
   type: QuickSlotContentType;
   id: string;
-  icon: string;
+  icon: PixelIconId;
   label: string;
   sublabel: string;
   count: number | null;
@@ -90,7 +92,7 @@ function gap(w: number = 0.5): KbKey {
     class: 'settings',
     '(document:keydown.escape)': 'onEscapeKey()',
   },
-  imports: [NgTemplateOutlet],
+  imports: [PixelIconComponent, NgTemplateOutlet],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.css',
 })
@@ -132,24 +134,24 @@ export class SettingsComponent implements OnDestroy {
   ];
 
   readonly actionChips: ReadonlyArray<ActionChip> = [
-    { action: 'attack', label: 'Attack', icon: '⚔' },
-    { action: 'jump', label: 'Jump', icon: '⬆' },
-    { action: 'left', label: 'Left', icon: '←' },
-    { action: 'right', label: 'Right', icon: '→' },
-    { action: 'up', label: 'Up', icon: '↑' },
-    { action: 'down', label: 'Down', icon: '↓' },
-    { action: 'skill1', label: 'Skill 1', icon: '①' },
-    { action: 'skill2', label: 'Skill 2', icon: '②' },
-    { action: 'skill3', label: 'Skill 3', icon: '③' },
-    { action: 'skill4', label: 'Skill 4', icon: '④' },
-    { action: 'skill5', label: 'Skill 5', icon: '⑤' },
-    { action: 'skill6', label: 'Skill 6', icon: '⑥' },
-    { action: 'useHpPotion', label: 'HP Pot', icon: '❤' },
-    { action: 'useMpPotion', label: 'MP Pot', icon: '💧' },
-    { action: 'openStats', label: 'Stats', icon: '📊' },
-    { action: 'openSkills', label: 'Skills', icon: '📖' },
-    { action: 'openShop', label: 'Shop', icon: '🛒' },
-    { action: 'openInventory', label: 'Inv', icon: '🎒' },
+    { action: 'attack', label: 'Attack', icon: 'sword' },
+    { action: 'jump', label: 'Jump', icon: 'spring' },
+    { action: 'left', label: 'Left', icon: 'arrow-left' },
+    { action: 'right', label: 'Right', icon: 'arrow-right' },
+    { action: 'up', label: 'Up', icon: 'arrow-up' },
+    { action: 'down', label: 'Down', icon: 'arrow-down' },
+    { action: 'skill1', label: 'Skill 1', icon: 'spark' },
+    { action: 'skill2', label: 'Skill 2', icon: 'spark' },
+    { action: 'skill3', label: 'Skill 3', icon: 'spark' },
+    { action: 'skill4', label: 'Skill 4', icon: 'spark' },
+    { action: 'skill5', label: 'Skill 5', icon: 'spark' },
+    { action: 'skill6', label: 'Skill 6', icon: 'spark' },
+    { action: 'useHpPotion', label: 'HP Pot', icon: 'heart' },
+    { action: 'useMpPotion', label: 'MP Pot', icon: 'mana' },
+    { action: 'openStats', label: 'Stats', icon: 'chart' },
+    { action: 'openSkills', label: 'Skills', icon: 'book' },
+    { action: 'openShop', label: 'Shop', icon: 'shop' },
+    { action: 'openInventory', label: 'Inv', icon: 'bag' },
   ];
 
   readonly keyActionMap: Signal<Record<string, KeyBinding>> = computed((): Record<string, KeyBinding> => {
@@ -164,7 +166,7 @@ export class SettingsComponent implements OnDestroy {
         if (QUICK_SLOT_ACTION_SET.has(action)) {
           const slotEntry: QuickSlotEntry | null = slotAssignments[action] ?? null;
           if (slotEntry) {
-            const resolved: { label: string; icon: string } = this.resolveSlotContent(slotEntry);
+            const resolved: { label: string; icon: PixelIconId } = this.resolveSlotContent(slotEntry);
             result[key] = { action, label: resolved.label, icon: resolved.icon };
           } else {
             result[key] = { action, label: info.label, icon: info.icon };
@@ -185,9 +187,9 @@ export class SettingsComponent implements OnDestroy {
       const keyLabel: string = keys.length > 0 ? formatKeyName(keys[0]) : '—';
       const entry: QuickSlotEntry | null = slotAssignments[action] ?? null;
       if (!entry) {
-        return { action, slotNumber: idx + 1, keyLabel, contentIcon: '', contentLabel: '', isEmpty: true };
+        return { action, slotNumber: idx + 1, keyLabel, contentIcon: 'slot', contentLabel: '', isEmpty: true };
       }
-      const resolved: { label: string; icon: string } = this.resolveSlotContent(entry);
+      const resolved: { label: string; icon: PixelIconId } = this.resolveSlotContent(entry);
       return { action, slotNumber: idx + 1, keyLabel, contentIcon: resolved.icon, contentLabel: resolved.label, isEmpty: false };
     });
   });
@@ -442,19 +444,19 @@ export class SettingsComponent implements OnDestroy {
     this.quickSlotService.clear(action);
   }
 
-  private resolveSlotContent(entry: QuickSlotEntry): { label: string; icon: string } {
+  private resolveSlotContent(entry: QuickSlotEntry): { label: string; icon: PixelIconId } {
     if (entry.type === 'potion') {
       const def: PotionDefinition | undefined = getPotionById(entry.id);
-      return { label: def?.name ?? entry.id, icon: def?.icon ?? '?' };
+      return { label: def?.name ?? entry.id, icon: def?.icon ?? 'spark' };
     }
     if (entry.type === 'skill') {
       const skillDef: SkillDefinition | undefined = SKILLS.find(
         (s: SkillDefinition): boolean => s.id === entry.id,
       );
-      return { label: skillDef?.name ?? entry.id, icon: skillDef?.icon ?? '?' };
+      return { label: skillDef?.name ?? entry.id, icon: skillDef?.icon ?? 'spark' };
     }
     const bindInfo: ActionInfo | undefined = ACTION_INFO[entry.id];
-    return { label: bindInfo?.label ?? entry.id, icon: bindInfo?.icon ?? '?' };
+    return { label: bindInfo?.label ?? entry.id, icon: bindInfo?.icon ?? 'spark' };
   }
 
   private cancelRebind(): void {
