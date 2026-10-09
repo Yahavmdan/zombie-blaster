@@ -171,19 +171,19 @@ function ropeLandsCleanly(rope: Rope, platforms: Platform[]): boolean {
   );
 }
 
-/** Map props (barrels, boxes, lockers, fences): solid, so you can stand on them and bump into them. */
-export type PropKind =
+/** One-image map props (barrels, boxes, lockers). */
+export type SinglePropKind =
   | 'barrel1'
   | 'barrel2'
   | 'barrel3'
   | 'box1'
   | 'box2'
   | 'box3'
-  | 'fence1'
-  | 'fence2'
-  | 'fence3'
   | 'locker1'
   | 'locker2';
+
+/** Map props: solid, so you can stand on them and bump into them. A rail is built from pieces (`RAIL_ART`). */
+export type PropKind = SinglePropKind | 'rail';
 
 /**
  * Where a prop image's visible pixels are (measured from the PNG): the collision box is exactly
@@ -197,22 +197,50 @@ export interface PropArt {
   bottom: number;
 }
 
-export const PROP_ART: Record<PropKind, PropArt> = {
+export const PROP_ART: Record<SinglePropKind, PropArt> = {
   barrel1: { src: 'tiles/objects/Barrel1.png', left: 0, top: 4, right: 17, bottom: 25 },
   barrel2: { src: 'tiles/objects/Barrel2.png', left: 0, top: 1, right: 17, bottom: 25 },
   barrel3: { src: 'tiles/objects/Barrel3.png', left: 0, top: 3, right: 17, bottom: 25 },
   box1: { src: 'tiles/objects/Box1.png', left: 2, top: 10, right: 29, bottom: 31 },
   box2: { src: 'tiles/objects/Box2.png', left: 2, top: 10, right: 29, bottom: 31 },
   box3: { src: 'tiles/objects/Box3.png', left: 3, top: 16, right: 28, bottom: 31 },
-  fence1: { src: 'tiles/objects/Fence1.png', left: 0, top: 16, right: 31, bottom: 31 },
-  fence2: { src: 'tiles/objects/Fence2.png', left: 0, top: 16, right: 31, bottom: 31 },
-  fence3: { src: 'tiles/objects/Fence3.png', left: 0, top: 16, right: 20, bottom: 31 },
   locker1: { src: 'tiles/objects/Locker1.png', left: 1, top: 1, right: 30, bottom: 22 },
   locker2: { src: 'tiles/objects/Locker2.png', left: 1, top: 1, right: 31, bottom: 23 },
 };
 
-const PROP_KINDS: PropKind[] = Object.keys(PROP_ART) as PropKind[];
-const STACKABLE: PropKind[] = ['box1', 'box2', 'box3'];
+export interface RailArt {
+  left: PropArt;
+  middle: PropArt;
+  right: PropArt;
+}
+
+/** A rail's pieces, laid edge to edge: left cap, 0..RAIL_MAX_MIDDLES middle pieces, right cap. */
+export const RAIL_ART: RailArt = {
+  left: { src: 'tiles/objects/Fence1.png', left: 0, top: 16, right: 31, bottom: 31 },
+  middle: { src: 'tiles/objects/Fence2.png', left: 0, top: 16, right: 31, bottom: 31 },
+  right: { src: 'tiles/objects/Fence3.png', left: 0, top: 16, right: 20, bottom: 31 },
+};
+export const RAIL_MAX_MIDDLES: number = 5;
+
+export function propArtWidth(art: PropArt): number {
+  return art.right - art.left + 1;
+}
+
+export function propArtHeight(art: PropArt): number {
+  return art.bottom - art.top + 1;
+}
+
+/** A rail's width with `middles` middle pieces between its caps. */
+export function railWidth(middles: number): number {
+  return (
+    propArtWidth(RAIL_ART.left) +
+    middles * propArtWidth(RAIL_ART.middle) +
+    propArtWidth(RAIL_ART.right)
+  );
+}
+
+const PROP_KINDS: PropKind[] = [...(Object.keys(PROP_ART) as SinglePropKind[]), 'rail'];
+const STACKABLE: SinglePropKind[] = ['box1', 'box2', 'box3'];
 
 /** A prop's collision box (top-left x/y, size) equals its visible art. */
 export interface Prop {
@@ -223,11 +251,15 @@ export interface Prop {
   height: number;
 }
 
-function propBox(kind: PropKind, x: number, surfaceY: number): Prop {
+function propBox(kind: SinglePropKind, x: number, surfaceY: number): Prop {
   const art: PropArt = PROP_ART[kind];
-  const width: number = art.right - art.left + 1;
-  const height: number = art.bottom - art.top + 1;
-  return { kind, x, y: surfaceY - height, width, height };
+  const height: number = propArtHeight(art);
+  return { kind, x, y: surfaceY - height, width: propArtWidth(art), height };
+}
+
+function railBox(middles: number, x: number, surfaceY: number): Prop {
+  const height: number = propArtHeight(RAIL_ART.middle);
+  return { kind: 'rail', x, y: surfaceY - height, width: railWidth(middles), height };
 }
 
 /** Horizontal room kept free around the player's spawn point (ground, screen center). */
@@ -344,21 +376,26 @@ function propProblems(prop: Prop, layout: PropContext): string[] {
   return out;
 }
 
-/** Scatters props on the ground and platforms (some boxes stacked), each passing propProblems. */
+/**
+ * Scatters props on the ground and platforms (rails of random length, some boxes stacked), each
+ * passing propProblems.
+ */
 function placeProps(rand: Random, layout: Omit<PropContext, 'props'>): Prop[] {
   const props: Prop[] = [];
   const wanted: number = randomInt(rand, 3, 7);
   for (let i: number = 0; i < wanted; i++) {
     for (let attempt: number = 0; attempt < 30; attempt++) {
       const kind: PropKind = PROP_KINDS[randomInt(rand, 0, PROP_KINDS.length - 1)];
-      const art: PropArt = PROP_ART[kind];
-      const width: number = art.right - art.left + 1;
+      const middles: number = randomInt(rand, 0, RAIL_MAX_MIDDLES);
+      const width: number = kind === 'rail' ? railWidth(middles) : propArtWidth(PROP_ART[kind]);
       const bases: Prop[] = props.filter(
         (q: Prop): boolean =>
-          STACKABLE.includes(q.kind) && !props.some((t: Prop): boolean => t.y + t.height === q.y),
+          q.kind !== 'rail' &&
+          STACKABLE.includes(q.kind) &&
+          !props.some((t: Prop): boolean => t.y + t.height === q.y),
       );
       let candidate: Prop;
-      if (STACKABLE.includes(kind) && bases.length > 0 && rand() < 0.35) {
+      if (kind !== 'rail' && STACKABLE.includes(kind) && bases.length > 0 && rand() < 0.35) {
         const base: Prop = bases[randomInt(rand, 0, bases.length - 1)];
         candidate = propBox(kind, base.x + Math.floor((base.width - width) / 2), base.y);
       } else {
@@ -375,7 +412,8 @@ function placeProps(rand: Random, layout: Omit<PropContext, 'props'>): Prop[] {
           surface.x + surface.width - width - margin,
         );
         if (maxX < minX) continue;
-        candidate = propBox(kind, randomInt(rand, minX, maxX), surface.y);
+        const x: number = randomInt(rand, minX, maxX);
+        candidate = kind === 'rail' ? railBox(middles, x, surface.y) : propBox(kind, x, surface.y);
       }
       if (propProblems(candidate, { ...layout, props: [...props, candidate] }).length === 0) {
         props.push(candidate);
