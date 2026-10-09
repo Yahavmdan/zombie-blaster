@@ -1,4 +1,5 @@
 import { GAME_CONSTANTS } from '@shared/index';
+import { LooseProp } from '@shared/game-entities';
 import {
   BoulderPuzzleLayout,
   CagePuzzleLayout,
@@ -262,6 +263,40 @@ function railBox(middles: number, x: number, surfaceY: number): Prop {
   return { kind: 'rail', x, y: surfaceY - height, width: railWidth(middles), height };
 }
 
+/** Props that look liftable (barrels, boxes): players pick them up and throw them. Rails and lockers stay put. */
+const PICKABLE_KINDS: PropKind[] = ['barrel1', 'barrel2', 'barrel3', 'box1', 'box2', 'box3'];
+
+export function isPickable(prop: Prop): boolean {
+  return PICKABLE_KINDS.includes(prop.kind);
+}
+
+/**
+ * The floor's pickable props by their game-state id (floor and index in the layout's props, so a
+ * new floor never reuses one), each with its art and spawn spot.
+ */
+export function pickableProps(level: LevelLayout): Map<string, Prop> {
+  const out: Map<string, Prop> = new Map<string, Prop>();
+  level.props.forEach((p: Prop, i: number): void => {
+    if (isPickable(p)) out.set(`prop-${level.floor}-${i}`, p);
+  });
+  return out;
+}
+
+/** A pickable prop as game state, lying on its spawn spot. */
+export function lyingProp(id: string, prop: Prop): LooseProp {
+  return {
+    id,
+    x: prop.x,
+    y: prop.y,
+    width: prop.width,
+    height: prop.height,
+    velocityX: 0,
+    velocityY: 0,
+    isGrounded: true,
+    carrierId: null,
+  };
+}
+
 /** Horizontal room kept free around the player's spawn point (ground, screen center). */
 const SPAWN_CLEAR: [number, number] = [560, 720];
 /** Props keep this far from platform edges (ledges stay clear to walk off and jump up). */
@@ -382,7 +417,7 @@ function propProblems(prop: Prop, layout: PropContext): string[] {
  */
 function placeProps(rand: Random, layout: Omit<PropContext, 'props'>): Prop[] {
   const props: Prop[] = [];
-  const wanted: number = randomInt(rand, 3, 7);
+  const wanted: number = randomInt(rand, 8, 14);
   for (let i: number = 0; i < wanted; i++) {
     for (let attempt: number = 0; attempt < 30; attempt++) {
       const kind: PropKind = PROP_KINDS[randomInt(rand, 0, PROP_KINDS.length - 1)];

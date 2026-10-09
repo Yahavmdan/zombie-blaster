@@ -3,6 +3,7 @@ import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer, KEYS } from '../../support/game-player';
 import { E2eCorpseView, E2eSnapshot } from '../../support/probe';
 import { WORLD } from '../../support/invariants';
+import { layoutWithoutPickables } from '../../support/props';
 
 /** The probe's foothold top sits this far above the corpse's feet (ZOMBIE_CORPSE_PLATFORM_HEIGHT). */
 const FOOTHOLD_DEPTH: number = 5;
@@ -80,6 +81,7 @@ test.describe('carrying corpses', { tag: '@solo' }, (): void => {
     test.setTimeout(90_000);
     const p: GamePlayer = await solo('warrior');
     await p.probe.setGodMode(true);
+    await layoutWithoutPickables(p, [], 300, 1000);
 
     const corpse: E2eCorpseView = await lyingCorpse(p, 500);
     const feet: number = corpseFeet(corpse);
@@ -158,6 +160,7 @@ test.describe('carrying corpses', { tag: '@solo' }, (): void => {
     test.setTimeout(90_000);
     const p: GamePlayer = await solo('warrior');
     await p.probe.setGodMode(true);
+    await layoutWithoutPickables(p, [], 300, 1000);
     const id: string = (await p.probe.state()).player!.id;
 
     const stack: E2eCorpseView[] = await lyingCorpses(p, 500, MAX_CARRY + 1);
@@ -244,6 +247,7 @@ test.describe('carrying corpses', { tag: '@solo' }, (): void => {
     test.setTimeout(60_000);
     const p: GamePlayer = await solo('warrior');
     await p.probe.setGodMode(true);
+    await layoutWithoutPickables(p, [], 300, 1000);
 
     const pile: E2eCorpseView[] = await lyingCorpses(p, 500, 2);
     await p.face('right');
@@ -283,6 +287,7 @@ test.describe('carrying corpses', { tag: '@solo' }, (): void => {
     test.setTimeout(60_000);
     const p: GamePlayer = await solo('warrior');
     await p.probe.setGodMode(true);
+    await layoutWithoutPickables(p, [], 300, 1000);
 
     const corpse: E2eCorpseView = await lyingCorpse(p, 400);
     await p.face('right');

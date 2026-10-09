@@ -1,12 +1,12 @@
 import { CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, isZombieWindingUp } from '@shared/index';
-import { ActiveSpecialEffect, BoulderState, CagePuzzleState, CageState, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
+import { ActiveSpecialEffect, BoulderState, CagePuzzleState, CageState, LooseProp, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, PlayerTint, Rope, SpringPuzzleLayout } from '../engine/engine-types';
 import { CageId, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
 import { doorBox, isDoorOpen, isHeld, plateBox } from '../engine/plate-puzzle';
 import { chargeCorpses, leverBox } from '../engine/spring-puzzle';
 import { measureLevelGeometry } from './geometry-report';
 import { BoulderPath, boulderBox, boulderPath, gateBox } from '../engine/boulder-puzzle';
-import { Prop } from '../engine/level-generator';
+import { pickableProps, Prop } from '../engine/level-generator';
 import { CorpseSurface, corpseSurface } from '../engine/corpse-surface';
 import { CorpseDrape, maxDrop } from '../engine/corpse-drape';
 import { magnetPullProgress } from '../engine/magnet-pull';
@@ -25,6 +25,7 @@ import {
   E2eExitPile,
   E2eEngineControls,
   E2eGeometryReport,
+  E2eLevelView,
   E2ePlayerView,
   E2eRemotePlayerView,
   E2eRole,
@@ -181,6 +182,30 @@ function exitPile(engine: GameEngine): E2eExitPile {
     bodies: footholds.length,
     reachable: topY <= reachY,
   };
+}
+
+/** Every layout prop where it is now: pickable ones as the game state has them. */
+function propViews(engine: GameEngine): E2eLevelView['props'] {
+  const pickable: Map<string, Prop> = pickableProps(engine.level);
+  return engine.level.props.map((p: Prop): E2eLevelView['props'][number] => {
+    const id: string | undefined = [...pickable].find(
+      ([, q]: [string, Prop]): boolean => q === p,
+    )?.[0];
+    const loose: LooseProp | undefined = engine.looseProps.find(
+      (q: LooseProp): boolean => q.id === id,
+    );
+    return {
+      id: id ?? null,
+      kind: p.kind,
+      x: loose?.x ?? p.x,
+      y: loose?.y ?? p.y,
+      width: p.width,
+      height: p.height,
+      pickable: loose !== undefined,
+      isGrounded: loose?.isGrounded ?? true,
+      carrierId: loose?.carrierId ?? null,
+    };
+  });
 }
 
 function safeSpotView(engine: GameEngine): { x: number; y: number; width: number } | null {
@@ -343,15 +368,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
         topY: r.topY,
         bottomY: r.bottomY,
       })),
-      props: engine.level.props.map(
-        (p: Prop): { kind: string; x: number; y: number; width: number; height: number } => ({
-          kind: p.kind,
-          x: p.x,
-          y: p.y,
-          width: p.width,
-          height: p.height,
-        }),
-      ),
+      props: propViews(engine),
       safeSpot: safeSpotView(engine),
     },
     puzzle: puzzleView(engine),

@@ -119,6 +119,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     levelUpNotification: null,
     zombies,
     zombieCorpses: [],
+    looseProps: [],
     carryPoses: new Map<string, CarryPose>(),
     corpseDrapes: new Map<string, CorpseDrape>(),
     particles: [],

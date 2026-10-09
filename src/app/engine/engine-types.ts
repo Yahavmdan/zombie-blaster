@@ -11,6 +11,7 @@ import {
   PlateState,
   SpringState,
   DropType,
+  LooseProp,
   PendingSpecialDropConfirm,
   SpecialDropType,
   WorldDrop,
@@ -86,6 +87,8 @@ export interface Platform {
    * then standing on the ground) and `zombie-cage` (while it hangs) go when their chain snaps.
    */
   puzzlePart?: 'wall' | 'gate' | 'spring' | 'cage' | 'zombie-cage';
+  /** A loose prop's box: it follows the prop, and is gone while the prop is carried or in the air. */
+  propId?: string;
 }
 
 export interface Rope {
@@ -249,6 +252,8 @@ export interface IGameEngine {
   remotePlayers: CharacterState[];
   zombies: ZombieState[];
   zombieCorpses: ZombieCorpse[];
+  /** The floor's pickable props (barrels, boxes): lying ones are solid platforms (`Platform.propId`). */
+  looseProps: LooseProp[];
   /** How each carried corpse sways on its carrier this tick (drawing only). */
   readonly carryPoses: Map<string, CarryPose>;
   /** How each lying corpse's body sags onto what is under it (drawing only). */

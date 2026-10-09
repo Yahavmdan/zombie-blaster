@@ -1,4 +1,5 @@
 import { GAME_CONSTANTS } from '@shared/index';
+import { LooseProp } from '@shared/game-entities';
 import { BoulderPuzzleLayout, Platform, Rope } from './engine-types';
 import { Prop, PROP_ART, PropArt, propArtWidth, RAIL_ART } from './level-generator';
 
@@ -52,7 +53,10 @@ export class MapRenderer {
   private ladderImage: HTMLImageElement | null = null;
   /** Prop images by `PropArt.src`. */
   private propImages: Map<string, HTMLImageElement> = new Map<string, HTMLImageElement>();
+  /** Props that stay put, drawn in the geometry layer. */
   private props: Prop[] = [];
+  /** Pickable props' art by id: they are drawn per frame, wherever they are. */
+  private looseArt: Map<string, Prop> = new Map<string, Prop>();
   /** Opaque columns of the ladder image (its art doesn't fill the tile; it is centered by these). */
   private ladderArt: { left: number; right: number } = { left: 0, right: LADDER_TILE_WIDTH - 1 };
   private sceneryCanvas: HTMLCanvasElement | null = null;
@@ -387,6 +391,17 @@ export class MapRenderer {
     ctx.fillStyle = '#9aa3ad';
     ctx.fillRect(x, y, w, 2);
     ctx.restore();
+  }
+
+  /** The floor's pickable props (by id), drawn per frame with `drawLooseProp`. */
+  setLooseProps(art: Map<string, Prop>): void {
+    this.looseArt = art;
+  }
+
+  /** A pickable prop where it is now (an id from another floor draws nothing). */
+  drawLooseProp(ctx: CanvasRenderingContext2D, prop: LooseProp): void {
+    const art: Prop | undefined = this.looseArt.get(prop.id);
+    if (art) this.drawProp(ctx, { ...art, x: prop.x, y: prop.y });
   }
 
   /** A prop image placed so its visible art covers exactly the prop's collision box. */

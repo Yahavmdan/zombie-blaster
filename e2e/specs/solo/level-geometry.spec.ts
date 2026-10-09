@@ -8,7 +8,8 @@ import {
   drawnGeometry,
   expectArtMatchesCollision,
 } from '../../support/level-geometry';
-import { goToFloorWhere } from '../../support/navigation';
+import { layoutWhere } from '../../support/navigation';
+import { LevelProp } from '../../support/props';
 
 const FLOORS: number[] = [1, 2, 3, 4, 5, 6];
 
@@ -48,7 +49,7 @@ test.describe(
       );
     });
 
-    test('walking into a prop stops you at its drawn side', async ({
+    test('walking into a prop stack too tall to step over stops you at its drawn side', async ({
       solo,
     }: {
       solo: SoloFactory;
@@ -56,24 +57,26 @@ test.describe(
       test.setTimeout(120_000);
       const p: GamePlayer = await solo('warrior');
       await p.probe.setGodMode(true);
-      const s0: E2eSnapshot = await goToFloorWhere(
+      const s0: E2eSnapshot = await layoutWhere(
         p,
-        'a prop on open ground',
-        (s: E2eSnapshot): boolean => groundProp(s) !== undefined,
+        'a prop stack on open ground',
+        (s: E2eSnapshot): boolean => groundStack(s) !== undefined,
       );
-      const prop: LevelProp = groundProp(s0)!;
-      await p.probe.teleport(prop.x - 90, WORLD.groundY - WORLD.playerHeight);
+      const stack: LevelProp[] = groundStack(s0)!;
+      const left: number = Math.min(...stack.map((q: LevelProp): number => q.x));
+      await p.probe.teleport(left - 90, WORLD.groundY - WORLD.playerHeight);
       await p.wait(300);
       await p.hold(KEYS.right);
       await p.wait(900);
       await p.release(KEYS.right);
       const s: E2eSnapshot = await p.probe.state();
       const rightEdge: number = s.player!.x + WORLD.playerWidth;
+      const kinds: string = stack.map((q: LevelProp): string => q.kind).join(' under ');
       expect(
         rightEdge,
-        `stopped at the ${prop.kind}'s drawn left side (${prop.x})`,
-      ).toBeLessThanOrEqual(prop.x + EDGE_TOLERANCE_PX);
-      expect(rightEdge, 'walked all the way up to it').toBeGreaterThanOrEqual(prop.x - 3);
+        `stopped at the ${kinds} stack's drawn left side (${left})`,
+      ).toBeLessThanOrEqual(left + EDGE_TOLERANCE_PX);
+      expect(rightEdge, 'walked all the way up to it').toBeGreaterThanOrEqual(left - 3);
       expect(s.player!.y + WORLD.playerHeight, 'still on the ground beside it').toBe(WORLD.groundY);
     });
 
@@ -152,18 +155,23 @@ test.describe(
   },
 );
 
-type LevelProp = E2eSnapshot['level']['props'][number];
-
-/** A prop standing on open ground with nothing else on its left approach. */
-function groundProp(s: E2eSnapshot): LevelProp | undefined {
-  return s.level.props.find(
-    (q: LevelProp): boolean =>
-      q.y + q.height === WORLD.groundY &&
-      q.x > 120 &&
-      !s.level.props.some(
-        (o: LevelProp): boolean => o !== q && o.x + o.width > q.x - 110 && o.x < q.x,
-      ),
-  );
+/** Two props stacked on open ground (base first), with nothing else on their left approach. */
+function groundStack(s: E2eSnapshot): LevelProp[] | undefined {
+  for (const base of s.level.props) {
+    if (base.y + base.height !== WORLD.groundY || base.x < 150) continue;
+    const top: LevelProp | undefined = s.level.props.find(
+      (o: LevelProp): boolean =>
+        o.y + o.height === base.y && o.x < base.x + base.width && o.x + o.width > base.x,
+    );
+    if (!top) continue;
+    const left: number = Math.min(base.x, top.x);
+    const approachClear: boolean = !s.level.props.some(
+      (o: LevelProp): boolean =>
+        o !== base && o !== top && o.x + o.width > left - 110 && o.x < base.x + base.width,
+    );
+    if (approachClear) return [base, top];
+  }
+  return undefined;
 }
 
 function overlaps(c: E2eGeometryCheck, left: number, right: number): boolean {

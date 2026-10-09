@@ -2,6 +2,7 @@ import { CharacterState, GAME_CONSTANTS, VfxEventType } from '@shared/index';
 import {
   CagePuzzleState,
   CageState,
+  LooseProp,
   WorldDrop,
   ZombieCorpse,
   ZombieState,
@@ -116,6 +117,10 @@ export class CagePuzzleSystem {
     );
     for (const c of corpses) {
       c.y = yAfterCageLands(c.x, c.y, c.width, c.height, c.isGrounded, box, exit);
+    }
+    // ...and so do loose props lying there (thrown under the exit).
+    for (const p of this.e.looseProps.filter((q: LooseProp): boolean => q.carrierId === null)) {
+      p.y = yAfterCageLands(p.x, p.y, p.width, p.height, p.isGrounded, box, exit);
     }
     const zombies: ZombieState[] = this.e.zombies;
     for (const z of zombies) {

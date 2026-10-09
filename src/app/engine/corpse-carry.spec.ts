@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { CharacterState, Direction, GAME_CONSTANTS } from '@shared/index';
-import { ZombieCorpse, ZombieType } from '@shared/game-entities';
+import { LooseProp, ZombieCorpse, ZombieType } from '@shared/game-entities';
 import {
   assignCarriers,
-  carryableCorpse,
+  nearestCarriable,
   CarryPose,
   carrySway,
   easeCarryPose,
-  holdCarriedCorpses,
+  holdCarried,
   holdOverhead,
-  tossCorpse,
+  toss,
 } from './corpse-carry';
 
 const PW: number = GAME_CONSTANTS.PLAYER_WIDTH;
@@ -58,18 +58,18 @@ function player(id: string, cx: number, overrides: Partial<CharacterState> = {})
   } as CharacterState;
 }
 
-describe('carryableCorpse', (): void => {
+describe('nearestCarriable', (): void => {
   it('picks the nearest lying corpse within reach', (): void => {
     const near: ZombieCorpse = corpse('near', 120);
     const far: ZombieCorpse = corpse('far', 140);
-    expect(carryableCorpse(player('p', 100), [far, near])?.id).toBe('near');
+    expect(nearestCarriable(player('p', 100), [far, near])?.id).toBe('near');
   });
 
   it('ignores corpses out of reach, falling or already carried', (): void => {
     const p: CharacterState = player('p', 100);
-    expect(carryableCorpse(p, [corpse('out', 100 + RANGE + 30)])).toBeNull();
-    expect(carryableCorpse(p, [corpse('falling', 110, { isGrounded: false })])).toBeNull();
-    expect(carryableCorpse(p, [corpse('taken', 110, { carrierId: 'other' })])).toBeNull();
+    expect(nearestCarriable(p, [corpse('out', 100 + RANGE + 30)])).toBeNull();
+    expect(nearestCarriable(p, [corpse('falling', 110, { isGrounded: false })])).toBeNull();
+    expect(nearestCarriable(p, [corpse('taken', 110, { carrierId: 'other' })])).toBeNull();
   });
 });
 
@@ -85,13 +85,13 @@ describe('holding and tossing', (): void => {
 
   it('tossing throws it forward and up, in the facing direction', (): void => {
     const right: ZombieCorpse = corpse('r', 100, { carrierId: 'p' });
-    tossCorpse(right, player('p', 100));
+    toss(right, player('p', 100));
     expect(right.carrierId).toBeNull();
     expect(right.velocityX).toBeGreaterThan(0);
     expect(right.velocityY).toBeLessThan(0);
 
     const left: ZombieCorpse = corpse('l', 100, { carrierId: 'p' });
-    tossCorpse(left, player('p', 100, { facing: Direction.Left }));
+    toss(left, player('p', 100, { facing: Direction.Left }));
     expect(left.velocityX).toBeLessThan(0);
   });
 });
@@ -151,13 +151,13 @@ describe('assignCarriers (host)', (): void => {
   });
 });
 
-describe('holdCarriedCorpses (every client)', (): void => {
+describe('holdCarried (every client)', (): void => {
   it('moves carried corpses with their carriers, but not one whose carrier already let go', (): void => {
     const held: ZombieCorpse = corpse('held', 500, { carrierId: 'a' });
     const released: ZombieCorpse = corpse('released', 500, { carrierId: 'b' });
     const a: CharacterState = player('a', 100, { carryingCorpseIds: ['held'] });
     const b: CharacterState = player('b', 200, { carryingCorpseIds: [] });
-    holdCarriedCorpses([held, released], [a, b]);
+    holdCarried([held, released], [a, b]);
     expect(held.x + held.width / 2).toBe(100);
     expect(released.x + released.width / 2).toBe(500);
   });
@@ -191,7 +191,7 @@ describe('carrying a stack', (): void => {
     const bottom: ZombieCorpse = corpse('bottom', 300, { carrierId: 'p' });
     const top: ZombieCorpse = corpse('top', 400, { carrierId: 'p' });
     const p: CharacterState = player('p', 100, { carryingCorpseIds: ['bottom', 'top'] });
-    holdCarriedCorpses([top, bottom], [p]);
+    holdCarried([top, bottom], [p]);
     expect(bottom.y + bottom.height).toBe(p.y - GAME_CONSTANTS.CORPSE_CARRY_LIFT);
     expect(top.y + top.height).toBe(p.y - GAME_CONSTANTS.CORPSE_CARRY_LIFT - STEP);
     expect(top.x + top.width / 2).toBe(100);
@@ -202,7 +202,7 @@ describe('carrying a stack', (): void => {
     const stack: ZombieCorpse[] = ['a', 'b', 'c'].map(
       (id: string): ZombieCorpse => corpse(id, 100, { carrierId: 'p' }),
     );
-    holdCarriedCorpses(stack, [p]);
+    holdCarried(stack, [p]);
     p.carryingCorpseIds = [];
     assignCarriers([stack[2], stack[0], stack[1]], [p]);
     for (const [level, c] of stack.entries()) {
@@ -223,6 +223,83 @@ describe('carrying a stack', (): void => {
   });
 });
 
+/** A barrel lying on the ground, centered at cx. */
+function barrel(id: string, cx: number, overrides: Partial<LooseProp> = {}): LooseProp {
+  const width: number = 18;
+  const height: number = 22;
+  return {
+    id,
+    x: cx - width / 2,
+    y: GROUND - height,
+    width,
+    height,
+    velocityX: 0,
+    velocityY: 0,
+    isGrounded: true,
+    carrierId: null,
+    ...overrides,
+  };
+}
+
+describe('carrying props', (): void => {
+  it('a lying prop in reach is picked up like a corpse; the nearest one wins', (): void => {
+    const near: LooseProp = barrel('near', 110);
+    const far: ZombieCorpse = corpse('far', 140);
+    expect(nearestCarriable(player('p', 100), [far, near])?.id).toBe('near');
+    expect(nearestCarriable(player('p', 100), [barrel('flying', 110, { isGrounded: false })])).toBeNull();
+  });
+
+  it('the host grants a prop request, within reach, like a corpse', (): void => {
+    const b: LooseProp = barrel('b', 110);
+    assignCarriers([b], [player('p', 100, { carryingCorpseIds: ['b'] })]);
+    expect(b.carrierId).toBe('p');
+  });
+
+  it('a carried prop sits right on the head, and the next thing in the stack rests on its top', (): void => {
+    const b: LooseProp = barrel('b', 300, { carrierId: 'p' });
+    const c: ZombieCorpse = corpse('c', 400, { carrierId: 'p' });
+    const p: CharacterState = player('p', 100, { carryingCorpseIds: ['b', 'c'] });
+    holdCarried([c, b], [p]);
+    expect(b.x + b.width / 2).toBe(100);
+    expect(b.y + b.height).toBe(p.y);
+    expect(c.y + c.height).toBe(b.y - GAME_CONSTANTS.CORPSE_CARRY_LIFT);
+  });
+
+  it('a prop on a corpse rests one body higher', (): void => {
+    const c: ZombieCorpse = corpse('c', 400, { carrierId: 'p' });
+    const b: LooseProp = barrel('b', 300, { carrierId: 'p' });
+    const p: CharacterState = player('p', 100, { carryingCorpseIds: ['c', 'b'] });
+    holdCarried([c, b], [p]);
+    expect(b.y + b.height).toBe(p.y - GAME_CONSTANTS.CORPSE_CARRY_STACK_STEP);
+  });
+
+  it("a guest's own pick-up rides on it before the host grants it; a remote's doesn't", (): void => {
+    const mine: LooseProp = barrel('mine', 300);
+    const theirs: LooseProp = barrel('theirs', 500);
+    const guest: CharacterState = player('g', 100, { carryingCorpseIds: ['mine'] });
+    const other: CharacterState = player('o', 700, { carryingCorpseIds: ['theirs'] });
+    holdCarried([mine, theirs], [guest, other], guest);
+    expect(mine.x + mine.width / 2).toBe(100);
+    expect(mine.isGrounded).toBe(false);
+    expect(theirs.x + theirs.width / 2).toBe(500);
+    expect(theirs.isGrounded).toBe(true);
+  });
+
+  it('letting go of a mixed stack tosses it together, each thing off its own spot', (): void => {
+    const p: CharacterState = player('p', 100, { carryingCorpseIds: ['b', 'c'] });
+    const b: LooseProp = barrel('b', 100, { carrierId: 'p' });
+    const c: ZombieCorpse = corpse('c', 100, { carrierId: 'p' });
+    holdCarried([b, c], [p]);
+    const cBottom: number = c.y + c.height;
+    p.carryingCorpseIds = [];
+    assignCarriers([c, b], [p]);
+    expect(b.carrierId).toBeNull();
+    expect(c.carrierId).toBeNull();
+    expect(b.y + b.height).toBe(p.y);
+    expect(c.y + c.height).toBe(cBottom);
+    expect(c.velocityX).toBe(b.velocityX);
+  });
+});
 describe('carried corpses sway', (): void => {
   /** A carrier on the ground at x walking at vx (px/tick). */
   function walker(x: number, vx: number): CharacterState {

@@ -267,6 +267,25 @@ export const QUICK_SLOT_ACTIONS: QuickSlotAction[] = [
 
 export const QUICK_SLOT_ACTION_SET: Set<string> = new Set<string>(QUICK_SLOT_ACTIONS);
 
+/**
+ * A map prop players can pick up and throw (barrels, boxes). Its kind and starting spot come from
+ * the floor layout (id `prop-<index in the layout's props>`); the host simulates where it is and
+ * sends it with every game-sync. Lying, it is solid like any prop; carried, it rides overhead like
+ * a corpse.
+ */
+export interface LooseProp {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  velocityX: number;
+  velocityY: number;
+  isGrounded: boolean;
+  /** Player carrying it overhead (the host decides; null = lying in the world or falling). */
+  carrierId: string | null;
+}
+
 /** Floor-2 boulder puzzle: the host simulates it and sends it with every game-sync. */
 export interface BoulderState {
   /** Hits the gate holding the boulder has taken; at BOULDER_GATE_HITS it breaks and the boulder rolls. */

@@ -187,8 +187,21 @@ export interface E2eLevelView {
   /** Platforms above the ground (the ground is always y = GROUND_Y, full width). */
   platforms: Array<{ x: number; y: number; width: number; height: number }>;
   ropes: Array<{ x: number; topY: number; bottomY: number }>;
-  /** Solid props (stand on top, blocked at the sides); their boxes are their visible art. */
-  props: Array<{ kind: string; x: number; y: number; width: number; height: number }>;
+  /**
+   * Solid props (stand on top, step over low ones, blocked by taller ones); their boxes are their
+   * visible art. Pickable ones (barrels, boxes) are where they are now, with their game-state id.
+   */
+  props: Array<{
+    id: string | null;
+    kind: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    pickable: boolean;
+    isGrounded: boolean;
+    carrierId: string | null;
+  }>;
   /** The floor's safe spot (also listed in `platforms`); its ladder is in `ropes`. */
   safeSpot: { x: number; y: number; width: number } | null;
 }

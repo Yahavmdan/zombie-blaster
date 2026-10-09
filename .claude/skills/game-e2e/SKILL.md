@@ -125,7 +125,12 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   `levelRopes(s)`, `goToFloorWhere(player, 'a rope', pred)`), or pin a layout with
   `probe.setLayoutSeed(n)` (solo/host). Tiers at y 530 / 430 / 330; ropes only where the layout
   has them (floor 1 may have none, later floors always have one). Props (`state().level.props`) are
-  solid: you stand on them and they block walking; the Brain hops when a held direction stalls.
+  solid: you stand on them; walking into one up to 26 px tall steps you onto it, a stack (or
+  taller) blocks (the Brain hops when a held direction stalls). Barrels and boxes are `pickable`:
+  their entry has the game-state `id`, current x/y, `isGrounded`, `carrierId`. Find a test layout
+  with `layoutWhere(player, desc, pred)` (navigation.ts: loops `setLayoutSeed`); prop helpers in
+  `support/props.ts` (`pickableOnGround`, `standLeftOf`). Specs: `solo/props.spec.ts`,
+  `online/props-coop.spec.ts`.
 - **Visual == collision:** `probe.geometryReport()` measures the drawn level pixels against the
   collision data; `expectArtMatchesCollision` (support/level-geometry.ts) asserts it. Any art/layout
   change must keep `level-geometry.spec` and `level-sync.spec` green. Look at their floor screenshots.
@@ -208,7 +213,7 @@ Driving tips:
   - Always validate exit/climb specs with `--workers=5` (plus fairness specs) to reproduce suite load.
   - The brain restocks MP potions (5) for classes with skills; the game has no MP regen.
 - Special drops open a Y/N prompt with a timer; the brain presses Y.
-- **Carrying corpses**: `KEYS.carry` (E) picks up the nearest lying corpse within 50 px
+- **Carrying corpses (and barrels/boxes)**: `KEYS.carry` (E) picks up the nearest lying corpse or pickable prop within 50 px
   (center to center; a "[E] Carry" prompt shows over it) and stacks it overhead, up to 3
   (`CORPSE_CARRY_MAX`, 5 px per level: bodies rest on each other). E with nothing more to pick up (or a full stack; prompt
   "[E] Throw") tosses the whole stack forward and it lands as a pile (each body's `footY` 5 px
@@ -268,6 +273,11 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
   animator method; a missing one throws only on a random branch and looks like a flake.
 - `vfxQueuedBy` reads the probe VFX log. Events leave the queue as `sent` (multiplayer) or
   `discarded` (solo, drained every tick), so it works in both modes.
+- Worktree slot: ports 4200/3001 may belong to the primary checkout. Run the slot's frontend on
+  another port (`npx ng serve --port 4210`) and point the suite at it with
+  `E2E_BASE_URL=http://localhost:4210 E2E_EXTERNAL_HAS_PROBE=1` (online specs use whatever API
+  listens on 3001; the frontend wsUrl is fixed). An API in watch mode restarting shows up as a
+  disabled lobby CREATE button: retry.
 - Background tabs: Playwright keeps every page visible (new tab, minimize, removing the
   anti-throttling launch flags, raw Chrome over CDP: all still `visible`, rAF at full speed).
   `player.setBackgroundTab(true/false)` emulates Chrome instead (init script): window blur,
