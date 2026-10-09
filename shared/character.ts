@@ -1,4 +1,5 @@
 import { PlayerInventory } from './game-entities';
+import { PixelIconId } from './pixel-icon';
 
 export enum CharacterClass {
   Warrior = 'warrior',
@@ -31,7 +32,7 @@ export interface CharacterClassDefinition {
   description: string;
   baseStats: CharacterStats;
   color: string;
-  icon: string;
+  icon: PixelIconId;
 }
 
 export type BuffStat = keyof CharacterDerived | 'allDamagePercent' | 'knockbackResist' | 'maxHpMaxMpPercent' | 'attackSpeed' | 'twinMimicPercent' | 'darkSight' | 'darkSightSpeedPenalty';
