@@ -5,5 +5,6 @@ export interface Environment {
 
 export const environment: Environment = {
   production: false,
-  wsUrl: 'ws://localhost:3001',
+  // Same origin as the page: `ng serve` proxies /ws to the API on API_PORT (proxy.conf.mjs).
+  wsUrl: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`,
 };

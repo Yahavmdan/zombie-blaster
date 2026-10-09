@@ -5,6 +5,9 @@
  * E2E_BASE_URL   Frontend under test. Set it to test a deployed/staging build ("online" mode);
  *                the config then starts no local servers.
  * E2E_WS_URL     Game server for raw-protocol tests. Defaults to the local server.
+ * WEB_PORT       Port of the local `ng serve` the config starts (default 4200).
+ * API_PORT       Port of the local API the config starts (default 3001). A worktree slot N uses
+ *                WEB_PORT=N*1111 and API_PORT=N*1111+1 (`wt.ps1 ports`), so slots never share servers.
  * E2E_CHANNEL    Browser channel: `chrome` (installed Chrome, default), `msedge`, or `chromium`
  *                (Playwright's bundled build; needs `npx playwright install chromium`).
  * E2E_WORKERS    Parallel workers. Every page runs a full 50 tps game loop, so keep it low.
@@ -23,7 +26,12 @@ function readInt(name: string, fallback: number): number {
 
 const channelSetting: string = readString('E2E_CHANNEL', 'chrome');
 
+const webPort: number = readInt('WEB_PORT', 4200);
+const apiPort: number = readInt('API_PORT', 3001);
+
 export const e2eEnv: {
+  webPort: number;
+  apiPort: number;
   baseUrl: string;
   wsUrl: string;
   isExternal: boolean;
@@ -32,8 +40,10 @@ export const e2eEnv: {
   slowMo: number;
   isCi: boolean;
 } = {
-  baseUrl: readString('E2E_BASE_URL', 'http://localhost:4200'),
-  wsUrl: readString('E2E_WS_URL', 'ws://localhost:3001'),
+  webPort,
+  apiPort,
+  baseUrl: readString('E2E_BASE_URL', `http://localhost:${webPort}`),
+  wsUrl: readString('E2E_WS_URL', `ws://localhost:${apiPort}`),
   isExternal: (process.env['E2E_BASE_URL'] ?? '').trim() !== '',
   channel: channelSetting === 'chromium' ? undefined : channelSetting,
   workers: readInt('E2E_WORKERS', 2),

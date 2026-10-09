@@ -323,19 +323,21 @@ export class GamePlayer {
 
   // ── Network ─────────────────────────────────────────────
 
-  /**
-   * Closes the game-server socket as if the network dropped; the app should auto-reconnect.
-   * Sockets to the page's own host (dev-server live reload) are left alone.
-   */
   /** Puts this tab behind another one (as when the player opens a new tab) or brings it back. */
   async setBackgroundTab(hidden: boolean): Promise<void> {
     await this.page.evaluate((h: boolean): void => window.__zbBackgroundTab?.(h), hidden);
   }
 
+  /**
+   * Closes the game-server socket as if the network dropped; the app should auto-reconnect.
+   * The game socket is on another host (deployed) or on the dev server's `/ws` proxy; the dev
+   * server's own live-reload socket is left alone.
+   */
   async dropConnection(): Promise<void> {
     await this.page.evaluate((): void => {
       for (const ws of window.__zbSockets ?? []) {
-        const isGameSocket: boolean = new URL(ws.url).host !== location.host;
+        const url: URL = new URL(ws.url);
+        const isGameSocket: boolean = url.host !== location.host || url.pathname === '/ws';
         if (isGameSocket && ws.readyState === WebSocket.OPEN)
           ws.close(4000, 'e2e: simulated network drop');
       }
@@ -347,7 +349,8 @@ export class GamePlayer {
       (): number =>
         (window.__zbSockets ?? []).filter(
           (ws: WebSocket): boolean =>
-            new URL(ws.url).host !== location.host && ws.readyState === WebSocket.OPEN,
+            (new URL(ws.url).host !== location.host || new URL(ws.url).pathname === '/ws') &&
+            ws.readyState === WebSocket.OPEN,
         ).length,
     );
   }
