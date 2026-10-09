@@ -8,8 +8,9 @@ import {
   VfxEvent,
   VfxEventType,
 } from '@shared/index';
-import { CagePuzzleState, CageState, DropType, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
+import { CagePuzzleState, CageState, DropType, LooseProp, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import {
+  BarrelBlastFx,
   BoulderPuzzleLayout,
   CagePuzzleLayout,
   HangingCage,
@@ -30,7 +31,9 @@ import { ZombieSystem } from './zombie-system';
 import { CarryPose } from './corpse-carry';
 import { CorpseDrape } from './corpse-drape';
 import { buttonBox, newSpringState, scaleBox, springSpan } from './spring-puzzle';
-import { exitPlatformY } from './level-generator';
+import { exitPlatformY, isExplosive, pickableProps, Prop } from './level-generator';
+import { LoosePropSystem } from './loose-prop-system';
+import { ExplodingBarrelSystem } from './exploding-barrel-system';
 import { Box, BoulderPath, boulderPath, gateBox, pointAlong } from './boulder-puzzle';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
@@ -411,6 +414,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     SPRITE_RENDER_SIZE: 96,
     dragonProjectiles: [],
     dragonImpacts: [],
+    barrelBlasts: [],
     dragonProjectileImg: new Image(),
     dragonImpactImg: new Image(),
     spitterProjectiles: [],
@@ -1505,5 +1509,227 @@ describe('Player status tints (hurt red, poison green) synced via VfxEvents', ()
     expect(engine.playerTints.get('remote-player')?.hurtTicks).toBe(1);
     vfx.updatePlayerTints();
     expect(engine.playerTints.has('remote-player')).toBe(false);
+  });
+});
+
+describe('Exploding barrels', (): void => {
+  const FUSE: number = GAME_CONSTANTS.BARREL_FUSE_TICKS;
+  const CHAIN: number = GAME_CONSTANTS.BARREL_CHAIN_FUSE_TICKS;
+  const GROUND: number = GAME_CONSTANTS.GROUND_Y;
+  let engine: GameEngine;
+  let props: LoosePropSystem;
+  let barrels: ExplodingBarrelSystem;
+
+  function barrelIds(e: GameEngine): string[] {
+    return [...pickableProps(e.level)]
+      .filter(([, p]: [string, Prop]): boolean => isExplosive(p.kind))
+      .map(([id]: [string, Prop]): string => id);
+  }
+
+  /** Pins the first layout with at least `n` barrels and returns their ids. */
+  function layoutWithBarrels(e: GameEngine, n: number): string[] {
+    for (let seed: number = 1; seed < 500; seed++) {
+      e.layoutSeed = seed;
+      e.applyLevel();
+      const ids: string[] = barrelIds(e);
+      if (ids.length >= n) return ids;
+    }
+    throw new Error(`no layout with ${n} barrels`);
+  }
+
+  function propById(e: GameEngine, id: string): LooseProp | undefined {
+    return e.looseProps.find((p: LooseProp): boolean => p.id === id);
+  }
+
+  /** Setup: the barrel lies on the ground with its left side at x. */
+  function placeOnGround(b: LooseProp, x: number): void {
+    b.x = x;
+    b.y = GROUND - b.height;
+    b.isGrounded = true;
+  }
+
+  function queued(type: VfxEventType): VfxEvent[] {
+    return engine.pendingVfxEvents.filter((evt: VfxEvent): boolean => evt.type === type);
+  }
+
+  /** A host (solo) engine on a layout with `n` barrels, and the barrel systems on it. */
+  function hostWithBarrels(n: number): string[] {
+    const ids: string[] = layoutWithBarrels(engine, n);
+    const physics: PhysicsSystem = new PhysicsSystem(engine);
+    const vfx: VfxSystem = new VfxSystem(engine);
+    const drops: DropSystem = new DropSystem(engine, physics, vfx);
+    const combat: CombatSystem = new CombatSystem(engine, physics, vfx, drops);
+    props = new LoosePropSystem(engine, drops);
+    props.reset(engine.level);
+    barrels = new ExplodingBarrelSystem(engine, props, combat, vfx);
+    return ids;
+  }
+
+  beforeEach((): void => {
+    engine = new GameEngine(createMockCanvas());
+    engine.pendingVfxEvents = [];
+  });
+
+  it('a hit lights the fuse; 3 s later the barrel blows up and hurts the zombies around it', (): void => {
+    const [id]: string[] = hostWithBarrels(1);
+    const b: LooseProp = propById(engine, id)!;
+    placeOnGround(b, 600);
+    engine.looseProps = [b];
+    engine.player = makePlayer({
+      x: 600 - GAME_CONSTANTS.PLAYER_WIDTH - 2,
+      y: GROUND - GAME_CONSTANTS.PLAYER_HEIGHT,
+      facing: Direction.Right,
+      isAttacking: true,
+    });
+    const near: ZombieState = makeZombie({ id: 'near', x: 640, y: GROUND - 50 });
+    const far: ZombieState = makeZombie({ id: 'far', x: 900, y: GROUND - 50 });
+    engine.zombies = [near, far];
+
+    barrels.update();
+    expect(b.fuseTicks, 'lit and burning').toBe(FUSE - 1);
+    expect(queued(VfxEventType.HitParticles).length, 'sparks as it catches').toBe(1);
+    expect(props.moved().find((p: LooseProp): boolean => p.id === id)?.fuseTicks).toBe(FUSE - 1);
+
+    // The player keeps swinging: the fuse burns on, it is never lit again.
+    for (let t: number = 0; t < FUSE - 2; t++) barrels.update();
+    expect(b.fuseTicks).toBe(1);
+    expect(propById(engine, id)).toBeDefined();
+    expect(near.hp).toBe(100);
+
+    barrels.update();
+    expect(propById(engine, id), 'gone from the world').toBeUndefined();
+    props.placeSolids();
+    expect(engine.platforms.some((p: Platform): boolean => p.propId === id), 'no collision left').toBe(false);
+    const blast: VfxEvent[] = queued(VfxEventType.BarrelBlast);
+    expect(blast.length).toBe(1);
+    expect(blast[0].x).toBe(b.x + b.width / 2);
+    expect(blast[0].playerId).toBe(engine.player.id);
+    expect(near.hp, '60% of its max HP').toBe(40);
+    expect(near.velocityX, 'thrown away from the barrel').toBeGreaterThan(0);
+    expect(near.isGrounded).toBe(false);
+    expect(far.hp, 'out of the blast').toBe(100);
+    expect(queued(VfxEventType.DamageNumber).map((evt: VfxEvent): number => evt.value!)).toEqual([60]);
+    expect(engine.particles.length).toBeGreaterThan(0);
+    expect(engine.screenShakeFrames).toBeGreaterThan(0);
+    expect(props.moved().find((p: LooseProp): boolean => p.id === id)?.exploded, 'synced as gone').toBe(true);
+    expect(blast[0].targetY, 'lay on the ground: a scorch mark there').toBe(GROUND);
+    expect(engine.barrelBlasts).toEqual([{ x: blast[0].x, y: blast[0].y, groundY: GROUND, age: 0 }]);
+  });
+
+  it('10 s after the blast the barrel is back on its spawn spot, once nobody stands there', (): void => {
+    const [id]: string[] = hostWithBarrels(1);
+    const spawn: Prop = pickableProps(engine.level).get(id)!;
+    const b: LooseProp = propById(engine, id)!;
+    engine.looseProps = [b];
+    engine.zombies = [];
+    b.fuseTicks = 1;
+    barrels.update();
+    expect(propById(engine, id)).toBeUndefined();
+
+    // Someone stands on the spot when it is due: it waits for them to step off.
+    engine.player = makePlayer({ x: spawn.x, y: spawn.y + spawn.height - GAME_CONSTANTS.PLAYER_HEIGHT });
+    for (let t: number = 0; t < GAME_CONSTANTS.BARREL_RESPAWN_TICKS + 5; t++) barrels.update();
+    expect(propById(engine, id), 'blocked by the player').toBeUndefined();
+    expect(queued(VfxEventType.BarrelRespawn)).toEqual([]);
+
+    engine.player.x = spawn.x + 200;
+    barrels.update();
+    const back: LooseProp | undefined = propById(engine, id);
+    expect(back).toMatchObject({ x: spawn.x, y: spawn.y, fuseTicks: 0, exploded: false, isGrounded: true });
+    props.placeSolids();
+    expect(engine.platforms.some((p: Platform): boolean => p.propId === id), 'solid again').toBe(true);
+    expect(props.moved().some((p: LooseProp): boolean => p.id === id), 'no longer synced as gone').toBe(false);
+    const respawn: VfxEvent[] = queued(VfxEventType.BarrelRespawn);
+    expect(respawn.length).toBe(1);
+    expect(respawn[0].y).toBe(spawn.y + spawn.height);
+
+    // Clients rebuild it from their own layout once the host stops sending it as gone.
+    const client: GameEngine = new GameEngine(createMockCanvas());
+    client.isMultiplayerClient = true;
+    client.layoutSeed = engine.layoutSeed;
+    client.applyLevel();
+    client.applyRemoteProps([{ ...b, exploded: true }]);
+    expect(propById(client, id)).toBeUndefined();
+    client.applyRemoteProps(props.moved());
+    expect(propById(client, id)).toMatchObject({ x: spawn.x, y: spawn.y });
+  });
+
+  it('it comes back exactly BARREL_RESPAWN_TICKS after the blast', (): void => {
+    const [id]: string[] = hostWithBarrels(1);
+    engine.looseProps = [propById(engine, id)!];
+    engine.zombies = [];
+    engine.looseProps[0].fuseTicks = 1;
+    barrels.update();
+    for (let t: number = 1; t < GAME_CONSTANTS.BARREL_RESPAWN_TICKS; t++) {
+      barrels.update();
+      expect(propById(engine, id), `${t} ticks after the blast`).toBeUndefined();
+    }
+    barrels.update();
+    expect(propById(engine, id), '10 s after the blast').toBeDefined();
+  });
+
+  it('a blast plays out and its scorch mark fades, then it is dropped', (): void => {
+    const vfx: VfxSystem = new VfxSystem(engine);
+    vfx.spawnBarrelBlast(600, 600, GROUND);
+    vfx.spawnBarrelBlast(300, 300, null);
+    expect(engine.barrelBlasts.length).toBe(2);
+    for (let t: number = 0; t < GAME_CONSTANTS.BARREL_SCORCH_TICKS - 1; t++) vfx.updateBarrelBlasts();
+    expect(engine.barrelBlasts.length).toBe(2);
+    vfx.updateBarrelBlasts();
+    expect(engine.barrelBlasts).toEqual([]);
+  });
+
+  it('a blast sets off the barrels next to it', (): void => {
+    const [a, b]: string[] = hostWithBarrels(2);
+    const first: LooseProp = propById(engine, a)!;
+    const second: LooseProp = propById(engine, b)!;
+    placeOnGround(first, 600);
+    placeOnGround(second, 660);
+    engine.looseProps = [first, second];
+    first.fuseTicks = 1;
+    engine.zombies = [];
+    barrels.update();
+    expect(propById(engine, a)).toBeUndefined();
+    expect(second.fuseTicks).toBe(CHAIN);
+    for (let t: number = 0; t < CHAIN; t++) barrels.update();
+    expect(propById(engine, b)).toBeUndefined();
+    expect(queued(VfxEventType.BarrelBlast).length).toBe(2);
+  });
+
+  it("clients take the host's fuse (clamped) and drop the barrels that blew up", (): void => {
+    const [id]: string[] = hostWithBarrels(1);
+    const client: GameEngine = new GameEngine(createMockCanvas());
+    client.isMultiplayerClient = true;
+    client.layoutSeed = engine.layoutSeed;
+    client.applyLevel();
+    const lit: LooseProp = { ...propById(engine, id)!, fuseTicks: 90 };
+
+    client.applyRemoteProps([lit]);
+    expect(propById(client, id)?.fuseTicks).toBe(90);
+    client.applyRemoteProps([{ ...lit, fuseTicks: 1e9 }]);
+    expect(propById(client, id)?.fuseTicks).toBe(FUSE);
+    client.applyRemoteProps([{ ...lit, fuseTicks: 'soon' as unknown as number }]);
+    expect(propById(client, id)?.fuseTicks).toBe(0);
+    client.applyRemoteProps([]);
+    expect(propById(client, id)?.fuseTicks, 'back on its spawn spot, unlit').toBe(0);
+
+    client.applyRemoteProps([{ ...lit, exploded: true }]);
+    expect(propById(client, id)).toBeUndefined();
+    expect(client.platforms.some((p: Platform): boolean => p.propId === id)).toBe(false);
+  });
+
+  it('replaying a blast shows the explosion and shakes the screen', (): void => {
+    engine.isMultiplayerClient = true;
+    engine.player = makePlayer();
+    engine.replayRemoteVfxEvents([
+      { type: VfxEventType.BarrelBlast, playerId: 'host', x: 600, y: 560, targetY: GROUND },
+      { type: VfxEventType.BarrelBlast, playerId: 'host', x: 300, y: 300 },
+    ]);
+    expect(engine.particles.length).toBeGreaterThan(0);
+    expect(engine.screenShakeFrames).toBeGreaterThan(0);
+    expect(engine.barrelBlasts.map((b: BarrelBlastFx): number | null => b.groundY)).toEqual([GROUND, null]);
+    const before: number = engine.particles.length;
+    engine.replayRemoteVfxEvents([{ type: VfxEventType.BarrelRespawn, playerId: 'host', x: 600, y: GROUND }]);
+    expect(engine.particles.length, 'dust as the barrel drops back in').toBeGreaterThan(before);
   });
 });

@@ -179,6 +179,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     SPRITE_RENDER_SIZE: 96,
     dragonProjectiles: [],
     dragonImpacts: [],
+    barrelBlasts: [],
     dragonProjectileImg: new Image(),
     dragonImpactImg: new Image(),
     spitterProjectiles: [],

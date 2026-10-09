@@ -3,6 +3,7 @@ import { GAME_CONSTANTS } from '@shared/index';
 import {
   exitPlatformY,
   generateLevel,
+  isExplosive,
   isPickable,
   LevelLayout,
   levelViolations,
@@ -185,6 +186,24 @@ describe('map props', () => {
       }
     }
     expect(total / floors).toBeGreaterThanOrEqual(2 * 4.88);
+  });
+
+  it('every floor has 5 to 10 barrels, and the count varies', (): void => {
+    const counts: Set<number> = new Set<number>();
+    const wrong: string[] = [];
+    for (let seed: number = 1; seed <= 200; seed++) {
+      for (let floor: number = 1; floor <= 10; floor++) {
+        const n: number = generateLevel(seed, floor).props.filter((p: Prop): boolean =>
+          isExplosive(p.kind),
+        ).length;
+        counts.add(n);
+        if (n < GAME_CONSTANTS.BARREL_COUNT_MIN || n > GAME_CONSTANTS.BARREL_COUNT_MAX) {
+          wrong.push(`seed ${seed} floor ${floor}: ${n} barrels`);
+        }
+      }
+    }
+    expect(wrong.slice(0, 10)).toEqual([]);
+    expect(counts.size).toBeGreaterThanOrEqual(4);
   });
 
   it('barrels and boxes can be picked up; rails and lockers stay put', (): void => {

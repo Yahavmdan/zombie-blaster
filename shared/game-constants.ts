@@ -320,6 +320,22 @@ export const GAME_CONSTANTS = {
   CORPSE_THROW_SPEED_X: 4, // Sideways speed of a dropped corpse, in the carrier's facing direction
   CORPSE_THROW_SPEED_Y: -3, // Upward toss of a dropped corpse (negative = up)
   PROP_STEP_UP_PX: 26, // A prop this low (or lower) is stepped onto when walked into; taller stacks still block
+  BARREL_FUSE_TICKS: 150, // A barrel hit by an attack burns its fuse this long (3 s), then blows up
+  BARREL_HIT_REACH_PX: 24, // Max gap between an attacking player's box and a barrel for the swing to light it
+  BARREL_BLAST_RADIUS_PX: 110, // Zombies (and other barrels) whose center is this close to the barrel's center are caught in the blast
+  BARREL_BLAST_DAMAGE_PERCENT: 60, // The blast takes this share of a caught zombie's max HP
+  BARREL_BLAST_BOSS_DAMAGE_PERCENT: 10, // ...and only this share of a boss's (a few barrels don't kill one)
+  BARREL_BLAST_KNOCKBACK: 9, // Sideways speed (px/tick) the blast throws a caught zombie away from the barrel
+  BARREL_BLAST_KNOCKBACK_UP: -6, // Upward speed of a caught zombie (negative = up)
+  BARREL_CHAIN_FUSE_TICKS: 12, // A barrel caught in another's blast blows up this soon (a chain reaction)
+  BARREL_RESPAWN_TICKS: 500, // A blown-up barrel comes back on its spawn spot this long after the blast (10 s), once no player or prop is in the way
+  BARREL_COUNT_MIN: 5, // Barrels the level generator puts on every floor: at least this many...
+  BARREL_COUNT_MAX: 10, // ...and at most this many
+  BARREL_OTHER_PROPS_MIN: 4, // Other props (boxes, lockers, rails) per floor besides the barrels: at least this many...
+  BARREL_OTHER_PROPS_MAX: 8, // ...and at most this many
+  BARREL_BLAST_FX_TICKS: 45, // The blast's fireball, shockwave and glow play out over this long
+  BARREL_SCORCH_TICKS: 400, // The scorch mark a blast leaves on the surface under it fades over this long (8 s)
+  BARREL_BLAST_HITSTOP_TICKS: 4, // Solo only: the game freezes this long on a blast, so it lands hard
 
   // ─── Ropes ──────────────────────────────────────
   ROPE_CLIMB_SPEED: 3, // How fast the player moves up/down on a rope

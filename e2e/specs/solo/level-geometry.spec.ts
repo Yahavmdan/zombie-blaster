@@ -12,6 +12,8 @@ import { layoutWhere } from '../../support/navigation';
 import { LevelProp } from '../../support/props';
 
 const FLOORS: number[] = [1, 2, 3, 4, 5, 6];
+/** Mirrors LEVEL_TILE_PX in shared/game-constants.ts: a platform is one tile tall. */
+const TILE_PX: number = 32;
 
 /**
  * What you see is what you stand on, on every generated floor (helpers: support/level-geometry.ts).
@@ -104,8 +106,13 @@ test.describe(
           if (cx !== undefined) surfaces.push({ check: plat, cx });
         }
         for (const prop of props) {
-          // Drop where the player's body overlaps this prop and nothing taller beside it.
-          const cx: number | undefined = soloDropSpot(prop, props);
+          // Drop where the player's body overlaps this prop and nothing taller beside it. A
+          // barrel under a ledge (crowded floors) has no room to stand on: it is skipped.
+          const cx: number | undefined = soloDropSpot(
+            prop,
+            props,
+            report.checks.filter((c: E2eGeometryCheck): boolean => c.kind === 'platform'),
+          );
           if (cx !== undefined) surfaces.push({ check: prop, cx });
         }
         for (const { check: plat, cx } of surfaces) {
@@ -192,8 +199,15 @@ function freeSpotOn(plat: E2eGeometryCheck, props: E2eGeometryCheck[]): number |
   return undefined;
 }
 
-/** A drop x whose 32 px body overlaps `prop` but no higher prop (e.g. a taller stack next to it). */
-function soloDropSpot(prop: E2eGeometryCheck, props: E2eGeometryCheck[]): number | undefined {
+/**
+ * A drop x whose 32 px body overlaps `prop` but no higher prop (e.g. a taller stack next to it),
+ * with room to stand on it (no platform tile low over it).
+ */
+function soloDropSpot(
+  prop: E2eGeometryCheck,
+  props: E2eGeometryCheck[],
+  platforms: E2eGeometryCheck[],
+): number | undefined {
   const half: number = WORLD.playerWidth / 2;
   for (
     let cx: number = prop.expectedLeft - half + 2;
@@ -206,7 +220,13 @@ function soloDropSpot(prop: E2eGeometryCheck, props: E2eGeometryCheck[]): number
       (q: E2eGeometryCheck): boolean =>
         q !== prop && q.expectedTop < prop.expectedTop && overlaps(q, left, right),
     );
-    if (!higher) return cx;
+    const ledgeOver: boolean = platforms.some(
+      (pl: E2eGeometryCheck): boolean =>
+        pl.expectedTop < prop.expectedTop &&
+        prop.expectedTop - (pl.expectedTop + TILE_PX) < WORLD.playerHeight + 4 &&
+        overlaps(pl, left, right),
+    );
+    if (!higher && !ledgeOver) return cx;
   }
   return undefined;
 }

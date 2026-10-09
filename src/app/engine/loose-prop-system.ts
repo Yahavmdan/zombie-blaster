@@ -3,12 +3,29 @@ import { LooseProp, ZombieCorpse } from '@shared/game-entities';
 import { IGameEngine, Platform } from './engine-types';
 import { DropSystem } from './drop-system';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
-import { keepOutOfWall } from './boulder-puzzle';
+import { Box, keepOutOfWall } from './boulder-puzzle';
 import { pushOutOfSolids } from './solid-blocks';
-import { LevelLayout, lyingProp, pickableProps, Prop, propWeightKg } from './level-generator';
+import {
+  LevelLayout,
+  lyingProp,
+  pickableProps,
+  Prop,
+  PropKind,
+  propWeightKg,
+} from './level-generator';
 
 /** Sideways speed kept per tick by a thrown prop (like a corpse). */
 const PROP_AIR_DRAG: number = 0.92;
+
+function boxesOverlap(a: Box, b: Box): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+/** A synced fuse as a whole tick count within the fuse's length (0 for anything malformed). */
+function syncedFuseTicks(ticks: unknown): number {
+  if (typeof ticks !== 'number' || !Number.isFinite(ticks)) return 0;
+  return Math.min(GAME_CONSTANTS.BARREL_FUSE_TICKS, Math.max(0, Math.round(ticks)));
+}
 
 /**
  * Loose props (barrels, boxes players pick up). The host (or solo) moves the ones in the air: a
@@ -20,6 +37,10 @@ const PROP_AIR_DRAG: number = 0.92;
 export class LoosePropSystem {
   /** The floor's pickable props by id: art and spawn spot. */
   private spawns: Map<string, Prop> = new Map<string, Prop>();
+  /** Host: props blown up and not back yet, sent with every sync so clients drop them too. */
+  private exploded: LooseProp[] = [];
+  /** Host: ticks until each blown-up prop comes back (0 = due, waiting for its spot to clear). */
+  private respawnTicks: Map<string, number> = new Map<string, number>();
 
   constructor(
     private readonly e: IGameEngine,
@@ -29,6 +50,8 @@ export class LoosePropSystem {
   /** New floor: every pickable prop lies on its spawn spot. */
   reset(level: LevelLayout): void {
     this.spawns = pickableProps(level);
+    this.exploded = [];
+    this.respawnTicks.clear();
     this.e.mapRenderer.setLooseProps(this.spawns);
     this.e.looseProps = [...this.spawns].map(
       ([id, spawn]: [string, Prop]): LooseProp => lyingProp(id, spawn),
@@ -36,31 +59,95 @@ export class LoosePropSystem {
     this.placeSolids();
   }
 
-  /**
-   * Host: the props to send, the ones away from their spawn spot (carried, flying, or lying
-   * somewhere else). The rest lie where every client's own layout puts them.
-   */
-  moved(): LooseProp[] {
-    return this.e.looseProps
-      .filter((p: LooseProp): boolean => {
-        const spawn: Prop | undefined = this.spawns.get(p.id);
-        return (
-          !spawn || p.carrierId !== null || !p.isGrounded || p.x !== spawn.x || p.y !== spawn.y
-        );
-      })
-      .map((p: LooseProp): LooseProp => ({ ...p }));
+  /** What a prop of this floor is (its layout kind), or undefined for an unknown id. */
+  kindOf(id: string): PropKind | undefined {
+    return this.spawns.get(id)?.kind;
   }
 
-  /** Client: the host's moved props; every other one lies on its spawn spot. */
+  /**
+   * Host: the prop is blown up. It leaves the world (and any carrier's hands) until it comes back
+   * on its spawn spot BARREL_RESPAWN_TICKS later (`respawn`), or for the rest of the floor when
+   * `respawns` is false (test setup clearing room).
+   */
+  remove(id: string, respawns: boolean = true): void {
+    const prop: LooseProp | undefined = this.e.looseProps.find((p: LooseProp): boolean => p.id === id);
+    if (!prop) return;
+    this.e.looseProps = this.e.looseProps.filter((p: LooseProp): boolean => p !== prop);
+    this.exploded.push({ ...prop, carrierId: null, fuseTicks: 0, exploded: true });
+    if (respawns) this.respawnTicks.set(id, GAME_CONSTANTS.BARREL_RESPAWN_TICKS);
+    this.placeSolids();
+  }
+
+  /**
+   * Host, every tick: blown-up props whose time is up come back, lying on their spawn spots. One
+   * waits while a player (a `blockers` box) or another prop is in the way. Returns the ones back.
+   */
+  respawn(blockers: Box[]): LooseProp[] {
+    const back: LooseProp[] = [];
+    for (const [id, ticks] of this.respawnTicks) {
+      if (ticks > 0) {
+        this.respawnTicks.set(id, ticks - 1);
+        continue;
+      }
+      const spawn: Prop | undefined = this.spawns.get(id);
+      if (!spawn) {
+        this.respawnTicks.delete(id);
+        continue;
+      }
+      const inTheWay: boolean = [...blockers, ...this.e.looseProps].some(
+        (b: Box): boolean => boxesOverlap(b, spawn),
+      );
+      if (inTheWay) continue;
+      const prop: LooseProp = lyingProp(id, spawn);
+      this.e.looseProps.push(prop);
+      this.exploded = this.exploded.filter((p: LooseProp): boolean => p.id !== id);
+      this.respawnTicks.delete(id);
+      back.push(prop);
+    }
+    if (back.length > 0) this.placeSolids();
+    return back;
+  }
+
+  /**
+   * Host: the props to send, the ones away from their spawn spot (carried, flying, lying
+   * somewhere else, burning a fuse or blown up). The rest lie where every client's own layout
+   * puts them.
+   */
+  moved(): LooseProp[] {
+    return [
+      ...this.e.looseProps.filter((p: LooseProp): boolean => {
+        const spawn: Prop | undefined = this.spawns.get(p.id);
+        return (
+          !spawn ||
+          p.carrierId !== null ||
+          !p.isGrounded ||
+          p.fuseTicks > 0 ||
+          p.x !== spawn.x ||
+          p.y !== spawn.y
+        );
+      }),
+      ...this.exploded,
+    ].map((p: LooseProp): LooseProp => ({ ...p }));
+  }
+
+  /** Client: the host's moved props; every other one lies on its spawn spot, blown up ones are gone. */
   applyRemote(moved: LooseProp[]): void {
     const synced: Map<string, LooseProp> = new Map<string, LooseProp>(
       moved.map((p: LooseProp): [string, LooseProp] => [p.id, p]),
     );
-    this.e.looseProps = [...this.spawns].map(([id, spawn]: [string, Prop]): LooseProp => {
-      const s: LooseProp | undefined = synced.get(id);
-      // The weight comes from this client's own layout, never from the sync.
-      return s ? { ...s, weightKg: propWeightKg(spawn.kind) } : lyingProp(id, spawn);
-    });
+    this.e.looseProps = [...this.spawns]
+      .filter(([id]: [string, Prop]): boolean => synced.get(id)?.exploded !== true)
+      .map(([id, spawn]: [string, Prop]): LooseProp => {
+        const s: LooseProp | undefined = synced.get(id);
+        if (!s) return lyingProp(id, spawn);
+        // The weight comes from this client's own layout, never from the sync.
+        return {
+          ...s,
+          weightKg: propWeightKg(spawn.kind),
+          fuseTicks: syncedFuseTicks(s.fuseTicks),
+          exploded: false,
+        };
+      });
   }
 
   update(): void {

@@ -7,7 +7,7 @@ import {
 import { DropType } from '@shared/game-entities';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { SKILL_ANIMATIONS, SkillAnimation } from './skill-animations';
-import { DamageNumber, DropNotification, IGameEngine, PlayerTint } from './engine-types';
+import { BarrelBlastFx, DamageNumber, DropNotification, IGameEngine, PlayerTint } from './engine-types';
 import { PixelIconId } from '@shared/pixel-icon';
 
 export class VfxSystem {
@@ -565,6 +565,143 @@ export class VfxSystem {
   }
 
   /**
+   * A barrel blows up: the animated blast (white-hot core, fireball, shockwave, glow, then a
+   * scorch mark under it: `barrelBlasts`), a burning ring, flames licking the surface, a burst of
+   * fire, embers raining down, steel shards, a rising smoke column, a flash and a shake that is
+   * hardest close to the blast. `groundY`: the surface it lay on, null when it blew up in the air.
+   */
+  spawnBarrelBlast(cx: number, cy: number, groundY: number | null): void {
+    this.e.barrelBlasts.push({ x: cx, y: cy, groundY, age: 0 });
+    if (this.e.spriteEffectSystem.isLoaded()) {
+      this.e.spriteEffectSystem.spawn('sunburn', cx, cy, false);
+      if (groundY !== null) {
+        for (const dx of [-34, 0, 34]) {
+          this.e.spriteEffectSystem.spawn('brightfire', cx + dx, groundY - 26, dx < 0);
+        }
+      }
+    }
+    const fire: string[] = ['#fff6c8', '#ffd23a', '#ff9a1f', '#ff5a1a', '#d8301a'];
+    for (let i: number = 0; i < 40; i++) {
+      const angle: number = Math.random() * Math.PI * 2;
+      const speed: number = 2 + Math.random() * 6;
+      const life: number = 16 + Math.floor(Math.random() * 20);
+      this.addParticle({
+        x: cx + Math.cos(angle) * 8,
+        y: cy + Math.sin(angle) * 8,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed * 0.8 - 2,
+        life,
+        maxLife: life,
+        color: fire[i % fire.length],
+        size: 8 + Math.random() * 12,
+        shape: ParticleShape.Circle,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Quick,
+        scaleOverLife: true,
+        gravityScale: -0.3,
+      });
+    }
+    for (let i: number = 0; i < 40; i++) {
+      const angle: number = -Math.PI * Math.random();
+      const speed: number = 4 + Math.random() * 8;
+      const life: number = 40 + Math.floor(Math.random() * 40);
+      this.addParticle({
+        x: cx,
+        y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 2,
+        life,
+        maxLife: life,
+        color: i % 3 === 0 ? '#fff2a8' : '#ffb347',
+        size: 2 + Math.random() * 2,
+        shape: ParticleShape.Square,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: false,
+      });
+    }
+    const steel: string[] = ['#c0392b', '#7f1d16', '#9aa3ad', '#e0a030'];
+    for (let i: number = 0; i < 16; i++) {
+      const life: number = 45 + Math.floor(Math.random() * 30);
+      this.addParticle({
+        x: cx + (Math.random() - 0.5) * 10,
+        y: cy,
+        vx: (Math.random() - 0.5) * 16,
+        vy: -5 - Math.random() * 8,
+        life,
+        maxLife: life,
+        color: steel[i % steel.length],
+        size: 4 + Math.random() * 5,
+        shape: ParticleShape.Square,
+        rotation: Math.random() * Math.PI,
+        rotationSpeed: (Math.random() - 0.5) * 0.8,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: false,
+      });
+    }
+    for (let i: number = 0; i < 24; i++) {
+      const life: number = 70 + Math.floor(Math.random() * 60);
+      this.addParticle({
+        x: cx + (Math.random() - 0.5) * 50,
+        y: cy - Math.random() * 30,
+        vx: (Math.random() - 0.5) * 1.2,
+        vy: -1 - Math.random() * 1.5,
+        life,
+        maxLife: life,
+        color: i % 2 === 0 ? 'rgba(54, 48, 46, 0.8)' : 'rgba(92, 84, 80, 0.7)',
+        size: 14 + Math.random() * 16,
+        shape: ParticleShape.Circle,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Linear,
+        scaleOverLife: false,
+        // Smoke rises and slows as it goes.
+        gravityScale: -0.05,
+      });
+    }
+    const p: { x: number; y: number } | null = this.e.player;
+    const distance: number = p ? Math.hypot(p.x - cx, p.y - cy) : 0;
+    const closeness: number = Math.max(0.35, 1 - distance / 900);
+    this.triggerScreenShake(Math.round(26 * closeness), Math.round(13 * closeness));
+    this.triggerScreenFlash('#ffb060', 6);
+  }
+
+  /** Every client, every tick: blasts play out and their scorch marks fade. */
+  updateBarrelBlasts(): void {
+    for (const b of this.e.barrelBlasts) b.age++;
+    this.e.barrelBlasts = this.e.barrelBlasts.filter(
+      (b: BarrelBlastFx): boolean =>
+        b.age < Math.max(GAME_CONSTANTS.BARREL_BLAST_FX_TICKS, GAME_CONSTANTS.BARREL_SCORCH_TICKS),
+    );
+  }
+
+  /** A blown-up barrel is back on its spawn spot: a puff of dust as it drops in. */
+  spawnBarrelRespawn(cx: number, bottomY: number): void {
+    for (let i: number = 0; i < 16; i++) {
+      const side: number = i % 2 === 0 ? 1 : -1;
+      const life: number = 22 + Math.floor(Math.random() * 16);
+      this.addParticle({
+        x: cx + side * Math.random() * 10,
+        y: bottomY - Math.random() * 6,
+        vx: side * (0.8 + Math.random() * 2),
+        vy: -0.4 - Math.random() * 0.8,
+        life,
+        maxLife: life,
+        color: 'rgba(190, 180, 165, 0.75)',
+        size: 4 + Math.random() * 5,
+        shape: ParticleShape.Circle,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Linear,
+        scaleOverLife: true,
+        gravityScale: 0,
+      });
+    }
+  }
+
+  /**
    * The spring lets go: a dust cloud puffs out from its base and a rising streak of wind lines
    * shoots up over it as it launches everyone.
    */
@@ -654,7 +791,7 @@ export class VfxSystem {
     for (const p of this.e.particles) {
       p.x += p.vx;
       p.y += p.vy;
-      p.vy += GAME_CONSTANTS.PARTICLE_GRAVITY;
+      p.vy += GAME_CONSTANTS.PARTICLE_GRAVITY * (p.gravityScale ?? 1);
       p.rotation += p.rotationSpeed;
       p.life--;
     }

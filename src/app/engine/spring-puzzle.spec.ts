@@ -111,6 +111,8 @@ function box(cx: number, bottom: number, overrides: Partial<LooseProp> = {}): Lo
     isGrounded: true,
     carrierId: null,
     weightKg: PROP_WEIGHT_KG.box,
+    fuseTicks: 0,
+    exploded: false,
     ...overrides,
   };
 }

@@ -259,6 +259,11 @@ export function propWeightKg(kind: PropKind): number {
   return PROP_WEIGHT_KG[PROP_MATERIAL[kind]];
 }
 
+/** Barrels blow up a few seconds after an attack lights them (ExplodingBarrelSystem). */
+export function isExplosive(kind: PropKind): boolean {
+  return PROP_MATERIAL[kind] === 'barrel';
+}
+
 const PROP_KINDS: PropKind[] = [...(Object.keys(PROP_ART) as SinglePropKind[]), 'rail'];
 const STACKABLE: SinglePropKind[] = ['box1', 'box2', 'box3'];
 
@@ -314,6 +319,8 @@ export function lyingProp(id: string, prop: Prop): LooseProp {
     isGrounded: true,
     carrierId: null,
     weightKg: propWeightKg(prop.kind),
+    fuseTicks: 0,
+    exploded: false,
   };
 }
 
@@ -334,6 +341,17 @@ interface PropContext {
   cagePuzzle?: CagePuzzleLayout;
   /** Floor-5 puzzle (the pressure plate on a far, high ledge that holds the exit door open). */
   platePuzzle?: PlatePuzzleLayout;
+}
+
+/** A platform tile hangs too close over the prop for a player to stand on it. */
+function lacksHeadroom(prop: Prop, platforms: Platform[]): boolean {
+  const headroom: number = GAME_CONSTANTS.PLAYER_HEIGHT + 4;
+  return platforms.some(
+    (p: Platform): boolean =>
+      p.y < prop.y &&
+      prop.y - (p.y + GAME_CONSTANTS.LEVEL_TILE_PX) < headroom &&
+      spanGap(prop.x, prop.x + prop.width, p.x, p.x + p.width) < GAME_CONSTANTS.PLAYER_WIDTH,
+  );
 }
 
 /** Broken rules for one prop against the rest of the layout (shared by the generator and the checks). */
@@ -372,15 +390,12 @@ function propProblems(prop: Prop, layout: PropContext): string[] {
   if (groundLevel && spanGap(left, right, SPAWN_CLEAR[0], SPAWN_CLEAR[1]) === 0)
     out.push('blocks the spawn point');
 
-  // Standing on a prop needs full headroom: no platform tile just above it.
-  const headroom: number = GAME_CONSTANTS.PLAYER_HEIGHT + 4;
-  const cramped: boolean = layout.platforms.some(
-    (p: Platform): boolean =>
-      p.y < prop.y &&
-      prop.y - (p.y + GAME_CONSTANTS.LEVEL_TILE_PX) < headroom &&
-      spanGap(left, right, p.x, p.x + p.width) < GAME_CONSTANTS.PLAYER_WIDTH,
-  );
-  if (cramped) out.push('no headroom under a platform');
+  // Standing on a prop needs full headroom: no platform tile just above it. A barrel may still
+  // sit under a ledge (only when a crowded floor has no open spot left for its minimum count):
+  // it is in the way like a thrown one, until someone carries it off or blows it up.
+  if (!isExplosive(prop.kind) && lacksHeadroom(prop, layout.platforms)) {
+    out.push('no headroom under a platform');
+  }
 
   const restsOn: number = below ? below.y + below.height : bottom;
   for (const r of layout.ropes) {
@@ -440,51 +455,84 @@ function propProblems(prop: Prop, layout: PropContext): string[] {
 }
 
 /**
- * Scatters props on the ground and platforms (rails of random length, some boxes stacked), each
- * passing propProblems.
+ * Scatters props on the ground and platforms, each passing propProblems: first the floor's
+ * BARREL_COUNT_MIN..MAX barrels (they blow up when hit), then other props (rails of random
+ * length, boxes, some stacked, lockers).
  */
 function placeProps(rand: Random, layout: Omit<PropContext, 'props'>): Prop[] {
   const props: Prop[] = [];
-  const wanted: number = randomInt(rand, 8, 14);
-  for (let i: number = 0; i < wanted; i++) {
-    for (let attempt: number = 0; attempt < 30; attempt++) {
-      const kind: PropKind = PROP_KINDS[randomInt(rand, 0, PROP_KINDS.length - 1)];
-      const middles: number = randomInt(rand, 0, RAIL_MAX_MIDDLES);
-      const width: number = kind === 'rail' ? railWidth(middles) : propArtWidth(PROP_ART[kind]);
-      const bases: Prop[] = props.filter(
-        (q: Prop): boolean =>
-          q.kind !== 'rail' &&
-          STACKABLE.includes(q.kind) &&
-          !props.some((t: Prop): boolean => t.y + t.height === q.y),
+  const barrelKinds: PropKind[] = PROP_KINDS.filter((k: PropKind): boolean => isExplosive(k));
+  const otherKinds: PropKind[] = PROP_KINDS.filter((k: PropKind): boolean => !isExplosive(k));
+  const barrels: number = randomInt(
+    rand,
+    GAME_CONSTANTS.BARREL_COUNT_MIN,
+    GAME_CONSTANTS.BARREL_COUNT_MAX,
+  );
+  for (let i: number = 0; i < barrels; i++) placeProp(rand, barrelKinds, props, layout, 30, true);
+  // A crowded floor (cages, ledges low over the ground) may have no open spot left: the rest of
+  // the minimum goes under a ledge.
+  for (let tries: number = 0; tries < 20; tries++) {
+    if (props.length >= GAME_CONSTANTS.BARREL_COUNT_MIN) break;
+    placeProp(rand, barrelKinds, props, layout, 30, false);
+  }
+  const others: number = randomInt(
+    rand,
+    GAME_CONSTANTS.BARREL_OTHER_PROPS_MIN,
+    GAME_CONSTANTS.BARREL_OTHER_PROPS_MAX,
+  );
+  for (let i: number = 0; i < others; i++) placeProp(rand, otherKinds, props, layout, 30, true);
+  return props;
+}
+
+/**
+ * Adds one prop of a random kind (of `kinds`) where it breaks no rule, if one fits in `attempts`.
+ * `open`: only where a player could stand on it (no ledge low over it), even for a barrel.
+ */
+function placeProp(
+  rand: Random,
+  kinds: PropKind[],
+  props: Prop[],
+  layout: Omit<PropContext, 'props'>,
+  attempts: number,
+  open: boolean,
+): void {
+  for (let attempt: number = 0; attempt < attempts; attempt++) {
+    const kind: PropKind = kinds[randomInt(rand, 0, kinds.length - 1)];
+    const middles: number = randomInt(rand, 0, RAIL_MAX_MIDDLES);
+    const width: number = kind === 'rail' ? railWidth(middles) : propArtWidth(PROP_ART[kind]);
+    const bases: Prop[] = props.filter(
+      (q: Prop): boolean =>
+        q.kind !== 'rail' &&
+        STACKABLE.includes(q.kind) &&
+        !props.some((t: Prop): boolean => t.y + t.height === q.y),
+    );
+    let candidate: Prop;
+    if (kind !== 'rail' && STACKABLE.includes(kind) && bases.length > 0 && rand() < 0.35) {
+      const base: Prop = bases[randomInt(rand, 0, bases.length - 1)];
+      candidate = propBox(kind, base.x + Math.floor((base.width - width) / 2), base.y);
+    } else {
+      const surfaces: Platform[] = [
+        GROUND_PLATFORM,
+        GROUND_PLATFORM,
+        ...layout.platforms.filter((p: Platform): boolean => !p.safe),
+      ];
+      const surface: Platform = surfaces[randomInt(rand, 0, surfaces.length - 1)];
+      const margin: number = surface === GROUND_PLATFORM ? 0 : PROP_EDGE_MARGIN_PX;
+      const minX: number = Math.max(8, surface.x + margin);
+      const maxX: number = Math.min(
+        GAME_CONSTANTS.CANVAS_WIDTH - 8 - width,
+        surface.x + surface.width - width - margin,
       );
-      let candidate: Prop;
-      if (kind !== 'rail' && STACKABLE.includes(kind) && bases.length > 0 && rand() < 0.35) {
-        const base: Prop = bases[randomInt(rand, 0, bases.length - 1)];
-        candidate = propBox(kind, base.x + Math.floor((base.width - width) / 2), base.y);
-      } else {
-        const surfaces: Platform[] = [
-          GROUND_PLATFORM,
-          GROUND_PLATFORM,
-          ...layout.platforms.filter((p: Platform): boolean => !p.safe),
-        ];
-        const surface: Platform = surfaces[randomInt(rand, 0, surfaces.length - 1)];
-        const margin: number = surface === GROUND_PLATFORM ? 0 : PROP_EDGE_MARGIN_PX;
-        const minX: number = Math.max(8, surface.x + margin);
-        const maxX: number = Math.min(
-          GAME_CONSTANTS.CANVAS_WIDTH - 8 - width,
-          surface.x + surface.width - width - margin,
-        );
-        if (maxX < minX) continue;
-        const x: number = randomInt(rand, minX, maxX);
-        candidate = kind === 'rail' ? railBox(middles, x, surface.y) : propBox(kind, x, surface.y);
-      }
-      if (propProblems(candidate, { ...layout, props: [...props, candidate] }).length === 0) {
-        props.push(candidate);
-        break;
-      }
+      if (maxX < minX) continue;
+      const x: number = randomInt(rand, minX, maxX);
+      candidate = kind === 'rail' ? railBox(middles, x, surface.y) : propBox(kind, x, surface.y);
+    }
+    if (open && lacksHeadroom(candidate, layout.platforms)) continue;
+    if (propProblems(candidate, { ...layout, props: [...props, candidate] }).length === 0) {
+      props.push(candidate);
+      return;
     }
   }
-  return props;
 }
 
 /**

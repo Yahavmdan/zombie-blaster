@@ -28,4 +28,6 @@ export interface Particle {
   scaleOverLife: boolean;
   /** Extra opacity factor (e.g. softer effects replayed from other players). */
   alphaScale?: number;
+  /** Share of PARTICLE_GRAVITY it feels (default 1; 0 floats, below 0 rises like smoke or flame). */
+  gravityScale?: number;
 }

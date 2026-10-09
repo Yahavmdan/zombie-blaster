@@ -204,6 +204,9 @@ function propViews(engine: GameEngine): E2eLevelView['props'] {
       pickable: loose !== undefined,
       isGrounded: loose?.isGrounded ?? true,
       carrierId: loose?.carrierId ?? null,
+      fuseTicks: loose?.fuseTicks ?? 0,
+      // Every pickable prop stays in the game state for the floor unless it blew up.
+      exploded: id !== undefined && loose === undefined,
     };
   });
 }
@@ -448,6 +451,15 @@ const engineControls: E2eEngineControls = {
       });
       engine.zombieSpriteAnimator.setState(id, ZombieAnimState.Dead);
     }
+  },
+  clearPickables(from: number, to: number): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine || engine.isMultiplayerClient) return;
+    engine.clearLooseProps(
+      engine.looseProps
+        .filter((p: LooseProp): boolean => p.x < to && p.x + p.width > from)
+        .map((p: LooseProp): string => p.id),
+    );
   },
   setLayoutSeed(seed: number): void {
     const engine: GameEngine | null = currentEngine;

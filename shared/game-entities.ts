@@ -290,6 +290,10 @@ export interface LooseProp {
   carrierId: string | null;
   /** Weight in kg, from what it is made of (PROP_WEIGHT_KG). Clients take it from their own layout. */
   weightKg: number;
+  /** Barrels: ticks until a lit fuse blows it up (0 = not lit). An attack lights it (the host decides). */
+  fuseTicks: number;
+  /** Blown up: gone for the rest of the floor. Only the host's sync carries these, so clients drop it too. */
+  exploded: boolean;
 }
 
 /** What a map prop is made of: picks its weight (PROP_WEIGHT_KG). */

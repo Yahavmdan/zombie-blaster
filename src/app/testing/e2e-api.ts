@@ -201,6 +201,10 @@ export interface E2eLevelView {
     pickable: boolean;
     isGrounded: boolean;
     carrierId: string | null;
+    /** Barrels: ticks until a lit fuse blows it up (0 = not lit). */
+    fuseTicks: number;
+    /** A barrel that blew up: gone from the world (and from collision) for the rest of the floor. */
+    exploded: boolean;
   }>;
   /** The floor's safe spot (also listed in `platforms`); its ladder is in `ropes`. */
   safeSpot: { x: number; y: number; width: number } | null;
@@ -388,6 +392,11 @@ export interface E2eEngineControls {
   geometryReport(): E2eGeometryReport;
   /** Solo/host setup only: drops N corpses from above x; they fall and pile up by the normal corpse physics. */
   dropCorpses(centerX: number, count: number): void;
+  /**
+   * Solo/host setup only: takes every pickable prop (barrels, boxes) overlapping these x, at any
+   * height, off the floor for good (synced to guests), so carrying there finds only corpses.
+   */
+  clearPickables(from: number, to: number): void;
 }
 
 export interface ZbE2eApi {
