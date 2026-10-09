@@ -234,3 +234,15 @@ export async function layoutWhere(
   }
   throw new Error(`no layout seed up to ${maxSeed} has ${description}`);
 }
+
+/**
+ * Left end of a stretch of ground `span` px wide with nothing above it (no platform or prop), so
+ * corpses dropped there land on the ground; null when the floor has none.
+ */
+export function openGroundX(s: E2eSnapshot, span: number): number | null {
+  const above: LevelPlatform[] = levelPlatforms(s).filter((p: LevelPlatform): boolean => p !== GROUND);
+  for (let x: number = 40; x + span < WORLD.width - 40; x += 10) {
+    if (above.every((p: LevelPlatform): boolean => p.x >= x + span || p.x + p.width <= x)) return x;
+  }
+  return null;
+}

@@ -71,6 +71,7 @@ export const GAME_CONSTANTS = {
   PLAYER_SKILL_ANIM_MS: 480, // How long skill attack animations play in milliseconds
   INVINCIBILITY_FRAMES: 90, // Ticks of invincibility after the player takes damage
   INVINCIBILITY_BLINK_RATE: 3, // Player blinks every N ticks during invincibility
+  PLAYER_HURT_TINT_TICKS: 18, // Ticks the player's sprite stays tinted red after a hit
 
   // ─── Knockback ──────────────────────────────────
   KNOCKBACK_FORCE_PLAYER: 6, // How far the player is pushed back when hit by a zombie
@@ -295,7 +296,7 @@ export const GAME_CONSTANTS = {
   CORPSE_CARRY_RANGE: 50, // Pixels from the player's center to a lying corpse's center to pick it up
   CORPSE_CARRY_SPEED_MULTIPLIER: 0.75, // Walking speed while carrying corpses overhead
   CORPSE_CARRY_MAX: 3, // Corpses one player can carry, stacked overhead
-  CORPSE_CARRY_STACK_STEP: 9, // Each carried corpse above the bottom one rides this much higher
+  CORPSE_CARRY_STACK_STEP: 5, // Each carried corpse above the bottom one rides this much higher (a body is ~6 px thick: they rest on each other)
   CORPSE_CARRY_CONFIRM_TICKS: 25, // A guest's pick-up the host hasn't granted by then is given up
   CORPSE_CARRY_LIFT: 12, // Carried corpse's box bottom sits this far above the carrier's head (its lying body rests on the head)
   CORPSE_THROW_SPEED_X: 4, // Sideways speed of a dropped corpse, in the carrier's facing direction

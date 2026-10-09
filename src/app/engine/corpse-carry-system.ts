@@ -1,12 +1,17 @@
 import { CharacterState, GAME_CONSTANTS } from '@shared/index';
+import { ZombieCorpse } from '@shared/game-entities';
 import { IGameEngine } from './engine-types';
 import {
   assignCarriers,
   canCarry,
   Carriable,
   carriedIds,
+  carrySway,
+  CarryPose,
+  easeCarryPose,
   holdCarried,
   nearestCarriable,
+  REST_POSE,
 } from './corpse-carry';
 
 /**
@@ -15,7 +20,7 @@ import {
  * nothing more to pick up (or a full stack) it tosses the whole stack forward. The host (or solo)
  * grants and releases them for every player; every client puts carried things on their carrier's
  * head as it sees them. A guest holds its own pick-ups right away while the host's answer is on
- * its way.
+ * its way. Carried corpses sway with their carrier's steps and jumps (`carryPoses`).
  */
 export class CorpseCarrySystem {
   private carryKeyHeld: boolean = false;
@@ -58,6 +63,31 @@ export class CorpseCarrySystem {
     if (!this.e.isMultiplayerClient) assignCarriers(this.items(), this.players());
     this.settleLocalRequests();
     this.holdCarried();
+    this.swayCorpses();
+  }
+
+  /** Eases every carried corpse toward the sway its carrier's motion gives it (bodies settle). */
+  private swayCorpses(): void {
+    const poses: Map<string, CarryPose> = this.e.carryPoses;
+    const held: Set<string> = new Set<string>();
+    for (const carrier of this.players()) {
+      carriedIds(carrier).forEach((id: string, level: number): void => {
+        const corpse: ZombieCorpse | undefined = this.e.zombieCorpses.find(
+          (c: ZombieCorpse): boolean => c.id === id,
+        );
+        // The local player's own pick-up rides before the host grants it.
+        const onCarrier: boolean =
+          !!corpse &&
+          (corpse.carrierId === carrier.id ||
+            (corpse.carrierId === null && carrier === this.e.player));
+        if (!onCarrier) return;
+        held.add(id);
+        poses.set(id, easeCarryPose(poses.get(id) ?? REST_POSE, carrySway(carrier, level)));
+      });
+    }
+    for (const id of [...poses.keys()]) {
+      if (!held.has(id)) poses.delete(id);
+    }
   }
 
   /** Puts everything carried on its carrier (also right after a sync, before the next tick). */

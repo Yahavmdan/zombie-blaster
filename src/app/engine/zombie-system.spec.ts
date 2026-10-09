@@ -7,7 +7,7 @@ import {
   Direction,
 } from '@shared/index';
 import { ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
-import { EntityInterpolation, IGameEngine, Platform } from './engine-types';
+import { EntityInterpolation, IGameEngine, Platform, PlayerTint } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { CombatSystem } from './combat-system';
@@ -15,6 +15,8 @@ import { DropSystem } from './drop-system';
 import { ProjectileSystem } from './projectile-system';
 import { restsOnSafeSpot } from './safe-spot';
 import { corpseSurface } from './corpse-surface';
+import { CarryPose } from './corpse-carry';
+import { CorpseDrape } from './corpse-drape';
 import { ZombieSystem } from './zombie-system';
 import { SpriteAnimator } from './sprite-animator';
 import { ZombieAnimState } from './zombie-sprite-animator';
@@ -118,6 +120,8 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     zombies,
     zombieCorpses: [],
     looseProps: [],
+    carryPoses: new Map<string, CarryPose>(),
+    corpseDrapes: new Map<string, CorpseDrape>(),
     particles: [],
     damageNumbers: [],
     dropNotifications: [],
@@ -179,6 +183,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     dragonImpactImg: new Image(),
     spitterProjectiles: [],
     poisonEffect: null,
+    playerTints: new Map<string, PlayerTint>(),
     DRAGON_PROJ_FRAME_W: 105,
     DRAGON_PROJ_FRAME_H: 118,
     DRAGON_PROJ_FRAMES: 3,

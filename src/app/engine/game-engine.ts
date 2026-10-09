@@ -49,6 +49,7 @@ import {
   LevelUpNotification,
   Platform,
   PlayerProjectile,
+  PlayerTint,
   PoisonEffect,
   Rope,
   SpitterProjectile,
@@ -75,6 +76,8 @@ import {
 } from './cage-puzzle';
 import { CorpseCarrySystem } from './corpse-carry-system';
 import { LoosePropSystem } from './loose-prop-system';
+import { CarryPose } from './corpse-carry';
+import { CorpseDrape } from './corpse-drape';
 import { flingIfOnSpring, freshLaunch } from './spring-puzzle';
 import { pullZombiesToward } from './magnet-pull';
 import {
@@ -119,6 +122,8 @@ export class GameEngine implements IGameEngine {
   zombies: ZombieState[] = [];
   zombieCorpses: ZombieCorpse[] = [];
   looseProps: LooseProp[] = [];
+  readonly carryPoses: Map<string, CarryPose> = new Map<string, CarryPose>();
+  corpseDrapes: Map<string, CorpseDrape> = new Map<string, CorpseDrape>();
   particles: Particle[] = [];
   damageNumbers: DamageNumber[] = [];
   dropNotifications: DropNotification[] = [];
@@ -180,6 +185,7 @@ export class GameEngine implements IGameEngine {
 
   spitterProjectiles: SpitterProjectile[] = [];
   poisonEffect: PoisonEffect | null = null;
+  playerTints: Map<string, PlayerTint> = new Map<string, PlayerTint>();
   readonly DRAGON_PROJ_FRAME_W: number = 105;
   readonly DRAGON_PROJ_FRAME_H: number = 118;
   readonly DRAGON_PROJ_FRAMES: number = 3;
@@ -444,6 +450,7 @@ export class GameEngine implements IGameEngine {
     this.dragonImpacts = [];
     this.spitterProjectiles = [];
     this.poisonEffect = null;
+    this.playerTints.clear();
     this.hitMarks = [];
     this.playerProjectiles = [];
     this.activeSpecialEffects = [];
@@ -639,6 +646,7 @@ export class GameEngine implements IGameEngine {
 
     this.vfxSystem.updateDragonImpacts();
     this.vfxSystem.updateHitMarks();
+    this.vfxSystem.updatePlayerTints();
     this.corpseCarrySystem.update();
     this.loosePropSystem.update();
     this.zombieSystem.updateZombieCorpses();
@@ -1190,6 +1198,10 @@ export class GameEngine implements IGameEngine {
           break;
         case VfxEventType.PoisonTrigger:
           this.vfxSystem.spawnPoisonBubblesAt(evt.x, evt.y);
+          this.vfxSystem.tintPlayerPoisoned(evt.playerId);
+          break;
+        case VfxEventType.PlayerHurt:
+          this.vfxSystem.tintPlayerHurt(evt.playerId);
           break;
         case VfxEventType.ThrowingStar:
           this.vfxSystem.spawnThrowingStarTrail(evt.x, evt.y, evt.targetX!, evt.targetY!, evt.color!);
@@ -1236,6 +1248,7 @@ export class GameEngine implements IGameEngine {
 
     p.hp -= damage;
     this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
+    this.vfxSystem.flashPlayerHurt(p);
 
     this.combatSystem.interruptReviveChannel();
 
@@ -1285,6 +1298,7 @@ export class GameEngine implements IGameEngine {
         tickTimer: GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL,
         damagePerTick,
       };
+      this.vfxSystem.tintPlayerPoisoned(p.id);
       this.pendingVfxEvents.push({
         type: VfxEventType.PoisonTrigger,
         playerId: p.id,

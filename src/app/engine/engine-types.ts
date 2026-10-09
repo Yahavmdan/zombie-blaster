@@ -19,6 +19,8 @@ import {
   ZombieState,
   ZombieType,
 } from '@shared/game-entities';
+import { CarryPose } from './corpse-carry';
+import { CorpseDrape } from './corpse-drape';
 import { InputKeys } from '@shared/messages';
 import { Particle } from './particle-types';
 import { SpriteAnimator } from './sprite-animator';
@@ -181,6 +183,12 @@ export interface SpitterProjectile {
   trail: { x: number; y: number; life: number }[];
 }
 
+/** Remaining ticks of each status tint on a player's sprite (0 = off). */
+export interface PlayerTint {
+  hurtTicks: number;
+  poisonTicks: number;
+}
+
 export interface PoisonEffect {
   remainingTicks: number;
   tickInterval: number;
@@ -246,6 +254,10 @@ export interface IGameEngine {
   zombieCorpses: ZombieCorpse[];
   /** The floor's pickable props (barrels, boxes): lying ones are solid platforms (`Platform.propId`). */
   looseProps: LooseProp[];
+  /** How each carried corpse sways on its carrier this tick (drawing only). */
+  readonly carryPoses: Map<string, CarryPose>;
+  /** How each lying corpse's body sags onto what is under it (drawing only). */
+  corpseDrapes: Map<string, CorpseDrape>;
   particles: Particle[];
   damageNumbers: DamageNumber[];
   dropNotifications: DropNotification[];
@@ -310,6 +322,8 @@ export interface IGameEngine {
 
   spitterProjectiles: SpitterProjectile[];
   poisonEffect: PoisonEffect | null;
+  /** Status tints by player id (local and remote), drawn in the shape of the sprite. */
+  playerTints: Map<string, PlayerTint>;
   readonly DRAGON_PROJ_FRAME_W: number;
   readonly DRAGON_PROJ_FRAME_H: number;
   readonly DRAGON_PROJ_FRAMES: number;

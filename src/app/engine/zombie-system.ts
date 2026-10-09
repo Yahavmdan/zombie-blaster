@@ -23,6 +23,7 @@ import { DropSystem } from './drop-system';
 import { ProjectileSystem } from './projectile-system';
 import { ZombieAnimState } from './zombie-sprite-animator';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
+import { drapeCorpses } from './corpse-drape';
 import { advanceMagnetPull } from './magnet-pull';
 import { pushOutOfSolids } from './solid-blocks';
 
@@ -37,6 +38,9 @@ interface TargetInfo {
 }
 
 export class ZombieSystem {
+  /** Fingerprint of what the corpse drapes were last worked out from. */
+  private drapedLayout: number = NaN;
+
   constructor(
     private readonly e: IGameEngine,
     private readonly physics: PhysicsSystem,
@@ -1092,9 +1096,29 @@ export class ZombieSystem {
   updateZombieCorpses(): void {
     if (this.e.isMultiplayerClient) {
       this.tickClientCorpseVisuals();
-      return;
+    } else {
+      this.tickCorpses();
     }
+    this.drapeCorpses();
+  }
 
+  /**
+   * Re-drapes the lying bodies over what is under them whenever a corpse or platform moved
+   * (the drapes are drawing only; working them out every tick would be wasted on a still pile).
+   */
+  private drapeCorpses(): void {
+    let layout: number = this.e.platforms.length;
+    for (const p of this.e.platforms) layout = (layout * 31 + Math.round(p.x) * 7 + Math.round(p.y) * 13) | 0;
+    for (const c of this.e.zombieCorpses) {
+      if (!c.isGrounded || c.carrierId !== null) continue;
+      layout = (layout * 31 + Math.round(c.x * 4) * 7 + Math.round(c.y * 4) * 13 + c.facing) | 0;
+    }
+    if (layout === this.drapedLayout) return;
+    this.drapedLayout = layout;
+    this.e.corpseDrapes = drapeCorpses(this.e.zombieCorpses, this.e.platforms);
+  }
+
+  private tickCorpses(): void {
     this.revalidateGroundedCorpses();
 
     for (const corpse of this.e.zombieCorpses) {

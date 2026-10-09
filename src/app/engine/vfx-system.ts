@@ -2,11 +2,12 @@ import {
   CharacterState,
   Direction,
   GAME_CONSTANTS,
+  VfxEventType,
 } from '@shared/index';
 import { DropType } from '@shared/game-entities';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { SKILL_ANIMATIONS, SkillAnimation } from './skill-animations';
-import { DamageNumber, DropNotification, IGameEngine } from './engine-types';
+import { DamageNumber, DropNotification, IGameEngine, PlayerTint } from './engine-types';
 
 export class VfxSystem {
   constructor(private readonly e: IGameEngine) {}
@@ -29,6 +30,44 @@ export class VfxSystem {
         scaleOverLife: false,
       });
     }
+  }
+
+  /** Local hurt tint on the hit player plus the event that shows it on every other screen. */
+  flashPlayerHurt(p: CharacterState): void {
+    this.tintPlayerHurt(p.id);
+    this.e.pendingVfxEvents.push({
+      type: VfxEventType.PlayerHurt,
+      playerId: p.id,
+      x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+      y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+    });
+  }
+
+  /** Red flash in the shape of the player's sprite. */
+  tintPlayerHurt(playerId: string): void {
+    this.tintFor(playerId).hurtTicks = GAME_CONSTANTS.PLAYER_HURT_TINT_TICKS;
+  }
+
+  /** Pulsing green sprite while the spitter poison lasts (its trigger is synced as PoisonTrigger). */
+  tintPlayerPoisoned(playerId: string): void {
+    this.tintFor(playerId).poisonTicks = GAME_CONSTANTS.SPITTER_POISON_DURATION_TICKS;
+  }
+
+  updatePlayerTints(): void {
+    for (const [id, tint] of this.e.playerTints) {
+      if (tint.hurtTicks > 0) tint.hurtTicks--;
+      if (tint.poisonTicks > 0) tint.poisonTicks--;
+      if (tint.hurtTicks === 0 && tint.poisonTicks === 0) this.e.playerTints.delete(id);
+    }
+  }
+
+  private tintFor(playerId: string): PlayerTint {
+    let tint: PlayerTint | undefined = this.e.playerTints.get(playerId);
+    if (!tint) {
+      tint = { hurtTicks: 0, poisonTicks: 0 };
+      this.e.playerTints.set(playerId, tint);
+    }
+    return tint;
   }
 
   addParticle(p: Particle): void {

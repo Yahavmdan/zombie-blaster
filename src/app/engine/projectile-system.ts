@@ -208,6 +208,7 @@ export class ProjectileSystem {
           if (p && this.e.invincibilityFrames <= 0) {
             p.hp -= rawDamage;
             this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
+            this.vfx.flashPlayerHurt(p);
             p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
             p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
             p.isGrounded = false;
@@ -288,11 +289,12 @@ export class ProjectileSystem {
           if (p && this.e.invincibilityFrames <= 0) {
             p.hp -= rawDamage;
             this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
+            this.vfx.flashPlayerHurt(p);
             p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER * 0.5;
             p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE * 0.5;
             p.isGrounded = false;
 
-            this.applyPoisonToPlayer();
+            this.applyPoisonToPlayer(p);
             this.e.pendingVfxEvents.push({
               type: VfxEventType.PoisonTrigger,
               playerId: p.id,
@@ -364,7 +366,7 @@ export class ProjectileSystem {
     );
   }
 
-  private applyPoisonToPlayer(): void {
+  private applyPoisonToPlayer(p: CharacterState): void {
     const damagePerTick: number = GAME_CONSTANTS.SPITTER_POISON_DAMAGE_PER_TICK +
       Math.floor(this.e.floor * GAME_CONSTANTS.SPITTER_POISON_DAMAGE_WAVE_SCALE);
     this.e.poisonEffect = {
@@ -373,6 +375,7 @@ export class ProjectileSystem {
       tickTimer: GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL,
       damagePerTick,
     };
+    this.vfx.tintPlayerPoisoned(p.id);
   }
 
   updatePoisonEffect(): void {

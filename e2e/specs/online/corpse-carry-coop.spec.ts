@@ -107,6 +107,19 @@ test.describe('carrying corpses in co-op', { tag: '@online' }, (): void => {
       { timeoutMs: 5_000 },
     );
     expect(findCorpse(hostView, corpse.id)!.isGrounded).toBe(false);
+
+    // The host draws it bouncing on the guest's steps, from the guest's synced motion.
+    const swaying: number[] = [];
+    await guest.hold(KEYS.left);
+    for (let i: number = 0; i < 12; i++) {
+      await host.wait(40);
+      const s: E2eSnapshot = await host.probe.state();
+      const bob: number | undefined = findCorpse(s, corpse.id)?.carryPose?.bob;
+      if (bob !== undefined) swaying.push(bob);
+    }
+    await guest.release(KEYS.left);
+    expect(swaying.length, 'the host draws it swaying on the guest').toBeGreaterThan(6);
+    expect(Math.max(...swaying) - Math.min(...swaying), 'it bounces with the guest\'s steps').toBeGreaterThan(1);
     await host.attachCanvas(testInfo, 'host sees the guest carrying');
     await guest.attachCanvas(testInfo, 'guest carrying');
 

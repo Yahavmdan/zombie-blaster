@@ -27,6 +27,12 @@ running ones. Uses installed Chrome (`E2E_CHANNEL=chrome`); Playwright's Chromiu
 blocked on this machine. Every page runs a 50 tps loop, so workers default to 2 (`E2E_WORKERS`).
 Long runs: start them with `run_in_background` and wait for the notification.
 
+**Port 4200 busy (another worktree slot's dev server)?** Don't let the config reuse it: it serves that
+slot's code. Start your own: `cd zombie-blaster-api && npm run dev` (:3001, the frontend env hard-codes it)
+and `npx ng serve --port <free port>` (check `netstat -ano` first: other slots use 4210 too; a busy port makes Playwright silently test THEIR code), then run with
+`E2E_BASE_URL=http://localhost:<port> E2E_WS_URL=ws://localhost:3001 E2E_EXTERNAL_HAS_PROBE=1`. Kill both after.
+Canvas attachments land in `e2e/.report/data/*.png` (not `e2e/.results`).
+
 **Online / deployed targets:** `E2E_BASE_URL=https://… E2E_WS_URL=wss://… npm run e2e`. No local
 servers start. Production builds have no probe, so only tests tagged `@external-safe` run (DOM +
 raw protocol). A staging build served in dev mode can set `E2E_EXTERNAL_HAS_PROBE=1` to run all.
@@ -87,7 +93,7 @@ Fix production code only after the repro is agreed.
 Mechanics that matter (verify in shared/game-constants.ts if changed):
 
 - Zombies: melee reach 35 px, attack cooldown 40–70 ticks. Every melee swing is telegraphed: a
-  15-tick wind-up (red "!" + glow, `windingUp` in the probe) before the swing, ~0.5 s total.
+  15-tick wind-up (big pulsing "!" over the head, no body glow; `windingUp` in the probe) before the swing, ~0.5 s total.
   At most 2 zombies swing at one player at once (attack tokens). Damage ramps from 40% on floor 1
   to full by floor 5. Zombies only chase players within 640 px (`ZOMBIE_DETECTION_RANGE`);
   nobody is waiting for them at the exit (no lure, spawns spread over the map).
@@ -209,12 +215,13 @@ Driving tips:
 - Special drops open a Y/N prompt with a timer; the brain presses Y.
 - **Carrying corpses (and barrels/boxes)**: `KEYS.carry` (E) picks up the nearest lying corpse or pickable prop within 50 px
   (center to center; a "[E] Carry" prompt shows over it) and stacks it overhead, up to 3
-  (`CORPSE_CARRY_MAX`, 9 px per level). E with nothing more to pick up (or a full stack; prompt
+  (`CORPSE_CARRY_MAX`, 5 px per level: bodies rest on each other). E with nothing more to pick up (or a full stack; prompt
   "[E] Throw") tosses the whole stack forward and it lands as a pile (each body's `footY` 5 px
   above the one below). `KEYS.attack` always throws while carrying: use it next to a pile, where E
   would pick up another body instead. While carrying: 0.75x walk speed, no attacks or skills. The
   request is the player's own state (`player.carryingCorpseIds`, bottom first); the host grants
-  each as `corpseViews[].carrierId` (first come; a down carrier drops the stack). Specs: `solo/corpse-carry.spec.ts`, `online/corpse-carry-coop.spec.ts`.
+  each as `corpseViews[].carrierId` (first come; a down carrier drops the stack). Carried bodies sway (drawing only, box unchanged): `corpseViews[].carryPose` {bob, sag, tilt} eases each tick toward `carrySway(carrier, level)` (bob per footfall by distance walked, droop at the ends, rock; in the air pressed down going up). Specs: `solo/corpse-carry.spec.ts`, `online/corpse-carry-coop.spec.ts`.
+  Piles drape (drawing only): `corpseViews[].drape` is a lying body's deepest sag (px) onto what is under it, 0 flat on the ground; host and guests compute the same. `openGroundX(s, span)` (navigation.ts) finds ground with nothing above it for a pile. Specs: `solo/corpse-drape.spec.ts`, `online/corpse-drape-sync.spec.ts`.
   Setup: `dropCorpses(x, 1)`, then teleport the player onto the corpse's own spot (feet =
   `footY + 5`). Dropped corpses often land on a platform edge, so "stand 30 px beside it" flakes.
 
@@ -253,6 +260,7 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
 ## Gotchas
 
 - Headless pages still render; `attachCanvas` gives real frames. `KEYS.attack` is `j`.
+- `attachCanvas` images live only in the HTML report: `--reporter=line` drops them. To eyeball small art (carried corpses), a throwaway spec can `page.screenshot({ path, clip })` around `state().player` and you upscale the crop (System.Drawing, NearestNeighbor); delete the spec after.
 - Physics gotcha: tiny velocities snap to 0 (`PLAYER_MIN_VELOCITY`); any per-tick acceleration
   smaller than that must skip the snap (air control was silently dead until fixed).
 - Skills live in slots 1..6 = usable Active/Buff skills sorted by required level

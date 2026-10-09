@@ -77,6 +77,13 @@ VFX Multiplayer Sync:
 
 Grep engine files for local VFX calls (`triggerSkillAnimation`, `spawnLevelUpEffect`, `spawnBuffActivationParticles`, `spriteEffectSystem.spawn`, `triggerScreenShake`, `triggerScreenFlash`, particle pushes) and confirm each originating path has a matching `pendingVfxEvents.push`.
 
+## Player status tints (hurt / poison)
+
+Never draw a rect/circle over the hitbox for a player status. `VfxSystem.flashPlayerHurt(p)` (red, queues
+`PlayerHurt`) and `tintPlayerPoisoned(id)` (green, synced through `PoisonTrigger`) set `engine.playerTints`;
+`RenderSystem.renderStatusTint` draws them with `SpriteAnimator.drawTint`, a silhouette of the current frame.
+Every new local player-damage path calls `flashPlayerHurt`. Probe: `player.tint` / `remotePlayers[].tint`.
+
 ## Payload size
 
 - Events are per sync tick and cleared after send. Send only the fields replay needs.
