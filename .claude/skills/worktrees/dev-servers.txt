@@ -1,0 +1,4 @@
+# Dev servers `wt.ps1 serve` (and `take`) starts in a worktree: <WEB|API> <dir relative to the worktree> <command>
+# {WEB_PORT} / {API_PORT} are replaced; each server also gets PORT = its own port, plus WEB_PORT and API_PORT.
+API zombie-blaster-api npm run dev
+WEB . npx ng serve --port {WEB_PORT}

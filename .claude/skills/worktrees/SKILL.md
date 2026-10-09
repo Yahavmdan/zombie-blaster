@@ -11,7 +11,7 @@ counts as 1) and the base branch (`origin/HEAD`, else `origin/main`, else `origi
 
 ```powershell
 $wt = "$(git rev-parse --show-toplevel)\.claude\skills\worktrees\wt.ps1"
-& $wt take feat/some-slug           # prints: READY <root>\<repo>-N (feat/some-slug)
+& $wt take feat/some-slug           # prints: READY <root>\<repo>-N (feat/some-slug), then starts its dev servers (-NoServe skips)
 & $wt take                          # free slot detached at the base; branch it later inside the slot
 & $wt status                        # slots, branch, who holds them, dirty count
 & $wt all                           # every worktree: dirty, pushed, behind base, PR, lock, Free
@@ -19,6 +19,9 @@ $wt = "$(git rev-parse --show-toplevel)\.claude\skills\worktrees\wt.ps1"
 & $wt reset <all|name>              # clean worktree(s) -> latest base, unlock, re-sync deps
 & $wt sync <repo>-N [-Clean]        # re-sync deps
 & $wt init -Count 3                 # grow the pool (new slots get a clean npm ci)
+& $wt ports [<repo>-N]              # WEB_PORT=N*1111 API_PORT=N*1111+1 (primary = 1; default: current dir)
+& $wt serve [<repo>-N]              # start its dev servers (dev-servers.txt) on its ports, hidden, wait until up
+& $wt stop [<repo>-N]               # stop the dev servers serve started (release does this too)
 ```
 
 Commands wrapping it: `/find-free-worktree-and <task>`, `/worktrees-status`, `/reset-worktree`.
@@ -35,5 +38,14 @@ Commands wrapping it: `/find-free-worktree-and <task>`, `/worktrees-status`, `/r
 - Lock lives in the slot's private git dir (`.git\worktrees\<slot>\wt-slot.lock`), not in the tree.
 - One slot per session. Never switch branches in a slot another session holds (`status` shows holder).
 - After `take`, work only inside the printed path. Release when the branch is pushed.
-- Dev servers on fixed ports collide across slots; run a slot's servers on other ports.
+- Ports: worktree N (primary = 1, `<repo>-N` = N) runs its dev servers on WEB_PORT=N*1111 and
+  API_PORT=N*1111+1 (`take` prints them; `ports` repeats). In this repo `ng serve` proxies `/ws` to
+  `API_PORT` (`proxy.conf.mjs`), the API listens on `PORT`, and `playwright.config.ts` reads
+  `WEB_PORT`/`API_PORT`. Chrome's blocked 6665-6669 and `netsh portproxy` listeners (2222 here)
+  are skipped: the port moves up one (slot 2 = web 2224, api 2223).
+- Dev servers: `dev-servers.txt` lists them (`<WEB|API> <dir> <command>`, `{WEB_PORT}`/`{API_PORT}`
+  replaced; each also gets `PORT` = its own port). `take`/`serve` run each as a hidden `cmd /c`
+  that outlives the script, log to `wt-serve-<web|api>.log` in the worktree's git dir, keep PIDs in
+  `wt-serve.pids` there, and wait up to 180 s for the port. A port already listening is left alone
+  (maybe another session's server). `stop`/`release` `taskkill /T` only those PIDs (if still `cmd`).
 - The script must be committed for slots to have it; it always acts on the whole pool from any worktree.

@@ -5,12 +5,13 @@
 #
 #   wt.ps1 status                      list slots: branch, owner, dirty
 #   wt.ps1 init [-Count 2]             create missing slots + clean install each
-#   wt.ps1 take [<branch>] [-Base origin/main] [-Clean]
+#   wt.ps1 take [<branch>] [-Base origin/main] [-Clean] [-NoServe]
 #                                      lock a free clean slot, switch to <branch>
 #                                      (existing local/remote branch, else new from -Base);
-#                                      no branch = detached at -Base (branch it later inside the slot)
+#                                      no branch = detached at -Base (branch it later inside the slot);
+#                                      then starts its dev servers on its own ports (see serve)
 #   wt.ps1 release <slot|path> [-Force]
-#                                      unlock slot, detach HEAD so the branch is free elsewhere
+#                                      stop its dev servers, unlock slot, detach HEAD so the branch is free elsewhere
 #   wt.ps1 sync <slot|path> [-Clean]   re-sync deps in a slot
 #   wt.ps1 all [-NoFetch]              every worktree of the repo: branch, dirty, ahead/behind, PR, lock, FREE
 #   wt.ps1 reset <all|name|path> [-Force] [-NoDeps]
@@ -19,18 +20,26 @@
 #                                      Never touches a dirty tree; skips a locked slot unless -Force;
 #                                      'all' skips the primary checkout unless it is on the base branch.
 #   wt.ps1 config                      copy local-files.txt entries from the primary checkout into every slot
+#   wt.ps1 ports [<slot|path>]         dev-server ports of a worktree (default: the current one):
+#                                      worktree N (primary = 1, <repo>-N = N) -> WEB_PORT=N*1111 API_PORT=N*1111+1
+#   wt.ps1 serve [<slot|path>]         start the worktree's dev servers (dev-servers.txt) hidden in the background
+#                                      on its ports, wait until they listen; a port already in use is left alone
+#   wt.ps1 stop [<slot|path>]          stop the dev servers `serve` started there
 #
 # Optional local-files.txt next to this script: git-ignored files/folders (relative paths, one per line)
 # that a fresh worktree needs, copied from the primary checkout on init/reset/config.
+# Optional dev-servers.txt next to this script: the repo's dev servers, one per line
+# `<WEB|API> <dir relative to the worktree> <command>`; {WEB_PORT}/{API_PORT} in the command are replaced.
 param(
-    [Parameter(Position = 0)][ValidateSet('status', 'init', 'take', 'release', 'sync', 'config', 'all', 'reset')][string]$Cmd = 'status',
+    [Parameter(Position = 0)][ValidateSet('status', 'init', 'take', 'release', 'sync', 'config', 'all', 'reset', 'ports', 'serve', 'stop')][string]$Cmd = 'status',
     [Parameter(Position = 1)][string]$Arg,
     [int]$Count = 2,
     [string]$Base,
     [switch]$Clean,
     [switch]$Force,
     [switch]$NoFetch,
-    [switch]$NoDeps
+    [switch]$NoDeps,
+    [switch]$NoServe
 )
 # Continue, not Stop: PS 5.1 turns any native stderr line (git progress, npm warnings) into a
 # terminating error. Failures are decided by exit codes below.
@@ -45,6 +54,7 @@ $Prefix = (Split-Path $Repo -Leaf) + '-'
 # Own npm cache so pool installs don't race other sessions' npm runs.
 $NpmCache = Join-Path $HOME '.npm-cache-pool'
 $LocalFilesList = Join-Path $PSScriptRoot 'local-files.txt'
+$DevServersList = Join-Path $PSScriptRoot 'dev-servers.txt'
 
 if (-not $Base) {
     $Base = (& git -C $Repo symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>$null)
@@ -91,6 +101,76 @@ function Resolve-Slot([string]$NameOrPath) {
         if ($s.Name -eq $NameOrPath -or $s.FullName -eq $NameOrPath.TrimEnd('\') -or $NameOrPath.StartsWith($s.FullName + '\')) { return $s.FullName }
     }
     throw "not a slot: $NameOrPath (slots: $((Get-Slots | ForEach-Object Name) -join ', '))"
+}
+
+# Primary checkout or a slot, by name or by any path inside it (default: the current dir).
+function Resolve-Worktree([string]$NameOrPath) {
+    if (-not $NameOrPath) { $NameOrPath = (Get-Location).Path }
+    $path = $NameOrPath.TrimEnd('\')
+    if ($path -eq $Repo -or $path.StartsWith($Repo + '\') -or $path -eq (Split-Path $Repo -Leaf)) { return $Repo }
+    Resolve-Slot $NameOrPath
+}
+
+# Worktree number: primary checkout = 1, <repo>-N = N. Ports derive from it so slots never share dev servers.
+function Get-SlotPorts([string]$NameOrPath) {
+    $path = Resolve-Worktree $NameOrPath
+    if ($path -eq $Repo) { $n = 1 } else { $n = [int]((Split-Path $path -Leaf).Substring($Prefix.Length)) }
+    # Never usable: Chrome's ERR_UNSAFE_PORT range (6665-6669) and Windows portproxy listeners
+    # (netsh interface portproxy, e.g. 2222 forwarded to a VM's SSH). A reserved port moves up to the next one.
+    if ($null -eq $script:ReservedPorts) {
+        $script:ReservedPorts = @(6665..6669) + @(netsh interface portproxy show all | ForEach-Object { if ($_ -match '^\S+\s+(\d+)\s+\S+\s+\d+\s*$') { [int]$Matches[1] } })
+    }
+    $reserved = $script:ReservedPorts
+    $api = $n * 1111 + 1
+    while ($reserved -contains $api) { $api++ }
+    $web = $n * 1111
+    while ($reserved -contains $web -or $web -eq $api) { $web++ }
+    [pscustomobject]@{ Number = $n; Web = $web; Api = $api }
+}
+
+function Get-ListeningPorts { @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | ForEach-Object { [int]$_.LocalPort } | Sort-Object -Unique) }
+
+# Each server runs as a hidden `cmd /c <command>` (outlives this script; output in the worktree's private
+# git dir, wt-serve-<kind>.log). Its PID goes to wt-serve.pids so `stop` can end the whole process tree.
+function Start-DevServers([string]$Path) {
+    if (-not (Test-Path $DevServersList)) { Write-Host "no $DevServersList - no dev servers to start"; return }
+    $ports = Get-SlotPorts $Path
+    $gitDir = (Invoke-Git $Path rev-parse --absolute-git-dir).Trim()
+    $listening = Get-ListeningPorts
+    $started = @()
+    foreach ($line in Get-Content $DevServersList) {
+        if ($line -notmatch '^\s*(WEB|API)\s+(\S+)\s+(.+?)\s*$') { continue }
+        $kind = $Matches[1]
+        $dir = Join-Path $Path $Matches[2]
+        $command = $Matches[3] -replace '\{WEB_PORT\}', $ports.Web -replace '\{API_PORT\}', $ports.Api
+        if ($kind -eq 'WEB') { $port = $ports.Web } else { $port = $ports.Api }
+        if ($listening -contains $port) { Write-Host "SERVE $kind port $port already in use - left as is (http://localhost:$port)"; continue }
+        $log = Join-Path $gitDir "wt-serve-$($kind.ToLower()).log"
+        # Inherited by the child: PORT is the server's own port, WEB_PORT/API_PORT pair it with the other one.
+        $env:WEB_PORT = $ports.Web; $env:API_PORT = $ports.Api; $env:PORT = $port
+        $proc = Start-Process cmd.exe -ArgumentList '/c', "$command > `"$log`" 2>&1" -WorkingDirectory $dir -WindowStyle Hidden -PassThru
+        Add-Content (Join-Path $gitDir 'wt-serve.pids') $proc.Id
+        $started += [pscustomobject]@{ Kind = $kind; Port = $port; Log = $log; Proc = $proc }
+    }
+    $deadline = (Get-Date).AddSeconds(180)
+    foreach ($s in $started) {
+        while (-not ((Get-ListeningPorts) -contains $s.Port) -and -not $s.Proc.HasExited -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+        if ((Get-ListeningPorts) -contains $s.Port) { Write-Host "SERVE $($s.Kind) up on http://localhost:$($s.Port) (log $($s.Log))" }
+        else { Write-Warning "SERVE $($s.Kind) not listening on $($s.Port) - log $($s.Log):`n$((Get-Content $s.Log -Tail 15 -ErrorAction SilentlyContinue) -join "`n")" }
+    }
+}
+
+function Stop-DevServers([string]$Path) {
+    $pidFile = Join-Path (Invoke-Git $Path rev-parse --absolute-git-dir).Trim() 'wt-serve.pids'
+    if (-not (Test-Path $pidFile)) { Write-Host "no dev servers started by serve in $Path"; return }
+    foreach ($id in Get-Content $pidFile) {
+        # Only our cmd wrappers: a PID from before a reboot may now belong to something else.
+        if (Get-Process -Id $id -ErrorAction SilentlyContinue | Where-Object ProcessName -eq 'cmd') {
+            & taskkill /T /F /PID $id 2>&1 | Out-Null
+            Write-Host "stopped dev server tree $id"
+        }
+    }
+    Remove-Item $pidFile
 }
 
 function Invoke-Npm([string[]]$NpmArgs) {
@@ -196,10 +276,17 @@ function Get-PrStates {
     $map
 }
 
-function Get-WorktreeRow($wt, $prs) {
+# "web 2224 up, api 2223 down": the worktree's dev-server ports and whether something listens on them.
+function Get-PortsCell([string]$Path, [int[]]$Listening) {
+    try { $ports = Get-SlotPorts $Path } catch { return '-' }
+    $state = { param([int]$port) if ($Listening -contains $port) { 'up' } else { 'down' } }
+    "web $($ports.Web) $(& $state $ports.Web), api $($ports.Api) $(& $state $ports.Api)"
+}
+
+function Get-WorktreeRow($wt, $prs, [int[]]$Listening) {
     $name = Split-Path $wt.Path -Leaf
     if ($wt.Prunable -or -not (Test-Path $wt.Path)) {
-        return [pscustomobject]@{ Name = $name; Branch = $wt.Branch; Dirty = '-'; Remote = '-'; BaseBehind = '-'; LastCommit = '-'; PR = '-'; Lock = '-'; Free = 'MISSING (prunable)' }
+        return [pscustomobject]@{ Name = $name; Branch = $wt.Branch; Dirty = '-'; Remote = '-'; BaseBehind = '-'; LastCommit = '-'; PR = '-'; Lock = '-'; Ports = '-'; Free = 'MISSING (prunable)' }
     }
     $p = $wt.Path
     $branch = $wt.Branch
@@ -241,6 +328,7 @@ function Get-WorktreeRow($wt, $prs) {
         LastCommit = (git -C $p log -1 --format=%cr)
         PR         = $pr
         Lock       = $lock
+        Ports      = (Get-PortsCell $p $Listening)
         Free       = $free
     }
 }
@@ -248,7 +336,8 @@ function Get-WorktreeRow($wt, $prs) {
 function Show-All {
     if (-not $NoFetch) { Update-Remote }
     $prs = Get-PrStates
-    $rows = foreach ($wt in Get-Worktrees) { Get-WorktreeRow $wt $prs }
+    $listening = Get-ListeningPorts
+    $rows = foreach ($wt in Get-Worktrees) { Get-WorktreeRow $wt $prs $listening }
     Write-Host "repo $Repo, base $Base"
     $rows | Format-Table -AutoSize | Out-String -Width 400 | Write-Host
     if ($null -eq $prs) { Write-Host 'PR column: gh unavailable or failed (?)' }
@@ -344,10 +433,21 @@ switch ($Cmd) {
             Remove-Item (Get-LockPath $slot) -ErrorAction SilentlyContinue
             throw
         }
-        Write-Host "READY $slot ($holder)"
+        $ports = Get-SlotPorts $slot
+        Write-Host "READY $slot ($holder) WEB_PORT=$($ports.Web) API_PORT=$($ports.Api)"
+        if (-not $NoServe) { Start-DevServers $slot }
     }
 
+    'serve' { Start-DevServers (Resolve-Worktree $Arg) }
+
+    'stop' { Stop-DevServers (Resolve-Worktree $Arg) }
+
     'all' { Show-All }
+
+    'ports' {
+        $ports = Get-SlotPorts $Arg
+        Write-Host "WEB_PORT=$($ports.Web) API_PORT=$($ports.Api)"
+    }
 
     'reset' {
         if (-not $Arg) { throw 'usage: wt.ps1 reset <all|name|path> [-Force] [-NoDeps]' }
@@ -372,6 +472,7 @@ switch ($Cmd) {
         if (-not $Force -and $dirtyCount -gt 0) {
             throw "$slot has uncommitted changes - commit/push first, or -Force to release anyway"
         }
+        Stop-DevServers $slot
         if ($dirtyCount -eq 0) { Invoke-Git $slot switch --detach | Out-Null }
         Remove-Item (Get-LockPath $slot) -ErrorAction SilentlyContinue
         Write-Host "released $slot"

@@ -27,10 +27,10 @@ running ones. Uses installed Chrome (`E2E_CHANNEL=chrome`); Playwright's Chromiu
 blocked on this machine. Every page runs a 50 tps loop, so workers default to 2 (`E2E_WORKERS`).
 Long runs: start them with `run_in_background` and wait for the notification.
 
-**Port 4200 busy (another worktree slot's dev server)?** Don't let the config reuse it: it serves that
-slot's code. Start your own: `cd zombie-blaster-api && npm run dev` (:3001, the frontend env hard-codes it)
-and `npx ng serve --port <free port>` (check `netstat -ano` first: other slots use 4210 too; a busy port makes Playwright silently test THEIR code), then run with
-`E2E_BASE_URL=http://localhost:<port> E2E_WS_URL=ws://localhost:3001 E2E_EXTERNAL_HAS_PROBE=1`. Kill both after.
+**In a worktree, use its own ports** or Playwright reuses another slot's servers and silently tests
+THEIR code. Worktree N uses WEB_PORT=N*1111, API_PORT=N*1111+1 (`.claude\skills\worktrees\wt.ps1 ports`):
+`$env:WEB_PORT=2224; $env:API_PORT=2223; npm run e2e:solo` (slot 2; 2222 is reserved here) - the config starts (or reuses) the API on
+API_PORT and `ng serve --port WEB_PORT`, whose `/ws` proxies to API_PORT (`proxy.conf.mjs`). Kill both after.
 Canvas attachments land in `e2e/.report/data/*.png` (not `e2e/.results`).
 
 **Online / deployed targets:** `E2E_BASE_URL=https://… E2E_WS_URL=wss://… npm run e2e`. No local

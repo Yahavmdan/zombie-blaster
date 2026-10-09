@@ -11,7 +11,8 @@ Run ONE call and show the table:
 Columns: `Dirty` = uncommitted files; `Remote` = ahead/behind `origin/<branch>` (`NOT PUSHED`, or
 `gone (merged)` when the PR merged and the remote branch was deleted); `BaseBehind` = commits the
 base branch (`origin/main`) has that HEAD lacks; `PR` = newest PR of mine for that branch; `Lock` =
-pool-slot holder from `wt.ps1 take`; `Free` = YES or the reasons it is not (dirty, locked, primary,
+pool-slot holder from `wt.ps1 take`; `Ports` = the worktree's dev-server ports (`web N*1111`,
+`api N*1111+1`, reserved ports skipped) and whether something listens on each (`up`/`down`); `Free` = YES or the reasons it is not (dirty, locked, primary,
 unpushed, branch in progress).
 
 Then one short line per worktree that needs attention (dirty, unpushed, MISSING/prunable, stale lock
