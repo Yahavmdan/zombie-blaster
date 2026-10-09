@@ -5,7 +5,7 @@ import { DropSystem } from './drop-system';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
 import { keepOutOfWall } from './boulder-puzzle';
 import { pushOutOfSolids } from './solid-blocks';
-import { LevelLayout, lyingProp, pickableProps, Prop } from './level-generator';
+import { LevelLayout, lyingProp, pickableProps, Prop, propWeightKg } from './level-generator';
 
 /** Sideways speed kept per tick by a thrown prop (like a corpse). */
 const PROP_AIR_DRAG: number = 0.92;
@@ -58,7 +58,8 @@ export class LoosePropSystem {
     );
     this.e.looseProps = [...this.spawns].map(([id, spawn]: [string, Prop]): LooseProp => {
       const s: LooseProp | undefined = synced.get(id);
-      return s ? { ...s } : lyingProp(id, spawn);
+      // The weight comes from this client's own layout, never from the sync.
+      return s ? { ...s, weightKg: propWeightKg(spawn.kind) } : lyingProp(id, spawn);
     });
   }
 

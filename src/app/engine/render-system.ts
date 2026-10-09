@@ -57,12 +57,18 @@ import {
 } from './boulder-puzzle';
 import {
   SPRING_FLOOR_HINT,
-  chargeCorpses,
+  buttonBox,
+  buttonTopY,
+  cablePath,
   countdownSeconds,
+  gaugeFraction,
   isBusy,
-  isCharged,
-  leverBox,
+  isButtonUp,
+  isLoaded,
   plateOffset,
+  scaleBox,
+  scalePostTopY,
+  scalePostX,
   springSpan,
 } from './spring-puzzle';
 import {
@@ -147,6 +153,7 @@ export class RenderSystem {
     }
     // The exit cage's chain runs down behind the exit.
     this.renderCageChains(ctx);
+    this.renderSpringCable(ctx);
     this.renderExitPlatform(ctx);
     this.renderSafeSpotMarker(ctx);
     this.renderBoulderPuzzle(ctx);
@@ -2001,10 +2008,36 @@ export class RenderSystem {
   }
 
   /**
-   * The floor-3 spring, per frame from the layout, the synced timers and the synced corpses: the
-   * spring (its plate winds down in the 3-2-1 and shoots up on release), the lever beside it
-   * (upright while waiting, thrown once pulled, jiggling on a pull without charge), the charge
-   * count, and the big 3-2-1 over the spring.
+   * The floor-3 cable (not walkable), behind the exit: from the scale's post up to a pulley on the
+   * ceiling, along it, and down to the spring's button, whose cap it holds (so it follows the
+   * button up and down).
+   */
+  private renderSpringCable(ctx: CanvasRenderingContext2D): void {
+    const puzzle: SpringPuzzleLayout | null = this.e.springPuzzle;
+    const spring: SpringState | null = this.e.spring;
+    if (!puzzle || !spring) return;
+    const path: Point[] = cablePath(puzzle, spring);
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    this.strokeChain(ctx, path);
+    const pulleys: Point[] = [path[0], path[1], path[2]];
+    for (const pulley of pulleys) {
+      ctx.fillStyle = '#3a3f48';
+      ctx.strokeStyle = '#9aa3ad';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(pulley.x, pulley.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * The floor-3 spring, per frame from the layout and the synced state: the spring (its plate
+   * winds down in the 3-2-1 and shoots up on release), its button rising out of the ground on the
+   * cable (pressed in during the count), the scale with its gauge and kg readout, and the big 3-2-1.
    */
   private renderSpringPuzzle(ctx: CanvasRenderingContext2D): void {
     const puzzle: SpringPuzzleLayout | null = this.e.springPuzzle;
@@ -2014,45 +2047,63 @@ export class RenderSystem {
     const [left, right]: [number, number] = springSpan(puzzle);
     const cx: number = (left + right) / 2;
     const t: number = performance.now() / 1000;
+    const ground: number = GAME_CONSTANTS.GROUND_Y;
     this.e.mapRenderer.drawSpring(ctx, block, plateOffset(spring));
-
-    const lever: Box = leverBox(puzzle);
-    const baseX: number = lever.x + lever.width / 2;
-    const thrown: boolean = spring.countdownTicks > 0 || spring.bounceTicks > 0;
-    const jiggle: number = spring.wobbleTicks > 0 ? Math.sin(spring.wobbleTicks * 1.3) * 6 : 0;
-    const tipX: number = baseX + (thrown ? -puzzle.side * 22 : 0) + jiggle;
-    const tipY: number = lever.y + (thrown ? 14 : 6);
     ctx.save();
-    ctx.fillStyle = '#3a3f48';
-    ctx.fillRect(lever.x - 4, GAME_CONSTANTS.GROUND_Y - 10, lever.width + 8, 10);
-    ctx.strokeStyle = '#7d8590';
-    ctx.lineWidth = 5;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(baseX, GAME_CONSTANTS.GROUND_Y - 8);
-    ctx.lineTo(tipX, tipY);
-    ctx.stroke();
-    ctx.fillStyle = '#d23c3c';
-    ctx.beginPath();
-    ctx.arc(tipX, tipY, 7, 0, Math.PI * 2);
-    ctx.fill();
 
-    const needed: number = GAME_CONSTANTS.SPRING_CHARGE_CORPSES;
-    const count: number = chargeCorpses(this.e.zombieCorpses, puzzle).length;
-    const ready: boolean = isCharged(count);
+    // The button: a shaft and a red cap pulled up out of its housing in the ground.
+    const button: Box = buttonBox(puzzle);
+    const buttonX: number = button.x + button.width / 2;
+    const capY: number = buttonTopY(puzzle, spring);
+    ctx.fillStyle = '#7d8590';
+    ctx.fillRect(buttonX - 4, capY, 8, ground - capY);
+    ctx.fillStyle = isButtonUp(spring) ? '#ff4d4d' : '#a33a3a';
+    ctx.fillRect(button.x - 2, capY - 4, button.width + 4, 10);
+    ctx.fillStyle = '#3a3f48';
+    ctx.fillRect(button.x - 6, ground - 8, button.width + 12, 8);
+
+    // The scale: the pan set into the ground, its post and gauge at the inner end.
+    const pan: Box = scaleBox(puzzle);
+    const loaded: boolean = isLoaded(spring);
+    ctx.fillStyle = '#5b6470';
+    ctx.fillRect(pan.x, pan.y, pan.width, pan.height);
+    ctx.fillStyle = loaded ? '#7dff7d' : '#ffd166';
+    ctx.fillRect(pan.x, pan.y, pan.width, 2);
+    const postX: number = scalePostX(puzzle);
+    const postTop: number = scalePostTopY();
+    ctx.fillStyle = '#3a3f48';
+    ctx.fillRect(postX - 3, postTop, 6, ground - postTop);
+    const gaugeY: number = ground - 56;
+    ctx.fillStyle = '#e8e4d8';
+    ctx.strokeStyle = '#3a3f48';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(postX, gaugeY, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    const angle: number = Math.PI * (0.75 + 1.5 * gaugeFraction(spring));
+    ctx.strokeStyle = '#d23c3c';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(postX, gaugeY);
+    ctx.lineTo(postX + Math.cos(angle) * 12, gaugeY + Math.sin(angle) * 12);
+    ctx.stroke();
+
     ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'center';
     ctx.lineWidth = 3;
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.fillStyle = ready ? '#7dff7d' : '#ffd166';
-    const label: string = `CHARGE ${Math.min(count, needed)}/${needed}`;
-    const labelY: number = block.y + block.height - 14;
-    ctx.strokeText(label, cx, labelY);
-    ctx.fillText(label, cx, labelY);
-    if (ready && !isBusy(spring)) {
+    ctx.fillStyle = loaded ? '#7dff7d' : '#ffd166';
+    const needed: number = GAME_CONSTANTS.SPRING_SCALE_KG_NEEDED;
+    const label: string = `${Math.round(spring.scaleKg)} / ${needed} KG`;
+    const panX: number = pan.x + pan.width / 2;
+    ctx.strokeText(label, panX, ground + 28);
+    ctx.fillText(label, panX, ground + 28);
+    if (isButtonUp(spring) && !isBusy(spring)) {
       ctx.globalAlpha = 0.7 + Math.sin(t * 6) * 0.3;
-      ctx.strokeText('PULL!', baseX, lever.y - 14);
-      ctx.fillText('PULL!', baseX, lever.y - 14);
+      ctx.fillStyle = '#7dff7d';
+      ctx.strokeText('HIT!', buttonX, button.y - 16);
+      ctx.fillText('HIT!', buttonX, button.y - 16);
     }
 
     const seconds: number = countdownSeconds(spring);

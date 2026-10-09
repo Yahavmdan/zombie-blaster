@@ -366,7 +366,27 @@ describe('spring puzzle floor', (): void => {
     }
   });
 
-  it('the rules catch a platform over the spring, a prop by its lever, a moved spring and a missing one', (): void => {
+  it('the scale lies in the ground on the far half with open sky over it; no prop stands on it', (): void => {
+    for (let seed: number = 1; seed <= 200; seed++) {
+      const level: LevelLayout = generateLevel(seed, SPRING_FLOOR);
+      const puzzle: SpringPuzzleLayout = level.springPuzzle!;
+      const left: number = puzzle.scaleX;
+      const right: number = left + GAME_CONSTANTS.SPRING_SCALE_WIDTH_PX;
+      const half: number = GAME_CONSTANTS.CANVAS_WIDTH / 2;
+      expect(Math.sign((left + right) / 2 - half), `seed ${seed} far half`).toBe(-puzzle.side);
+      for (const p of level.platforms) {
+        const over: boolean = p.x < right && p.x + p.width > left;
+        expect(over, `seed ${seed} platform ${p.x},${p.y} over the scale`).toBe(false);
+      }
+      for (const prop of level.props) {
+        const onGround: boolean = prop.y + prop.height === GAME_CONSTANTS.GROUND_Y;
+        const over: boolean = prop.x < right && prop.x + prop.width > left;
+        expect(onGround && over, `seed ${seed} prop ${prop.x}`).toBe(false);
+      }
+    }
+  });
+
+  it('the rules catch a platform over the spring, a prop by its button or on the scale, a moved spring or scale and a missing one', (): void => {
     const level: LevelLayout = generateLevel(5, SPRING_FLOOR);
     const puzzle: SpringPuzzleLayout = level.springPuzzle!;
     const has: (l: LevelLayout, text: string) => boolean = (l: LevelLayout, text: string): boolean =>
@@ -376,10 +396,16 @@ describe('spring puzzle floor', (): void => {
     expect(has({ ...level, platforms: [...level.platforms, over] }, 'over the spring')).toBe(true);
     const nearX: number =
       puzzle.side === 1 ? puzzle.spring.x - 40 : puzzle.spring.x + puzzle.spring.width + 12;
-    const byLever: Prop = { kind: 'box1', x: nearX, y: GAME_CONSTANTS.GROUND_Y - 22, width: 28, height: 22 };
-    expect(has({ ...level, props: [...level.props, byLever] }, 'crowds the spring')).toBe(true);
+    const byButton: Prop = { kind: 'box1', x: nearX, y: GAME_CONSTANTS.GROUND_Y - 22, width: 28, height: 22 };
+    expect(has({ ...level, props: [...level.props, byButton] }, 'crowds the spring')).toBe(true);
+    const onPan: Prop = { ...byButton, x: puzzle.scaleX + 40 };
+    expect(has({ ...level, props: [...level.props, onPan] }, 'on the scale')).toBe(true);
     const moved: SpringPuzzleLayout = { ...puzzle, spring: { ...puzzle.spring, x: puzzle.spring.x + 32 } };
     expect(has({ ...level, springPuzzle: moved }, 'spring: not')).toBe(true);
+    const scaleMoved: SpringPuzzleLayout = { ...puzzle, scaleX: puzzle.scaleX + 32 };
+    expect(has({ ...level, springPuzzle: scaleMoved }, 'scale: not on the far side')).toBe(true);
+    const overPan: Platform = { x: puzzle.scaleX, y: 530, width: 96, height: 32 };
+    expect(has({ ...level, platforms: [...level.platforms, overPan] }, 'over the scale')).toBe(true);
     expect(has({ ...level, springPuzzle: undefined }, 'spring floor without a spring')).toBe(true);
     expect(has({ ...generateLevel(5, 4), springPuzzle: puzzle }, 'spring on another floor')).toBe(true);
   });

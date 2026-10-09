@@ -114,14 +114,17 @@ export interface BoulderPuzzleLayout {
 
 /**
  * Floor-3 puzzle: a big spring (a solid block one hop high) at the screen edge straight under the
- * exit, which hangs at the very top. Corpses landing on it charge it; a lever beside its open side
- * starts a 3-2-1, then the spring launches everyone standing on it (or on the corpses on it).
+ * exit, which hangs at the very top. A scale's pan is set into the ground on the far side; a cable
+ * runs from it along the ceiling to the spring's button. Enough kg on the scale slowly pulls the
+ * button up; a hit on the raised button starts a 3-2-1, then the spring launches everyone on it.
  */
 export interface SpringPuzzleLayout {
   /** The spring's solid box: its top plate is walkable, it spans the exit from the screen edge. */
   spring: Platform;
-  /** +1: the spring is at the right screen edge (the lever on its left), -1: at the left edge. */
+  /** +1: the spring is at the right screen edge (the button on its left), -1: at the left edge. */
   side: 1 | -1;
+  /** Left edge of the scale's pan (SPRING_SCALE_WIDTH_PX wide, its top flush with the ground). */
+  scaleX: number;
 }
 
 /**

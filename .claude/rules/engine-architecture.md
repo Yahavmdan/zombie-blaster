@@ -23,8 +23,9 @@ The engine is split into focused files under `src/app/engine/`.
 | `map-renderer.ts` | Draws scenery (backgrounds) and the level geometry layer (ground, platforms, ladders) **from the layout data only** |
 | `level-generator.ts` | Seeded per-floor layouts (platforms, ropes, exit side, safe spot + its ladder, floor-2 boulder puzzle: wall + ledge position, platforms kept out of the chute) + `levelViolations` rules; host picks the seed, clients follow it via game-sync |
 | `boulder-puzzle.ts` | Floor-2 puzzle rules (pure): gate box + hits, boulder path (ledge → chute → wall), rolling, crush targets, debris, `keepOutOfWall`, leaving through the opening |
-| `spring-puzzle.ts` | Floor-3 puzzle rules (pure): spring span, lever box + pulls, charge from corpses on the spring, 3-2-1 countdown + launch tick, on-spring check + fling, plate offset |
-| `spring-puzzle-system.ts` | Floor-3 puzzle simulation: host watches every player's lever pulls, runs the countdown, launches the local player; guests launch themselves from the synced launch |
+| `spring-puzzle.ts` | Floor-3 puzzle rules (pure): spring span, scale pan + what rests on it and its kg (`scaleLoadKg`), cable path, button box + rise (`tickButton`) + presses, 3-2-1 countdown + launch tick, on-spring check + fling, corpse scatter, plate offset |
+| `spring-puzzle-system.ts` | Floor-3 puzzle simulation: host weighs the scale (corpses, props, zombies, every player + carried load), raises/lowers the button, watches every player's presses, runs the countdown, launches the local player; guests launch themselves from the synced launch, clients move the button from the synced kg |
+| `weight.ts` | Weight helpers (kg): `zombieWeightKg(type)`, `playerLoadKg` (body + carried corpses/props). The numbers live in `shared/game-constants.ts` |
 | `cage-puzzle.ts` | Floor-4 puzzle rules (pure): hanging / falling / landed cage boxes and collision, cleat box + hits, chain path, fall ticks (host lands, client only falls), what the landing exit cage lifts (`yAfterCageLands`), release spots |
 | `cage-puzzle-system.ts` | Floor-4 puzzle simulation: host counts every player's cleat hits, snaps chains, drops and lands cages (exit cage: lift the pile, zombies, drops and its own player onto it; zombie cage: smash, `spawnZombieAt` x6); guests lift themselves from the synced landing |
 | `plate-puzzle.ts` | Floor-5 puzzle rules (pure): plate box, what presses on it (lying corpses, standing players) and its weight, open/shut changes, door slide + door box, zombie kicks |
@@ -75,8 +76,10 @@ The engine is split into focused files under `src/app/engine/`.
   party size), straight over a solid `puzzlePart: 'spring'` block from that screen edge (walk onto
   its plate like a prop). It is drawn per frame (`MapRenderer.drawSpring`, the plate moves while
   it fires) and measured at rest in the geometry report. Ground spawns are kept out of it. The
-  generator keeps platforms, ropes and props `SPRING_CLEAR_PX` clear of it (the lever stands
-  there). The charge is derived from the synced corpses.
+  generator keeps platforms, ropes and props `SPRING_CLEAR_PX` clear of it (the button stands
+  there). The scale's pan is per-frame art set into the ground on the far side (`scaleX`, no new
+  collision; the generator keeps props off it), and the cable is per-frame non-walkable art. The
+  host weighs the scale and syncs `scaleKg`; every client raises the button from it.
 - Floor 4 is the hanging cages: the exit cage (`puzzlePart: 'cage'`) hangs under the exit and is
   re-placed with it (`placeCages`, called from `repositionExitPlatform`), the zombie cage
   (`puzzlePart: 'zombie-cage'`) hangs mid-screen over a column the generator keeps free of

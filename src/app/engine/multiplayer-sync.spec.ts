@@ -28,7 +28,7 @@ import { CageId, cleatBox, exitCageGroundBox, hangBox } from './cage-puzzle';
 import { ZombieSystem } from './zombie-system';
 import { CarryPose } from './corpse-carry';
 import { CorpseDrape } from './corpse-drape';
-import { leverBox, springSpan } from './spring-puzzle';
+import { buttonBox, newSpringState, scaleBox, springSpan } from './spring-puzzle';
 import { exitPlatformY } from './level-generator';
 import { Box, BoulderPath, boulderPath, gateBox, pointAlong } from './boulder-puzzle';
 import { PhysicsSystem } from './physics-system';
@@ -717,12 +717,12 @@ describe('Spring puzzle (floor 3)', (): void => {
     return new SpringPuzzleSystem(e, new VfxSystem(e));
   }
 
-  /** A player on the ground beside the lever (on the screen-center side), attacking, facing it. */
-  function playerAtLever(e: GameEngine, id: string = 'player-1'): CharacterState {
+  /** A player on the ground beside the button (on the screen-center side), attacking, facing it. */
+  function playerAtButton(e: GameEngine, id: string = 'player-1'): CharacterState {
     const puzzle: SpringPuzzleLayout = e.springPuzzle!;
-    const lever: Box = leverBox(puzzle);
+    const button: Box = buttonBox(puzzle);
     const x: number =
-      puzzle.side === 1 ? lever.x - GAME_CONSTANTS.PLAYER_WIDTH - 4 : lever.x + lever.width + 4;
+      puzzle.side === 1 ? button.x - GAME_CONSTANTS.PLAYER_WIDTH - 4 : button.x + button.width + 4;
     return makePlayer({
       id,
       x,
@@ -744,32 +744,41 @@ describe('Spring puzzle (floor 3)', (): void => {
     });
   }
 
-  function charge(e: GameEngine, count: number): void {
-    const [left, right]: [number, number] = springSpan(e.springPuzzle!);
-    const top: number = e.springPuzzle!.spring.y;
+  function lyingCorpse(id: string, cx: number, feetY: number): ZombieCorpse {
+    return {
+      id,
+      type: ZombieType.Walker,
+      x: cx - 20,
+      y: feetY - 30,
+      width: 40,
+      height: 30,
+      spriteKey: 'walker',
+      facing: 1,
+      velocityX: 0,
+      velocityY: 0,
+      isGrounded: true,
+      frozen: false,
+      landProcessed: true,
+      fadeTimer: 999,
+      maxFadeTimer: 999,
+      showBlood: false,
+      carrierId: null,
+    };
+  }
+
+  /** Walker corpses lying on the scale's pan, a few deep. */
+  function loadScale(e: GameEngine, count: number): void {
+    const pan: Box = scaleBox(e.springPuzzle!);
     for (let i: number = 0; i < count; i++) {
-      const cx: number = left + 20 + ((right - left - 40) * (i % 6)) / 6;
-      e.zombieCorpses.push({
-        id: `charge-${i}`,
-        type: ZombieType.Walker,
-        x: cx - 20,
-        y: top - 30 - Math.floor(i / 6) * 5,
-        width: 40,
-        height: 30,
-        spriteKey: 'walker',
-        facing: 1,
-        velocityX: 0,
-        velocityY: 0,
-        isGrounded: true,
-        frozen: false,
-        landProcessed: true,
-        fadeTimer: 999,
-        maxFadeTimer: 999,
-        showBlood: false,
-        carrierId: null,
-      });
+      const cx: number = pan.x + 24 + ((pan.width - 48) * (i % 4)) / 3;
+      const feet: number = GAME_CONSTANTS.GROUND_Y - Math.floor(i / 4) * 5;
+      e.zombieCorpses.push(lyingCorpse(`load-${i}`, cx, feet));
     }
   }
+
+  const WALKER_KG: number = ZOMBIE_TYPES[ZombieType.Walker].weightKg;
+  /** Walker corpses enough to hold the button up. */
+  const ENOUGH: number = Math.ceil(GAME_CONSTANTS.SPRING_SCALE_KG_NEEDED / WALKER_KG);
 
   function hasEvent(e: GameEngine, type: VfxEventType): boolean {
     return e.pendingVfxEvents.some((evt: VfxEvent): boolean => evt.type === type);
@@ -781,9 +790,9 @@ describe('Spring puzzle (floor 3)', (): void => {
     engine.setFloor(GAME_CONSTANTS.PUZZLE_SPRING_FLOOR);
   });
 
-  it('floor 3: a solid spring stands under the whole exit, which hangs at the top for any party size', (): void => {
+  it('floor 3: a solid spring under the whole exit (at the top for any party size), the scale on the far side', (): void => {
     const puzzle: SpringPuzzleLayout = engine.springPuzzle!;
-    expect(engine.spring).toEqual({ launches: 0, countdownTicks: 0, bounceTicks: 0, wobbleTicks: 0 });
+    expect(engine.spring).toEqual(newSpringState());
     const block: Platform[] = engine.platforms.filter(
       (p: Platform): boolean => p.puzzlePart === 'spring',
     );
@@ -791,19 +800,33 @@ describe('Spring puzzle (floor 3)', (): void => {
     const [left, right]: [number, number] = springSpan(puzzle);
     expect(left).toBeLessThanOrEqual(engine.exitPlatform.x);
     expect(right).toBeGreaterThanOrEqual(engine.exitPlatform.x + engine.exitPlatform.width);
+    const panCenter: number = puzzle.scaleX + GAME_CONSTANTS.SPRING_SCALE_WIDTH_PX / 2;
+    const half: number = GAME_CONSTANTS.CANVAS_WIDTH / 2;
+    expect(Math.sign(panCenter - half), 'scale on the far half').toBe(-puzzle.side);
     expect(engine.exitPlatform.y).toBe(GAME_CONSTANTS.SPRING_LEDGE_Y);
     engine.remotePlayers = [makePlayer({ id: 'guest' })];
     engine.repositionExitPlatform();
     expect(engine.exitPlatform.y).toBe(GAME_CONSTANTS.SPRING_LEDGE_Y);
   });
 
-  it('charged: a lever pull starts the 3-2-1, then the spring launches the player on it onto the exit', (): void => {
+  it('loaded: the cable raises the button, a hit starts the 3-2-1, the spring launches the player onto the exit', (): void => {
     const sys: SpringPuzzleSystem = systemFor(engine);
     const physics: PhysicsSystem = new PhysicsSystem(engine);
-    charge(engine, GAME_CONSTANTS.SPRING_CHARGE_CORPSES);
-    engine.player = playerAtLever(engine);
+    loadScale(engine, ENOUGH);
+    const onSpring: ZombieCorpse = lyingCorpse(
+      'on-spring',
+      engine.exitPlatform.x + engine.exitPlatform.width / 2,
+      engine.springPuzzle!.spring.y,
+    );
+    engine.zombieCorpses.push(onSpring);
+    engine.player = playerAtButton(engine);
     sys.update();
-    expect(engine.spring!.countdownTicks).toBe(GAME_CONSTANTS.SPRING_COUNTDOWN_TICKS);
+    expect(engine.spring!.scaleKg).toBeGreaterThanOrEqual(GAME_CONSTANTS.SPRING_SCALE_KG_NEEDED);
+    expect(engine.spring!.countdownTicks, 'the button is still sunk').toBe(0);
+    for (let t: number = 0; t < GAME_CONSTANTS.SPRING_BUTTON_RISE_TICKS; t++) sys.update();
+    expect(engine.spring!.buttonTicks).toBe(GAME_CONSTANTS.SPRING_BUTTON_RISE_TICKS);
+    expect(engine.spring!.countdownTicks).toBeGreaterThan(0);
+    expect(hasEvent(engine, VfxEventType.HitParticles)).toBe(true);
     expect(engine.spring!.launches).toBe(0);
     // Hop on (still walking when it fires: the launch is straight up all the same).
     const player: CharacterState = { ...playerOnSpring(engine), velocityX: 2 };
@@ -829,59 +852,93 @@ describe('Spring puzzle (floor 3)', (): void => {
     expect(player.y + GAME_CONSTANTS.PLAYER_HEIGHT, 'landed on the exit').toBe(
       engine.exitPlatform.y,
     );
-    // The charge scatters through the air, out over the open side (it is spent).
-    const out: number = -engine.springPuzzle!.side;
-    for (const c of engine.zombieCorpses) {
-      expect(c.isGrounded, `${c.id} thrown`).toBe(false);
-      expect(c.velocityY).toBeLessThan(0);
-      expect(Math.sign(c.velocityX)).toBe(out);
-    }
+    // The corpse on the spring flew off, out over the open side; the scale's load stays put.
+    expect(onSpring.isGrounded).toBe(false);
+    expect(onSpring.velocityY).toBeLessThan(0);
+    expect(Math.sign(onSpring.velocityX)).toBe(-engine.springPuzzle!.side);
+    const load: ZombieCorpse[] = engine.zombieCorpses.filter(
+      (c: ZombieCorpse): boolean => c.id.startsWith('load-'),
+    );
+    expect(load.every((c: ZombieCorpse): boolean => c.isGrounded)).toBe(true);
   });
 
-  it('not enough charge: the lever only jiggles and nobody flies', (): void => {
+  it('too light: the button never rises, hits do nothing and nobody flies', (): void => {
     const sys: SpringPuzzleSystem = systemFor(engine);
-    charge(engine, GAME_CONSTANTS.SPRING_CHARGE_CORPSES - 1);
-    engine.player = playerAtLever(engine);
-    sys.update();
+    loadScale(engine, ENOUGH - 1);
+    engine.player = playerAtButton(engine);
+    for (let t: number = 0; t < GAME_CONSTANTS.SPRING_BUTTON_RISE_TICKS + 300; t++) sys.update();
+    expect(engine.spring!.scaleKg).toBeLessThan(GAME_CONSTANTS.SPRING_SCALE_KG_NEEDED);
+    expect(engine.spring!.buttonTicks).toBe(0);
     expect(engine.spring!.countdownTicks).toBe(0);
-    expect(engine.spring!.wobbleTicks).toBe(GAME_CONSTANTS.SPRING_WOBBLE_TICKS);
-    expect(hasEvent(engine, VfxEventType.HitParticles)).toBe(true);
-    for (let t: number = 0; t < 300; t++) sys.update();
     expect(engine.spring!.launches).toBe(0);
+    expect(hasEvent(engine, VfxEventType.HitParticles)).toBe(false);
   });
 
-  it('the host counts a lever pull by a guest; its own player off the spring stays put', (): void => {
+  it('the weight leaving the scale lets the button sink back', (): void => {
+    const sys: SpringPuzzleSystem = systemFor(engine);
+    loadScale(engine, ENOUGH);
+    for (let t: number = 0; t < GAME_CONSTANTS.SPRING_BUTTON_RISE_TICKS; t++) sys.update();
+    expect(engine.spring!.buttonTicks).toBe(GAME_CONSTANTS.SPRING_BUTTON_RISE_TICKS);
+    engine.zombieCorpses = [];
+    for (let t: number = 0; t < GAME_CONSTANTS.SPRING_BUTTON_RISE_TICKS; t++) sys.update();
+    expect(engine.spring!.scaleKg).toBe(0);
+    expect(engine.spring!.buttonTicks).toBe(0);
+  });
+
+  it("the host weighs a guest on the scale with what they carry, and counts another guest's press", (): void => {
     engine.isMultiplayerHost = true;
     const sys: SpringPuzzleSystem = systemFor(engine);
-    charge(engine, GAME_CONSTANTS.SPRING_CHARGE_CORPSES);
-    engine.remotePlayers = [playerAtLever(engine, 'guest')];
-    for (let t: number = 0; t <= GAME_CONSTANTS.SPRING_COUNTDOWN_TICKS; t++) sys.update();
+    loadScale(engine, ENOUGH - 2);
+    const pan: Box = scaleBox(engine.springPuzzle!);
+    const onScale: CharacterState = makePlayer({
+      id: 'heavy-guest',
+      x: pan.x + pan.width / 2 - GAME_CONSTANTS.PLAYER_WIDTH / 2,
+      y: GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT,
+      isGrounded: true,
+    });
+    engine.zombieCorpses.push({ ...lyingCorpse('carried', 0, 0), carrierId: 'heavy-guest' });
+    engine.remotePlayers = [onScale, playerAtButton(engine, 'guest')];
+    sys.update();
+    expect(engine.spring!.scaleKg).toBe(
+      (ENOUGH - 1) * WALKER_KG + GAME_CONSTANTS.PLAYER_WEIGHT_KG,
+    );
+    for (
+      let t: number = 0;
+      t <= GAME_CONSTANTS.SPRING_BUTTON_RISE_TICKS + GAME_CONSTANTS.SPRING_COUNTDOWN_TICKS;
+      t++
+    ) {
+      sys.update();
+    }
     expect(engine.spring!.launches).toBe(1);
-    expect(engine.player!.velocityY).toBe(0);
+    expect(engine.player!.velocityY, 'its own player off the spring stays put').toBe(0);
   });
 
   it('a client follows the synced spring: NaN ignored, clamped, and a fresh launch flings only a player on it', (): void => {
     engine.isMultiplayerClient = true;
     engine.player = playerOnSpring(engine);
     const bounce: number = GAME_CONSTANTS.SPRING_BOUNCE_TICKS;
-    engine.applyRemoteSpring({
-      launches: Number.NaN,
-      countdownTicks: 0,
-      bounceTicks: bounce,
-      wobbleTicks: 0,
-    });
+    engine.applyRemoteSpring({ ...newSpringState(), launches: Number.NaN, bounceTicks: bounce });
     expect(engine.spring!.launches).toBe(0);
-    engine.applyRemoteSpring({ launches: 0, countdownTicks: 9_999, bounceTicks: 0, wobbleTicks: 999 });
+    engine.applyRemoteSpring({ ...newSpringState(), scaleKg: Number.POSITIVE_INFINITY });
+    expect(engine.spring!.scaleKg).toBe(0);
+    engine.applyRemoteSpring({
+      ...newSpringState(),
+      countdownTicks: 9_999,
+      scaleKg: -50,
+      buttonTicks: 9_999,
+    });
     expect(engine.spring!.countdownTicks).toBe(GAME_CONSTANTS.SPRING_COUNTDOWN_TICKS);
-    expect(engine.spring!.wobbleTicks).toBe(GAME_CONSTANTS.SPRING_WOBBLE_TICKS);
+    expect(engine.spring!.scaleKg).toBe(0);
+    expect(engine.spring!.buttonTicks).toBe(GAME_CONSTANTS.SPRING_BUTTON_RISE_TICKS);
+    engine.applyRemoteSpring({ ...newSpringState(), scaleKg: 1234.4 });
+    expect(engine.spring!.scaleKg).toBe(1234);
     // A launch it joined late (the bounce almost over) flings nobody.
-    engine.applyRemoteSpring({ launches: 1, countdownTicks: 0, bounceTicks: 5, wobbleTicks: 0 });
+    engine.applyRemoteSpring({ ...newSpringState(), launches: 1, bounceTicks: 5 });
     expect(engine.player.velocityY).toBe(0);
-    const fresh: SpringState = { launches: 2, countdownTicks: 0, bounceTicks: bounce, wobbleTicks: 0 };
-    engine.applyRemoteSpring(fresh);
+    engine.applyRemoteSpring({ ...newSpringState(), launches: 2, bounceTicks: bounce });
     expect(engine.player.velocityY).toBe(-GAME_CONSTANTS.SPRING_LAUNCH_FORCE);
-    engine.player = playerAtLever(engine);
-    engine.applyRemoteSpring({ launches: 3, countdownTicks: 0, bounceTicks: bounce, wobbleTicks: 0 });
+    engine.player = playerAtButton(engine);
+    engine.applyRemoteSpring({ ...newSpringState(), launches: 3, bounceTicks: bounce });
     expect(engine.player.velocityY, 'beside the spring: no launch').toBe(0);
   });
 
@@ -893,8 +950,10 @@ describe('Spring puzzle (floor 3)', (): void => {
     expect(engine.screenShakeFrames).toBeGreaterThan(0);
   });
 
-  it('the snapshot carries the spring', (): void => {
+  it('the snapshot carries the spring with its scale and button', (): void => {
     engine.spring!.countdownTicks = 42;
+    engine.spring!.scaleKg = 640;
+    engine.spring!.buttonTicks = 17;
     expect(engine.getStateSnapshot()!.spring).toEqual(engine.spring);
   });
 
