@@ -13,7 +13,12 @@ export interface LevelPlatform {
   x: number;
   y: number;
   width: number;
+  /** Props only: their height (low ones are walked over, see currentPlatform). */
+  height?: number;
 }
+
+/** Props this low (or lower) are stepped onto and off while walking (PROP_STEP_UP_PX). */
+const STEP_UP_PX: number = 26;
 
 export interface LevelRope {
   x: number;
@@ -42,11 +47,12 @@ export function levelPlatforms(s: E2eSnapshot): LevelPlatform[] {
     ),
     // Props are solid: you can stand on their tops too.
     ...s.level.props.map(
-      (p: { x: number; y: number; width: number }): LevelPlatform => ({
+      (p: { x: number; y: number; width: number; height: number }): LevelPlatform => ({
         name: `prop ${p.x},${p.y}`,
         x: p.x,
         y: p.y,
         width: p.width,
+        height: p.height,
       }),
     ),
   ];
@@ -68,13 +74,22 @@ export function currentPlatform(s: E2eSnapshot): LevelPlatform | null {
   const p: E2eSnapshot['player'] = s.player;
   if (!p || p.isClimbing || !p.isGrounded) return null;
   const feet: number = p.y + WORLD.playerHeight;
-  return (
+  const on: LevelPlatform | null =
     levelPlatforms(s).filter(
       (pl: LevelPlatform): boolean =>
         Math.abs(feet - pl.y) < FEET_TOLERANCE &&
         p.x + WORLD.playerWidth > pl.x &&
         p.x < pl.x + pl.width,
-    )[0] ?? null
+    )[0] ?? null;
+  if (!on || on.height === undefined || on.height > STEP_UP_PX) return on;
+  // Walking steps you up onto low props and off again: you are still on the surface under it.
+  const cx: number = p.x + WORLD.playerWidth / 2;
+  return (
+    levelPlatforms(s)
+      .filter(
+        (pl: LevelPlatform): boolean => pl.height === undefined && pl.y >= on.y && spans(pl, cx),
+      )
+      .sort((a: LevelPlatform, b: LevelPlatform): number => a.y - b.y)[0] ?? GROUND
   );
 }
 
