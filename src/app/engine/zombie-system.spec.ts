@@ -5,6 +5,8 @@ import {
   CharacterState,
   CharacterClass,
   Direction,
+  VfxEvent,
+  VfxEventType,
 } from '@shared/index';
 import { ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import { EntityInterpolation, IGameEngine, Platform, PlayerTint } from './engine-types';
@@ -147,6 +149,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     autoPotionCooldown: 0,
     floor: 1,
     spawnTimer: 999,
+    eaterSpawnTimer: 999,
     floorTransitionTimer: 0,
     exitPlatform: {
       x: (GAME_CONSTANTS.CANVAS_WIDTH - 250) / 2,
@@ -574,5 +577,252 @@ describe('monster magnet drag', () => {
     pullZombiesToward([boss, far], casterX, casterY, 500);
     expect(boss.magnetPull).toBeNull();
     expect(far.magnetPull).toBeNull();
+  });
+});
+
+describe('Eater zombie', (): void => {
+  let engine: IGameEngine;
+  let zombieSystem: ZombieSystem;
+  let player: CharacterState;
+
+  function lyingCorpse(id: string, x: number): ZombieCorpse {
+    return makeCorpse({ id, x, y: GAME_CONSTANTS.GROUND_Y - 50, isGrounded: true, landProcessed: true });
+  }
+
+  function makeEater(overrides: Partial<ZombieState> = {}): ZombieState {
+    return makeZombie({ id: 'eater-1', type: ZombieType.Eater, attackHesitation: 0, instanceWidth: 30, instanceHeight: 40, y: GAME_CONSTANTS.GROUND_Y - 40, ...overrides });
+  }
+
+  function eatersIn(e: IGameEngine): ZombieState[] {
+    return e.zombies.filter((z: ZombieState): boolean => z.type === ZombieType.Eater);
+  }
+
+  beforeEach((): void => {
+    player = makePlayer({ x: 100, y: GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT });
+    engine = makeMockEngine(player, []);
+    const physics: PhysicsSystem = new PhysicsSystem(engine);
+    const vfx: VfxSystem = new VfxSystem(engine);
+    const combat: CombatSystem = new CombatSystem(engine, physics, vfx, { rollDrops: vi.fn() } as never);
+    zombieSystem = new ZombieSystem(
+      engine, physics, combat, new ProjectileSystem(engine, physics, vfx), new DropSystem(engine, physics, vfx),
+    );
+  });
+
+  afterEach((): void => {
+    vi.restoreAllMocks();
+  });
+
+  it('never comes with the regular spawns, on any floor', (): void => {
+    const floors: number[] = [1, 5, 12];
+    for (const floor of floors) {
+      engine.floor = floor;
+      for (let i: number = 0; i < 200; i++) {
+        engine.zombies = [];
+        engine.spawnTimer = 1;
+        zombieSystem.updateSpawning();
+        expect(eatersIn(engine)).toHaveLength(0);
+      }
+    }
+  });
+
+  it('lying corpses draw one from floor 1, close enough to smell them', (): void => {
+    engine.floor = 1;
+    engine.zombieCorpses = [lyingCorpse('a', 900), lyingCorpse('b', 950), lyingCorpse('c', 1000)];
+    engine.eaterSpawnTimer = 1;
+    zombieSystem.updateSpawning();
+    const eaters: ZombieState[] = eatersIn(engine);
+    expect(eaters).toHaveLength(1);
+    expect(engine.eaterSpawnTimer).toBeGreaterThanOrEqual(GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_DELAY_MIN_TICKS);
+  });
+
+  it('too few corpses draw none, however long they lie', (): void => {
+    engine.zombieCorpses = [lyingCorpse('a', 900), lyingCorpse('b', 950)];
+    for (let i: number = 0; i < GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_DELAY_MAX_TICKS * 2; i++) zombieSystem.updateSpawning();
+    expect(eatersIn(engine)).toHaveLength(0);
+  });
+
+  it('at most ZOMBIE_EATER_MAX_ALIVE per player come at once', (): void => {
+    engine.zombieCorpses = [0, 1, 2, 3, 4, 5].map((i: number): ZombieCorpse => lyingCorpse(`c${i}`, 700 + i * 60));
+    for (let i: number = 0; i < GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_DELAY_MAX_TICKS * 6; i++) zombieSystem.updateSpawning();
+    expect(eatersIn(engine)).toHaveLength(GAME_CONSTANTS.ZOMBIE_EATER_MAX_ALIVE);
+  });
+
+  it('eats a corpse in 2 seconds, then it is gone, even while slow to react', (): void => {
+    const corpse: ZombieCorpse = lyingCorpse('meal', 1000);
+    engine.zombieCorpses = [corpse];
+    const eater: ZombieState = makeEater({
+      x: 1000, eatingTargetId: 'meal', eatingTimer: GAME_CONSTANTS.ZOMBIE_EATER_EATING_TICKS, reactionDelay: 1000,
+    });
+    engine.zombies = [eater];
+    expect(GAME_CONSTANTS.ZOMBIE_EATER_EATING_TICKS).toBe(2 * GAME_CONSTANTS.TICK_RATE);
+    for (let i: number = 0; i < GAME_CONSTANTS.ZOMBIE_EATER_EATING_TICKS - 1; i++) zombieSystem.updateZombies();
+    expect(engine.zombieCorpses).toHaveLength(1);
+    expect(eater.velocityX).toBe(0);
+    zombieSystem.updateZombies();
+    expect(engine.zombieCorpses).toHaveLength(0);
+    expect(eater.eatingTimer).toBe(0);
+  });
+
+  it('stops eating when a player carries the corpse off', (): void => {
+    const corpse: ZombieCorpse = lyingCorpse('meal', 1000);
+    engine.zombieCorpses = [corpse];
+    const eater: ZombieState = makeEater({ x: 1000, eatingTargetId: 'meal', eatingTimer: GAME_CONSTANTS.ZOMBIE_EATER_EATING_TICKS });
+    engine.zombies = [eater];
+    zombieSystem.updateZombies();
+    corpse.carrierId = player.id;
+    zombieSystem.updateZombies();
+    expect(eater.eatingTimer).toBe(0);
+    expect(engine.zombieCorpses).toHaveLength(1);
+  });
+
+  it('with corpses around, rarely bites a player in reach: only when the per-tick roll hits', (): void => {
+    engine.zombieCorpses = [lyingCorpse('meal', 1100)];
+    // Slow to react: it stays beside the player instead of running to the corpse.
+    const eater: ZombieState = makeEater({ x: player.x + GAME_CONSTANTS.PLAYER_WIDTH + 5, reactionDelay: 100_000 });
+    engine.zombies = [eater];
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    for (let i: number = 0; i < GAME_CONSTANTS.TICK_RATE * 10; i++) zombieSystem.updateZombies();
+    expect(eater.attackAnimTimer).toBe(0);
+
+    vi.spyOn(Math, 'random').mockReturnValue(GAME_CONSTANTS.ZOMBIE_EATER_ATTACK_CHANCE / 2);
+    zombieSystem.updateZombies();
+    expect(eater.attackAnimTimer).toBeGreaterThan(0);
+    expect(eater.facing).toBe(-1);
+  });
+
+  it('never bites while eating', (): void => {
+    engine.zombieCorpses = [lyingCorpse('meal', player.x + 40)];
+    const eater: ZombieState = makeEater({
+      x: player.x + GAME_CONSTANTS.PLAYER_WIDTH + 5, eatingTargetId: 'meal', eatingTimer: GAME_CONSTANTS.ZOMBIE_EATER_EATING_TICKS,
+    });
+    engine.zombies = [eater];
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    for (let i: number = 0; i < GAME_CONSTANTS.ZOMBIE_EATER_EATING_TICKS - 1; i++) {
+      zombieSystem.updateZombies();
+      expect(eater.attackAnimTimer).toBe(0);
+    }
+  });
+
+  it('smells a corpse across the whole screen and runs to it, steering every tick', (): void => {
+    engine.zombieCorpses = [lyingCorpse('far', GAME_CONSTANTS.CANVAS_WIDTH - 60)];
+    const eater: ZombieState = makeEater({ x: 20 });
+    engine.zombies = [eater];
+    zombieSystem.updateZombies();
+    expect(eater.velocityX).toBeCloseTo(eater.instanceSpeed * GAME_CONSTANTS.ZOMBIE_EATER_RUN_SPEED_MULT);
+    expect(eater.reactionDelay).toBe(0);
+  });
+
+  describe('reaching corpses on ledges', (): void => {
+    const low: Platform = { x: 600, y: GAME_CONSTANTS.LEVEL_TIER_Y[0], width: 200, height: 32 };
+    const high: Platform = { x: 900, y: GAME_CONSTANTS.LEVEL_TIER_Y[1], width: 200, height: 32 };
+
+    function corpseOn(id: string, ledge: Platform, x: number): ZombieCorpse {
+      return makeCorpse({ id, x, y: ledge.y - 50, isGrounded: true, landProcessed: true });
+    }
+
+    function runUntilEaten(eater: ZombieState, maxTicks: number): number {
+      for (let tick: number = 1; tick <= maxTicks; tick++) {
+        zombieSystem.updateZombies();
+        if (engine.zombieCorpses.length === 0) return tick;
+      }
+      expect.fail(`still not eaten after ${maxTicks} ticks; eater at ${eater.x}, ${eater.y}`);
+      return maxTicks;
+    }
+
+    it('jumps up onto the ledge a corpse lies on and eats it', (): void => {
+      engine.platforms = [...engine.platforms, low];
+      engine.zombieCorpses = [corpseOn('up', low, 700)];
+      const eater: ZombieState = makeEater({ x: 200 });
+      engine.zombies = [eater];
+      runUntilEaten(eater, 600);
+      // On the ledge (or on the corpse's foothold, a few px above it).
+      expect(eater.y + eater.instanceHeight, 'it is up on the ledge').toBeLessThanOrEqual(low.y);
+      expect(eater.y + eater.instanceHeight).toBeGreaterThan(low.y - 10);
+    });
+
+    it('climbs two ledges up, one at a time', (): void => {
+      engine.platforms = [...engine.platforms, low, high];
+      engine.zombieCorpses = [corpseOn('top', high, 1000)];
+      const eater: ZombieState = makeEater({ x: 200 });
+      engine.zombies = [eater];
+      runUntilEaten(eater, 900);
+      expect(eater.y + eater.instanceHeight).toBeLessThanOrEqual(high.y);
+      expect(eater.y + eater.instanceHeight).toBeGreaterThan(high.y - 10);
+    });
+
+    it('hops a crate in its way on the ground', (): void => {
+      const crate: Platform = { x: 450, y: GAME_CONSTANTS.GROUND_Y - 22, width: 30, height: 22, solid: true };
+      engine.platforms = [...engine.platforms, crate];
+      engine.zombieCorpses = [lyingCorpse('past', 700)];
+      const eater: ZombieState = makeEater({ x: 200 });
+      engine.zombies = [eater];
+      runUntilEaten(eater, 600);
+    });
+
+    it('two Eaters go for two different corpses', (): void => {
+      engine.zombieCorpses = [lyingCorpse('a', 700), lyingCorpse('b', 1000)];
+      const first: ZombieState = makeEater({ id: 'eater-1', x: 500 });
+      const second: ZombieState = makeEater({ id: 'eater-2', x: 520 });
+      engine.zombies = [first, second];
+      zombieSystem.updateZombies();
+      expect(first.eatingTargetId).not.toBeNull();
+      expect(second.eatingTargetId).not.toBeNull();
+      expect(first.eatingTargetId).not.toBe(second.eatingTargetId);
+    });
+  });
+
+  describe('hungry (no corpse on the floor)', (): void => {
+    function walkerNextTo(eater: ZombieState, hp: number): ZombieState {
+      return makeZombie({ id: 'walker', x: eater.x + eater.instanceWidth + 5, hp, maxHp: hp, reactionDelay: 100_000 });
+    }
+
+    it('runs at the nearest zombie or player', (): void => {
+      const eater: ZombieState = makeEater({ x: 900 });
+      const walker: ZombieState = makeZombie({ id: 'walker', x: 600, reactionDelay: 100_000 });
+      engine.zombies = [eater, walker];
+      zombieSystem.updateZombies();
+      expect(eater.velocityX).toBeCloseTo(-eater.instanceSpeed * GAME_CONSTANTS.ZOMBIE_EATER_RUN_SPEED_MULT);
+      expect(eater.facing).toBe(-1);
+    });
+
+    it('attacks a zombie in reach without the rare roll, and the bite hurts it for every player to see', (): void => {
+      const eater: ZombieState = makeEater({ x: 900, facing: 1 });
+      const walker: ZombieState = walkerNextTo(eater, 100);
+      engine.zombies = [eater, walker];
+      vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      zombieSystem.updateZombies();
+      expect(eater.attackAnimTimer, 'starts its attack (wind-up) at once').toBeGreaterThan(0);
+      for (let i: number = 0; i < GAME_CONSTANTS.ZOMBIE_ATTACK_WINDUP_TICKS + ZOMBIE_TYPES[ZombieType.Eater].attackAnimTicks && walker.hp === 100; i++) {
+        zombieSystem.updateZombies();
+      }
+      expect(walker.hp).toBeLessThan(100);
+      expect(walker.velocityX, 'knocked away from the Eater').toBeGreaterThan(0);
+      expect(walker.knockbackFrames, 'knocked away').toBeGreaterThan(0);
+      const bite: string[] = engine.pendingVfxEvents
+        .filter((evt: VfxEvent): boolean => evt.color === GAME_CONSTANTS.ZOMBIE_EATER_BITE_COLOR)
+        .map((evt: VfxEvent): string => evt.type);
+      expect(bite).toEqual(expect.arrayContaining([VfxEventType.HitParticles, VfxEventType.DamageNumber]));
+      expect(engine.pendingVfxEvents.some((evt: VfxEvent): boolean => evt.type === VfxEventType.HitMark)).toBe(true);
+    });
+
+    it('a zombie it kills leaves a corpse: its next meal', (): void => {
+      const eater: ZombieState = makeEater({ x: 900, facing: 1 });
+      const walker: ZombieState = walkerNextTo(eater, 1);
+      engine.zombies = [eater, walker];
+      for (let i: number = 0; i < GAME_CONSTANTS.ZOMBIE_ATTACK_WINDUP_TICKS + ZOMBIE_TYPES[ZombieType.Eater].attackAnimTicks + 2; i++) {
+        zombieSystem.updateZombies();
+      }
+      expect(walker.isDead).toBe(true);
+      expect(engine.zombieCorpses.map((c: ZombieCorpse): string => c.id)).toEqual(['walker']);
+    });
+
+    it('goes for a player when one is nearest', (): void => {
+      const eater: ZombieState = makeEater({ x: player.x + GAME_CONSTANTS.PLAYER_WIDTH + 5 });
+      engine.zombies = [eater];
+      vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      zombieSystem.updateZombies();
+      expect(eater.attackAnimTimer).toBeGreaterThan(0);
+      expect(eater.facing).toBe(-1);
+    });
   });
 });

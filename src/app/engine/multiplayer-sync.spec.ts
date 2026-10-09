@@ -379,6 +379,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     autoPotionCooldown: 0,
     floor: 1,
     spawnTimer: 999,
+    eaterSpawnTimer: 999,
     floorTransitionTimer: 0,
     exitPlatform: {
       x: (GAME_CONSTANTS.CANVAS_WIDTH - 250) / 2,

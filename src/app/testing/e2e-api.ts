@@ -74,6 +74,10 @@ export interface E2eZombieView {
   magnetPull: number | null;
   /** Ticks until this zombie can start its next attack. */
   attackCooldown: number;
+  /** Eater: true while it eats a corpse (host-simulated, synced). */
+  eating: boolean;
+  /** Sprite animation this client renders for the zombie (`walk`, `eating`, ...). */
+  animState: string | null;
 }
 
 export interface E2eCorpseView {
@@ -174,6 +178,8 @@ export interface E2eVfxLogEntry {
   type: string;
   playerId: string;
   animationKey?: string;
+  /** Color the effect is drawn in (hit particles, damage numbers), when it has one. */
+  color?: string;
   /** Replay only: true when the event came from this client and was skipped. */
   skippedOwn?: boolean;
   particlesAdded?: number;

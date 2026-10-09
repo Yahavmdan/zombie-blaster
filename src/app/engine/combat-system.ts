@@ -1393,9 +1393,38 @@ export class CombatSystem {
   applyZombieKnockback(z: ZombieState): void {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
+    this.knockZombieAwayFrom(z, p.x);
+  }
+
+  /**
+   * A hungry Eater bites another zombie (host only): damage, knockback and a bloody hit every
+   * player sees. A zombie it kills leaves an ordinary corpse (no XP or loot: no player killed it).
+   */
+  applyEaterBiteToZombie(victim: ZombieState, eater: ZombieState, damage: number): void {
+    victim.hp -= damage;
+    this.knockZombieAwayFrom(victim, eater.x);
+    const hitCx: number = victim.x + victim.instanceWidth / 2;
+    const hitCy: number = victim.y + victim.instanceHeight / 2;
+    const color: string = GAME_CONSTANTS.ZOMBIE_EATER_BITE_COLOR;
+    this.vfx.spawnHitParticles(hitCx, hitCy, color);
+    this.vfx.spawnDamageNumber(hitCx, victim.y - 10, damage, false, color);
+    this.vfx.spawnHitMark(hitCx, hitCy);
+    const host: CharacterState | null = this.e.player;
+    if (host) {
+      const events: VfxEvent[] = [
+        { type: VfxEventType.HitParticles, playerId: host.id, x: hitCx, y: hitCy, color },
+        { type: VfxEventType.DamageNumber, playerId: host.id, x: hitCx, y: victim.y - 10, value: damage, isCrit: false, color },
+        { type: VfxEventType.HitMark, playerId: host.id, x: hitCx, y: hitCy },
+      ];
+      for (const evt of events) this.e.pendingVfxEvents.push(evt);
+    }
+    if (victim.hp <= 0) this.handleZombieDeath(victim, false);
+  }
+
+  private knockZombieAwayFrom(z: ZombieState, fromX: number): void {
     // A zombie in a monster-magnet drag keeps flying to the caster: hits never knock it off course.
     if (z.magnetPull) return;
-    const knockDir: number = z.x > p.x ? 1 : -1;
+    const knockDir: number = z.x > fromX ? 1 : -1;
     z.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_ZOMBIE;
     z.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
     z.isGrounded = false;

@@ -111,7 +111,8 @@ function toPlayerView(p: CharacterState, engine: GameEngine): E2ePlayerView {
   };
 }
 
-function toZombieView(z: ZombieState): E2eZombieView {
+function toZombieView(z: ZombieState, engine: GameEngine): E2eZombieView {
+  const anim: { state: ZombieAnimState; frame: number } | null = engine.zombieSpriteAnimator.getInstanceFrame(z.id);
   return {
     id: z.id,
     type: z.type,
@@ -128,6 +129,8 @@ function toZombieView(z: ZombieState): E2eZombieView {
     windingUp: isZombieWindingUp(z),
     magnetPull: magnetPullProgress(z),
     attackCooldown: z.attackCooldown,
+    eating: z.eatingTimer > 0,
+    animState: anim ? anim.state : null,
   };
 }
 
@@ -326,7 +329,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
     player: player ? toPlayerView(player, engine) : null,
     localAnimState: engine.spriteAnimator.getState(),
     remotePlayers,
-    zombies: engine.zombies.map(toZombieView),
+    zombies: engine.zombies.map((z: ZombieState): E2eZombieView => toZombieView(z, engine)),
     corpses: engine.zombieCorpses.length,
     corpseViews: engine.zombieCorpses.map((c: ZombieCorpse): E2eCorpseView => {
       const foothold: CorpseSurface = corpseSurface(c);
@@ -510,6 +513,7 @@ export function attachEngineProbe(engine: GameEngine): () => void {
         type: evt.type,
         playerId: evt.playerId,
         animationKey: evt.animationKey,
+        color: evt.color,
         skippedOwn: evt.playerId === myId,
         particlesAdded: after.particles - before.particles,
         damageNumbersAdded: after.damageNumbers - before.damageNumbers,
@@ -528,6 +532,7 @@ export function attachEngineProbe(engine: GameEngine): () => void {
           type: evt.type,
           playerId: evt.playerId,
           animationKey: evt.animationKey,
+          color: evt.color,
         });
       }
     }
@@ -541,6 +546,7 @@ export function attachEngineProbe(engine: GameEngine): () => void {
         type: evt.type,
         playerId: evt.playerId,
         animationKey: evt.animationKey,
+        color: evt.color,
       });
     }
     originalDiscard();
