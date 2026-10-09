@@ -29,8 +29,8 @@ Long runs: start them with `run_in_background` and wait for the notification.
 
 **Port 4200 busy (another worktree slot's dev server)?** Don't let the config reuse it: it serves that
 slot's code. Start your own: `cd zombie-blaster-api && npm run dev` (:3001, the frontend env hard-codes it)
-and `npx ng serve --port 4210`, then run with
-`E2E_BASE_URL=http://localhost:4210 E2E_WS_URL=ws://localhost:3001 E2E_EXTERNAL_HAS_PROBE=1`. Kill both after.
+and `npx ng serve --port <free port>` (check `netstat -ano` first: other slots use 4210 too; a busy port makes Playwright silently test THEIR code), then run with
+`E2E_BASE_URL=http://localhost:<port> E2E_WS_URL=ws://localhost:3001 E2E_EXTERNAL_HAS_PROBE=1`. Kill both after.
 Canvas attachments land in `e2e/.report/data/*.png` (not `e2e/.results`).
 
 **Online / deployed targets:** `E2E_BASE_URL=https://… E2E_WS_URL=wss://… npm run e2e`. No local
@@ -93,7 +93,7 @@ Fix production code only after the repro is agreed.
 Mechanics that matter (verify in shared/game-constants.ts if changed):
 
 - Zombies: melee reach 35 px, attack cooldown 40–70 ticks. Every melee swing is telegraphed: a
-  15-tick wind-up (red "!" + glow, `windingUp` in the probe) before the swing, ~0.5 s total.
+  15-tick wind-up (big pulsing "!" over the head, no body glow; `windingUp` in the probe) before the swing, ~0.5 s total.
   At most 2 zombies swing at one player at once (attack tokens). Damage ramps from 40% on floor 1
   to full by floor 5. Zombies only chase players within 640 px (`ZOMBIE_DETECTION_RANGE`);
   nobody is waiting for them at the exit (no lure, spawns spread over the map).
