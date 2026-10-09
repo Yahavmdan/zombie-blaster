@@ -216,6 +216,7 @@ Driving tips:
   would pick up another body instead. While carrying: 0.75x walk speed, no attacks or skills. The
   request is the player's own state (`player.carryingCorpseIds`, bottom first); the host grants
   each as `corpseViews[].carrierId` (first come; a down carrier drops the stack). Carried bodies sway (drawing only, box unchanged): `corpseViews[].carryPose` {bob, sag, tilt} eases each tick toward `carrySway(carrier, level)` (bob per footfall by distance walked, droop at the ends, rock; in the air pressed down going up). Specs: `solo/corpse-carry.spec.ts`, `online/corpse-carry-coop.spec.ts`.
+  Piles drape (drawing only): `corpseViews[].drape` is a lying body's deepest sag (px) onto what is under it, 0 flat on the ground; host and guests compute the same. `openGroundX(s, span)` (navigation.ts) finds ground with nothing above it for a pile. Specs: `solo/corpse-drape.spec.ts`, `online/corpse-drape-sync.spec.ts`.
   Setup: `dropCorpses(x, 1)`, then teleport the player onto the corpse's own spot (feet =
   `footY + 5`). Dropped corpses often land on a platform edge, so "stand 30 px beside it" flakes.
 

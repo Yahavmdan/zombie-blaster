@@ -19,6 +19,7 @@ import {
   ZombieType,
 } from '@shared/game-entities';
 import { CarryPose } from './corpse-carry';
+import { CorpseDrape } from './corpse-drape';
 import { InputKeys } from '@shared/messages';
 import { Particle } from './particle-types';
 import { SpriteAnimator } from './sprite-animator';
@@ -250,6 +251,8 @@ export interface IGameEngine {
   zombieCorpses: ZombieCorpse[];
   /** How each carried corpse sways on its carrier this tick (drawing only). */
   readonly carryPoses: Map<string, CarryPose>;
+  /** How each lying corpse's body sags onto what is under it (drawing only). */
+  corpseDrapes: Map<string, CorpseDrape>;
   particles: Particle[];
   damageNumbers: DamageNumber[];
   dropNotifications: DropNotification[];

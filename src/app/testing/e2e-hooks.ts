@@ -8,6 +8,7 @@ import { measureLevelGeometry } from './geometry-report';
 import { BoulderPath, boulderBox, boulderPath, gateBox } from '../engine/boulder-puzzle';
 import { Prop } from '../engine/level-generator';
 import { CorpseSurface, corpseSurface } from '../engine/corpse-surface';
+import { CorpseDrape, maxDrop } from '../engine/corpse-drape';
 import { magnetPullProgress } from '../engine/magnet-pull';
 import { ZombieAnimState } from '../engine/zombie-sprite-animator';
 import { GameEngine } from '../engine/game-engine';
@@ -137,6 +138,11 @@ function toVfxEventView(evt: VfxEvent): E2eVfxEventView {
     y: evt.y,
     animationKey: evt.animationKey,
   };
+}
+
+function drapeOf(engine: GameEngine, id: string): number | null {
+  const drape: CorpseDrape | undefined = engine.corpseDrapes.get(id);
+  return drape ? maxDrop(drape) : null;
 }
 
 function resolveRole(engine: GameEngine): E2eRole {
@@ -313,6 +319,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
         frame: anim ? anim.frame : null,
         lastFrame: engine.zombieSpriteAnimator.getFrameCount(c.spriteKey, ZombieAnimState.Dead) - 1,
         carryPose: engine.carryPoses.get(c.id) ?? null,
+        drape: drapeOf(engine, c.id),
       };
     }),
     worldDrops: engine.worldDrops.length,
