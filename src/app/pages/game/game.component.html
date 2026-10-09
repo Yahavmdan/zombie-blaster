@@ -42,7 +42,7 @@
       [player]="currentPlayerDisplay()"
     />
 
-    @if (isDev) {
+    @if (showDevTools()) {
       <button
         class="dev-toggle-btn"
         [class.dev-toggle-btn--active]="devDialogOpen()"
@@ -53,7 +53,7 @@
       </button>
     }
 
-    @if (isDev && devDialogOpen()) {
+    @if (showDevTools() && devDialogOpen()) {
       <div class="dev-backdrop" (click)="closeDevDialog()"></div>
       <div class="dev-dialog">
         <div class="dev-dialog__header">
