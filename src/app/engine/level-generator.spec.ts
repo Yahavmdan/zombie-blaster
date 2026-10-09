@@ -8,6 +8,11 @@ import {
   Prop,
   PROP_ART,
   PropArt,
+  propArtHeight,
+  propArtWidth,
+  RAIL_ART,
+  RAIL_MAX_MIDDLES,
+  railWidth,
 } from './level-generator';
 import { pushOutOfSolids } from './solid-blocks';
 import { chuteSpan } from './boulder-puzzle';
@@ -136,12 +141,35 @@ describe('map props', () => {
         const level: LevelLayout = generateLevel(seed, floor);
         expect(level.props.length, `seed ${seed} floor ${floor}`).toBeGreaterThan(0);
         for (const prop of level.props) {
+          if (prop.kind === 'rail') continue;
           const art: PropArt = PROP_ART[prop.kind];
-          expect(prop.width).toBe(art.right - art.left + 1);
-          expect(prop.height).toBe(art.bottom - art.top + 1);
+          expect(prop.width).toBe(propArtWidth(art));
+          expect(prop.height).toBe(propArtHeight(art));
         }
       }
     }
+  });
+
+  it('rails are a left cap, 0..max middle pieces and a right cap, in random lengths and places', (): void => {
+    const widths: Set<number> = new Set<number>();
+    const xs: Set<number> = new Set<number>();
+    const allowed: number[] = Array.from(
+      { length: RAIL_MAX_MIDDLES + 1 },
+      (_: unknown, middles: number): number => railWidth(middles),
+    );
+    for (let seed: number = 1; seed <= 200; seed++) {
+      const rails: Prop[] = generateLevel(seed, 1).props.filter(
+        (p: Prop): boolean => p.kind === 'rail',
+      );
+      for (const rail of rails) {
+        expect(allowed).toContain(rail.width);
+        expect(rail.height).toBe(propArtHeight(RAIL_ART.middle));
+        widths.add(rail.width);
+        xs.add(rail.x);
+      }
+    }
+    expect(widths.size).toBeGreaterThanOrEqual(4);
+    expect(xs.size).toBeGreaterThan(20);
   });
 
   it('props sometimes stack (boxes on boxes)', (): void => {

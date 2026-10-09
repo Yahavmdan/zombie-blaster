@@ -1,6 +1,6 @@
 import { GAME_CONSTANTS } from '@shared/index';
 import { BoulderPuzzleLayout, Platform, Rope } from './engine-types';
-import { Prop, PROP_ART, PropArt, PropKind } from './level-generator';
+import { Prop, PROP_ART, PropArt, propArtWidth, RAIL_ART } from './level-generator';
 
 interface TileBlock {
   tl: number;
@@ -50,7 +50,8 @@ export class MapRenderer {
   private tileImages: Map<number, HTMLImageElement> = new Map();
   private bgLayers: HTMLImageElement[] = [];
   private ladderImage: HTMLImageElement | null = null;
-  private propImages: Map<PropKind, HTMLImageElement> = new Map<PropKind, HTMLImageElement>();
+  /** Prop images by `PropArt.src`. */
+  private propImages: Map<string, HTMLImageElement> = new Map<string, HTMLImageElement>();
   private props: Prop[] = [];
   /** Opaque columns of the ladder image (its art doesn't fill the tile; it is centered by these). */
   private ladderArt: { left: number; right: number } = { left: 0, right: LADDER_TILE_WIDTH - 1 };
@@ -69,14 +70,19 @@ export class MapRenderer {
     this.collectBlockTiles(GROUND_BLOCK, tileIds);
     this.collectBlockTiles(PLATFORM_BLOCK, tileIds);
 
-    const propKinds: PropKind[] = Object.keys(PROP_ART) as PropKind[];
-    this.totalCount = tileIds.size + BG_LAYER_PATHS.length + 1 + propKinds.length;
+    const propArts: PropArt[] = [
+      ...Object.values(PROP_ART),
+      RAIL_ART.left,
+      RAIL_ART.middle,
+      RAIL_ART.right,
+    ];
+    this.totalCount = tileIds.size + BG_LAYER_PATHS.length + 1 + propArts.length;
 
-    for (const kind of propKinds) {
+    for (const art of propArts) {
       const img: HTMLImageElement = new Image();
-      img.src = PROP_ART[kind].src;
+      img.src = art.src;
       img.onload = (): void => this.onAssetLoaded();
-      this.propImages.set(kind, img);
+      this.propImages.set(art.src, img);
     }
 
     for (const id of tileIds) {
@@ -385,10 +391,28 @@ export class MapRenderer {
 
   /** A prop image placed so its visible art covers exactly the prop's collision box. */
   drawProp(ctx: CanvasRenderingContext2D, prop: Prop): void {
-    const img: HTMLImageElement | undefined = this.propImages.get(prop.kind);
-    if (!img) return;
-    const art: PropArt = PROP_ART[prop.kind];
-    ctx.drawImage(img, prop.x - art.left, prop.y - art.top);
+    if (prop.kind !== 'rail') {
+      this.drawPropPiece(ctx, PROP_ART[prop.kind], prop.x, prop.y);
+      return;
+    }
+    // Rail: left cap, middle pieces edge to edge, right cap flush with the box's right side.
+    const rightCapX: number = prop.x + prop.width - propArtWidth(RAIL_ART.right);
+    this.drawPropPiece(ctx, RAIL_ART.left, prop.x, prop.y);
+    const middleWidth: number = propArtWidth(RAIL_ART.middle);
+    for (
+      let x: number = prop.x + propArtWidth(RAIL_ART.left);
+      x < rightCapX;
+      x += middleWidth
+    ) {
+      this.drawPropPiece(ctx, RAIL_ART.middle, x, prop.y);
+    }
+    this.drawPropPiece(ctx, RAIL_ART.right, rightCapX, prop.y);
+  }
+
+  /** One prop image with its visible art's top-left at x, y. */
+  private drawPropPiece(ctx: CanvasRenderingContext2D, art: PropArt, x: number, y: number): void {
+    const img: HTMLImageElement | undefined = this.propImages.get(art.src);
+    if (img) ctx.drawImage(img, x - art.left, y - art.top);
   }
 
   private measureOpaqueColumns(img: HTMLImageElement): { left: number; right: number } {

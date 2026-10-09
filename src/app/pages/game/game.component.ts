@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inject, OnInit, OnDestroy, viewChild, effect, NgZone, DestroyRef, isDevMode, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inject, OnInit, OnDestroy, viewChild, effect, NgZone, DestroyRef, isDevMode, computed, input, InputSignal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -604,6 +604,9 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
   readonly isDev: boolean = isDevMode();
+  /** Shows the dev tools in production builds too (set by the /dev page). */
+  readonly devTools: InputSignal<boolean> = input<boolean>(false);
+  readonly showDevTools: Signal<boolean> = computed((): boolean => this.isDev || this.devTools());
   readonly devClassList: CharacterClassDefinition[] = Object.values(CHARACTER_CLASSES);
   readonly devFloorInput: WritableSignal<number> = signal<number>(1);
   readonly devDialogOpen: WritableSignal<boolean> = signal<boolean>(false);

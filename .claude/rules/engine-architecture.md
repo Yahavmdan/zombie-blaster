@@ -48,10 +48,11 @@ The engine is split into focused files under `src/app/engine/`.
   feeds the same data to physics (`platforms`, `ropes`) and to `MapRenderer.setLevel()`.
 - Never hard-code a platform, ladder or prop in a renderer, and never draw scenery that looks walkable.
   Platforms are whole tiles (`LEVEL_TILE_PX`) wide and one tile tall, so art == collision box.
-- Props (barrels, boxes, lockers, fences) are placed by the generator and are solid (`Platform.solid`):
+- Props (barrels, boxes, lockers, rails) are placed by the generator and are solid (`Platform.solid`):
   stand on top, blocked at the sides (`solid-blocks.ts`, zombies hop over). A prop's box is its
   image's measured visible pixels (`PROP_ART`); the renderer offsets the image so the art lands on the
-  box. New prop art: measure its opaque bounds and add it to `PROP_ART`.
+  box. Rails are one prop of random length: left cap + 0..`RAIL_MAX_MIDDLES` middles + right cap
+  (`RAIL_ART`, drawn piece by piece). New prop art: measure its opaque bounds and add it to `PROP_ART`.
 - Any change to level art, tiles, layouts or collision must pass `e2e/specs/solo/level-geometry.spec.ts`
   and `e2e/specs/online/level-sync.spec.ts`. They measure the drawn pixels against the collision
   data, land on every platform and climb every ladder. Also look at the attached floor screenshots.
