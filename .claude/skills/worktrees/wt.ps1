@@ -283,6 +283,14 @@ function Get-PortsCell([string]$Path, [int[]]$Listening) {
     "web $($ports.Web) $(& $state $ports.Web), api $($ports.Api) $(& $state $ports.Api)"
 }
 
+# Branch was pushed once (has an upstream) but its origin copy is gone and HEAD is already in the base:
+# its PR merged and the remote branch was deleted. Git-only, so it holds when gh can't see the PR.
+function Test-MergedAndGone([string]$Path, [string]$Branch) {
+    if (-not (git -C $Path config --get "branch.$Branch.merge")) { return $false }
+    git -C $Path merge-base --is-ancestor HEAD $Base
+    $LASTEXITCODE -eq 0
+}
+
 function Get-WorktreeRow($wt, $prs, [int[]]$Listening) {
     $name = Split-Path $wt.Path -Leaf
     if ($wt.Prunable -or -not (Test-Path $wt.Path)) {
@@ -299,6 +307,7 @@ function Get-WorktreeRow($wt, $prs, [int[]]$Listening) {
             $remote = "+$($c[1]) -$($c[0])"
             if ($c[0] -eq '0' -and $c[1] -eq '0') { $remote = 'in sync' }
         }
+        elseif (Test-MergedAndGone $p $wt.Branch) { $remote = 'gone (merged)' }
         else { $remote = 'NOT PUSHED' }
     }
     $behindBase = (git -C $p rev-list --count "HEAD..$Base")
@@ -316,7 +325,7 @@ function Get-WorktreeRow($wt, $prs, [int[]]$Listening) {
     if ($remote -eq 'NOT PUSHED' -and $pr -match 'MERGED') { $remote = 'gone (merged)' }
     if ($wt.Branch -and $wt.Branch -ne $BaseBranch -and $remote -eq 'NOT PUSHED') { $reasons += 'unpushed branch' }
     elseif ($wt.Branch -and $remote -match '^\+[1-9]') { $reasons += 'unpushed commits' }
-    elseif ($wt.Branch -and $wt.Branch -ne $BaseBranch -and $pr -notmatch 'MERGED|CLOSED') { $reasons += 'branch in progress' }
+    elseif ($wt.Branch -and $wt.Branch -ne $BaseBranch -and $remote -ne 'gone (merged)' -and $pr -notmatch 'MERGED|CLOSED') { $reasons += 'branch in progress' }
     $free = 'YES'
     if ($reasons.Count -gt 0) { $free = 'no: ' + ($reasons -join ', ') }
     [pscustomobject]@{
@@ -359,7 +368,8 @@ function Reset-Worktree($wt) {
         else {
             if ($wt.Branch) {
                 $hasRemote = git -C $p rev-parse --verify --quiet "refs/remotes/origin/$($wt.Branch)"
-                if (-not $hasRemote) { $note = " (left branch $($wt.Branch) has no origin copy - never pushed, or deleted after merge; still exists locally)" }
+                if (-not $hasRemote -and (Test-MergedAndGone $p $wt.Branch)) { $note = " (left branch $($wt.Branch) is merged and its origin copy deleted; still exists locally)" }
+                elseif (-not $hasRemote) { $note =" (left branch $($wt.Branch) has no origin copy - never pushed, or deleted after merge; still exists locally)" }
                 elseif ([int](git -C $p rev-list --count "origin/$($wt.Branch)..HEAD") -gt 0) { $note = " (left branch $($wt.Branch) has unpushed commits - still exists locally)" }
             }
             # The base branch is checked out elsewhere (git can't check it out twice), so sit detached at it.
