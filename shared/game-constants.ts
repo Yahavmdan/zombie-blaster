@@ -357,6 +357,26 @@ export const GAME_CONSTANTS = {
   DEATH_PARTICLE_LIFE: 45, // Lifetime of death particles in ticks
   PARTICLE_GRAVITY: 0.15, // Downward pull on particles each tick
 
+  // ─── Storm Sky (scenery, never walkable) ─────────
+  STORM_CLOUD_SPEED_PX_S: 14, // The background clouds' drift speed (pixels per second, to the left)
+  STORM_FOG_SPEED_PX_S: 12, // Ground fog drift speed (pixels per second, to the right)
+  STORM_RAIN_DROP_COUNT: 160, // Rain streaks on screen at once
+  STORM_RAIN_FALL_PX_S: 950, // Rain fall speed (pixels per second)
+  STORM_RAIN_SLANT: 0.22, // Rain sideways drift per pixel fallen (wind)
+  STORM_RAIN_LENGTH_PX: 14, // Length of a rain streak
+  LIGHTNING_MIN_INTERVAL_MS: 9000, // Shortest wait between two lightning strikes (host decides)
+  LIGHTNING_MAX_INTERVAL_MS: 22000, // Longest wait between two lightning strikes
+  LIGHTNING_DURATION_MS: 700, // How long a strike lights the sky (bolt + afterglow)
+  LIGHTNING_EDGE_MARGIN_PX: 90, // A bolt lands at least this far from the screen edges
+  LIGHTNING_TOP_Y: 100, // Where a bolt leaves the cloud base
+  LIGHTNING_MIN_LENGTH_PX: 200, // A bolt reaches at least this far down, even onto the tallest stack
+  LIGHTNING_SEGMENT_PX: 22, // Vertical step between two kinks of a bolt
+  LIGHTNING_JITTER_PX: 26, // Sideways reach of each kink
+  LIGHTNING_MAX_BRANCHES: 3, // Forks off the main bolt
+  LIGHTNING_SCREEN_FLASH_ALPHA: 0.22, // Whole-screen white flash at the peak of a strike
+  LIGHTNING_SHAKE_FRAMES: 14, // Thunder rumble length (frames)
+  LIGHTNING_SHAKE_INTENSITY: 3, // Thunder rumble strength (pixels)
+
   // ─── Damage Numbers ────────────────────────────
   DAMAGE_NUMBER_LIFE_TICKS: 60, // How many ticks a floating damage number stays visible
 

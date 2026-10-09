@@ -273,6 +273,8 @@ export enum VfxEventType {
   DoorShut = 'door-shut',
   /** A player took a hit: every screen tints that player's sprite red for a moment. */
   PlayerHurt = 'player-hurt',
+  /** The host's sky struck: every screen draws the same bolt (x, `value` = bolt seed) and flash. */
+  Lightning = 'lightning',
 }
 
 export interface VfxEvent {

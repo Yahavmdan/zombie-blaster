@@ -52,7 +52,7 @@ shipped.
 | Pure rules (no engine) | `src/app/engine/<puzzle>.ts` | `boulder-puzzle.ts` |
 | Host simulation system | `src/app/engine/<puzzle>-system.ts`, `update()` (host/solo) + `tickClient()` | `BoulderPuzzleSystem` |
 | Engine state + wiring | `engine-types.ts` `IGameEngine`, `game-engine.ts` | `boulderPuzzle`, `boulder`, `breakPuzzleGate/Wall`, `puzzleWall()` |
-| Per-frame art | `render-system.ts` | `renderBoulderPuzzle` (chute, gate, boulder, EXIT sign) |
+| Per-frame art | `render-system.ts` calls `puzzle-art.ts` (pixel art on the 2 px grid, `pixel-art.ts` helpers) | `renderBoulderPuzzle` → `drawChute`, `drawBoulder`, `drawGate`, `drawExitArrows` |
 | Collidable art | `map-renderer.ts` geometry layer | `drawPuzzleWall` |
 | Floor exit override | `zombie-system.ts` `checkFloorCompletion` | `leavesThroughOpening` |
 | Floor intro hint | `boulder-puzzle.ts` `floorHint()` used by `render-system.ts` | "Climb to the boulder and break its gate" |

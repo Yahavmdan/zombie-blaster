@@ -149,6 +149,14 @@ export interface E2eVfxCounts {
   spriteEffects: string[];
   screenShakeFrames: number;
   screenFlashFrames: number;
+  /** The lightning strike lighting the sky (null between strikes). */
+  lightning: E2eLightningView | null;
+}
+
+export interface E2eLightningView {
+  x: number;
+  seed: number;
+  ageMs: number;
 }
 
 export interface E2ePendingQueues {
@@ -394,6 +402,8 @@ export interface E2eEngineControls {
   geometryReport(): E2eGeometryReport;
   /** Solo/host setup only: drops N corpses from above x; they fall and pile up by the normal corpse physics. */
   dropCorpses(centerX: number, count: number): void;
+  /** Solo/host only: the sky strikes on the next tick (the normal scheduler path, event included). */
+  strikeLightningNow(): void;
 }
 
 export interface ZbE2eApi {

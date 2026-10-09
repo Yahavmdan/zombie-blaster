@@ -67,6 +67,14 @@ VFX Multiplayer Sync:
 - [ ] Tested with 2+ players: effect visible on all screens
 ```
 
+## World effects decided by the host
+
+Effects nobody's action causes (weather) are scheduled by the host/solo engine only and sent like any
+other event: see `VfxSystem.updateLightning(isScheduler)` (host strikes + queues `Lightning`; guests
+only age the replayed strike). Send what makes every screen identical (bolt `x` + seed), not the
+geometry. Purely ambient motion with no gameplay meaning (drifting clouds, rain, fog) is drawn from
+frame time on each client and not synced.
+
 ## Already reconstructed from state (don't double-emit)
 
 - Damage numbers + hit marks from zombie HP deltas: `applyRemoteZombies` (`previousZombieHp`).
