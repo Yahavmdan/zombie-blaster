@@ -1,101 +1,106 @@
-<div class="shop-overlay" (click)="onClose()">
-  <div class="shop-panel" (click)="$event.stopPropagation()">
-    <div class="shop-header">
-      <h2 class="shop-title">🏪 SHOP</h2>
-      <div class="shop-gold">💰 {{ gold() }}G</div>
+<div class="shop-overlay px-overlay" (click)="onClose()">
+  <div class="shop-panel px-panel" (click)="$event.stopPropagation()">
+    <div class="shop-header px-header">
+      <app-pixel-icon [icon]="'shop'" [size]="24" />
+      <h2 class="shop-title">Shop</h2>
+      <div class="shop-gold px-chip"><app-pixel-icon [icon]="'coin'" [size]="16" /> {{ gold() }}</div>
       <button
-        class="shop-close"
+        class="shop-close px-btn px-close"
         (click)="onClose()"
         data-testid="shop-panel-button-close"
-      >✕</button>
+      ><app-pixel-icon [icon]="'close'" [size]="16" /></button>
     </div>
 
-    <div class="shop-inventory">
-      <span class="shop-inv-label">Inventory:</span>
-      <span class="shop-inv-item">❤️ {{ totalHpPotions() }}</span>
-      <span class="shop-inv-item">💧 {{ totalMpPotions() }}</span>
-    </div>
+    <div class="shop-body px-scroll">
+      <div class="shop-inventory">
+        <span class="px-label">Carrying</span>
+        <span class="shop-inv-item px-chip"><app-pixel-icon [icon]="'potion-hp-s'" [size]="16" /> {{ totalHpPotions() }}</span>
+        <span class="shop-inv-item px-chip"><app-pixel-icon [icon]="'potion-mp-s'" [size]="16" /> {{ totalMpPotions() }}</span>
+      </div>
 
-    <div class="shop-items">
-      @for (row of rows(); track row.item.id) {
-        <div class="shop-item" [class.shop-item--disabled]="!row.canAfford">
-          <span class="shop-item-icon">{{ row.item.icon }}</span>
-          <div class="shop-item-info">
-            <span class="shop-item-name">{{ row.item.name }}</span>
-            <span class="shop-item-desc">{{ row.item.description }}</span>
-            <span class="shop-item-owned">Owned: {{ row.owned }}</span>
-          </div>
-          <div class="shop-item-action">
-            <span class="shop-item-price">{{ row.totalPrice }}G</span>
-            <div class="shop-qty-row">
-              <button
-                class="shop-qty-btn"
-                [disabled]="!row.canAfford || row.quantity <= 1"
-                (click)="onQuantityChange(row.item.id, -1)"
-                [attr.data-testid]="'shop-item-button-qty-minus-' + row.item.id"
-              >−</button>
-              <input
-                type="number"
-                class="shop-qty-input"
-                [value]="row.quantity"
-                [disabled]="!row.canAfford"
-                [attr.min]="1"
-                [attr.max]="row.maxAffordable"
-                (input)="onQuantityInput(row.item.id, $event)"
-                [attr.data-testid]="'shop-item-input-qty-' + row.item.id"
-              />
-              <button
-                class="shop-qty-btn"
-                [disabled]="!row.canAfford || row.quantity >= row.maxAffordable"
-                (click)="onQuantityChange(row.item.id, 1)"
-                [attr.data-testid]="'shop-item-button-qty-plus-' + row.item.id"
-              >+</button>
+      <div class="shop-items">
+        @for (row of rows(); track row.item.id) {
+          <div class="shop-item px-panel--inset" [class.shop-item--disabled]="!row.canAfford">
+            <div class="shop-item-slot">
+              <app-pixel-icon [icon]="row.item.icon" [size]="32" />
             </div>
-            <button
-              class="shop-buy-btn"
-              [disabled]="!row.canAfford"
-              (click)="onBuy(row.item.id, row.quantity)"
-              [attr.data-testid]="'shop-item-button-buy-' + row.item.id"
-            >BUY</button>
+            <div class="shop-item-info">
+              <span class="shop-item-name">{{ row.item.name }}</span>
+              <span class="shop-item-desc">{{ row.item.description }}</span>
+              <span class="shop-item-owned">Owned: {{ row.owned }}</span>
+            </div>
+            <div class="shop-item-action">
+              <span class="shop-item-price"><app-pixel-icon [icon]="'coin'" [size]="16" /> {{ row.totalPrice }}</span>
+              <div class="shop-qty-row">
+                <button
+                  class="shop-qty-btn px-btn px-btn--sm"
+                  [disabled]="!row.canAfford || row.quantity <= 1"
+                  (click)="onQuantityChange(row.item.id, -1)"
+                  [attr.data-testid]="'shop-item-button-qty-minus-' + row.item.id"
+                >−</button>
+                <input
+                  type="number"
+                  class="shop-qty-input px-input"
+                  [value]="row.quantity"
+                  [disabled]="!row.canAfford"
+                  [attr.min]="1"
+                  [attr.max]="row.maxAffordable"
+                  (input)="onQuantityInput(row.item.id, $event)"
+                  [attr.data-testid]="'shop-item-input-qty-' + row.item.id"
+                />
+                <button
+                  class="shop-qty-btn px-btn px-btn--sm"
+                  [disabled]="!row.canAfford || row.quantity >= row.maxAffordable"
+                  (click)="onQuantityChange(row.item.id, 1)"
+                  [attr.data-testid]="'shop-item-button-qty-plus-' + row.item.id"
+                >+</button>
+                <button
+                  class="shop-buy-btn px-btn px-btn--good px-btn--sm"
+                  [disabled]="!row.canAfford"
+                  (click)="onBuy(row.item.id, row.quantity)"
+                  [attr.data-testid]="'shop-item-button-buy-' + row.item.id"
+                >Buy</button>
+              </div>
+            </div>
           </div>
+        }
+      </div>
+
+      <div class="shop-auto-potion px-panel--inset">
+        <h3 class="shop-auto-title"><app-pixel-icon [icon]="'flask'" [size]="16" /> Auto potion</h3>
+        <div class="shop-auto-row">
+          <label class="shop-auto-label">HP potion</label>
+          <select
+            class="shop-auto-select px-input"
+            [value]="autoPotionHpId() ?? ''"
+            (change)="onAutoPotionHpChange($event)"
+            data-testid="shop-auto-select-hp"
+          >
+            <option value="">None</option>
+            @for (pot of hpPotionOptions(); track pot.id) {
+              <option [value]="pot.id">{{ pot.name }}</option>
+            }
+          </select>
         </div>
-      }
-    </div>
-
-    <div class="shop-auto-potion">
-      <h3 class="shop-auto-title">🧪 Auto Potion Settings</h3>
-      <div class="shop-auto-row">
-        <label class="shop-auto-label">HP Potion:</label>
-        <select
-          class="shop-auto-select"
-          [value]="autoPotionHpId() ?? ''"
-          (change)="onAutoPotionHpChange($event)"
-          data-testid="shop-auto-select-hp"
-        >
-          <option value="">None</option>
-          @for (pot of hpPotionOptions(); track pot.id) {
-            <option [value]="pot.id">{{ pot.icon }} {{ pot.name }}</option>
-          }
-        </select>
+        <div class="shop-auto-row">
+          <label class="shop-auto-label">MP potion</label>
+          <select
+            class="shop-auto-select px-input"
+            [value]="autoPotionMpId() ?? ''"
+            (change)="onAutoPotionMpChange($event)"
+            data-testid="shop-auto-select-mp"
+          >
+            <option value="">None</option>
+            @for (pot of mpPotionOptions(); track pot.id) {
+              <option [value]="pot.id">{{ pot.name }}</option>
+            }
+          </select>
+        </div>
       </div>
-      <div class="shop-auto-row">
-        <label class="shop-auto-label">MP Potion:</label>
-        <select
-          class="shop-auto-select"
-          [value]="autoPotionMpId() ?? ''"
-          (change)="onAutoPotionMpChange($event)"
-          data-testid="shop-auto-select-mp"
-        >
-          <option value="">None</option>
-          @for (pot of mpPotionOptions(); track pot.id) {
-            <option [value]="pot.id">{{ pot.icon }} {{ pot.name }}</option>
-          }
-        </select>
-      </div>
-    </div>
 
-    <div class="shop-hint">
-      Press <span class="shop-hint-key">B</span> or click outside to close
+      <div class="shop-hint px-label">
+        Press <span class="shop-hint-key">B</span> or click outside to close
+      </div>
     </div>
   </div>
 </div>
