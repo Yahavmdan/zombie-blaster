@@ -97,6 +97,19 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   At most 2 zombies swing at one player at once (attack tokens). Damage ramps from 40% on floor 1
   to full by floor 5. Zombies only chase players within 640 px (`ZOMBIE_DETECTION_RANGE`);
   nobody is waiting for them at the exit (no lure, spawns spread over the map).
+- **Eaters** (crawl on all fours, art from `generate-eater-sprites.cjs`) never come with the regular
+  spawns: from floor 1, while >= 3 lying unclaimed corpses exist, one rises every 10-20 s (max 2
+  per player) near a corpse, smells corpses across the whole screen, runs to them (3.5x speed,
+  steering every tick; each claims its corpse, so two Eaters split up) and eats each in 2 s (100
+  ticks, then the corpse is gone). Corpses on ledges: it jumps (~144 px, other zombies ~90) up
+  through the ledge overhead or leaps from a ledge's end, ledge by ledge (`eater-path.ts`). With corpses
+  around they bite a player in reach only rarely (0.4%/tick, never mid-meal). With **no corpse
+  left they turn hungry**: run at the nearest player or zombie (not Eaters, not the dragon) and
+  attack like any zombie; bites on zombies knock back, show red hit effects (VFX log `color`
+  `#b02a22`, replayed for guests) and a kill leaves a corpse (no XP/loot): the next meal. Probe:
+  `zombies[].type === 'eater'`, `eating`, `animState` (`eating`, `run`, ...). They eat the exit
+  pile too. Rest players on the safe spot so a hungry Eater only has zombies to hunt.
+  Specs: `solo/eater.spec.ts`, `online/eater-coop.spec.ts`.
 - Player: 90 ticks (1.8 s) invincible after a hit; move speed 3 (faster than most zombies).
 - Potions: key 7 (HP +50) / 8 (MP +30), 30-tick cooldown, start with 3 each, 30/20 gold.
   Auto-potion needs the class's auto-potion passive; without it nothing drinks for you.

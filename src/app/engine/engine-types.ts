@@ -300,6 +300,8 @@ export interface IGameEngine {
 
   floor: number;
   spawnTimer: number;
+  /** Ticks until the next Eater comes for the lying corpses (counts only while enough lie uneaten). */
+  eaterSpawnTimer: number;
   floorTransitionTimer: number;
   exitPlatform: Platform;
   /** Floor-2 puzzle layout and its boulder (null on other floors). */

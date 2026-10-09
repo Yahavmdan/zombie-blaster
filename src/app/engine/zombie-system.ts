@@ -2,7 +2,6 @@ import {
   CharacterState,
   GAME_CONSTANTS,
   ZOMBIE_TYPES,
-  isZombieWindingUp,
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
@@ -21,11 +20,12 @@ import { PhysicsSystem } from './physics-system';
 import { CombatSystem } from './combat-system';
 import { DropSystem } from './drop-system';
 import { ProjectileSystem } from './projectile-system';
-import { ZombieAnimState } from './zombie-sprite-animator';
+import { ZombieAnimState, zombieAnimState } from './zombie-sprite-animator';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
 import { drapeCorpses } from './corpse-drape';
 import { advanceMagnetPull } from './magnet-pull';
 import { pushOutOfSolids } from './solid-blocks';
+import { EaterStep, Feet, eaterStep } from './eater-path';
 
 interface TargetInfo {
   id: string;
@@ -37,9 +37,21 @@ interface TargetInfo {
   defense: number;
 }
 
+/** What a hungry Eater hunts: a player or another zombie. */
+interface EaterPrey {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** The player it hunts; null for a zombie. */
+  player: TargetInfo | null;
+}
+
 export class ZombieSystem {
   /** Fingerprint of what the corpse drapes were last worked out from. */
   private drapedLayout: number = NaN;
+  /** Eaters in the air on a jump of their own (up through a ledge or a leap): they hold their course. */
+  private readonly eatersOnCourse: WeakSet<ZombieState> = new WeakSet<ZombieState>();
 
   constructor(
     private readonly e: IGameEngine,
@@ -151,12 +163,17 @@ export class ZombieSystem {
           z.eatingTimer = 0;
           z.eatingTargetId = null;
         }
+      } else if (z.eatingTimer > 0) {
+        this.tickEaterMeal(z);
       } else if (z.reactionDelay > 0) {
         z.reactionDelay--;
       } else {
         this.updateZombieAI(z, zDef);
-        z.reactionDelay = GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS +
-          Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MAX_TICKS - GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS));
+        // An Eater after a meal steers every tick: a slow reaction ran it past the corpse and back.
+        z.reactionDelay = this.isEaterHunting(z)
+          ? 0
+          : GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS +
+            Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MAX_TICKS - GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS));
       }
 
       if (z.jumpCooldown > 0) z.jumpCooldown--;
@@ -312,7 +329,6 @@ export class ZombieSystem {
   }
 
   private updateZombieAttack(z: ZombieState, zDef: ZombieDefinition): void {
-    if (z.type === ZombieType.Eater) return;
     if (z.attackAnimTimer > 0) {
       z.attackAnimTimer--;
 
@@ -325,12 +341,17 @@ export class ZombieSystem {
           this.projectiles.spawnSpitterProjectile(z);
         } else {
           this.resolveZombieSwingHits(z);
+          if (z.type === ZombieType.Eater) this.resolveEaterBiteOnZombies(z);
         }
       }
       return;
     }
 
     if (z.attackCooldown > 0 || z.knockbackFrames > 0) return;
+    if (z.type === ZombieType.Eater) {
+      this.startEaterAttack(z, zDef);
+      return;
+    }
 
     const zCenterX: number = z.x + z.instanceWidth / 2;
     const zCenterY: number = z.y + z.instanceHeight / 2;
@@ -560,13 +581,16 @@ export class ZombieSystem {
     }
   }
 
-  private findNearestCorpse(zx: number, zy: number): ZombieCorpse | null {
+  /** The nearest lying corpse no other zombie has claimed (an Eater claims the one it goes for). */
+  private findNearestCorpse(z: ZombieState): ZombieCorpse | null {
+    const zx: number = z.x + z.instanceWidth / 2;
+    const zy: number = z.y + z.instanceHeight / 2;
     let best: ZombieCorpse | null = null;
     let bestDist: number = Infinity;
     for (const corpse of this.e.zombieCorpses) {
-      if (!corpse.isGrounded) continue;
+      if (!corpse.isGrounded || corpse.carrierId !== null) continue;
       const claimed: boolean = this.e.zombies.some(
-        (other: ZombieState) => !other.isDead && other.eatingTargetId === corpse.id && other.id !== corpse.id,
+        (other: ZombieState): boolean => other !== z && !other.isDead && other.eatingTargetId === corpse.id,
       );
       if (claimed) continue;
       const cx: number = corpse.x + corpse.width / 2;
@@ -583,61 +607,184 @@ export class ZombieSystem {
   }
 
   private updateEaterAI(z: ZombieState): void {
-    if (z.eatingTimer > 0) {
+    if (z.attackAnimTimer > 0) {
       z.velocityX = 0;
-      z.eatingTimer--;
-      if (z.eatingTimer <= 0) {
-        this.consumeCorpse(z);
-      }
       return;
     }
 
     const zCx: number = z.x + z.instanceWidth / 2;
     const zCy: number = z.y + z.instanceHeight / 2;
-    const corpse: ZombieCorpse | null = this.findNearestCorpse(zCx, zCy);
+    const corpse: ZombieCorpse | null = this.findEaterMeal(z);
+    // Claimed while it goes there: a second Eater picks another corpse instead of the same one.
+    z.eatingTargetId = corpse ? corpse.id : null;
 
     if (!corpse) {
-      const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
-      this.updateZombieIdleWander(z, zDef);
+      // Nothing to eat on the floor: it hunts the nearest player or zombie to make some.
+      const prey: EaterPrey | null = this.findEaterPrey(z);
+      if (prey) {
+        this.chaseEaterPrey(z, prey);
+      } else {
+        this.updateZombieIdleWander(z, ZOMBIE_TYPES[z.type]);
+      }
       return;
     }
 
-    const corpseCx: number = corpse.x + corpse.width / 2;
-    const corpseCy: number = corpse.y + corpse.height / 2;
-    const dx: number = corpseCx - zCx;
-    const dy: number = corpseCy - zCy;
-    const distSq: number = dx * dx + dy * dy;
-    const detectRange: number = GAME_CONSTANTS.ZOMBIE_EATER_DETECT_RANGE;
-
-    if (distSq > detectRange * detectRange) {
-      const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
-      this.updateZombieIdleWander(z, zDef);
-      return;
-    }
-
-    z.facing = dx > 0 ? 1 : -1;
+    const dx: number = corpse.x + corpse.width / 2 - zCx;
+    const dy: number = corpse.y + corpse.height / 2 - zCy;
 
     const arriveThreshold: number = GAME_CONSTANTS.ZOMBIE_EATER_ARRIVE_THRESHOLD;
-    if (Math.abs(dx) < arriveThreshold && Math.abs(dy) < z.instanceHeight) {
+    if (Math.abs(dx) < arriveThreshold && Math.abs(dy) < z.instanceHeight && z.isGrounded) {
+      z.facing = dx > 0 ? 1 : -1;
       z.velocityX = 0;
-      z.eatingTargetId = corpse.id;
       z.eatingTimer = GAME_CONSTANTS.ZOMBIE_EATER_EATING_TICKS;
       return;
     }
 
-    z.velocityX = dx > 0 ? z.instanceSpeed : -z.instanceSpeed;
+    this.runEaterToward(z, { x: corpse.x + corpse.width / 2, y: corpse.y + corpse.height });
+  }
 
-    if (!z.isGrounded || z.jumpCooldown > 0) return;
-    const targetIsAbove: boolean = dy < -z.instanceHeight;
-    const targetIsBelow: boolean = dy > z.instanceHeight;
+  /**
+   * Runs (ZOMBIE_EATER_RUN_SPEED_MULT) to a goal's feet over the platforms: under a ledge above it
+   * jumps (ZOMBIE_EATER_JUMP_FORCE) and comes down on top; a goal below it drops down to. On its
+   * own jumps it holds its course; otherwise (hopping a prop, falling) it steers in the air.
+   */
+  private runEaterToward(z: ZombieState, goal: Feet): void {
+    const halfWidth: number = z.instanceWidth / 2;
+    const feet: Feet = { x: z.x + halfWidth, y: z.y + z.instanceHeight };
+    const runSpeed: number = z.instanceSpeed * GAME_CONSTANTS.ZOMBIE_EATER_RUN_SPEED_MULT;
+    if (!z.isGrounded) {
+      if (!this.eatersOnCourse.has(z)) z.velocityX = Math.sign(goal.x - feet.x) * Math.min(runSpeed, Math.abs(goal.x - feet.x));
+      return;
+    }
+    this.eatersOnCourse.delete(z);
+    const step: EaterStep = eaterStep(feet, halfWidth, goal, this.e.platforms, this.drops.getEffectiveGravity());
 
-    if (targetIsBelow && z.y + z.instanceHeight < GAME_CONSTANTS.GROUND_Y && Math.random() < GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_CHANCE) {
+    const dx: number = step.aimX - feet.x;
+    z.velocityX = Math.sign(dx) * Math.min(runSpeed, Math.abs(dx));
+    z.facing = Math.abs(dx) >= 1 ? Math.sign(dx) : goal.x > feet.x ? 1 : -1;
+
+    if (step.drop) {
       z.platformDropTimer = GAME_CONSTANTS.ZOMBIE_PLATFORM_DROP_TICKS;
       z.y += GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE + 1;
       z.isGrounded = false;
-    } else if (targetIsAbove && Math.random() < GAME_CONSTANTS.ZOMBIE_JUMP_PLATFORM_CHASE_CHANCE) {
-      this.zombieJump(z);
+    } else if (step.jump && z.jumpCooldown <= 0) {
+      // Straight up through the ledge overhead, or a leap across onto it; it keeps its course in the air.
+      z.velocityX = step.jumpVx;
+      z.velocityY = GAME_CONSTANTS.ZOMBIE_EATER_JUMP_FORCE;
+      z.isGrounded = false;
+      z.jumpCooldown = GAME_CONSTANTS.ZOMBIE_EATER_JUMP_COOLDOWN_TICKS;
+      this.eatersOnCourse.add(z);
     }
+  }
+
+  /** The corpse an Eater goes for: the nearest unclaimed one it can smell. */
+  private findEaterMeal(z: ZombieState): ZombieCorpse | null {
+    const zCx: number = z.x + z.instanceWidth / 2;
+    const zCy: number = z.y + z.instanceHeight / 2;
+    const corpse: ZombieCorpse | null = this.findNearestCorpse(z);
+    if (!corpse) return null;
+    const dist: number = Math.hypot(corpse.x + corpse.width / 2 - zCx, corpse.y + corpse.height / 2 - zCy);
+    return dist <= GAME_CONSTANTS.ZOMBIE_EATER_DETECT_RANGE ? corpse : null;
+  }
+
+  /** A hungry Eater's prey: the nearest player (off the safe spot) or zombie it can reach (no Eaters, no dragon). */
+  private findEaterPrey(z: ZombieState): EaterPrey | null {
+    const zCx: number = z.x + z.instanceWidth / 2;
+    const zCy: number = z.y + z.instanceHeight / 2;
+    const prey: EaterPrey[] = [
+      ...this.getAllTargets().map((t: TargetInfo): EaterPrey => ({ x: t.x, y: t.y, width: t.width, height: t.height, player: t })),
+      ...this.e.zombies
+        .filter((o: ZombieState): boolean => this.isEaterVictim(o, z))
+        .map((o: ZombieState): EaterPrey => ({ x: o.x, y: o.y, width: o.instanceWidth, height: o.instanceHeight, player: null })),
+    ];
+    let best: EaterPrey | null = null;
+    let bestDist: number = Infinity;
+    for (const p of prey) {
+      const dist: number = Math.hypot(p.x + p.width / 2 - zCx, p.y + p.height / 2 - zCy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  private isEaterVictim(o: ZombieState, eater: ZombieState): boolean {
+    return o !== eater && !o.isDead && o.spawnTimer <= 0 && o.type !== ZombieType.Eater && o.type !== ZombieType.DragonBoss;
+  }
+
+  private isPreyInReach(z: ZombieState, prey: EaterPrey): boolean {
+    const dx: number = Math.abs(prey.x + prey.width / 2 - (z.x + z.instanceWidth / 2));
+    const dy: number = Math.abs(prey.y + prey.height / 2 - (z.y + z.instanceHeight / 2));
+    return dx < z.instanceWidth / 2 + GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE + prey.width / 2 && dy < z.instanceHeight;
+  }
+
+  private chaseEaterPrey(z: ZombieState, prey: EaterPrey): void {
+    if (this.isPreyInReach(z, prey)) {
+      z.facing = prey.x + prey.width / 2 > z.x + z.instanceWidth / 2 ? 1 : -1;
+      z.velocityX = 0;
+      return;
+    }
+    this.runEaterToward(z, { x: prey.x + prey.width / 2, y: prey.y + prey.height });
+  }
+
+  /**
+   * An Eater's next attack: hungry (no corpse on the floor) it goes for its prey like any zombie;
+   * with a meal around it bites a player in reach only now and then, and never while eating.
+   */
+  private startEaterAttack(z: ZombieState, zDef: ZombieDefinition): void {
+    if (z.eatingTimer > 0) return;
+    const hungry: boolean = this.findEaterMeal(z) === null;
+    if (!hungry && Math.random() >= GAME_CONSTANTS.ZOMBIE_EATER_ATTACK_CHANCE) return;
+    const nearestPlayer: TargetInfo | null = this.findNearestTarget(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);
+    const prey: EaterPrey | null = hungry
+      ? this.findEaterPrey(z)
+      : nearestPlayer && { x: nearestPlayer.x, y: nearestPlayer.y, width: nearestPlayer.width, height: nearestPlayer.height, player: nearestPlayer };
+    if (!prey || !this.isPreyInReach(z, prey)) return;
+    if (prey.player && this.countAttackersOn(prey.player, z) >= GAME_CONSTANTS.ZOMBIE_MAX_ATTACKERS_PER_TARGET) {
+      z.attackCooldown = 10;
+      return;
+    }
+    z.facing = prey.x + prey.width / 2 > z.x + z.instanceWidth / 2 ? 1 : -1;
+    z.velocityX = 0;
+    z.attackAnimTimer = zDef.attackAnimTicks + GAME_CONSTANTS.ZOMBIE_ATTACK_WINDUP_TICKS;
+    z.attackHasHit = false;
+    z.attackCooldown = GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN +
+      Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX - GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN));
+  }
+
+  /** An Eater's bite lands on every zombie in its reach too (its kills leave corpses: food). */
+  private resolveEaterBiteOnZombies(z: ZombieState): void {
+    const swingX: number = z.facing > 0 ? z.x + z.instanceWidth : z.x - GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE;
+    for (const o of this.e.zombies) {
+      if (!this.isEaterVictim(o, z)) continue;
+      const hit: boolean = this.physics.rectsOverlap(
+        swingX, z.y, GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE, z.instanceHeight,
+        o.x, o.y, o.instanceWidth, o.instanceHeight,
+      );
+      if (!hit) continue;
+      const damage: number = z.instanceDamageMin + Math.floor(Math.random() * (z.instanceDamageMax - z.instanceDamageMin + 1));
+      this.combat.applyEaterBiteToZombie(o, z, Math.max(1, damage));
+    }
+  }
+
+  /** An Eater with somewhere to go (a corpse, or prey when hungry): it steers every tick. */
+  private isEaterHunting(z: ZombieState): boolean {
+    return z.type === ZombieType.Eater && z.eatingTimer <= 0 &&
+      (this.findEaterMeal(z) !== null || this.findEaterPrey(z) !== null);
+  }
+
+  /** One tick of a meal: the corpse is gone after ZOMBIE_EATER_EATING_TICKS, unless someone took it first. */
+  private tickEaterMeal(z: ZombieState): void {
+    z.velocityX = 0;
+    const meal: ZombieCorpse | undefined = this.e.zombieCorpses.find((c: ZombieCorpse): boolean => c.id === z.eatingTargetId);
+    if (!meal || meal.carrierId !== null || !meal.isGrounded) {
+      z.eatingTimer = 0;
+      z.eatingTargetId = null;
+      return;
+    }
+    z.eatingTimer--;
+    if (z.eatingTimer <= 0) this.consumeCorpse(z);
   }
 
   private consumeCorpse(z: ZombieState): void {
@@ -691,57 +838,7 @@ export class ZombieSystem {
   }
 
   private updateZombieAnimState(z: ZombieState): void {
-    if (z.isDead) {
-      this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Dead);
-      return;
-    }
-
-    if (z.type === ZombieType.Eater && z.eatingTimer > 0) {
-      const phaseTicks: number = 12;
-      const phase: number = z.eatingTimer % (phaseTicks * 4);
-      if (phase < phaseTicks) {
-        this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Eating);
-      } else if (phase < phaseTicks * 2) {
-        this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Attack);
-      } else if (phase < phaseTicks * 3) {
-        this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.AttackAlt1);
-      } else {
-        this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.AttackAlt2);
-      }
-      return;
-    }
-
-    if (isZombieWindingUp(z)) {
-      this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Idle);
-      return;
-    }
-
-    if (z.attackAnimTimer > 0) {
-      this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Attack);
-      return;
-    }
-
-    if (z.knockbackFrames > 0) {
-      this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Hurt);
-      return;
-    }
-
-    if (z.type === ZombieType.Eater && !z.isGrounded) {
-      this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Jump);
-      return;
-    }
-
-    if (z.type === ZombieType.Eater && Math.abs(z.velocityX) > z.instanceSpeed * 0.9) {
-      this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Run);
-      return;
-    }
-
-    if (Math.abs(z.velocityX) > 0.1) {
-      this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Walk);
-      return;
-    }
-
-    this.e.zombieSpriteAnimator.setState(z.id, ZombieAnimState.Idle);
+    this.e.zombieSpriteAnimator.setState(z.id, zombieAnimState(z));
   }
 
   private zombieJump(z: ZombieState): void {
@@ -864,6 +961,7 @@ export class ZombieSystem {
     }
 
     const playerCount: number = Math.max(1, this.countPlayersUp());
+    this.updateEaterSpawning(playerCount);
 
     const maxAlive: number = Math.min(
       (GAME_CONSTANTS.FLOOR_MAX_ALIVE_ZOMBIES_BASE + (this.e.floor - 1) * GAME_CONSTANTS.FLOOR_MAX_ALIVE_ZOMBIES_GROWTH) * playerCount,
@@ -882,6 +980,55 @@ export class ZombieSystem {
       const interval: number = baseInterval / playerCount;
       this.e.spawnTimer = Math.floor(interval / this.e.fixedDt);
     }
+  }
+
+  /** Lying corpses draw Eaters: while enough of them lie uneaten, one comes every 10-20 s (capped). */
+  private updateEaterSpawning(playerCount: number): void {
+    if (this.e.floor < GAME_CONSTANTS.ZOMBIE_EATER_MIN_WAVE) return;
+    const meals: ZombieCorpse[] = this.e.zombieCorpses.filter(
+      (c: ZombieCorpse): boolean => c.isGrounded && c.carrierId === null && !this.isMealClaimed(c),
+    );
+    const eaters: number = this.e.zombies.filter((z: ZombieState): boolean => !z.isDead && z.type === ZombieType.Eater).length;
+    if (meals.length < GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_MIN_CORPSES || eaters >= GAME_CONSTANTS.ZOMBIE_EATER_MAX_ALIVE * playerCount) {
+      this.e.eaterSpawnTimer = this.rollEaterSpawnDelay();
+      return;
+    }
+    this.e.eaterSpawnTimer--;
+    if (this.e.eaterSpawnTimer > 0) return;
+    this.e.eaterSpawnTimer = this.rollEaterSpawnDelay();
+    const meal: ZombieCorpse = meals[Math.floor(Math.random() * meals.length)];
+    const feet: { x: number; y: number } = this.pickEaterSpawnSpot(meal);
+    this.spawnZombie({ x: feet.x, groundY: feet.y }, ZombieType.Eater);
+  }
+
+  private rollEaterSpawnDelay(): number {
+    return GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_DELAY_MIN_TICKS +
+      Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_DELAY_MAX_TICKS - GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_DELAY_MIN_TICKS));
+  }
+
+  private isMealClaimed(corpse: ZombieCorpse): boolean {
+    return this.e.zombies.some((z: ZombieState): boolean => !z.isDead && z.eatingTargetId === corpse.id);
+  }
+
+  /** Feet (center x, ground y) of a regular spawn spot close enough to smell the meal, but not on top of it. */
+  private pickEaterSpawnSpot(meal: ZombieCorpse): { x: number; y: number } {
+    const def: ZombieDefinition = ZOMBIE_TYPES[ZombieType.Eater];
+    const mealX: number = meal.x + meal.width / 2;
+    const mealY: number = meal.y + meal.height;
+    let best: { x: number; y: number } = { x: mealX, y: mealY };
+    let bestMiss: number = Infinity;
+    for (let i: number = 0; i < GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_TRIES; i++) {
+      const spot: { x: number; y: number } = this.pickSpawnSpot(def.widthMax, def.heightMax);
+      const feet: { x: number; y: number } = { x: spot.x + def.widthMax / 2, y: spot.y + def.heightMax };
+      const dist: number = Math.hypot(feet.x - mealX, feet.y - mealY);
+      const miss: number = Math.max(0, GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_MIN_DIST - dist, dist - GAME_CONSTANTS.ZOMBIE_EATER_DETECT_RANGE);
+      if (miss === 0) return feet;
+      if (miss < bestMiss) {
+        bestMiss = miss;
+        best = feet;
+      }
+    }
+    return best;
   }
 
   /** Zombies rise on the ground and platforms: never on top of a prop or on the safe spot. */
@@ -914,18 +1061,21 @@ export class ZombieSystem {
     this.spawnZombie({ x, groundY });
   }
 
-  /** A new zombie: at a random spawn spot, or (released from a cage) at `at`, never a boss then. */
-  private spawnZombie(at: { x: number; groundY: number } | null = null): void {
+  /**
+   * A new zombie: at a random spawn spot, or (released from a cage, an Eater come to eat) at `at`,
+   * never a boss then. `kind` forces the type: Eaters never come with the regular rolls.
+   */
+  private spawnZombie(at: { x: number; groundY: number } | null = null, kind: ZombieType | null = null): void {
     let type: ZombieType = ZombieType.Walker;
     const roll: number = Math.random();
     if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_TANK_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_TANK_ROLL_THRESHOLD) type = ZombieType.Tank;
     else if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_RUNNER_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_RUNNER_ROLL_THRESHOLD) type = ZombieType.Runner;
     else if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_SPITTER_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_SPITTER_ROLL_THRESHOLD) type = ZombieType.Spitter;
-    else if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_EATER_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_EATER_ROLL_THRESHOLD) type = ZombieType.Eater;
+    if (kind) type = kind;
     const hasBoss: boolean = this.e.zombies.some(
       (z: ZombieState) => !z.isDead && (z.type === ZombieType.DragonBoss || z.type === ZombieType.Boss),
     );
-    if (!hasBoss && !at) {
+    if (!hasBoss && !at && !kind) {
       if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_DRAGON_BOSS_MIN_WAVE && this.e.floor % GAME_CONSTANTS.ZOMBIE_DRAGON_BOSS_WAVE_INTERVAL === 0 && Math.random() < 0.02) {
         type = ZombieType.DragonBoss;
       } else if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_BOSS_MIN_WAVE && this.e.floor % GAME_CONSTANTS.ZOMBIE_BOSS_WAVE_INTERVAL === 0 && Math.random() < 0.04) {
@@ -1089,6 +1239,7 @@ export class ZombieSystem {
   startFloor(): void {
     this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead);
     this.e.spawnTimer = GAME_CONSTANTS.FLOOR_INITIAL_SPAWN_DELAY_TICKS;
+    this.e.eaterSpawnTimer = this.rollEaterSpawnDelay();
     this.e.applyLevel();
     this.e.onFloorUpdate?.(this.e.floor);
   }
