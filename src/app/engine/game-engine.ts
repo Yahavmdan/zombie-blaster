@@ -40,6 +40,7 @@ import {
   SpringPuzzleLayout,
   DamageNumber,
   DragonImpact,
+  BarrelBlastFx,
   DragonProjectile,
   DropNotification,
   EntityInterpolation,
@@ -76,6 +77,7 @@ import {
 } from './cage-puzzle';
 import { CorpseCarrySystem } from './corpse-carry-system';
 import { LoosePropSystem } from './loose-prop-system';
+import { ExplodingBarrelSystem } from './exploding-barrel-system';
 import { CarryPose } from './corpse-carry';
 import { CorpseDrape } from './corpse-drape';
 import { SCALE_MAX_KG, flingIfOnSpring, freshLaunch, newSpringState } from './spring-puzzle';
@@ -183,6 +185,7 @@ export class GameEngine implements IGameEngine {
 
   dragonProjectiles: DragonProjectile[] = [];
   dragonImpacts: DragonImpact[] = [];
+  barrelBlasts: BarrelBlastFx[] = [];
   readonly dragonProjectileImg: HTMLImageElement = new Image();
   readonly dragonImpactImg: HTMLImageElement = new Image();
 
@@ -262,6 +265,7 @@ export class GameEngine implements IGameEngine {
   private readonly platePuzzleSystem: PlatePuzzleSystem;
   private readonly corpseCarrySystem: CorpseCarrySystem;
   private readonly loosePropSystem: LoosePropSystem;
+  private readonly explodingBarrelSystem: ExplodingBarrelSystem;
   private readonly renderSystem: RenderSystem;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -281,6 +285,12 @@ export class GameEngine implements IGameEngine {
     this.platePuzzleSystem = new PlatePuzzleSystem(this, this.vfxSystem);
     this.corpseCarrySystem = new CorpseCarrySystem(this);
     this.loosePropSystem = new LoosePropSystem(this, this.dropSystem);
+    this.explodingBarrelSystem = new ExplodingBarrelSystem(
+      this,
+      this.loosePropSystem,
+      this.combatSystem,
+      this.vfxSystem,
+    );
     this.renderSystem = new RenderSystem(this);
 
     this.initExitPlatform();
@@ -452,6 +462,7 @@ export class GameEngine implements IGameEngine {
     this.worldDrops = [];
     this.dragonProjectiles = [];
     this.dragonImpacts = [];
+    this.barrelBlasts = [];
     this.spitterProjectiles = [];
     this.poisonEffect = null;
     this.playerTints.clear();
@@ -631,6 +642,7 @@ export class GameEngine implements IGameEngine {
       this.springPuzzleSystem.update();
       this.cagePuzzleSystem.update();
       this.platePuzzleSystem.update();
+      this.explodingBarrelSystem.update();
       this.projectileSystem.updateDragonProjectiles();
       this.projectileSystem.updateSpitterProjectiles();
       this.projectileSystem.updatePoisonEffect();
@@ -649,6 +661,7 @@ export class GameEngine implements IGameEngine {
     this.tickRemotePlayerAnimations();
 
     this.vfxSystem.updateDragonImpacts();
+    this.vfxSystem.updateBarrelBlasts();
     this.vfxSystem.updateHitMarks();
     this.vfxSystem.updatePlayerTints();
     // The host's sky decides when lightning strikes; guests see it through the Lightning event.
@@ -1236,6 +1249,16 @@ export class GameEngine implements IGameEngine {
         case VfxEventType.DoorOpen:
           this.vfxSystem.spawnDoorOpen(evt.x, evt.y);
           break;
+        case VfxEventType.BarrelBlast:
+          this.vfxSystem.spawnBarrelBlast(
+            evt.x,
+            evt.y,
+            Number.isFinite(evt.targetY) ? evt.targetY! : null,
+          );
+          break;
+        case VfxEventType.BarrelRespawn:
+          this.vfxSystem.spawnBarrelRespawn(evt.x, evt.y);
+          break;
         case VfxEventType.DoorShut:
           this.vfxSystem.spawnDoorShut(evt.x, evt.y);
           break;
@@ -1410,6 +1433,15 @@ export class GameEngine implements IGameEngine {
         });
       }
     }
+  }
+
+  /**
+   * Host (or solo): takes these pickable props off the floor for good, synced like a blown-up
+   * barrel that never comes back. For test setup that needs room with no prop in carry reach.
+   */
+  clearLooseProps(ids: string[]): void {
+    if (this.isMultiplayerClient) return;
+    for (const id of ids) this.loosePropSystem.remove(id, false);
   }
 
   /** Client: the host's moved props (the rest lie on their spawn spots); lying ones are solid. */

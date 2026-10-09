@@ -133,6 +133,14 @@ export class GameProbe {
     );
   }
 
+  /** Setup only (solo/host): takes every barrel and box overlapping these x off the floor for good. */
+  async clearPickables(from: number, to: number): Promise<void> {
+    await this.page.evaluate(
+      (args: [number, number]): void => window.__zbE2e?.engine?.clearPickables(args[0], args[1]),
+      [from, to] as [number, number],
+    );
+  }
+
   async setGodMode(enabled: boolean): Promise<void> {
     await this.page.evaluate(
       (on: boolean): void => window.__zbE2e?.controls?.setGodMode(on),

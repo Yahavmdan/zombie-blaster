@@ -238,6 +238,8 @@ function barrel(id: string, cx: number, overrides: Partial<LooseProp> = {}): Loo
     isGrounded: true,
     carrierId: null,
     weightKg: PROP_WEIGHT_KG.barrel,
+    fuseTicks: 0,
+    exploded: false,
     ...overrides,
   };
 }

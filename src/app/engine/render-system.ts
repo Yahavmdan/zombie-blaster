@@ -33,6 +33,7 @@ import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
 import { ZombieAnimState, ZombieSpriteAnchor } from './zombie-sprite-animator';
 import { LooseProp, MagnetPull, ZombieCorpse } from '@shared/game-entities';
 import { magnetPullProgress } from './magnet-pull';
+import { fuseSeconds } from './exploding-barrel';
 import { Carriable, CarryPose, carriedIds, isCorpse, nearestCarriable } from './corpse-carry';
 import {
   BODY_HALF_SPAN,
@@ -80,6 +81,7 @@ import {
 } from './cage-puzzle';
 import { PLATE_FLOOR_HINT, doorBox, isHeld, plateBox } from './plate-puzzle';
 import {
+  BarrelBlastFx,
   BoulderPuzzleLayout,
   CagePuzzleLayout,
   PlatePuzzleLayout,
@@ -193,6 +195,7 @@ export class RenderSystem {
     this.renderSpringPuzzle(ctx);
     this.renderCages(ctx);
     this.renderPlate(ctx);
+    this.renderScorchMarks(ctx);
     this.renderLyingProps(ctx);
     this.renderZombies(ctx);
     this.renderHitMarks(ctx);
@@ -208,6 +211,7 @@ export class RenderSystem {
     this.renderPlayerProjectiles(ctx);
     this.renderReviveProgress(ctx);
     this.renderParticles(ctx);
+    this.renderBarrelBlasts(ctx);
     this.renderDashOverlay(ctx);
     this.e.spriteEffectSystem.render(ctx);
     this.renderDamageNumbers(ctx);
@@ -980,17 +984,156 @@ export class RenderSystem {
     this.drawCorpses(ctx, this.e.zombieCorpses.filter((c: ZombieCorpse): boolean => this.isCarried(c)));
   }
 
+  /** The burnt patch a barrel blast leaves on the surface under it, fading out (embers glow at first). */
+  private renderScorchMarks(ctx: CanvasRenderingContext2D): void {
+    for (const b of this.e.barrelBlasts) {
+      if (b.groundY === null) continue;
+      const fade: number = 1 - b.age / GAME_CONSTANTS.BARREL_SCORCH_TICKS;
+      if (fade <= 0) continue;
+      ctx.save();
+      ctx.translate(b.x, b.groundY);
+      ctx.scale(1, 0.16);
+      const scorch: CanvasGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 56);
+      scorch.addColorStop(0, `rgba(18, 12, 10, ${0.85 * fade})`);
+      scorch.addColorStop(0.6, `rgba(30, 22, 18, ${0.5 * fade})`);
+      scorch.addColorStop(1, 'rgba(30, 22, 18, 0)');
+      ctx.fillStyle = scorch;
+      ctx.beginPath();
+      ctx.arc(0, 0, 56, 0, Math.PI * 2);
+      ctx.fill();
+      const embers: number = 1 - b.age / 90;
+      if (embers > 0) {
+        const glow: CanvasGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 34);
+        glow.addColorStop(0, `rgba(255, 120, 40, ${0.8 * embers})`);
+        glow.addColorStop(1, 'rgba(255, 80, 20, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(0, 0, 34, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  /**
+   * A barrel blast as it happens: a wide glow lighting up the scene, a white-hot core, a fireball
+   * that swells and rises as it burns out, a shockwave ring racing out past the blast's reach and
+   * a dust ring rolling along the surface under it.
+   */
+  private renderBarrelBlasts(ctx: CanvasRenderingContext2D): void {
+    const fx: number = GAME_CONSTANTS.BARREL_BLAST_FX_TICKS;
+    const reach: number = GAME_CONSTANTS.BARREL_BLAST_RADIUS_PX;
+    const easeOut: (t: number) => number = (t: number): number => 1 - Math.pow(1 - t, 3);
+    for (const b of this.e.barrelBlasts.filter((q: BarrelBlastFx): boolean => q.age < fx)) {
+      const t: number = b.age / fx;
+      ctx.save();
+
+      ctx.globalCompositeOperation = 'lighter';
+      const glowR: number = reach * 1.8;
+      const glow: CanvasGradient = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, glowR);
+      glow.addColorStop(0, `rgba(255, 180, 80, ${0.6 * (1 - t)})`);
+      glow.addColorStop(1, 'rgba(255, 120, 40, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, glowR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+
+      const burn: number = Math.min(1, b.age / (fx * 0.7));
+      const fireR: number = reach * (0.25 + 0.5 * easeOut(Math.min(1, b.age / 10)));
+      const fireY: number = b.y - b.age * 0.6;
+      if (burn < 1) {
+        const fire: CanvasGradient = ctx.createRadialGradient(b.x, fireY, 0, b.x, fireY, fireR);
+        fire.addColorStop(0, '#fffbe6');
+        fire.addColorStop(0.3, '#ffd23a');
+        fire.addColorStop(0.65, '#ff7a1a');
+        fire.addColorStop(1, 'rgba(160, 30, 10, 0)');
+        ctx.globalAlpha = 1 - Math.pow(burn, 1.5);
+        ctx.fillStyle = fire;
+        ctx.beginPath();
+        ctx.arc(b.x, fireY, fireR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (b.age < 6) {
+        ctx.globalAlpha = 1 - b.age / 6;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 14 + b.age * 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const wave: number = Math.min(1, b.age / 16);
+      if (wave < 1) {
+        ctx.globalAlpha = 1 - wave;
+        ctx.strokeStyle = '#ffecbe';
+        ctx.lineWidth = 2 + 10 * (1 - wave);
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, reach * (0.2 + 1.05 * easeOut(wave)), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      const dust: number = Math.min(1, b.age / 24);
+      if (b.groundY !== null && dust < 1) {
+        ctx.globalAlpha = 0.7 * (1 - dust);
+        ctx.strokeStyle = '#c8b89a';
+        ctx.lineWidth = 4;
+        ctx.save();
+        ctx.translate(b.x, b.groundY);
+        ctx.scale(1, 0.18);
+        ctx.beginPath();
+        ctx.arc(0, 0, reach * 1.4 * easeOut(dust), 0, Math.PI * 2);
+        ctx.restore();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
   /** Pickable props lying (or flying) in the world, drawn like the map's other props. */
   private renderLyingProps(ctx: CanvasRenderingContext2D): void {
     for (const p of this.e.looseProps.filter((q: LooseProp): boolean => !this.isCarried(q))) {
       this.e.mapRenderer.drawLooseProp(ctx, p);
+      this.renderFuse(ctx, p);
     }
   }
 
   private renderCarriedProps(ctx: CanvasRenderingContext2D): void {
     for (const p of this.e.looseProps.filter((q: LooseProp): boolean => this.isCarried(q))) {
       this.e.mapRenderer.drawLooseProp(ctx, p);
+      this.renderFuse(ctx, p);
     }
+  }
+
+  /**
+   * A lit barrel: it flashes hot faster and faster as the fuse burns down, a spark sputters on its
+   * top and the seconds left (3, 2, 1) count down over it. Drawn from the synced fuse.
+   */
+  private renderFuse(ctx: CanvasRenderingContext2D, p: LooseProp): void {
+    if (p.fuseTicks <= 0) return;
+    const blinkTicks: number = p.fuseTicks > 100 ? 12 : p.fuseTicks > 50 ? 7 : 3;
+    const cx: number = p.x + p.width / 2;
+    ctx.save();
+    if (Math.floor(p.fuseTicks / blinkTicks) % 2 === 0) {
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = '#ffe9b0';
+      ctx.fillRect(p.x, p.y, p.width, p.height);
+    }
+    const flicker: number = Math.sin(performance.now() / 30) * 0.5 + 0.5;
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ff8a1f';
+    ctx.beginPath();
+    ctx.arc(cx, p.y - 2, 3 + flicker * 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff2a8';
+    ctx.beginPath();
+    ctx.arc(cx, p.y - 2, 1.5 + flicker, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.textAlign = 'center';
+    ctx.font = pixelFont(18, 700);
+    // Above the "[E] Carry" prompt, which sits right over the barrel.
+    fillOutlinedText(ctx, String(fuseSeconds(p)), cx, p.y - 32, '#ffcc33');
+    ctx.restore();
   }
 
   /**

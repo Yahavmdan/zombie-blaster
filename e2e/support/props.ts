@@ -1,7 +1,6 @@
 import { GamePlayer } from './game-player';
 import { E2eSnapshot } from './probe';
 import { WORLD } from './invariants';
-import { layoutWhere } from './navigation';
 
 /** A map prop as the probe sees it (pickable ones where they are now). */
 export type LevelProp = E2eSnapshot['level']['props'][number];
@@ -36,10 +35,22 @@ export function clearAround(s: E2eSnapshot, q: LevelProp, left: number, right: n
   );
 }
 
-/** A lone pickable prop lying on open ground, with room to walk up from the left and throw right. */
-export function pickableOnGround(s: E2eSnapshot): LevelProp | undefined {
+/** Barrels blow up a few seconds after a hit (boxes don't). */
+export function isBarrel(q: LevelProp): boolean {
+  return q.kind.startsWith('barrel');
+}
+
+/**
+ * A lone pickable prop (of the accepted kinds) lying on open ground, with room to walk up from
+ * the left and throw right.
+ */
+export function pickableOnGround(
+  s: E2eSnapshot,
+  accept: (q: LevelProp) => boolean = (): boolean => true,
+): LevelProp | undefined {
   return s.level.props.find(
     (q: LevelProp): boolean =>
+      accept(q) &&
       q.pickable &&
       q.isGrounded &&
       q.carrierId === null &&
@@ -62,30 +73,27 @@ export async function standLeftOf(p: GamePlayer, q: LevelProp): Promise<void> {
   await p.wait(200);
 }
 
-/** No pickable prop lies between these x (so E there only ever picks up corpses). */
+/** No pickable prop lies between these x, at any height (so E there only ever picks up corpses). */
 export function noPickableBetween(s: E2eSnapshot, from: number, to: number): boolean {
   return !s.level.props.some((q: LevelProp): boolean => q.pickable && spanOverlaps(q, from, to));
 }
 
 /**
- * Setup: pins a layout (via the host) with no barrel or box between these x, so the carry key
- * there finds only corpses, and waits until every observer plays on it.
+ * Setup: the host takes every barrel and box between these x off the floor (every floor has
+ * 5-10 barrels, so no layout leaves a wide span empty), so the carry key there finds only
+ * corpses, and waits until every observer sees them gone.
  */
-export async function layoutWithoutPickables(
+export async function clearPickablesBetween(
   host: GamePlayer,
   observers: GamePlayer[],
   from: number,
   to: number,
 ): Promise<void> {
-  const s0: E2eSnapshot = await layoutWhere(
-    host,
-    `no pickable prop between x ${from} and ${to}`,
-    (s: E2eSnapshot): boolean => noPickableBetween(s, from, to),
-  );
-  for (const o of observers) {
-    await o.probe.waitFor(
-      "the host's layout",
-      (s: E2eSnapshot): boolean => s.level.seed === s0.level.seed,
+  await host.probe.clearPickables(from, to);
+  for (const p of [host, ...observers]) {
+    await p.probe.waitFor(
+      `no barrel or box between x ${from} and ${to}`,
+      (s: E2eSnapshot): boolean => noPickableBetween(s, from, to),
       { timeoutMs: 5_000 },
     );
   }

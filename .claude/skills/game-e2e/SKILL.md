@@ -234,6 +234,23 @@ Driving tips:
   - Always validate exit/climb specs with `--workers=5` (plus fairness specs) to reproduce suite load.
   - The brain restocks MP potions (5) for classes with skills; the game has no MP regen.
 - Special drops open a Y/N prompt with a timer; the brain presses Y.
+- **Exploding barrels**: an attack on a lying barrel (beside it, facing it, within 24 px, level
+  with it; any player, the host decides) lights its fuse: `level.props[].fuseTicks` counts 150
+  ticks (3 s, "3-2-1" over it), then it blows up: `exploded: true`, gone from the world and
+  collision (`pickable: false`), zombies whose center is within 110 px lose 60% max HP (bosses
+  10%) and fly away, barrels in reach go up 12 ticks later (chain). 500 ticks (10 s) after the
+  blast it is back on its spawn spot, unlit (`exploded: false`); it waits while a player or prop
+  stands there. A lit barrel can still be carried and thrown. Boxes never light. Every floor has
+  5-10 barrels (generator places them first; on crowded floors, e.g. cages, the last ones may
+  sit under a ledge, where nobody can stand on them). VFX: `hit-particles` on lighting,
+  `barrel-blast` (animated fireball/shockwave in `engine.barrelBlasts`, scorch mark, sprite
+  `sunburn` + `brightfire` flames; solo hit-stop) and `barrel-respawn` (dust puff), all
+  replayed for guests. Tunables `BARREL_*` in game-constants. With this many barrels no layout
+  leaves a wide span free of props: a test that needs E to find only corpses clears the span
+  first with `clearPickablesBetween(host, observers, from, to)` (probe `clearPickables`, synced,
+  no respawn) instead of searching layouts. Find one with
+  `pickableOnGround(s, isBarrel)` (support/props.ts). Specs: `solo/exploding-barrel.spec.ts`,
+  `online/exploding-barrel-coop.spec.ts`.
 - **Carrying corpses (and barrels/boxes)**: `KEYS.carry` (E) picks up the nearest lying corpse or pickable prop within 50 px
   (center to center; a "[E] Carry" prompt shows over it) and stacks it overhead, up to 3
   (`CORPSE_CARRY_MAX`, 5 px per level: bodies rest on each other). E with nothing more to pick up (or a full stack; prompt
@@ -281,7 +298,9 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
 ## Gotchas
 
 - Headless pages still render; `attachCanvas` gives real frames. `KEYS.attack` is `j`.
-- `attachCanvas` images live only in the HTML report: `--reporter=line` drops them. To eyeball small art (carried corpses), a throwaway spec can `page.screenshot({ path, clip })` around `state().player` and you upscale the crop (System.Drawing, NearestNeighbor); delete the spec after.
+- `attachCanvas` images live only in the HTML report: `--reporter=line` drops them, and
+  `--reporter=html` writes a stray `playwright-report/` (delete it). Run with no `--reporter`
+  flag (config: list + html into `e2e/.report/data/*.png`). To eyeball small art (carried corpses), a throwaway spec can `page.screenshot({ path, clip })` around `state().player` and you upscale the crop (System.Drawing, NearestNeighbor); delete the spec after.
 - Physics gotcha: tiny velocities snap to 0 (`PLAYER_MIN_VELOCITY`); any per-tick acceleration
   smaller than that must skip the snap (air control was silently dead until fixed).
 - Skills live in slots 1..6 = usable Active/Buff skills sorted by required level

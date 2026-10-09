@@ -273,6 +273,13 @@ export enum VfxEventType {
   DoorShut = 'door-shut',
   /** A player took a hit: every screen tints that player's sprite red for a moment. */
   PlayerHurt = 'player-hurt',
+  /**
+   * A lit barrel blew up: fireball, shockwave, smoke, flying shards and a hard shake. `targetY`:
+   * the surface it lay on (a scorch mark stays there), absent when it blew up in the air.
+   */
+  BarrelBlast = 'barrel-blast',
+  /** A blown-up barrel came back on its spawn spot: a puff of dust as it drops in. */
+  BarrelRespawn = 'barrel-respawn',
   /** The host's sky struck: every screen draws the same bolt (x, `value` = bolt seed) and flash. */
   Lightning = 'lightning',
 }

@@ -218,6 +218,18 @@ export interface DragonImpact {
   tickCounter: number;
 }
 
+/**
+ * A barrel blast playing out on this screen (drawn by RenderSystem): white-hot core, fireball,
+ * shockwave and glow over BARREL_BLAST_FX_TICKS, then a scorch mark fading over BARREL_SCORCH_TICKS.
+ */
+export interface BarrelBlastFx {
+  x: number;
+  y: number;
+  /** The surface under it (where the scorch mark lies), or null when it blew up in the air. */
+  groundY: number | null;
+  age: number;
+}
+
 export interface HitMark {
   x: number;
   y: number;
@@ -338,6 +350,7 @@ export interface IGameEngine {
 
   dragonProjectiles: DragonProjectile[];
   dragonImpacts: DragonImpact[];
+  barrelBlasts: BarrelBlastFx[];
   readonly dragonProjectileImg: HTMLImageElement;
   readonly dragonImpactImg: HTMLImageElement;
 
