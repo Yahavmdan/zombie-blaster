@@ -348,13 +348,13 @@ export class MapRenderer {
 
   /**
    * A floor-4 cage: an iron frame (its top bar is the walkable top) with bars between, filling
-   * exactly its collision box. The zombie cage shows its prisoners behind the bars (drawn per
-   * frame: cages fall).
+   * exactly its collision box. While it hangs it is covered with a tarp, so nobody sees what it
+   * holds; the exit cage that landed stands open and bare (drawn per frame: cages fall).
    */
   drawCage(
     ctx: CanvasRenderingContext2D,
     box: { x: number; y: number; width: number; height: number },
-    withZombies: boolean,
+    covered: boolean,
   ): void {
     const frame: number = 6;
     const x: number = Math.round(box.x);
@@ -362,23 +362,33 @@ export class MapRenderer {
     const w: number = box.width;
     const h: number = box.height;
     ctx.save();
+    if (covered) {
+      // Tarp draped over the frame, gathered by a rope near the top, with fold lines down it.
+      ctx.fillStyle = '#4b4232';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#5c5240';
+      for (let fx: number = x + 10; fx < x + w - 8; fx += 22) ctx.fillRect(fx, y + 14, 8, h - 20);
+      ctx.strokeStyle = '#2e281e';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let fx: number = x + 20; fx < x + w - 8; fx += 22) {
+        ctx.moveTo(fx, y + 16);
+        ctx.lineTo(fx - 3, y + h - 4);
+      }
+      ctx.stroke();
+      ctx.fillStyle = '#a08a5a';
+      ctx.fillRect(x, y + 10, w, 3);
+      ctx.fillStyle = '#3a3f48';
+      ctx.fillRect(x, y, w, frame);
+      ctx.fillStyle = '#9aa3ad';
+      ctx.fillRect(x, y, w, 2);
+      ctx.fillStyle = '#3d3528';
+      ctx.fillRect(x, y + h - 4, w, 4);
+      ctx.restore();
+      return;
+    }
     ctx.fillStyle = 'rgba(20, 22, 28, 0.55)';
     ctx.fillRect(x, y, w, h);
-    if (withZombies) {
-      for (let i: number = 0; i < 3; i++) {
-        const cx: number = x + (w * (i + 0.5)) / 3;
-        const headY: number = y + 30 + (i % 2) * 6;
-        ctx.fillStyle = '#3f7a2c';
-        ctx.fillRect(cx - 10, headY + 10, 20, y + h - frame - headY - 10);
-        ctx.fillStyle = '#6abf4b';
-        ctx.beginPath();
-        ctx.arc(cx, headY, 10, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ff4040';
-        ctx.fillRect(cx - 6, headY - 3, 3, 3);
-        ctx.fillRect(cx + 3, headY - 3, 3, 3);
-      }
-    }
     ctx.fillStyle = '#5a5f68';
     for (let bx: number = x + 14; bx < x + w - frame; bx += 14) {
       ctx.fillRect(bx, y, 3, h);

@@ -165,11 +165,13 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   nothing. `probe.dropCorpses(scale center, n)` loads it (walker 70 kg: ~15). Don't teleport
   above the exit to get on the spring: you land on the exit. Specs: `solo/spring-puzzle.spec.ts`,
   `online/spring-puzzle-coop.spec.ts`. The Brain has no spring goal yet: AI players stall on floor 3.
-- **Floor 4 is the hanging-cage puzzle** (`state().cages`): `exitCage` hangs under the exit,
-  `zombieCage` mid-screen; each has `box` (as drawn, null once the zombie cage smashed), `solid`
-  (collision: hanging, or the exit cage once landed; null while falling), `cleat` (on the highest
-  regular ledge, never the safe spot: no swinging there), `cleatHits` / `hitsNeeded`, `cut`,
-  `fallTicks`, `landed`. Face the cleat, teleport beside it on its ledge, hold attack. Once the
+- **Floor 4 is the hanging-cage puzzle** (`state().cages`): `cages[]`, [0] the exit cage under the
+  exit (`exit: true`), the rest mid-screen. Each has `content` (zombies / loot / empty: hidden from
+  players, visible to tests), `box` (as drawn, null once a mid cage smashed), `solid` (collision:
+  hanging, or the exit cage once landed; null while falling), `landY`, `cleat` (on a regular
+  ledge, never the safe spot: no swinging there), `cleatHits` / `hitsNeeded`, `cut`, `fallTicks`,
+  `landed`; `zombiesPerCage`. Face the cleat, teleport beside it on its surface, hold attack (only
+  the faced cleat is hit). Once the
   exit cage landed, `exitPile.baseY` is its top, so `dropCorpses(exitPile.centerX)` builds the pile
   on it; the Brain hops onto the cage first (`climbPile`). Specs: `solo/cage-puzzle.spec.ts`,
   `online/cage-puzzle-coop.spec.ts`. The Brain has no cleat goal: AI players only climb normally.

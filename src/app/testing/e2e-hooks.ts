@@ -1,7 +1,7 @@
 import { CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, isZombieWindingUp } from '@shared/index';
 import { ActiveSpecialEffect, BoulderState, CagePuzzleState, CageState, LooseProp, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, PlayerTint, Rope, SpringPuzzleLayout } from '../engine/engine-types';
-import { CageId, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
+import { EXIT_CAGE, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
 import { doorBox, isDoorOpen, isHeld, plateBox } from '../engine/plate-puzzle';
 import { buttonBox, scaleBox } from '../engine/spring-puzzle';
 import { measureLevelGeometry } from './geometry-report';
@@ -259,23 +259,24 @@ function cagesView(engine: GameEngine): E2eCagePuzzleView | null {
   const puzzle: CagePuzzleLayout | null = engine.cagePuzzle;
   const cages: CagePuzzleState | null = engine.cages;
   if (!puzzle || !cages) return null;
-  const view: (id: CageId) => E2eCageView = (id: CageId): E2eCageView => {
-    const cage: CageState = cages[id];
-    return {
-      box: cageBox(puzzle, id, cage, engine.exitPlatform),
-      solid: cageSolid(puzzle, id, cage, engine.exitPlatform),
-      cleat: cleatBox(puzzle, id),
-      cleatHits: cage.cleatHits,
-      cut: isCut(cage),
-      fallTicks: cage.fallTicks,
-      landed: cage.landed,
-    };
-  };
+  const exit: Platform = engine.exitPlatform;
   return {
-    exitCage: view('exitCage'),
-    zombieCage: view('zombieCage'),
+    cages: cages.cages.map(
+      (cage: CageState, i: number): E2eCageView => ({
+        exit: i === EXIT_CAGE,
+        content: puzzle.cages[i].content,
+        box: cageBox(puzzle, i, cage, exit),
+        solid: cageSolid(puzzle, i, cage, exit),
+        landY: puzzle.cages[i].landY,
+        cleat: cleatBox(puzzle, i),
+        cleatHits: cage.cleatHits,
+        cut: isCut(cage),
+        fallTicks: cage.fallTicks,
+        landed: cage.landed,
+      }),
+    ),
     hitsNeeded: GAME_CONSTANTS.CAGE_CLEAT_HITS,
-    zombiesReleased: GAME_CONSTANTS.CAGE_ZOMBIES,
+    zombiesPerCage: GAME_CONSTANTS.CAGE_ZOMBIES,
   };
 }
 

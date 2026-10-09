@@ -48,6 +48,15 @@ export class DropSystem {
     this.rollSpecialDrop(cx, cy, isBoss, isDragonBoss);
   }
 
+  /** A floor-4 loot cage bursts: gold and both potions pop out, centered on cx, from surfaceY. */
+  spawnCageLoot(cx: number, surfaceY: number): void {
+    const y: number = surfaceY - GAME_CONSTANTS.DROP_SIZE;
+    const x: number = cx - GAME_CONSTANTS.DROP_SIZE / 2;
+    this.spawnDrop(DropType.Gold, x, y, GAME_CONSTANTS.CAGE_LOOT_GOLD);
+    this.spawnDrop(DropType.HpPotion, x - 18, y, GAME_CONSTANTS.HP_POTION_RESTORE);
+    this.spawnDrop(DropType.MpPotion, x + 18, y, GAME_CONSTANTS.MP_POTION_RESTORE);
+  }
+
   private rollSpecialDrop(cx: number, cy: number, isBoss: boolean, isDragonBoss: boolean): void {
     let chance: number = GAME_CONSTANTS.SPECIAL_DROP_CHANCE_NORMAL;
     if (isDragonBoss) {

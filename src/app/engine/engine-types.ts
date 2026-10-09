@@ -84,9 +84,9 @@ export interface Platform {
    * A floor-2 puzzle solid, removed when it breaks: the side `wall` (broken by the boulder) or the
    * `gate` holding the boulder on its ledge (broken by players' hits). The floor-3 `spring` is a
    * solid puzzle part that stays for the whole floor. The floor-4 `cage` (the exit cage: hanging,
-   * then standing on the ground) and `zombie-cage` (while it hangs) go when their chain snaps.
+   * then standing on the ground) and each `hanging-cage` (mid-screen) go when their chain snaps.
    */
-  puzzlePart?: 'wall' | 'gate' | 'spring' | 'cage' | 'zombie-cage';
+  puzzlePart?: 'wall' | 'gate' | 'spring' | 'cage' | 'hanging-cage';
   /** A loose prop's box: it follows the prop, and is gone while the prop is carried or in the air. */
   propId?: string;
 }
@@ -127,24 +127,34 @@ export interface SpringPuzzleLayout {
   scaleX: number;
 }
 
+/** What a floor-4 cage hides under its cover until it lands. */
+export type CageContent = 'zombies' | 'loot' | 'empty';
+
+/** One floor-4 cage on its chain. */
+export interface HangingCage {
+  /** Where it hangs (solid: you can stand on it); null for the exit cage, which hangs under the exit and moves with it. */
+  hang: Platform | null;
+  /** Top of what it lands on: the ground, or (a mid-screen cage) the highest platform under it. */
+  landY: number;
+  /** Hidden until it lands: zombies spill out, loot pops out, or nothing. */
+  content: CageContent;
+  /** The cleat tying its chain: center x, and the surface it stands on (a ledge or the ground). */
+  cleatX: number;
+  cleatY: number;
+  /** Points its chain winds through in the ceiling band, between its cleat and its cage (the tangle). */
+  kinks: Array<{ x: number; y: number }>;
+}
+
 /**
- * Floor-4 puzzle: two cages hang on chains. The empty exit cage hangs under the exit (derived from
- * the exit platform, which moves with the party size); the zombie cage hangs mid-screen. Each
- * chain runs up from a cleat on a ledge, along the ceiling, and down to its cage: hit a
- * cleat to snap its chain. The exit cage lands under the exit as a solid step; the zombie cage
- * smashes on the ground and lets its zombies loose.
+ * Floor-4 puzzle: 4-5 covered cages hang on chains. cages[0] is the exit cage, hanging under the
+ * exit (derived from the exit platform, which moves with the party size); the rest hang
+ * mid-screen. Every chain runs up from a cleat on a ledge, tangles with the others through the
+ * ceiling band, and comes down to its cage: nobody can tell which cleat drops which cage, nor
+ * what each cage hides. Hit a cleat to snap its chain. The exit cage lands under the exit as a
+ * solid step (and spills its content on top); the others smash where they land.
  */
 export interface CagePuzzleLayout {
-  /** The zombie cage while it hangs (solid: you can stand on it); it falls straight to the ground. */
-  zombieCage: Platform;
-  /** Surface the two cleats stand on: the highest regular ledge (one with open sky above preferred). */
-  cleatY: number;
-  /** Centers of the cleats tying the exit cage's and the zombie cage's chains (near the ledge's ends). */
-  exitCleatX: number;
-  zombieCleatX: number;
-  /** Ceiling heights the exit cage's and the zombie cage's chains run along. */
-  exitChainY: number;
-  zombieChainY: number;
+  cages: HangingCage[];
 }
 
 /**

@@ -11,8 +11,10 @@ implementation: copy its shape. The floor-3 **spring** (`spring-puzzle.ts`,
 on guests, and a remote trigger. It started as a seesaw, then a spring charged by 30 corpses on it;
 now a **scale** on the far side, linked by a cable over the ceiling, raises the spring's button once
 it holds 1000 kg (everything has a weight in kg, see Weights below). The floor-4 **hanging cages**
-(`cage-puzzle.ts`, `cage-puzzle-system.ts`) are the third: a choice (follow the chains to the
-right cleat), a solid that falls and lands, and a punishment that spawns zombies. The floor-5 **pressure plate** (`plate-puzzle.ts`,
+(`cage-puzzle.ts`, `cage-puzzle-system.ts`) are the third: a gamble (4-5 covered cages on tangled
+chains: which cleat drops the exit cage, and what does each cage hide?), a solid that falls and
+lands, and hidden outcomes (zombies, loot, nothing). It started as two open cages with chains you
+could follow; the user wanted more cages and no way to know the wiring or the contents. The floor-5 **pressure plate** (`plate-puzzle.ts`,
 `plate-puzzle-system.ts`) is the fourth: no new collision at all (a door that is scenery plus an
 exit gate, a plate drawn inside its ledge), weight derived from synced corpses and players, and
 corpse carrying as the tool. The backlog of ideas is **`docs/level-puzzle-ideas.md`** (a
@@ -126,9 +128,17 @@ Lessons from the spring:
 ## Lessons from the cages
 
 - **No swinging on the safe spot.** Attacks are disabled there (`restsOnSafeSpot`), so a hit
-  target must stand on a regular ledge. The cleats pick the highest ledge with open sky above
-  (`cleatLedge`); 1 seed in 80 has none, so there is a fallback. Measure such odds with a
-  throwaway spec over 2000 seeds before relying on a layout feature.
+  target must stand on a regular ledge. The cleats take spots `CAGE_CLEAT_SPACING_PX` apart along
+  the highest ledges (`cleatSpots`), the ground only as a rare fallback (asserted over 200 seeds).
+  Measure such odds with a throwaway spec over 2000 seeds before relying on a layout feature.
+- **Hidden information is layout data.** Contents and chain kinks are seeded in the layout, so
+  every client has them with nothing new to sync; the renderer just never draws them. The user
+  chose tangling by identical art (same-color chains) over hiding the routing in a ceiling beam.
+- **Many falling things: land on platforms, don't clear columns.** Keeping 3-4 mid-screen columns
+  free of platforms would empty the map, so each cage stores `landY` (the highest platform under
+  it) and spills its content there.
+- **Perl/sed multi-line edits on CRLF files** (docs, skills, rules) silently fail or, with a lazy
+  `.*?` and `/s`, eat whole sections. Use the Edit tool for those files.
 - **A falling solid** has no collision while it falls (removed from `platforms`), is solid again
   where it lands, and `placeCages()` re-derives all of it from state (hanging / falling /
   landed). Call it from `repositionExitPlatform` when it hangs off the exit.

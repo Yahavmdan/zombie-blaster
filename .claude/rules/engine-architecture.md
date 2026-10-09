@@ -26,8 +26,8 @@ The engine is split into focused files under `src/app/engine/`.
 | `spring-puzzle.ts` | Floor-3 puzzle rules (pure): spring span, scale pan + what rests on it and its kg (`scaleLoadKg`), cable path, button box + rise (`tickButton`) + presses, 3-2-1 countdown + launch tick, on-spring check + fling, corpse scatter, plate offset |
 | `spring-puzzle-system.ts` | Floor-3 puzzle simulation: host weighs the scale (corpses, props, zombies, every player + carried load), raises/lowers the button, watches every player's presses, runs the countdown, launches the local player; guests launch themselves from the synced launch, clients move the button from the synced kg |
 | `weight.ts` | Weight helpers (kg): `zombieWeightKg(type)`, `playerLoadKg` (body + carried corpses/props). The numbers live in `shared/game-constants.ts` |
-| `cage-puzzle.ts` | Floor-4 puzzle rules (pure): hanging / falling / landed cage boxes and collision, cleat box + hits, chain path, fall ticks (host lands, client only falls), what the landing exit cage lifts (`yAfterCageLands`), release spots |
-| `cage-puzzle-system.ts` | Floor-4 puzzle simulation: host counts every player's cleat hits, snaps chains, drops and lands cages (exit cage: lift the pile, zombies, drops and its own player onto it; zombie cage: smash, `spawnZombieAt` x6); guests lift themselves from the synced landing |
+| `cage-puzzle.ts` | Floor-4 puzzle rules (pure), cages by index (`EXIT_CAGE` = 0): hanging / falling / landed cage boxes and collision, landing top, cleat box + hits, tangled chain path through its kinks, fall ticks (host lands, client only falls), what the landing exit cage lifts (`yAfterCageLands`), release spots |
+| `cage-puzzle-system.ts` | Floor-4 puzzle simulation: host counts every player's cleat hits, snaps chains, drops and lands cages (exit cage: lift the pile, zombies, drops and its own player onto it; others smash where they land), then spills the hidden content (`spawnZombieAt` x4, `DropSystem.spawnCageLoot`, or nothing); guests lift themselves from the synced landing |
 | `plate-puzzle.ts` | Floor-5 puzzle rules (pure): plate box, what presses on it (lying corpses, standing players) and its weight, open/shut changes, door slide + door box, zombie kicks |
 | `plate-puzzle-system.ts` | Floor-5 puzzle simulation: host weighs the plate from the corpses and every player, slides the exit door, lets walking zombies kick corpses off; clients slide the door from the synced weight |
 | `boulder-puzzle-system.ts` | Floor-2 puzzle simulation: host counts gate hits (all players), rolls the boulder, crushes, breaks the wall; clients extrapolate the synced roll |
@@ -80,13 +80,16 @@ The engine is split into focused files under `src/app/engine/`.
   there). The scale's pan is per-frame art set into the ground on the far side (`scaleX`, no new
   collision; the generator keeps props off it), and the cable is per-frame non-walkable art. The
   host weighs the scale and syncs `scaleKg`; every client raises the button from it.
-- Floor 4 is the hanging cages: the exit cage (`puzzlePart: 'cage'`) hangs under the exit and is
-  re-placed with it (`placeCages`, called from `repositionExitPlatform`), the zombie cage
-  (`puzzlePart: 'zombie-cage'`) hangs mid-screen over a column the generator keeps free of
-  platforms. Both are solid while they hang, have no collision while falling, and the exit cage is
-  solid on the ground once landed. They are drawn per frame (`MapRenderer.drawCage`) and measured
-  where their collision is in the geometry report. Chains are per-frame, non-walkable art. Cleats
-  stand on the highest regular ledge (open sky preferred): attacks are off on the safe spot.
+- Floor 4 is the hanging cages (4-5, `CagePuzzleState.cages[]`, index 0 the exit cage): the exit
+  cage (`puzzlePart: 'cage'`) hangs under the exit and is re-placed with it (`placeCages`, called
+  from `repositionExitPlatform`); the others (`puzzlePart: 'hanging-cage'`) hang mid-screen, clear
+  of the exit and the safe spot, and fall onto the highest platform under them (`landY`, else the
+  ground). All are solid while they hang, have no collision while falling, and the exit cage is
+  solid on the ground once landed. They are drawn per frame under tarps (`MapRenderer.drawCage`,
+  bare once the exit cage landed) and measured where their collision is in the geometry report.
+  Chains are per-frame, non-walkable art, all alike and tangled through seeded kinks in the
+  ceiling band. Cleats stand on regular ledges, highest first (`cleatSpots`; the ground only as a
+  fallback): attacks are off on the safe spot. Contents are seeded layout data, never drawn.
   Ground spawns are kept out of the landed cage.
 - Floor 5 is the pressure plate: a barred door stands on the exit (scenery drawn per frame, not
   collision) and the floor completes only while it is fully open (`checkFloorCompletion`). The
@@ -108,7 +111,7 @@ ProjectileSystem -> Physics, Vfx
 ZombieSystem     -> Physics, Combat, Projectile, Drop
 BoulderPuzzleSystem -> Combat, Vfx
 SpringPuzzleSystem  -> Vfx
-CagePuzzleSystem    -> Vfx, Zombie
+CagePuzzleSystem    -> Vfx, Zombie, Drop
 PlatePuzzleSystem   -> Vfx
 CorpseCarrySystem   -> standalone
 LoosePropSystem     -> Drop

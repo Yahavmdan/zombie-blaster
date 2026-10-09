@@ -6,7 +6,7 @@ import { WORLD } from '../../support/invariants';
 
 const CAGE_FLOOR: number = 4;
 
-/** Puts a player up on the ledge left of a cleat, facing it, and starts swinging. */
+/** Puts a player on the surface left of a cleat, facing it, and starts swinging. */
 async function swingAt(p: GamePlayer, cage: E2eCageView): Promise<void> {
   // Face first: the turning key-press walks a step.
   await p.face('right');
@@ -26,7 +26,7 @@ function replayed(log: E2eVfxLogEntry[], type: string): boolean {
 }
 
 test.describe('hanging cages in co-op', { tag: '@online' }, (): void => {
-  test('a guest cuts both chains: the host drops the cages, the guest sees them land and rides the exit cage up', async ({
+  test('a guest cuts two chains: the host drops the cages, the guest sees them land and rides the exit cage up', async ({
     room,
   }: {
     room: RoomFactory;
@@ -49,24 +49,27 @@ test.describe('hanging cages in co-op', { tag: '@online' }, (): void => {
       (s: E2eSnapshot): boolean => s.floor === CAGE_FLOOR && s.cages !== null,
     );
     const h0: E2eSnapshot = await host.probe.state();
-    expect(g0.cages, 'same cages, same cleats').toEqual(h0.cages);
+    expect(g0.cages, 'same cages, contents, cleats and chains').toEqual(h0.cages);
     expect(g0.exit, 'same exit').toEqual(h0.exit);
 
-    // The wrong chain first: the host lets the zombies loose, the guest sees the smash.
+    // A mid-screen zombie cage first: the host lets the zombies loose, the guest sees the smash.
+    const z: number = g0.cages!.cages.findIndex(
+      (c: E2eCageView, i: number): boolean => i > 0 && c.content === 'zombies',
+    );
     await guest.probe.clearVfxLog();
-    await swingAt(guest, g0.cages!.zombieCage);
+    await swingAt(guest, g0.cages!.cages[z]);
     await host.probe.waitFor(
       "the host counts the guest's swings and smashes the zombie cage",
-      (s: E2eSnapshot): boolean => s.cages!.zombieCage.landed,
+      (s: E2eSnapshot): boolean => s.cages!.cages[z].landed,
       { timeoutMs: 10_000 },
     );
     await guest.release(KEYS.attack);
     const gSmash: E2eSnapshot = await guest.probe.waitFor(
       'the guest sees the zombie cage gone',
-      (s: E2eSnapshot): boolean => s.cages!.zombieCage.landed && s.cages!.zombieCage.box === null,
+      (s: E2eSnapshot): boolean => s.cages!.cages[z].landed && s.cages!.cages[z].box === null,
       { timeoutMs: 5_000 },
     );
-    expect(gSmash.cages!.exitCage.cut, 'the exit cage still hangs').toBe(false);
+    expect(gSmash.cages!.cages[0].cut, 'the exit cage still hangs').toBe(false);
     await guest.wait(500);
     expect(replayed(await guest.probe.vfxLog(), 'cage-smash'), 'the guest saw the smash').toBe(
       true,
@@ -76,25 +79,25 @@ test.describe('hanging cages in co-op', { tag: '@online' }, (): void => {
     );
 
     // Then the exit cage, with the host waiting under the exit: both end up standing on it.
-    const exitCage: E2eCageView = g0.cages!.exitCage;
+    const exitCage: E2eCageView = g0.cages!.cages[0];
     const underX: number = exitCage.box!.x + exitCage.box!.width / 2 - WORLD.playerWidth / 2;
     await host.probe.teleport(underX, WORLD.groundY - WORLD.playerHeight);
     await guest.probe.clearVfxLog();
     await swingAt(guest, exitCage);
     const hDown: E2eSnapshot = await host.probe.waitFor(
       'the host drops the exit cage',
-      (s: E2eSnapshot): boolean => s.cages!.exitCage.landed,
+      (s: E2eSnapshot): boolean => s.cages!.cages[0].landed,
       { timeoutMs: 10_000 },
     );
     await guest.release(KEYS.attack);
-    const top: number = hDown.cages!.exitCage.box!.y;
+    const top: number = hDown.cages!.cages[0].box!.y;
     expect(hDown.player!.y + WORLD.playerHeight, 'the host rode up onto the cage').toBe(top);
     const gDown: E2eSnapshot = await guest.probe.waitFor(
       'the guest sees the exit cage standing under the exit',
-      (s: E2eSnapshot): boolean => s.cages!.exitCage.landed && s.cages!.exitCage.solid !== null,
+      (s: E2eSnapshot): boolean => s.cages!.cages[0].landed && s.cages!.cages[0].solid !== null,
       { timeoutMs: 5_000 },
     );
-    expect(gDown.cages!.exitCage.solid).toEqual(hDown.cages!.exitCage.solid);
+    expect(gDown.cages!.cages[0].solid).toEqual(hDown.cages!.cages[0].solid);
     expect(replayed(await guest.probe.vfxLog(), 'cage-land'), 'the guest saw it land').toBe(true);
 
     // The guest stands on the landed cage too (its own physics collides with it).

@@ -491,9 +491,10 @@ export class VfxSystem {
     this.triggerScreenShake(12, 6);
   }
 
-  /** The zombie cage smashes open: bent bars and splinters fly out, green gore splashes. */
-  spawnCageSmash(cx: number, cy: number): void {
-    const colors: string[] = ['#8a8f98', '#5a5f68', '#a0703c', '#6abf4b', '#3f7a2c'];
+  /** A cage smashes open: bent bars and splinters fly out (and green gore, if zombies were inside). */
+  spawnCageSmash(cx: number, cy: number, gore: boolean): void {
+    const debris: string[] = ['#8a8f98', '#5a5f68', '#a0703c', '#c2b280', '#7a6a4f'];
+    const colors: string[] = gore ? [...debris.slice(0, 3), '#6abf4b', '#3f7a2c'] : debris;
     for (let i: number = 0; i < 40; i++) {
       const life: number = 35 + Math.floor(Math.random() * 25);
       this.addParticle({

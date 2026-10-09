@@ -2,7 +2,9 @@ import { GAME_CONSTANTS, PROP_WEIGHT_KG } from '@shared/index';
 import { LooseProp, PropMaterial } from '@shared/game-entities';
 import {
   BoulderPuzzleLayout,
+  CageContent,
   CagePuzzleLayout,
+  HangingCage,
   PlatePuzzleLayout,
   Platform,
   Rope,
@@ -412,12 +414,17 @@ function propProblems(prop: Prop, layout: PropContext): string[] {
     if (groundLevel && spanGap(left, right, pan[0], pan[1]) === 0) out.push('on the scale');
   }
   const cages: CagePuzzleLayout | undefined = layout.cagePuzzle;
-  if (cages && restsOn === cages.cleatY) {
+  if (cages) {
     // Room to stand and swing on either side of each cleat.
     const room: number = GAME_CONSTANTS.CAGE_CLEAT_WIDTH_PX / 2 + GAME_CONSTANTS.PLAYER_WIDTH + 8;
-    const cleats: number[] = [cages.exitCleatX, cages.zombieCleatX];
-    for (const x of cleats) {
-      if (spanGap(left, right, x - room, x + room) === 0) out.push('crowds a cleat');
+    for (const c of cages.cages.filter((h: HangingCage): boolean => h.cleatY === restsOn)) {
+      if (spanGap(left, right, c.cleatX - room, c.cleatX + room) === 0) out.push('crowds a cleat');
+    }
+    // Nothing where a mid-screen cage lands: its content spills out there.
+    for (const c of cages.cages) {
+      if (c.hang && c.landY === restsOn && spanGap(left, right, c.hang.x, c.hang.x + c.hang.width) === 0) {
+        out.push('under a hanging cage');
+      }
     }
   }
   const plate: PlatePuzzleLayout | undefined = layout.platePuzzle;
@@ -489,7 +496,6 @@ function placeSafeSpot(
   exitX: number,
   exitGap: number,
   below: Platform[],
-  avoid: [number, number] | null,
 ): { spot: Platform; ladder: Rope } {
   const tile: number = GAME_CONSTANTS.LEVEL_TILE_PX;
   const width: number = GAME_CONSTANTS.LEVEL_SAFE_SPOT_TILES * tile;
@@ -498,13 +504,10 @@ function placeSafeSpot(
   const maxX: number = GAME_CONSTANTS.CANVAS_WIDTH - tile - width;
   const candidates: number[] = [];
   for (let x: number = minX; x <= maxX; x += 16) {
-    const clear: boolean = !avoid || x + width <= avoid[0] || x >= avoid[1];
-    if (clear && spanGap(x, x + width, exitX, exitRight) >= exitGap) {
+    if (spanGap(x, x + width, exitX, exitRight) >= exitGap) {
       candidates.push(x);
     }
   }
-  const blocked: (p: Platform) => boolean = (p: Platform): boolean =>
-    avoid !== null && p.x < avoid[1] && p.x + p.width > avoid[0];
   const at: (x: number) => Platform = (x: number): Platform => ({
     x,
     y: GAME_CONSTANTS.LEVEL_SAFE_SPOT_Y,
@@ -517,7 +520,7 @@ function placeSafeSpot(
   let ladder: Rope = ropeFrom(rand, spot, below);
   for (
     let attempt: number = 0;
-    attempt < 40 && (blocked(spot) || !ropeLandsCleanly(ladder, below));
+    attempt < 40 && !ropeLandsCleanly(ladder, below);
     attempt++
   ) {
     spot = at(candidates[randomInt(rand, 0, candidates.length - 1)]);
@@ -580,81 +583,155 @@ function farScaleX(side: 1 | -1): number {
     : GAME_CONSTANTS.CANVAS_WIDTH - inset - GAME_CONSTANTS.SPRING_SCALE_WIDTH_PX;
 }
 
-/** Floor-4 puzzle, first part: the zombie cage hangs mid-screen (its cleats need the safe spot). */
-function placeZombieCage(rand: Random): Platform {
+/** Floor 4: left edges a mid-screen cage may hang at (tile-aligned, clear of the exit and the safe spot). */
+function midCageSpots(exitX: number, platforms: Platform[]): number[] {
   const tile: number = GAME_CONSTANTS.LEVEL_TILE_PX;
-  const x: number =
-    randomInt(
-      rand,
-      GAME_CONSTANTS.CAGE_ZOMBIE_MIN_X / tile,
-      GAME_CONSTANTS.CAGE_ZOMBIE_MAX_X / tile,
-    ) * tile;
-  return {
-    x,
-    y: GAME_CONSTANTS.CAGE_ZOMBIE_TOP_Y,
-    width: GAME_CONSTANTS.CAGE_WIDTH_PX,
-    height: GAME_CONSTANTS.CAGE_HEIGHT_PX,
-  };
+  const size: number = GAME_CONSTANTS.CAGE_MID_SIZE_PX;
+  const exitRight: number = exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH;
+  const safe: Platform | undefined = platforms.find((p: Platform): boolean => p.safe === true);
+  const out: number[] = [];
+  for (let x: number = tile; x + size <= GAME_CONSTANTS.CANVAS_WIDTH - tile; x += tile) {
+    if (spanGap(x, x + size, exitX, exitRight) < GAME_CONSTANTS.CAGE_EXIT_CLEAR_PX) continue;
+    if (safe && spanGap(x, x + size, safe.x, safe.x + safe.width) < GAME_CONSTANTS.CAGE_MID_GAP_PX) {
+      continue;
+    }
+    out.push(x);
+  }
+  return out;
 }
 
-/** The zombie cage's column widened by its clearance: platforms stay out (it falls to the ground). */
-function zombieCageClearSpan(zombieCage: Platform): [number, number] {
-  const clear: number = GAME_CONSTANTS.CAGE_CLEAR_PX;
-  return [zombieCage.x - clear, zombieCage.x + zombieCage.width + clear];
+/** A mid-screen cage hanging with its left edge at x. */
+function midCageAt(x: number): Platform {
+  const size: number = GAME_CONSTANTS.CAGE_MID_SIZE_PX;
+  return { x, y: GAME_CONSTANTS.CAGE_MID_TOP_Y, width: size, height: size };
 }
 
-/** The two cleat spots near a ledge's ends. */
-function cleatSpots(ledge: Platform): [number, number] {
+/** `count` mid-screen cages at random free spots, apart from each other (packed from the left if that fails). */
+function placeMidCages(rand: Random, count: number, exitX: number, platforms: Platform[]): Platform[] {
+  const apart: number = GAME_CONSTANTS.CAGE_MID_SIZE_PX + GAME_CONSTANTS.CAGE_MID_GAP_PX;
+  const spots: number[] = midCageSpots(exitX, platforms);
+  const fits: (picked: number[], x: number) => boolean = (picked: number[], x: number): boolean =>
+    picked.every((p: number): boolean => Math.abs(p - x) >= apart);
+  let picked: number[] = [];
+  let free: number[] = spots;
+  while (picked.length < count && free.length > 0) {
+    const x: number = free[randomInt(rand, 0, free.length - 1)];
+    picked.push(x);
+    free = free.filter((f: number): boolean => fits(picked, f));
+  }
+  if (picked.length < count) {
+    picked = spots.reduce(
+      (acc: number[], x: number): number[] => (acc.length < count && fits(acc, x) ? [...acc, x] : acc),
+      [],
+    );
+  }
+  return picked.sort((a: number, b: number): number => a - b).map(midCageAt);
+}
+
+/** Top of what a mid-screen cage lands on: the highest platform under it, else the ground. */
+function cageLandY(cage: Platform, platforms: Platform[]): number {
+  const bottom: number = cage.y + cage.height;
+  const under: Platform[] = platforms.filter(
+    (p: Platform): boolean => p.y >= bottom && p.x < cage.x + cage.width && p.x + p.width > cage.x,
+  );
+  return Math.min(GAME_CONSTANTS.GROUND_Y, ...under.map((p: Platform): number => p.y));
+}
+
+/** A seeded shuffle (Fisher-Yates) of a copy of `items`. */
+function shuffled<T>(rand: Random, items: T[]): T[] {
+  const out: T[] = [...items];
+  for (let i: number = out.length - 1; i > 0; i--) {
+    const j: number = randomInt(rand, 0, i);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** What `count` cages hide: a fixed mix (zombies, loot, the rest empty), not yet shuffled. */
+function cageContentMix(count: number): CageContent[] {
+  const zombies: number = GAME_CONSTANTS.CAGE_ZOMBIE_CAGES;
+  const loot: number = GAME_CONSTANTS.CAGE_LOOT_CAGES;
+  return Array.from(
+    { length: count },
+    (_: unknown, i: number): CageContent => (i < zombies ? 'zombies' : i < zombies + loot ? 'loot' : 'empty'),
+  );
+}
+
+/**
+ * Every spot a floor-4 cleat may stand on, highest surfaces first: spaced along each regular
+ * ledge (never the safe spot, where nobody swings), then along the ground (clear of the exit's
+ * column, the spawn point and rope ends).
+ */
+function cleatSpots(exitX: number, platforms: Platform[], ropes: Rope[]): Array<{ x: number; y: number }> {
   const inset: number = GAME_CONSTANTS.CAGE_CLEAT_INSET_PX;
-  return [ledge.x + inset, ledge.x + ledge.width - inset];
-}
-
-/**
- * Where the cleats stand: the highest regular ledge (never the safe spot, where nobody swings),
- * preferring one with open sky over both cleats so the chains run straight up to the ceiling.
- * Falls back to the ground under the safe spot.
- */
-function cleatLedge(platforms: Platform[]): Platform {
-  const openSky: (p: Platform) => boolean = (p: Platform): boolean =>
-    !platforms.some(
-      (q: Platform): boolean =>
-        q.y < p.y &&
-        cleatSpots(p).some((x: number): boolean => spanGap(x - 10, x + 10, q.x, q.x + q.width) === 0),
-    );
-  const ledges: Platform[] = platforms
-    .filter((p: Platform): boolean => !p.safe && p.width >= 4 * GAME_CONSTANTS.LEVEL_TILE_PX)
-    .sort(
-      (a: Platform, b: Platform): number =>
-        Number(openSky(b)) - Number(openSky(a)) || a.y - b.y || a.x - b.x,
-    );
-  if (ledges.length > 0) return ledges[0];
-  const spot: Platform | undefined = platforms.find((p: Platform): boolean => p.safe === true);
-  return { ...(spot ?? GROUND_PLATFORM), y: GAME_CONSTANTS.GROUND_Y, safe: false };
-}
-
-/**
- * Floor-4 puzzle, second part: the two cleats on their ledge, tied to the cages in a random order,
- * and the chains' ceiling rows in a random order (sometimes the chains cross).
- */
-function placeCagePuzzle(rand: Random, zombieCage: Platform, platforms: Platform[]): CagePuzzleLayout {
-  const ledge: Platform = cleatLedge(platforms);
-  const ends: [number, number] = cleatSpots(ledge);
-  const swapCleats: boolean = rand() < 0.5;
-  const rows: [number, number] = [
-    GAME_CONSTANTS.CAGE_CHAIN_ROW_Y,
-    GAME_CONSTANTS.CAGE_CHAIN_ROW_Y + GAME_CONSTANTS.CAGE_CHAIN_ROW_STEP_PX,
+  const spacing: number = GAME_CONSTANTS.CAGE_CLEAT_SPACING_PX;
+  const clear: number = GAME_CONSTANTS.CAGE_EXIT_CLEAR_PX;
+  const exitRight: number = exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH;
+  const surfaces: Platform[] = [
+    ...platforms
+      .filter((p: Platform): boolean => !p.safe)
+      .sort((a: Platform, b: Platform): number => a.y - b.y || a.x - b.x),
+    GROUND_PLATFORM,
   ];
-  const swapRows: boolean = rand() < 0.5;
+  const out: Array<{ x: number; y: number }> = [];
+  for (const s of surfaces) {
+    const ground: boolean = s.y === GAME_CONSTANTS.GROUND_Y;
+    for (let x: number = s.x + inset; x <= s.x + s.width - inset; x += spacing) {
+      const nearRope: boolean = ropes.some(
+        (r: Rope): boolean => (r.topY === s.y || r.bottomY === s.y) && Math.abs(r.x - x) < spacing / 2,
+      );
+      const inTheWay: boolean =
+        ground &&
+        (spanGap(x, x, exitX - clear, exitRight + clear) === 0 ||
+          spanGap(x, x, SPAWN_CLEAR[0], SPAWN_CLEAR[1]) === 0);
+      if (!nearRope && !inTheWay) out.push({ x, y: s.y });
+    }
+  }
+  return out;
+}
+
+/** Points a chain winds through in the ceiling band, around the span between its cleat and its hook. */
+function chainKinks(rand: Random, fromX: number, toX: number): Array<{ x: number; y: number }> {
+  const margin: number = 16;
+  const lo: number = Math.max(margin, Math.min(fromX, toX) - 200);
+  const hi: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - margin, Math.max(fromX, toX) + 200);
+  return Array.from(
+    { length: GAME_CONSTANTS.CAGE_CHAIN_KINKS },
+    (): { x: number; y: number } => ({
+      x: randomInt(rand, lo, hi),
+      y: randomInt(rand, GAME_CONSTANTS.CAGE_CHAIN_TOP_Y, GAME_CONSTANTS.CAGE_CHAIN_BOTTOM_Y),
+    }),
+  );
+}
+
+/**
+ * Floor-4 puzzle: the exit cage plus 3-4 cages hanging mid-screen, a hidden content each
+ * (shuffled), one cleat each on the highest free spots (tied in a random order), and tangled
+ * chains between them.
+ */
+function placeCagePuzzle(rand: Random, exitX: number, platforms: Platform[], ropes: Rope[]): CagePuzzleLayout {
+  const wanted: number = randomInt(rand, GAME_CONSTANTS.CAGE_COUNT_MIN, GAME_CONSTANTS.CAGE_COUNT_MAX);
+  const mids: Platform[] = placeMidCages(rand, wanted - 1, exitX, platforms);
+  const hangs: Array<Platform | null> = [null, ...mids];
+  const contents: CageContent[] = shuffled(rand, cageContentMix(hangs.length));
+  const cleats: Array<{ x: number; y: number }> = shuffled(
+    rand,
+    cleatSpots(exitX, platforms, ropes).slice(0, hangs.length),
+  );
+  const exitHookX: number = exitX + GAME_CONSTANTS.EXIT_PLATFORM_WIDTH / 2;
   return {
-    zombieCage,
-    cleatY: ledge.y,
-    exitCleatX: ends[swapCleats ? 1 : 0],
-    zombieCleatX: ends[swapCleats ? 0 : 1],
-    exitChainY: rows[swapRows ? 1 : 0],
-    zombieChainY: rows[swapRows ? 0 : 1],
+    cages: hangs.map(
+      (hang: Platform | null, i: number): HangingCage => ({
+        hang,
+        landY: hang ? cageLandY(hang, platforms) : GAME_CONSTANTS.GROUND_Y,
+        content: contents[i],
+        cleatX: cleats[i].x,
+        cleatY: cleats[i].y,
+        kinks: chainKinks(rand, cleats[i].x, hang ? hang.x + hang.width / 2 : exitHookX),
+      }),
+    ),
   };
 }
-
 /**
  * The ledge the floor-5 plate is set into: the highest regular ledge (never the safe spot) on the
  * far half of the screen from the exit, the farthest from the exit among equals; null if none.
@@ -719,15 +796,11 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
       : GAME_CONSTANTS.EXIT_EDGE_MARGIN_PX;
   const springPuzzle: SpringPuzzleLayout | undefined =
     floor === GAME_CONSTANTS.PUZZLE_SPRING_FLOOR ? placeSpringPuzzle(exitX, exitOnRight) : undefined;
-  const zombieCage: Platform | null =
-    floor === GAME_CONSTANTS.PUZZLE_CAGE_FLOOR ? placeZombieCage(rand) : null;
   const avoid: Array<[number, number]> = boulderPuzzle
     ? [chuteSpan(boulderPuzzle)]
     : springPuzzle
       ? [springClearSpan(springPuzzle), scaleClearSpan(springPuzzle)]
-      : zombieCage
-        ? [zombieCageClearSpan(zombieCage)]
-        : [];
+      : [];
 
   const tier1: Platform[] = [];
   const tier1Count: number = randomInt(rand, 2, 3);
@@ -773,7 +846,6 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
     exitX,
     boulderPuzzle ? GAME_CONSTANTS.BOULDER_SAFE_SPOT_GAP_PX : GAME_CONSTANTS.LEVEL_SAFE_SPOT_EXIT_GAP_PX,
     platforms,
-    zombieCage ? zombieCageClearSpan(zombieCage) : null,
   );
   platforms.push(safeSpot);
   ropes.push(ladder);
@@ -790,9 +862,8 @@ export function generateLevel(seed: number, floor: number): LevelLayout {
     if (placed) platforms.push(placed);
   }
 
-  const cagePuzzle: CagePuzzleLayout | undefined = zombieCage
-    ? placeCagePuzzle(rand, zombieCage, platforms)
-    : undefined;
+  const cagePuzzle: CagePuzzleLayout | undefined =
+    floor === GAME_CONSTANTS.PUZZLE_CAGE_FLOOR ? placeCagePuzzle(rand, exitX, platforms, ropes) : undefined;
   const platePuzzle: PlatePuzzleLayout | undefined =
     floor === GAME_CONSTANTS.PUZZLE_PLATE_FLOOR ? placePlatePuzzle(exitX, platforms) : undefined;
   const props: Prop[] = placeProps(rand, {
@@ -876,30 +947,64 @@ function springPuzzleProblems(layout: LevelLayout, puzzle: SpringPuzzleLayout): 
 /** Broken rules of the floor-4 puzzle. */
 function cagePuzzleProblems(layout: LevelLayout, puzzle: CagePuzzleLayout): string[] {
   const out: string[] = [];
-  const cage: Platform = puzzle.zombieCage;
-  if (cage.width !== GAME_CONSTANTS.CAGE_WIDTH_PX || cage.height !== GAME_CONSTANTS.CAGE_HEIGHT_PX) {
-    out.push('zombie cage: wrong size');
+  const cages: HangingCage[] = puzzle.cages;
+  if (cages.length < GAME_CONSTANTS.CAGE_COUNT_MIN || cages.length > GAME_CONSTANTS.CAGE_COUNT_MAX) {
+    out.push(`cages: ${cages.length}, not ${GAME_CONSTANTS.CAGE_COUNT_MIN}-${GAME_CONSTANTS.CAGE_COUNT_MAX}`);
   }
-  if (cage.y !== GAME_CONSTANTS.CAGE_ZOMBIE_TOP_Y) out.push('zombie cage: not at its hanging height');
-  if (cage.x < GAME_CONSTANTS.CAGE_ZOMBIE_MIN_X || cage.x > GAME_CONSTANTS.CAGE_ZOMBIE_MAX_X) {
-    out.push('zombie cage: not mid-screen');
+  if (cages[0]?.hang !== null || cages[0]?.landY !== GAME_CONSTANTS.GROUND_Y) {
+    out.push('exit cage: not first, or not landing on the ground under the exit');
   }
-  const [from, to]: [number, number] = zombieCageClearSpan(cage);
-  for (const p of layout.platforms) {
-    if (p.x < to && p.x + p.width > from) out.push(`platform ${p.x},${p.y}: under the zombie cage`);
+  const spots: number[] = midCageSpots(layout.exitX, layout.platforms);
+  const mids: Platform[] = cages.slice(1).map((c: HangingCage): Platform | null => c.hang)
+    .filter((h: Platform | null): h is Platform => h !== null);
+  if (mids.length !== cages.length - 1) out.push('mid cages: one has no hanging spot');
+  const headroom: number = GAME_CONSTANTS.PLAYER_HEIGHT + 4;
+  cages.slice(1).forEach((c: HangingCage): void => {
+    const h: Platform | null = c.hang;
+    if (!h) return;
+    if (h.width !== GAME_CONSTANTS.CAGE_MID_SIZE_PX || h.height !== GAME_CONSTANTS.CAGE_MID_SIZE_PX) {
+      out.push(`mid cage ${h.x}: wrong size`);
+    }
+    if (h.y !== GAME_CONSTANTS.CAGE_MID_TOP_Y) out.push(`mid cage ${h.x}: not at its hanging height`);
+    if (!spots.includes(h.x)) out.push(`mid cage ${h.x}: too close to the exit or the safe spot`);
+    if (c.landY !== cageLandY(h, layout.platforms)) out.push(`mid cage ${h.x}: wrong landing`);
+    const crowded: boolean = layout.platforms.some(
+      (p: Platform): boolean =>
+        p.y > h.y && p.y < h.y + h.height + headroom && spanGap(h.x, h.x + h.width, p.x, p.x + p.width) === 0,
+    );
+    if (crowded) out.push(`mid cage ${h.x}: a platform crowds it`);
+  });
+  const apart: number = GAME_CONSTANTS.CAGE_MID_SIZE_PX + GAME_CONSTANTS.CAGE_MID_GAP_PX;
+  mids.forEach((a: Platform, i: number): void => {
+    if (mids.slice(i + 1).some((b: Platform): boolean => Math.abs(a.x - b.x) < apart)) {
+      out.push(`mid cage ${a.x}: too close to another`);
+    }
+  });
+  const mix: CageContent[] = cageContentMix(cages.length);
+  const count: (list: CageContent[], c: CageContent) => number = (list: CageContent[], c: CageContent): number =>
+    list.filter((x: CageContent): boolean => x === c).length;
+  const contents: CageContent[] = cages.map((c: HangingCage): CageContent => c.content);
+  if ((['zombies', 'loot', 'empty'] as CageContent[]).some((c: CageContent): boolean => count(contents, c) !== count(mix, c))) {
+    out.push('contents: not the zombies / loot / empty mix');
   }
-  const ledge: Platform = cleatLedge(layout.platforms);
-  const ends: number[] = cleatSpots(ledge);
-  const cleats: number[] = [puzzle.exitCleatX, puzzle.zombieCleatX];
-  const onLedge: boolean = puzzle.cleatY === ledge.y && cleats.every((x: number): boolean => ends.includes(x));
-  if (!onLedge || cleats[0] === cleats[1]) out.push('cleats: not one at each end of the highest open ledge');
-  const rows: number[] = [puzzle.exitChainY, puzzle.zombieChainY].sort(
-    (a: number, b: number): number => a - b,
+  const allowed: Array<{ x: number; y: number }> = cleatSpots(layout.exitX, layout.platforms, layout.ropes);
+  const keys: string[] = cages.map((c: HangingCage): string => `${c.cleatX},${c.cleatY}`);
+  const onSpot: boolean = keys.every((k: string): boolean =>
+    allowed.some((s: { x: number; y: number }): boolean => `${s.x},${s.y}` === k),
   );
-  const row: number = GAME_CONSTANTS.CAGE_CHAIN_ROW_Y;
-  if (rows[0] !== row || rows[1] !== row + GAME_CONSTANTS.CAGE_CHAIN_ROW_STEP_PX) {
-    out.push('chains: not on their two ceiling rows');
-  }
+  if (!onSpot || new Set(keys).size !== keys.length) out.push('cleats: not one per cage on the cleat spots');
+  const inBand: boolean = cages.every(
+    (c: HangingCage): boolean =>
+      c.kinks.length === GAME_CONSTANTS.CAGE_CHAIN_KINKS &&
+      c.kinks.every(
+        (k: { x: number; y: number }): boolean =>
+          k.y >= GAME_CONSTANTS.CAGE_CHAIN_TOP_Y &&
+          k.y <= GAME_CONSTANTS.CAGE_CHAIN_BOTTOM_Y &&
+          k.x >= 0 &&
+          k.x <= GAME_CONSTANTS.CANVAS_WIDTH,
+      ),
+  );
+  if (!inBand) out.push('chains: kinks outside the ceiling band');
   return out;
 }
 

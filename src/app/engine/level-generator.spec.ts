@@ -19,7 +19,7 @@ import {
 } from './level-generator';
 import { pushOutOfSolids, stepUpOnto } from './solid-blocks';
 import { chuteSpan } from './boulder-puzzle';
-import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, Rope, SpringPuzzleLayout } from './engine-types';
+import { BoulderPuzzleLayout, CagePuzzleLayout, HangingCage, Platform, PlatePuzzleLayout, Rope, SpringPuzzleLayout } from './engine-types';
 import { springSpan } from './spring-puzzle';
 
 describe('level generator', () => {
@@ -423,63 +423,63 @@ describe('cage puzzle floor', (): void => {
     }
   });
 
-  it('the zombie cage hangs mid-screen over open ground; both cleats stand at the ends of a high regular ledge', (): void => {
-    const crossings: Set<string> = new Set<string>();
-    let openSky: number = 0;
+  it('4-5 cages, the exit cage first; contents, cleat order and chains vary per seed; cleats sit on ledges', (): void => {
+    const counts: Set<number> = new Set<number>();
+    const exitContents: Set<string> = new Set<string>();
+    const exitCleatRank: Set<number> = new Set<number>();
+    let groundCleats: number = 0;
     for (let seed: number = 1; seed <= 200; seed++) {
       const level: LevelLayout = generateLevel(seed, CAGE_FLOOR);
-      const puzzle: CagePuzzleLayout = level.cagePuzzle!;
-      const cage: Platform = puzzle.zombieCage;
-      expect(cage.x).toBeGreaterThanOrEqual(GAME_CONSTANTS.CAGE_ZOMBIE_MIN_X);
-      expect(cage.x).toBeLessThanOrEqual(GAME_CONSTANTS.CAGE_ZOMBIE_MAX_X);
-      const from: number = cage.x - GAME_CONSTANTS.CAGE_CLEAR_PX;
-      const to: number = cage.x + cage.width + GAME_CONSTANTS.CAGE_CLEAR_PX;
-      for (const p of level.platforms) {
-        expect(p.x + p.width <= from || p.x >= to, `seed ${seed} platform ${p.x},${p.y}`).toBe(true);
+      const cages: HangingCage[] = level.cagePuzzle!.cages;
+      counts.add(cages.length);
+      expect(cages[0].hang, `seed ${seed}: the exit cage hangs under the exit`).toBeNull();
+      expect(cages.slice(1).every((c: HangingCage): boolean => c.hang !== null)).toBe(true);
+      exitContents.add(cages[0].content);
+      const contents: string[] = cages.map((c: HangingCage): string => c.content);
+      expect(contents.filter((c: string): boolean => c === 'zombies').length).toBe(GAME_CONSTANTS.CAGE_ZOMBIE_CAGES);
+      expect(contents.filter((c: string): boolean => c === 'loot').length).toBe(GAME_CONSTANTS.CAGE_LOOT_CAGES);
+      for (const c of cages) {
+        const ledge: Platform | undefined = level.platforms.find(
+          (p: Platform): boolean => p.y === c.cleatY && c.cleatX > p.x && c.cleatX < p.x + p.width,
+        );
+        if (c.cleatY === GAME_CONSTANTS.GROUND_Y) groundCleats++;
+        else expect(ledge?.safe, `seed ${seed}: never the safe spot (no swinging there)`).toBeFalsy();
       }
-      const xs: number[] = [puzzle.exitCleatX, puzzle.zombieCleatX].sort(
-        (a: number, b: number): number => a - b,
+      const order: HangingCage[] = [...cages].sort(
+        (a: HangingCage, b: HangingCage): number => a.cleatY - b.cleatY || a.cleatX - b.cleatX,
       );
-      const ledge: Platform | undefined = level.platforms.find(
-        (p: Platform): boolean =>
-          p.y === puzzle.cleatY &&
-          xs[0] === p.x + GAME_CONSTANTS.CAGE_CLEAT_INSET_PX &&
-          xs[1] === p.x + p.width - GAME_CONSTANTS.CAGE_CLEAT_INSET_PX,
-      );
-      expect(ledge, `seed ${seed}: the cleats stand at a ledge's ends`).toBeDefined();
-      expect(ledge!.safe, 'never the safe spot (no swinging there)').toBeFalsy();
-      const above: boolean = level.platforms.some(
-        (q: Platform): boolean =>
-          q.y < ledge!.y && xs.some((x: number): boolean => x + 10 > q.x && x - 10 < q.x + q.width),
-      );
-      if (!above) openSky++;
-      crossings.add(`${puzzle.exitCleatX === xs[0]} ${puzzle.exitChainY < puzzle.zombieChainY}`);
+      exitCleatRank.add(order.indexOf(cages[0]));
     }
-    expect(openSky, 'the chains nearly always run up through open sky').toBeGreaterThan(190);
-    expect(crossings.size, 'cleat order and chain rows vary').toBe(4);
+    expect([...counts].sort()).toEqual([GAME_CONSTANTS.CAGE_COUNT_MIN, GAME_CONSTANTS.CAGE_COUNT_MAX]);
+    expect(exitContents.size, 'the exit cage may hide anything').toBe(3);
+    expect(exitCleatRank.size, 'the exit cage hangs from any cleat').toBeGreaterThanOrEqual(4);
+    expect(groundCleats, 'cleats almost always stand on ledges (climb to them)').toBeLessThan(40);
   });
 
-  it('the rules catch a platform under the zombie cage, a moved cleat, a stray cage and a missing one', (): void => {
+  it('the rules catch a crowded or misplaced cage, a moved cleat, a wrong mix, a wild chain, a stray cage and a missing one', (): void => {
     const level: LevelLayout = generateLevel(5, CAGE_FLOOR);
     const puzzle: CagePuzzleLayout = level.cagePuzzle!;
+    const mid: HangingCage = puzzle.cages[1];
+    const hang: Platform = mid.hang!;
     const has: (l: LevelLayout, text: string) => boolean = (l: LevelLayout, text: string): boolean =>
       levelViolations(l).some((v: string): boolean => v.includes(text));
+    const withCage: (patch: Partial<HangingCage>) => LevelLayout = (patch: Partial<HangingCage>): LevelLayout => ({
+      ...level,
+      cagePuzzle: { cages: puzzle.cages.map((c: HangingCage): HangingCage => (c === mid ? { ...c, ...patch } : c)) },
+    });
     expect(levelViolations(level)).toEqual([]);
-    const under: Platform = { x: puzzle.zombieCage.x, y: 430, width: 96, height: 32 };
-    expect(has({ ...level, platforms: [...level.platforms, under] }, 'under the zombie cage')).toBe(true);
-    expect(has({ ...level, cagePuzzle: { ...puzzle, exitCleatX: puzzle.exitCleatX + 8 } }, 'cleats')).toBe(true);
-    expect(has({ ...level, cagePuzzle: { ...puzzle, zombieChainY: 300 } }, 'chains')).toBe(true);
-    expect(has({ ...level, cagePuzzle: { ...puzzle, cleatY: GAME_CONSTANTS.LEVEL_SAFE_SPOT_Y } }, 'cleats')).toBe(true);
-    const byCleat: Prop = {
-      kind: 'box1',
-      x: puzzle.exitCleatX + 10,
-      y: puzzle.cleatY - 22,
-      width: 28,
-      height: 22,
-    };
+    const crowding: Platform = { x: hang.x, y: hang.y + hang.height + 20, width: 96, height: 32 };
+    expect(has({ ...level, platforms: [...level.platforms, crowding] }, 'crowds it')).toBe(true);
+    expect(has(withCage({ hang: { ...hang, x: level.exitX } }), 'too close to the exit')).toBe(true);
+    expect(has(withCage({ landY: mid.landY - 100 }), 'wrong landing')).toBe(true);
+    expect(has(withCage({ cleatX: mid.cleatX + 8 }), 'cleats')).toBe(true);
+    expect(has(withCage({ content: mid.content === 'loot' ? 'empty' : 'loot' }), 'contents')).toBe(true);
+    expect(has(withCage({ kinks: [{ x: 600, y: 400 }, ...mid.kinks.slice(1)] }), 'chains')).toBe(true);
+    expect(has({ ...level, cagePuzzle: { cages: puzzle.cages.slice(0, 2) } }, 'cages: 2')).toBe(true);
+    const byCleat: Prop = { kind: 'box1', x: mid.cleatX + 10, y: mid.cleatY - 22, width: 28, height: 22 };
     expect(has({ ...level, props: [...level.props, byCleat] }, 'crowds a cleat')).toBe(true);
-    const off: CagePuzzleLayout = { ...puzzle, zombieCage: { ...puzzle.zombieCage, x: 32 } };
-    expect(has({ ...level, cagePuzzle: off }, 'zombie cage: not mid-screen')).toBe(true);
+    const under: Prop = { kind: 'box1', x: hang.x + 30, y: mid.landY - 22, width: 28, height: 22 };
+    expect(has({ ...level, props: [...level.props, under] }, 'under a hanging cage')).toBe(true);
     expect(has({ ...level, cagePuzzle: undefined }, 'cage floor without cages')).toBe(true);
     expect(has({ ...generateLevel(5, 5), cagePuzzle: puzzle }, 'cages on another floor')).toBe(true);
   });
