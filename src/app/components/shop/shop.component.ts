@@ -13,10 +13,8 @@ import {
 import {
   CharacterState,
   SHOP_ITEMS,
-  POTION_DEFINITIONS,
   getPotionsByCategory,
   getTotalPotionsByCategory,
-  getPotionById,
 } from '@shared/index';
 import {
   ShopItemDefinition,
@@ -24,6 +22,7 @@ import {
   PotionDefinition,
   PotionCategory,
 } from '@shared/game-entities';
+import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
 
 export interface ShopRow {
   item: ShopItemDefinition;
@@ -41,6 +40,7 @@ export interface AutoPotionChange {
 
 @Component({
   selector: 'app-shop',
+  imports: [PixelIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'shop',
@@ -99,20 +99,6 @@ export class ShopComponent {
   readonly autoPotionMpId: Signal<string | null> = computed((): string | null =>
     this.player().inventory.autoPotionMpId,
   );
-
-  readonly autoPotionHpName: Signal<string> = computed((): string => {
-    const id: string | null = this.autoPotionHpId();
-    if (!id) return 'None';
-    const def: PotionDefinition | undefined = getPotionById(id);
-    return def ? def.name : 'None';
-  });
-
-  readonly autoPotionMpName: Signal<string> = computed((): string => {
-    const id: string | null = this.autoPotionMpId();
-    if (!id) return 'None';
-    const def: PotionDefinition | undefined = getPotionById(id);
-    return def ? def.name : 'None';
-  });
 
   onQuantityChange(itemId: string, delta: number): void {
     this.quantities.update((qtys: Record<string, number>): Record<string, number> => {

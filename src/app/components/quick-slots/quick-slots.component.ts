@@ -11,6 +11,7 @@ import {
   CharacterState,
   SKILLS,
   SkillDefinition,
+  SkillType,
   getPotionById,
 } from '@shared/index';
 import {
@@ -24,19 +25,23 @@ import {
 import { KeyBindings } from '@shared/messages';
 import { QuickSlotService } from '../../services/quick-slot.service';
 import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
+import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { PixelIconId } from '@shared/pixel-icon';
 
 export interface QuickSlotDisplay {
   action: QuickSlotAction;
   entry: QuickSlotEntry | null;
   keyLabel: string;
-  icon: string;
+  icon: PixelIconId;
   label: string;
   count: number | null;
   isEmpty: boolean;
+  isBuff: boolean;
 }
 
 @Component({
   selector: 'app-quick-slots',
+  imports: [PixelIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'quick-slots',
@@ -61,7 +66,7 @@ export class QuickSlotsComponent {
       const keyLabel: string = boundKeys.length > 0 ? formatKeyName(boundKeys[0]) : '—';
 
       if (!entry) {
-        return { action, entry: null, keyLabel, icon: '', label: '', count: null, isEmpty: true };
+        return { action, entry: null, keyLabel, icon: 'spark', label: '', count: null, isEmpty: true, isBuff: false };
       }
 
       if (entry.type === 'keybind') {
@@ -70,10 +75,11 @@ export class QuickSlotsComponent {
           action,
           entry,
           keyLabel,
-          icon: info?.icon ?? '?',
+          icon: info?.icon ?? 'spark',
           label: info?.label ?? entry.id,
           count: null,
           isEmpty: false,
+          isBuff: false,
         };
       }
 
@@ -84,10 +90,11 @@ export class QuickSlotsComponent {
           action,
           entry,
           keyLabel,
-          icon: def?.icon ?? '?',
+          icon: def?.icon ?? 'spark',
           label: def?.name ?? entry.id,
           count,
           isEmpty: false,
+          isBuff: false,
         };
       }
 
@@ -98,10 +105,11 @@ export class QuickSlotsComponent {
         action,
         entry,
         keyLabel,
-        icon: skillDef?.icon ?? '?',
+        icon: skillDef?.icon ?? 'spark',
         label: skillDef?.name ?? entry.id,
         count: null,
         isEmpty: false,
+        isBuff: skillDef?.type === SkillType.Buff,
       };
     });
   });

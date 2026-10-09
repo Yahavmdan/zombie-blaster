@@ -1,3 +1,4 @@
+import { PixelIconId } from './pixel-icon';
 import { BuffStat, CharacterClass } from './character';
 
 export enum SkillType {
@@ -62,7 +63,7 @@ export interface SkillDefinition {
   description: string;
   maxLevel: number;
   requiredCharacterLevel: number;
-  icon: string;
+  icon: PixelIconId;
   color: string;
   scaling: SkillScaling;
   levelData: SkillLevelData[] | null;

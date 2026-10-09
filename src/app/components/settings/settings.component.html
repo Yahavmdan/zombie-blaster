@@ -1,38 +1,42 @@
 <button
-  class="settings-toggle"
+  class="settings-toggle px-btn"
+  title="Settings"
   data-testid="game-settings-button-toggle"
   (click)="toggleSettings()"
 >
-  ⚙
+  <app-pixel-icon [icon]="'gear'" [size]="16" />
 </button>
 
 @if (isOpen()) {
-  <div class="settings-overlay">
+  <div class="settings-overlay px-overlay">
     <div class="kb-layout">
-      <div class="kb-panel">
-        <div class="kb-header">
-          <h2 class="kb-title">KEYBOARD SETTING</h2>
+      <div class="kb-panel px-panel">
+        <div class="kb-header px-header">
+          <app-pixel-icon [icon]="'gear'" [size]="24" />
+          <h2 class="kb-title">Keyboard settings</h2>
           <div class="kb-header-actions">
             <button
-              class="kb-header-btn"
+              class="kb-header-btn px-btn px-btn--sm"
               data-testid="game-settings-button-inventory"
               [class.kb-header-btn--active]="sidePanelTab() === 'inventory'"
               (click)="toggleSidePanel('inventory')"
-            >🎒 Inventory</button>
+            ><app-pixel-icon [icon]="'bag'" [size]="16" /> Inventory</button>
             <button
-              class="kb-header-btn"
+              class="kb-header-btn px-btn px-btn--sm"
               data-testid="game-settings-button-skills"
               [class.kb-header-btn--active]="sidePanelTab() === 'skills'"
               (click)="toggleSidePanel('skills')"
-            >📖 Skills</button>
+            ><app-pixel-icon [icon]="'book'" [size]="16" /> Skills</button>
           </div>
           <button
-            class="kb-close"
+            class="kb-close px-btn px-close"
+            title="Close"
             data-testid="game-settings-button-close"
             (click)="toggleSettings()"
-          >✕</button>
+          ><app-pixel-icon [icon]="'close'" [size]="16" /></button>
         </div>
 
+        <div class="kb-body px-scroll">
         <ng-template #keyButton let-key>
           <button
             class="kb-key"
@@ -49,7 +53,7 @@
           >
             <span class="kb-key-name">{{ key.label }}</span>
             @if (getKeyBinding(key.code); as binding) {
-              <span class="kb-key-icon">{{ binding.icon }}</span>
+              <app-pixel-icon class="kb-key-icon" [icon]="binding.icon" [size]="16" />
               <span class="kb-key-action">{{ binding.label }}</span>
             }
           </button>
@@ -85,7 +89,7 @@
           </div>
 
           <div class="kb-mouse">
-            <span class="kb-mouse-title">MOUSE</span>
+            <span class="kb-mouse-title">Mouse</span>
             @for (row of mouseRows; track $index) {
               <div class="kb-row">
                 @for (key of row; track $index) {
@@ -111,34 +115,34 @@
           <div class="kb-actions-grid">
             @for (chip of actionChips; track chip.action) {
               <button
-                class="kb-action-chip"
+                class="kb-action-chip px-chip"
                 [class.kb-action-chip--disabled]="!selectedKey()"
                 [attr.data-testid]="'game-settings-action-' + chip.action"
                 draggable="true"
                 (dragstart)="onActionDragStart($event, chip.action)"
                 (click)="onActionChipClick(chip.action)"
               >
-                <span class="kb-chip-icon">{{ chip.icon }}</span>
+                <app-pixel-icon class="kb-chip-icon" [icon]="chip.icon" [size]="16" />
                 <span class="kb-chip-label">{{ chip.label }}</span>
               </button>
             }
             <button
-              class="kb-action-chip kb-action-chip--clear"
+              class="kb-action-chip px-chip kb-action-chip--clear"
               [class.kb-action-chip--disabled]="!selectedKey()"
               (click)="onClearSelectedKey()"
             >
-              <span class="kb-chip-icon">✕</span>
+              <app-pixel-icon class="kb-chip-icon" [icon]="'close'" [size]="16" />
               <span class="kb-chip-label">Clear</span>
             </button>
           </div>
         </div>
 
         <div class="kb-qs-section">
-          <h3 class="kb-qs-title">QUICK SLOT KEYS</h3>
+          <h3 class="kb-qs-title">Quick slot keys</h3>
           <div class="kb-qs-grid">
             @for (qs of quickSlotBindings(); track qs.action) {
               <div
-                class="kb-qs-cell"
+                class="kb-qs-cell px-panel--inset"
                 [class.kb-qs-cell--active]="rebindingAction() === qs.action"
                 [class.kb-qs-cell--filled]="!qs.isEmpty"
                 (dragover)="onQuickSlotDragOver($event)"
@@ -148,7 +152,7 @@
               >
                 <span class="kb-qs-num">{{ qs.slotNumber }}</span>
                 @if (!qs.isEmpty) {
-                  <span class="kb-qs-content-icon">{{ qs.contentIcon }}</span>
+                  <app-pixel-icon class="kb-qs-content-icon" [icon]="qs.contentIcon" [size]="16" />
                   <span class="kb-qs-content-label">{{ qs.contentLabel }}</span>
                 }
                 <span class="kb-qs-key" [attr.data-testid]="'game-settings-quickslot-key-' + qs.action">{{ qs.keyLabel }}</span>
@@ -157,7 +161,7 @@
                     <span class="kb-listening">Press or click…</span>
                   } @else {
                     <button
-                      class="kb-rebind-btn"
+                      class="kb-rebind-btn px-btn px-btn--sm px-btn--ghost"
                       [attr.data-testid]="'game-settings-button-rebind-' + qs.action"
                       (click)="startRebind(qs.action)"
                     >Rebind</button>
@@ -170,40 +174,41 @@
 
         <div class="kb-footer">
           <button
-            class="kb-footer-btn"
+            class="kb-footer-btn px-btn px-btn--sm px-btn--ghost"
             data-testid="game-settings-button-reset"
             (click)="resetDefaults()"
-          >Reset Defaults</button>
+          >Reset defaults</button>
+        </div>
         </div>
       </div>
 
       @if (sidePanelTab()) {
-        <div class="kb-side-panel">
+        <div class="kb-side-panel px-panel">
           <div class="kb-side-header">
             <button
-              class="kb-side-tab"
+              class="kb-side-tab px-btn px-btn--sm"
               [class.kb-side-tab--active]="sidePanelTab() === 'inventory'"
               (click)="toggleSidePanel('inventory')"
-            >🎒 Inventory</button>
+            ><app-pixel-icon [icon]="'bag'" [size]="16" /> Inventory</button>
             <button
-              class="kb-side-tab"
+              class="kb-side-tab px-btn px-btn--sm"
               [class.kb-side-tab--active]="sidePanelTab() === 'skills'"
               (click)="toggleSidePanel('skills')"
-            >📖 Skills</button>
+            ><app-pixel-icon [icon]="'book'" [size]="16" /> Skills</button>
           </div>
 
-          <div class="kb-side-body">
+          <div class="kb-side-body px-scroll">
             @if (sidePanelTab() === 'inventory') {
               @if (potionItems().length > 0) {
                 @for (item of potionItems(); track item.id) {
                   <div
-                    class="kb-side-item"
+                    class="kb-side-item px-panel--inset"
                     draggable="true"
                     [attr.data-testid]="'game-settings-item-' + item.id"
                     (dragstart)="onSidePanelDragStart($event, item)"
                     [title]="item.sublabel"
                   >
-                    <span class="kb-side-item-icon">{{ item.icon }}</span>
+                    <app-pixel-icon class="kb-side-item-icon" [icon]="item.icon" [size]="24" />
                     <div class="kb-side-item-info">
                       <span class="kb-side-item-name">{{ item.label }}</span>
                       <span class="kb-side-item-desc">{{ item.sublabel }}</span>
@@ -222,13 +227,13 @@
               @if (skillItems().length > 0) {
                 @for (item of skillItems(); track item.id) {
                   <div
-                    class="kb-side-item"
+                    class="kb-side-item px-panel--inset"
                     draggable="true"
                     [attr.data-testid]="'game-settings-item-' + item.id"
                     (dragstart)="onSidePanelDragStart($event, item)"
                     [title]="item.sublabel"
                   >
-                    <span class="kb-side-item-icon">{{ item.icon }}</span>
+                    <app-pixel-icon class="kb-side-item-icon" [icon]="item.icon" [size]="24" />
                     <div class="kb-side-item-info">
                       <span class="kb-side-item-name">{{ item.label }}</span>
                       <span class="kb-side-item-desc">{{ item.sublabel }}</span>

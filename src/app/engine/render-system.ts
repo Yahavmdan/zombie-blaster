@@ -91,6 +91,22 @@ import {
   Platform,
   PlayerTint,
 } from './engine-types';
+import { drawPixelIcon } from '../ui/pixel-icon-raster';
+import {
+  CANVAS_BLOOD_HI,
+  CANVAS_BONE,
+  CANVAS_BONE_DIM,
+  CANVAS_GOLD,
+  CANVAS_INK,
+  CANVAS_INK_2,
+  CANVAS_TOXIC_HI,
+  fillOutlinedText,
+  fillPixelBox,
+  fillPixelPanel,
+  pixelFont,
+  preloadCanvasFonts,
+  snapFontSize,
+} from './canvas-text';
 
 /** Strips past a carried body's ends (empty sprite margin) stop dropping further. */
 const BEND_MAX_REACH: number = 1.3;
@@ -115,7 +131,9 @@ const POISON_TINT_FADE_TICKS: number = 20;
 export class RenderSystem {
   private bendSprite: HTMLCanvasElement | null = null;
 
-  constructor(private readonly e: IGameEngine) {}
+  constructor(private readonly e: IGameEngine) {
+    preloadCanvasFonts();
+  }
 
   private getTwinMimicPercent(p: CharacterState): number {
     const twinBuff: ActiveBuff | undefined = p.activeBuffs.find(
@@ -308,13 +326,11 @@ export class RenderSystem {
       ctx.restore();
     }
 
-    ctx.fillStyle = classColor;
-    ctx.font = 'bold 11px sans-serif';
+    ctx.font = pixelFont(12, 700);
     ctx.textAlign = 'center';
-    ctx.fillText(p.name, p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 12);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '9px sans-serif';
-    ctx.fillText(`Lv.${p.level}`, p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 2);
+    fillOutlinedText(ctx, p.name, p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 12, classColor);
+    ctx.font = pixelFont(10);
+    fillOutlinedText(ctx, `Lv.${p.level}`, p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 2, CANVAS_BONE);
 
     if (needsAlpha) {
       ctx.restore();
@@ -372,18 +388,15 @@ export class RenderSystem {
     ctx.lineWidth = 1;
     ctx.strokeRect(barX, barY, barWidth, barHeight);
 
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 12px sans-serif';
+    ctx.font = pixelFont(12, 700);
     ctx.textAlign = 'center';
-    ctx.fillText(`${timerSeconds}s`, cx, barY - 4);
+    fillOutlinedText(ctx, `${timerSeconds}s`, cx, barY - 4, CANVAS_BONE);
 
-    ctx.fillStyle = '#ff4444';
-    ctx.font = 'bold 10px sans-serif';
-    ctx.fillText('DOWNED', cx, barY - 16);
+    ctx.font = pixelFont(10, 700);
+    fillOutlinedText(ctx, 'Downed', cx, barY - 16, CANVAS_BLOOD_HI);
 
-    ctx.fillStyle = classColor;
-    ctx.font = 'bold 11px sans-serif';
-    ctx.fillText(p.name, cx, barY - 28);
+    ctx.font = pixelFont(12, 700);
+    fillOutlinedText(ctx, p.name, cx, barY - 28, classColor);
   }
 
   private renderReviveProgress(ctx: CanvasRenderingContext2D): void {
@@ -414,10 +427,9 @@ export class RenderSystem {
     ctx.lineWidth = 1;
     ctx.strokeRect(barX, barY, barWidth, barHeight);
 
-    ctx.fillStyle = '#44ff88';
-    ctx.font = 'bold 10px sans-serif';
+    ctx.font = pixelFont(10, 700);
     ctx.textAlign = 'center';
-    ctx.fillText('REVIVING...', cx, barY - 4);
+    fillOutlinedText(ctx, 'Reviving...', cx, barY - 4, '#44ff88');
 
     const radius: number = 24;
     ctx.strokeStyle = '#44ff88';
@@ -485,13 +497,11 @@ export class RenderSystem {
 
       ctx.restore();
 
-      ctx.fillStyle = classColor;
-      ctx.font = 'bold 11px sans-serif';
+      ctx.font = pixelFont(12, 700);
       ctx.textAlign = 'center';
-      ctx.fillText(rp.name, rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 12);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '9px sans-serif';
-      ctx.fillText(`Lv.${rp.level}`, rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 2);
+      fillOutlinedText(ctx, rp.name, rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 12, classColor);
+      ctx.font = pixelFont(10);
+      fillOutlinedText(ctx, `Lv.${rp.level}`, rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 2, CANVAS_BONE);
 
       const hpPercent: number = rp.hp / rp.derived.maxHp;
       const barWidth: number = 40;
@@ -738,8 +748,6 @@ export class RenderSystem {
 
       ctx.strokeStyle = Math.random() > 0.4 ? '#ffffff' : '#ccff00';
       ctx.lineWidth = Math.random() > 0.5 ? 2 : 1;
-      ctx.shadowColor = '#ccff00';
-      ctx.shadowBlur = 10;
       ctx.stroke();
     }
     ctx.restore();
@@ -839,17 +847,9 @@ export class RenderSystem {
     ctx.save();
     ctx.translate(cx, z.y - 8);
     ctx.scale(scale, scale);
-    ctx.font = 'bold 34px sans-serif';
+    ctx.font = pixelFont(28, 700);
     ctx.textAlign = 'center';
-    ctx.lineJoin = 'round';
-    ctx.shadowColor = '#ff0000';
-    ctx.shadowBlur = 8 + pulse * 8;
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#1a0000';
-    ctx.strokeText('!', 0, 0);
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = pulse > 0.5 ? '#ffdd33' : '#ff3030';
-    ctx.fillText('!', 0, 0);
+    fillOutlinedText(ctx, '!', 0, 0, pulse > 0.5 ? '#ffdd33' : '#ff3030', CANVAS_INK, 6);
     ctx.restore();
   }
 
@@ -931,11 +931,10 @@ export class RenderSystem {
       ctx.strokeRect(barX, barY, barWidth, isDragon ? 7 : 5);
 
       if (isDragon) {
-        ctx.fillStyle = '#88ccff';
-        ctx.font = 'bold 12px sans-serif';
+        ctx.font = pixelFont(12, 700);
         ctx.textAlign = 'center';
         const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
-        ctx.fillText(zDef.name, z.x + z.instanceWidth / 2, barY - 4);
+        fillOutlinedText(ctx, zDef.name, z.x + z.instanceWidth / 2, barY - 4, '#88ccff');
       }
     }
   }
@@ -989,12 +988,11 @@ export class RenderSystem {
     // A corpse's body lies low in its tall box; a prop's art fills its box.
     const y: number = isCorpse(anchor) ? anchor.y + anchor.height - 34 : anchor.y - 6;
     ctx.save();
-    ctx.font = 'bold 11px sans-serif';
+    ctx.font = pixelFont(12, 700);
     ctx.textAlign = 'center';
-    const w: number = ctx.measureText(label).width + 10;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillRect(cx - w / 2, y - 12, w, 16);
-    ctx.fillStyle = '#ffe08a';
+    const w: number = Math.round(ctx.measureText(label).width) + 12;
+    fillPixelBox(ctx, Math.round(cx - w / 2), y - 14, w, 20, CANVAS_INK_2);
+    ctx.fillStyle = CANVAS_GOLD;
     ctx.fillText(label, cx, y);
     ctx.restore();
   }
@@ -1386,8 +1384,6 @@ export class RenderSystem {
       }
 
       ctx.save();
-      ctx.shadowColor = '#44ff44';
-      ctx.shadowBlur = 12;
       ctx.fillStyle = '#88ff44';
       ctx.beginPath();
       ctx.arc(proj.x, proj.y, 7, 0, Math.PI * 2);
@@ -1525,24 +1521,19 @@ export class RenderSystem {
       if (!c) continue;
 
       ctx.save();
-      ctx.shadowColor = c.main;
-      ctx.shadowBlur = 12;
-
       ctx.fillStyle = c.main;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.shadowBlur = 0;
       ctx.fillStyle = c.highlight;
       ctx.beginPath();
       ctx.arc(cx - r * 0.2, cy - r * 0.25, r * 0.35, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 8px sans-serif';
+      ctx.font = pixelFont(10, 700);
       ctx.textAlign = 'center';
-      ctx.fillText(c.label, cx, cy + size + 6);
+      fillOutlinedText(ctx, c.label, cx, cy + size + 6, CANVAS_BONE, CANVAS_INK, 2);
       ctx.restore();
     }
   }
@@ -1562,9 +1553,6 @@ export class RenderSystem {
 
     ctx.save();
 
-    ctx.shadowColor = def.color;
-    ctx.shadowBlur = 20;
-
     const outerGlow: CanvasGradient = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * 1.8);
     outerGlow.addColorStop(0, def.color + 'cc');
     outerGlow.addColorStop(0.5, def.color + '44');
@@ -1574,7 +1562,6 @@ export class RenderSystem {
     ctx.arc(cx, cy, r * 1.8, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.shadowBlur = 14;
     const points: number = 6;
     const outerR: number = r;
     const innerR: number = r * 0.5;
@@ -1591,22 +1578,18 @@ export class RenderSystem {
     ctx.closePath();
     ctx.fill();
 
-    ctx.shadowBlur = 0;
     ctx.fillStyle = def.highlightColor;
     ctx.beginPath();
     ctx.arc(cx - r * 0.15, cy - r * 0.2, r * 0.3, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold ${Math.round(size * 0.55)}px sans-serif`;
+    const iconPx: number = Math.round(size * 0.6);
+    drawPixelIcon(ctx, def.icon, cx - iconPx / 2, cy - iconPx / 2, iconPx);
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(def.icon, cx, cy);
 
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 9px sans-serif';
+    ctx.font = pixelFont(10, 700);
     ctx.textBaseline = 'top';
-    ctx.fillText(def.name, cx, cy + size / 2 + 6);
+    fillOutlinedText(ctx, def.name, cx, cy + size / 2 + 6, CANVAS_BONE, CANVAS_INK, 2);
     ctx.restore();
   }
 
@@ -1615,9 +1598,9 @@ export class RenderSystem {
       const progress: number = d.life / GAME_CONSTANTS.DAMAGE_NUMBER_LIFE_TICKS;
       ctx.globalAlpha = Math.min(1, progress * 1.5);
 
-      const baseSize: number = d.isCrit ? 26 : 20;
-      const fontSize: number = Math.round(baseSize * d.scale);
-      ctx.font = `bold ${fontSize}px 'Segoe UI', Impact, sans-serif`;
+      const baseSize: number = d.isCrit ? 28 : 20;
+      const fontSize: number = snapFontSize(baseSize * d.scale);
+      ctx.font = pixelFont(fontSize, 700);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
@@ -1627,22 +1610,14 @@ export class RenderSystem {
       if (d.isCrit) {
         ctx.shadowColor = d.color;
         ctx.shadowBlur = 12;
-      } else {
-        ctx.shadowColor = 'rgba(0,0,0,0.6)';
-        ctx.shadowBlur = 4;
       }
 
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#000000';
-      ctx.lineJoin = 'round';
-      ctx.strokeText(text, d.x, d.y);
-
-      ctx.fillStyle = d.color;
-      ctx.fillText(text, d.x, d.y);
+      fillOutlinedText(ctx, text, d.x, d.y, d.color);
 
       if (d.isCrit) {
         ctx.shadowBlur = 0;
         ctx.globalAlpha = Math.min(1, progress * 1.5) * 0.4;
+        ctx.fillStyle = d.color;
         ctx.fillText(text, d.x, d.y);
       }
 
@@ -1673,26 +1648,17 @@ export class RenderSystem {
     ctx.textBaseline = 'middle';
 
     const titleScale: number = progress < 0.1 ? 0.8 + progress * 2 : 1;
-    const titleFontSize: number = Math.round(16 * titleScale);
-    ctx.font = `bold ${titleFontSize}px 'Segoe UI', Impact, sans-serif`;
+    const titleFontSize: number = snapFontSize(16 * titleScale);
+    ctx.font = pixelFont(titleFontSize, 700);
 
-    ctx.shadowColor = '#ffcc44';
+    ctx.shadowColor = CANVAS_GOLD;
     ctx.shadowBlur = 12;
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#000000';
-    ctx.lineJoin = 'round';
-    ctx.strokeText('LEVEL UP!', cx, y);
-    ctx.fillStyle = '#ffcc33';
-    ctx.fillText('LEVEL UP!', cx, y);
+    fillOutlinedText(ctx, 'Level up!', cx, y, CANVAS_GOLD);
 
     ctx.shadowBlur = 0;
-    ctx.font = 'bold 11px sans-serif';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
+    ctx.font = pixelFont(12, 700);
     const subText: string = `Lv.${n.oldLevel} → Lv.${n.newLevel}`;
-    ctx.strokeText(subText, cx, y + 16);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(subText, cx, y + 16);
+    fillOutlinedText(ctx, subText, cx, y + 16, CANVAS_BONE, CANVAS_INK, 2);
 
     ctx.restore();
   }
@@ -1702,10 +1668,11 @@ export class RenderSystem {
     if (effects.length === 0) return;
 
     const barWidth: number = 140;
-    const barHeight: number = 18;
+    const barHeight: number = 20;
     const padding: number = 4;
     const startX: number = GAME_CONSTANTS.CANVAS_WIDTH - barWidth - 10;
-    let startY: number = 10;
+    // Under the HUD's score plate and stat chips in the top-right corner.
+    let startY: number = 84;
 
     for (const eff of effects) {
       const def: ReturnType<typeof getSpecialDropDefinition> = getSpecialDropDefinition(eff.type);
@@ -1715,29 +1682,30 @@ export class RenderSystem {
       const secondsLeft: number = Math.ceil(eff.remainingTicks / GAME_CONSTANTS.TICK_RATE);
 
       ctx.save();
-      ctx.globalAlpha = 0.85;
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      const rr: number = barHeight / 2;
-      ctx.roundRect(startX, startY, barWidth, barHeight, rr);
-      ctx.fill();
+      fillPixelPanel(ctx, startX, startY, barWidth, barHeight);
 
+      // Time left: the buff's colour fills the panel's inside from the left.
+      const inset: number = 2;
       ctx.fillStyle = def.color;
-      ctx.globalAlpha = 0.7;
-      ctx.beginPath();
-      ctx.roundRect(startX, startY, barWidth * progress, barHeight, rr);
-      ctx.fill();
+      ctx.globalAlpha = 0.55;
+      ctx.fillRect(
+        startX + inset,
+        startY + inset,
+        Math.round((barWidth - inset * 2) * progress),
+        barHeight - inset * 2,
+      );
 
       ctx.globalAlpha = 1;
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 10px sans-serif';
+      ctx.font = pixelFont(12, 700);
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       const textY: number = startY + barHeight / 2;
-      ctx.fillText(`${def.icon} ${def.name}`, startX + padding + 2, textY);
+      const buffIconPx: number = 12;
+      drawPixelIcon(ctx, def.icon, startX + padding + 2, textY - buffIconPx / 2, buffIconPx);
+      fillOutlinedText(ctx, def.name, startX + padding + 6 + buffIconPx, textY, CANVAS_BONE, CANVAS_INK, 2);
 
       ctx.textAlign = 'right';
-      ctx.fillText(`${secondsLeft}s`, startX + barWidth - padding - 2, textY);
+      fillOutlinedText(ctx, `${secondsLeft}s`, startX + barWidth - padding - 2, textY, CANVAS_BONE, CANVAS_INK, 2);
 
       ctx.restore();
       startY += barHeight + 3;
@@ -1757,7 +1725,6 @@ export class RenderSystem {
     const boxH: number = 190;
     const boxX: number = (cw - boxW) / 2;
     const boxY: number = Math.min(56, ch - boxH);
-    const cornerR: number = 14;
     const timerProgress: number = pending.remainingTicks / pending.totalTicks;
     const secondsLeft: number = Math.ceil(pending.remainingTicks / GAME_CONSTANTS.TICK_RATE);
     const pulse: number = 0.9 + Math.sin(Date.now() / 200) * 0.1;
@@ -1765,44 +1732,23 @@ export class RenderSystem {
     ctx.save();
 
     // A toast near the top, not a modal: the fight stays visible and playable.
-    ctx.globalAlpha = 0.92;
-    ctx.fillStyle = '#0c0c1a';
-    ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxW, boxH, cornerR);
-    ctx.fill();
-
-    ctx.strokeStyle = def.color;
-    ctx.lineWidth = 2;
-    ctx.globalAlpha = 0.8;
-    ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxW, boxH, cornerR);
-    ctx.stroke();
-
-    ctx.globalAlpha = 0.12;
-    const glow: CanvasGradient = ctx.createRadialGradient(
-      boxX + boxW / 2, boxY + 50, 10,
-      boxX + boxW / 2, boxY + 50, boxW / 2,
-    );
-    glow.addColorStop(0, def.color);
-    glow.addColorStop(1, 'transparent');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxW, boxH, cornerR);
-    ctx.fill();
+    ctx.globalAlpha = 0.95;
+    fillPixelPanel(ctx, boxX, boxY, boxW, boxH);
+    // The drop's colour as a stripe along the top, like the modals' header stripe.
+    ctx.fillStyle = def.color;
+    ctx.fillRect(boxX + 2, boxY + 2, boxW - 4, 4);
 
     ctx.globalAlpha = 1;
-    const iconSize: number = 36;
-    ctx.font = `${iconSize}px sans-serif`;
+    const iconSize: number = 32;
+    drawPixelIcon(ctx, def.icon, boxX + boxW / 2 - iconSize / 2, boxY + 34 - iconSize / 2, iconSize);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(def.icon, boxX + boxW / 2, boxY + 34);
 
-    ctx.fillStyle = def.color;
-    ctx.font = 'bold 18px "Segoe UI", sans-serif';
-    ctx.fillText(def.name, boxX + boxW / 2, boxY + 62);
+    ctx.font = pixelFont(20, 700);
+    fillOutlinedText(ctx, def.name, boxX + boxW / 2, boxY + 62, def.color);
 
-    ctx.fillStyle = '#cccccc';
-    ctx.font = '12px "Segoe UI", sans-serif';
+    ctx.fillStyle = CANVAS_BONE_DIM;
+    ctx.font = pixelFont(12);
     const maxTextW: number = boxW - 40;
     const lines: string[] = this.wrapText(ctx, def.funnyDescription, maxTextW);
     let textY: number = boxY + 86;
@@ -1812,35 +1758,23 @@ export class RenderSystem {
     }
 
     const barW: number = boxW - 60;
-    const barH: number = 8;
+    const barH: number = 10;
     const barX: number = boxX + 30;
     const barY: number = boxY + boxH - 52;
 
-    ctx.fillStyle = '#222222';
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barW, barH, barH / 2);
-    ctx.fill();
-
+    fillPixelBox(ctx, barX, barY, barW, barH, CANVAS_INK_2);
     ctx.fillStyle = timerProgress > 0.4 ? def.color : timerProgress > 0.2 ? '#ff8800' : '#ff2222';
-    ctx.globalAlpha = 0.85;
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barW * timerProgress, barH, barH / 2);
-    ctx.fill();
+    ctx.fillRect(barX + 2, barY + 2, Math.round((barW - 4) * timerProgress), barH - 4);
 
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 11px "Segoe UI", sans-serif';
-    ctx.fillText(`${secondsLeft}s`, boxX + boxW / 2, barY + barH + 14);
+    ctx.font = pixelFont(12, 700);
+    fillOutlinedText(ctx, `${secondsLeft}s`, boxX + boxW / 2, barY + barH + 12, CANVAS_BONE, CANVAS_INK, 2);
 
-    ctx.font = 'bold 14px "Segoe UI", sans-serif';
+    ctx.font = pixelFont(14, 700);
     const promptY: number = boxY + boxH - 14;
 
-    ctx.fillStyle = '#44ff66';
     ctx.globalAlpha = pulse;
-    ctx.fillText('[Y] Activate', boxX + boxW / 2 - 70, promptY);
-
-    ctx.fillStyle = '#ff4466';
-    ctx.fillText('[N] Nope', boxX + boxW / 2 + 70, promptY);
+    fillOutlinedText(ctx, '[Y] Activate', boxX + boxW / 2 - 70, promptY, CANVAS_TOXIC_HI);
+    fillOutlinedText(ctx, '[N] Nope', boxX + boxW / 2 + 70, promptY, CANVAS_BLOOD_HI);
 
     ctx.globalAlpha = 1;
     ctx.restore();
@@ -1875,7 +1809,7 @@ export class RenderSystem {
     const wipePhase: number = Math.min(1, progress * 3);
     if (wipePhase < 1) {
       const wipeY: number = GAME_CONSTANTS.CANVAS_HEIGHT * (1 - wipePhase);
-      ctx.fillStyle = '#0a0a0f';
+      ctx.fillStyle = CANVAS_INK;
       ctx.globalAlpha = 0.85 * (1 - wipePhase);
       ctx.fillRect(0, wipeY, GAME_CONSTANTS.CANVAS_WIDTH, GAME_CONSTANTS.CANVAS_HEIGHT - wipeY);
     }
@@ -1889,16 +1823,11 @@ export class RenderSystem {
       const slideOffset: number = (1 - textFadeIn) * 60;
       const cy: number = GAME_CONSTANTS.CANVAS_HEIGHT / 2 + slideOffset;
 
-      ctx.shadowColor = '#44ddff';
-      ctx.shadowBlur = 20;
-      ctx.fillStyle = '#44ddff';
-      ctx.font = 'bold 52px sans-serif';
+      ctx.font = pixelFont(52, 700);
       ctx.textAlign = 'center';
-      ctx.fillText(`FLOOR ${this.e.floor}`, GAME_CONSTANTS.CANVAS_WIDTH / 2, cy);
+      fillOutlinedText(ctx, `Floor ${this.e.floor}`, GAME_CONSTANTS.CANVAS_WIDTH / 2, cy, CANVAS_GOLD, CANVAS_INK, 6);
 
-      ctx.shadowBlur = 0;
-      ctx.font = 'bold 20px sans-serif';
-      ctx.fillStyle = '#aaeeff';
+      ctx.font = pixelFont(20);
       const hint: string = this.e.springPuzzle
         ? SPRING_FLOOR_HINT
         : this.e.cagePuzzle
@@ -1906,26 +1835,12 @@ export class RenderSystem {
           : this.e.platePuzzle
             ? PLATE_FLOOR_HINT
             : floorHint(this.e.boulderPuzzle);
-      ctx.fillText(hint, GAME_CONSTANTS.CANVAS_WIDTH / 2, cy + 42);
+      fillOutlinedText(ctx, hint, GAME_CONSTANTS.CANVAS_WIDTH / 2, cy + 42, CANVAS_BONE);
 
+      // A hard pixel rule under the hint: a gold line in an ink border.
       const lineWidth: number = 200;
       const lineY: number = cy + 64;
-      const lineAlpha: number = textAlpha * 0.6;
-      ctx.globalAlpha = lineAlpha;
-      const grad: CanvasGradient = ctx.createLinearGradient(
-        GAME_CONSTANTS.CANVAS_WIDTH / 2 - lineWidth, lineY,
-        GAME_CONSTANTS.CANVAS_WIDTH / 2 + lineWidth, lineY,
-      );
-      grad.addColorStop(0, 'transparent');
-      grad.addColorStop(0.3, '#44ddff');
-      grad.addColorStop(0.7, '#44ddff');
-      grad.addColorStop(1, 'transparent');
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(GAME_CONSTANTS.CANVAS_WIDTH / 2 - lineWidth, lineY);
-      ctx.lineTo(GAME_CONSTANTS.CANVAS_WIDTH / 2 + lineWidth, lineY);
-      ctx.stroke();
+      fillPixelBox(ctx, GAME_CONSTANTS.CANVAS_WIDTH / 2 - lineWidth, lineY - 3, lineWidth * 2, 6, CANVAS_GOLD);
     }
 
     ctx.restore();
@@ -1962,8 +1877,8 @@ export class RenderSystem {
     const signY: number = plate ? doorBox(exit).y : exit.y;
 
     // No hints about how to get up here: players work out that the dead pile up under it.
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 14px sans-serif';
+    ctx.fillStyle = CANVAS_BONE;
+    ctx.font = pixelFont(14, 700);
     ctx.textAlign = 'center';
     ctx.globalAlpha = pulse;
     ctx.fillText('EXIT', exit.x + exit.width / 2, signY - 8);
@@ -2088,37 +2003,38 @@ export class RenderSystem {
     ctx.lineTo(postX + Math.cos(angle) * 12, gaugeY + Math.sin(angle) * 12);
     ctx.stroke();
 
-    ctx.font = 'bold 14px sans-serif';
+    ctx.font = pixelFont(14, 700);
     ctx.textAlign = 'center';
     ctx.lineWidth = 3;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.strokeStyle = CANVAS_INK;
     ctx.fillStyle = loaded ? '#7dff7d' : '#ffd166';
     const needed: number = GAME_CONSTANTS.SPRING_SCALE_KG_NEEDED;
-    const label: string = `${Math.round(spring.scaleKg)} / ${needed} KG`;
+    const label: string = `${Math.round(spring.scaleKg)} / ${needed} kg`;
     const panX: number = pan.x + pan.width / 2;
     ctx.strokeText(label, panX, ground + 28);
     ctx.fillText(label, panX, ground + 28);
     if (isButtonUp(spring) && !isBusy(spring)) {
       ctx.globalAlpha = 0.7 + Math.sin(t * 6) * 0.3;
       ctx.fillStyle = '#7dff7d';
-      ctx.strokeText('HIT!', buttonX, button.y - 16);
-      ctx.fillText('HIT!', buttonX, button.y - 16);
+      ctx.strokeText('Hit!', buttonX, button.y - 16);
+      ctx.fillText('Hit!', buttonX, button.y - 16);
     }
 
     const seconds: number = countdownSeconds(spring);
     if (seconds > 0) {
       const frac: number = (spring.countdownTicks % GAME_CONSTANTS.TICK_RATE) / GAME_CONSTANTS.TICK_RATE;
       ctx.globalAlpha = 1;
-      ctx.font = `bold ${48 + Math.round(frac * 24)}px sans-serif`;
-      ctx.lineWidth = 6;
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeText(String(seconds), cx, block.y - 120);
-      ctx.fillText(String(seconds), cx, block.y - 120);
-      ctx.font = 'bold 16px sans-serif';
-      ctx.lineWidth = 3;
-      ctx.fillStyle = '#aaeeff';
-      ctx.strokeText('GET ON THE SPRING!', cx, block.y - 86);
-      ctx.fillText('GET ON THE SPRING!', cx, block.y - 86);
+      // Drawn at the 52px type size and scaled, so the beat pulse keeps one font size.
+      const countdownPx: number = 52;
+      const beatScale: number = (48 + Math.round(frac * 24)) / countdownPx;
+      ctx.save();
+      ctx.translate(cx, block.y - 120);
+      ctx.scale(beatScale, beatScale);
+      ctx.font = pixelFont(countdownPx, 700);
+      fillOutlinedText(ctx, String(seconds), 0, 0, CANVAS_BONE, CANVAS_INK, 6);
+      ctx.restore();
+      ctx.font = pixelFont(16, 700);
+      fillOutlinedText(ctx, 'Get on the spring!', cx, block.y - 86, '#aaeeff');
     }
     ctx.restore();
   }
@@ -2210,8 +2126,8 @@ export class RenderSystem {
     const dir: number = puzzle.wallDir;
     ctx.save();
     ctx.globalAlpha = 0.6 + Math.sin(t * 2) * 0.2;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 14px sans-serif';
+    ctx.fillStyle = CANVAS_BONE;
+    ctx.font = pixelFont(14, 700);
     ctx.textAlign = 'center';
     ctx.fillText('EXIT', signX, signY);
     ctx.fillStyle = '#44ddff';
@@ -2418,7 +2334,7 @@ export class RenderSystem {
 
     ctx.globalAlpha = 0.85;
     ctx.fillStyle = '#9dffb0';
-    ctx.font = 'bold 13px sans-serif';
+    ctx.font = pixelFont(14, 700);
     ctx.textAlign = 'center';
     ctx.fillText('SAFE', cx, spot.y - 40);
     ctx.restore();
@@ -2495,19 +2411,19 @@ export class RenderSystem {
       const rowIdx: number = this.e.dropNotifications.length - 1 - i;
       const y: number = baseY - rowIdx * rowHeight - rowHeight / 2;
 
-      ctx.globalAlpha = alpha * 0.55;
-      const textWidth: number = 140;
+      ctx.font = pixelFont(14, 700);
+      const toastIconPx: number = 16;
+      const labelWidth: number = ctx.measureText(n.label).width;
+      // Wide enough for the icon and label, never narrower than the old fixed toast.
+      const textWidth: number = Math.max(140, Math.ceil(labelWidth) + toastIconPx + 8);
       const boxX: number = baseX - textWidth - padding * 2;
       const boxY: number = y - rowHeight / 2;
-      ctx.fillStyle = '#000000';
-      ctx.beginPath();
-      ctx.roundRect(boxX, boxY, textWidth + padding * 2, rowHeight, 4);
-      ctx.fill();
+      ctx.globalAlpha = alpha * 0.9;
+      fillPixelPanel(ctx, boxX, boxY + 1, textWidth + padding * 2, rowHeight - 2);
 
       ctx.globalAlpha = alpha;
-      ctx.font = 'bold 13px "Segoe UI", sans-serif';
-      ctx.fillStyle = n.color;
-      ctx.fillText(`${n.icon} ${n.label}`, baseX - padding, y);
+      fillOutlinedText(ctx, n.label, baseX - padding, y, n.color);
+      drawPixelIcon(ctx, n.icon, baseX - padding - labelWidth - toastIconPx - 4, y - toastIconPx / 2, toastIconPx);
     }
 
     ctx.globalAlpha = 1;
@@ -2562,7 +2478,7 @@ export class RenderSystem {
   }
 
   private renderDebugLabel(ctx: CanvasRenderingContext2D, color: string, text: string, x: number, y: number): void {
-    ctx.font = 'bold 8px monospace';
+    ctx.font = pixelFont(10);
     ctx.fillStyle = color;
     ctx.textAlign = 'left';
     ctx.fillText(text, x, y);

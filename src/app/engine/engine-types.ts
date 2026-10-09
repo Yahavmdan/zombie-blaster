@@ -22,6 +22,7 @@ import {
 import { CarryPose } from './corpse-carry';
 import { CorpseDrape } from './corpse-drape';
 import { InputKeys } from '@shared/messages';
+import { PixelIconId } from '@shared/pixel-icon';
 import { Particle } from './particle-types';
 import { SpriteAnimator } from './sprite-animator';
 import { ZombieSpriteAnimator } from './zombie-sprite-animator';
@@ -66,7 +67,7 @@ export interface DropNotification {
   type: DropType;
   label: string;
   color: string;
-  icon: string;
+  icon: PixelIconId;
   life: number;
   maxLife: number;
 }

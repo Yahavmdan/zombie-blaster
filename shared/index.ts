@@ -5,3 +5,4 @@ export * from './messages';
 export * from './multiplayer';
 export * from './skill';
 export * from './skill-utils';
+export * from './pixel-icon';

@@ -12,7 +12,7 @@ test.describe('menus and navigation', { tag: '@smoke' }, (): void => {
       const labels: string[] = (await page.locator('.menu-buttons button').allInnerTexts()).map(
         (t: string): string => t.trim(),
       );
-      expect(labels).toEqual(['NEW GAME', 'MULTIPLAYER', 'HOW TO PLAY']);
+      expect(labels).toEqual(['New game', 'Multiplayer', 'How to play']);
 
       await page.getByTestId('menu-main-button-howtoplay').click();
       await expect(page.locator('.help-panel')).toBeVisible();

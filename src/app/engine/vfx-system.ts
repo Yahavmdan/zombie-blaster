@@ -8,6 +8,7 @@ import { DropType } from '@shared/game-entities';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { SKILL_ANIMATIONS, SkillAnimation } from './skill-animations';
 import { DamageNumber, DropNotification, IGameEngine, PlayerTint } from './engine-types';
+import { PixelIconId } from '@shared/pixel-icon';
 
 export class VfxSystem {
   constructor(private readonly e: IGameEngine) {}
@@ -95,7 +96,7 @@ export class VfxSystem {
     });
   }
 
-  addDropNotification(type: DropType, label: string, color: string, icon: string): void {
+  addDropNotification(type: DropType, label: string, color: string, icon: PixelIconId): void {
     this.e.dropNotifications.push({
       type,
       label,
