@@ -71,6 +71,7 @@ export const GAME_CONSTANTS = {
   PLAYER_SKILL_ANIM_MS: 480, // How long skill attack animations play in milliseconds
   INVINCIBILITY_FRAMES: 90, // Ticks of invincibility after the player takes damage
   INVINCIBILITY_BLINK_RATE: 3, // Player blinks every N ticks during invincibility
+  PLAYER_HURT_TINT_TICKS: 18, // Ticks the player's sprite stays tinted red after a hit
 
   // ─── Knockback ──────────────────────────────────
   KNOCKBACK_FORCE_PLAYER: 6, // How far the player is pushed back when hit by a zombie

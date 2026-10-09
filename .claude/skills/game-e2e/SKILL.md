@@ -27,6 +27,12 @@ running ones. Uses installed Chrome (`E2E_CHANNEL=chrome`); Playwright's Chromiu
 blocked on this machine. Every page runs a 50 tps loop, so workers default to 2 (`E2E_WORKERS`).
 Long runs: start them with `run_in_background` and wait for the notification.
 
+**Port 4200 busy (another worktree slot's dev server)?** Don't let the config reuse it: it serves that
+slot's code. Start your own: `cd zombie-blaster-api && npm run dev` (:3001, the frontend env hard-codes it)
+and `npx ng serve --port 4210`, then run with
+`E2E_BASE_URL=http://localhost:4210 E2E_WS_URL=ws://localhost:3001 E2E_EXTERNAL_HAS_PROBE=1`. Kill both after.
+Canvas attachments land in `e2e/.report/data/*.png` (not `e2e/.results`).
+
 **Online / deployed targets:** `E2E_BASE_URL=https://… E2E_WS_URL=wss://… npm run e2e`. No local
 servers start. Production builds have no probe, so only tests tagged `@external-safe` run (DOM +
 raw protocol). A staging build served in dev mode can set `E2E_EXTERNAL_HAS_PROBE=1` to run all.

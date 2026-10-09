@@ -1411,6 +1411,7 @@ export class CombatSystem {
 
     p.hp -= damage;
     this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
+    this.vfx.flashPlayerHurt(p);
 
     this.interruptReviveChannel();
 

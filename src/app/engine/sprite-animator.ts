@@ -142,6 +142,8 @@ export class SpriteAnimator {
   private loaded: boolean = false;
   private loadCount: number = 0;
   private totalCount: number = 0;
+  /** Scratch canvas for the current frame recolored as a flat silhouette (status tints). */
+  private tintCanvas: HTMLCanvasElement | null = null;
 
   load(spriteSet: SpriteSet = 'biker'): void {
     const configs: Record<PlayerAnimState, SpriteConfig> = SPRITE_SET_CONFIGS[spriteSet];
@@ -224,24 +226,70 @@ export class SpriteAnimator {
     if (!anim) return;
 
     const srcX: number = this.currentFrame * anim.frameWidth;
+    this.blit(ctx, anim.image, srcX, anim.frameWidth, anim.frameHeight, x, y, renderWidth, renderHeight, flipX);
+  }
 
+  /**
+   * Draws the current frame filled with `color` at `alpha`, only where the sprite has pixels,
+   * so a status tint (hurt, poison) takes the shape of the figure. Call right after `draw`.
+   */
+  drawTint(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    renderWidth: number,
+    renderHeight: number,
+    flipX: boolean,
+    color: string,
+    alpha: number,
+  ): void {
+    const anim: SpriteAnimation | undefined = this.animations.get(this.currentState);
+    if (!anim || alpha <= 0) return;
+    if (!this.tintCanvas) this.tintCanvas = document.createElement('canvas');
+    const canvas: HTMLCanvasElement = this.tintCanvas;
+    canvas.width = anim.frameWidth;
+    canvas.height = anim.frameHeight;
+    const tintCtx: CanvasRenderingContext2D | null = canvas.getContext('2d');
+    if (!tintCtx) return;
+
+    tintCtx.clearRect(0, 0, anim.frameWidth, anim.frameHeight);
+    tintCtx.drawImage(
+      anim.image,
+      this.currentFrame * anim.frameWidth, 0, anim.frameWidth, anim.frameHeight,
+      0, 0, anim.frameWidth, anim.frameHeight,
+    );
+    tintCtx.globalCompositeOperation = 'source-in';
+    tintCtx.fillStyle = color;
+    tintCtx.fillRect(0, 0, anim.frameWidth, anim.frameHeight);
+    tintCtx.globalCompositeOperation = 'source-over';
+
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    this.blit(ctx, canvas, 0, anim.frameWidth, anim.frameHeight, x, y, renderWidth, renderHeight, flipX);
+    ctx.restore();
+  }
+
+  private blit(
+    ctx: CanvasRenderingContext2D,
+    source: CanvasImageSource,
+    srcX: number,
+    frameWidth: number,
+    frameHeight: number,
+    x: number,
+    y: number,
+    renderWidth: number,
+    renderHeight: number,
+    flipX: boolean,
+  ): void {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
 
     if (flipX) {
       ctx.translate(x + renderWidth, y);
       ctx.scale(-1, 1);
-      ctx.drawImage(
-        anim.image,
-        srcX, 0, anim.frameWidth, anim.frameHeight,
-        0, 0, renderWidth, renderHeight,
-      );
+      ctx.drawImage(source, srcX, 0, frameWidth, frameHeight, 0, 0, renderWidth, renderHeight);
     } else {
-      ctx.drawImage(
-        anim.image,
-        srcX, 0, anim.frameWidth, anim.frameHeight,
-        x, y, renderWidth, renderHeight,
-      );
+      ctx.drawImage(source, srcX, 0, frameWidth, frameHeight, x, y, renderWidth, renderHeight);
     }
 
     ctx.restore();

@@ -73,12 +73,17 @@ import {
   IGameEngine,
   LevelUpNotification,
   Platform,
+  PlayerTint,
 } from './engine-types';
 
 /** How far (fraction of the sprite width) a lying body's middle sits behind its feet. */
 const CARRIED_BODY_SHIFT: number = 0.26;
 /** Matches the warrior-monster-magnet skill color. */
 const MAGNET_STREAK_COLOR: string = '#cc44ff';
+const HURT_TINT_COLOR: string = '#ff2020';
+const POISON_TINT_COLOR: string = '#30ff50';
+/** Ticks over which the poison tint fades out at the end. */
+const POISON_TINT_FADE_TICKS: number = 20;
 
 export class RenderSystem {
   constructor(private readonly e: IGameEngine) {}
@@ -136,7 +141,6 @@ export class RenderSystem {
     this.renderCarryPrompt(ctx);
     this.renderPlayerProjectiles(ctx);
     this.renderReviveProgress(ctx);
-    this.renderPoisonOverlay(ctx);
     this.renderParticles(ctx);
     this.renderDashOverlay(ctx);
     this.e.spriteEffectSystem.render(ctx);
@@ -262,6 +266,7 @@ export class RenderSystem {
           });
       }
       this.e.spriteAnimator.draw(ctx, drawX, drawY, spriteSize, spriteSize, flipX);
+      this.renderStatusTint(ctx, p.id, this.e.spriteAnimator, drawX, drawY, spriteSize, flipX);
     } else {
       ctx.save();
       ctx.translate(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2);
@@ -433,6 +438,7 @@ export class RenderSystem {
             });
         }
         animator.draw(ctx, drawX, drawY, spriteSize, spriteSize, flipX);
+        this.renderStatusTint(ctx, rp.id, animator, drawX, drawY, spriteSize, flipX);
       } else {
         ctx.translate(rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2);
         if (flipX) ctx.scale(-1, 1);
@@ -1227,21 +1233,27 @@ export class RenderSystem {
     }
   }
 
-  private renderPoisonOverlay(ctx: CanvasRenderingContext2D): void {
-    if (!this.e.poisonEffect || !this.e.player) return;
-
-    const pulse: number = Math.sin(this.e.poisonEffect.remainingTicks * 0.15) * 0.15 + 0.25;
-
-    ctx.save();
-    ctx.globalAlpha = pulse;
-    ctx.fillStyle = '#00ff44';
-    ctx.fillRect(
-      this.e.player.x - 2,
-      this.e.player.y - 2,
-      GAME_CONSTANTS.PLAYER_WIDTH + 4,
-      GAME_CONSTANTS.PLAYER_HEIGHT + 4,
-    );
-    ctx.restore();
+  /** Pulsing green while poisoned, red flash on a hit (on top), both in the sprite's own shape. */
+  private renderStatusTint(
+    ctx: CanvasRenderingContext2D,
+    playerId: string,
+    animator: SpriteAnimator,
+    drawX: number,
+    drawY: number,
+    spriteSize: number,
+    flipX: boolean,
+  ): void {
+    const tint: PlayerTint | undefined = this.e.playerTints.get(playerId);
+    if (!tint) return;
+    if (tint.poisonTicks > 0) {
+      const pulse: number = 0.45 + Math.sin(tint.poisonTicks * 0.15) * 0.15;
+      const fade: number = Math.min(1, tint.poisonTicks / POISON_TINT_FADE_TICKS);
+      animator.drawTint(ctx, drawX, drawY, spriteSize, spriteSize, flipX, POISON_TINT_COLOR, pulse * fade);
+    }
+    if (tint.hurtTicks > 0) {
+      const alpha: number = 0.75 * (tint.hurtTicks / GAME_CONSTANTS.PLAYER_HURT_TINT_TICKS);
+      animator.drawTint(ctx, drawX, drawY, spriteSize, spriteSize, flipX, HURT_TINT_COLOR, alpha);
+    }
   }
 
   private renderParticles(ctx: CanvasRenderingContext2D): void {

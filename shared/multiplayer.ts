@@ -271,6 +271,8 @@ export enum VfxEventType {
   CageSmash = 'cage-smash',
   DoorOpen = 'door-open',
   DoorShut = 'door-shut',
+  /** A player took a hit: every screen tints that player's sprite red for a moment. */
+  PlayerHurt = 'player-hurt',
 }
 
 export interface VfxEvent {

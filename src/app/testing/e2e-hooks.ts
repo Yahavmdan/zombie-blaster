@@ -1,6 +1,6 @@
 import { CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, isZombieWindingUp } from '@shared/index';
 import { ActiveSpecialEffect, BoulderState, CagePuzzleState, CageState, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
-import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, Rope, SpringPuzzleLayout } from '../engine/engine-types';
+import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, PlayerTint, Rope, SpringPuzzleLayout } from '../engine/engine-types';
 import { CageId, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
 import { doorBox, isDoorOpen, isHeld, plateBox } from '../engine/plate-puzzle';
 import { chargeCorpses, leverBox } from '../engine/spring-puzzle';
@@ -74,7 +74,8 @@ function readCounters(engine: GameEngine): VfxCounters {
   };
 }
 
-function toPlayerView(p: CharacterState): E2ePlayerView {
+function toPlayerView(p: CharacterState, engine: GameEngine): E2ePlayerView {
+  const tint: PlayerTint | undefined = engine.playerTints.get(p.id);
   return {
     id: p.id,
     name: p.name,
@@ -104,6 +105,7 @@ function toPlayerView(p: CharacterState): E2ePlayerView {
     gold: p.inventory.gold,
     potions: { ...p.inventory.potions },
     carryingCorpseIds: [...(p.carryingCorpseIds ?? [])],
+    tint: { hurtTicks: tint?.hurtTicks ?? 0, poisonTicks: tint?.poisonTicks ?? 0 },
   };
 }
 
@@ -265,7 +267,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
   const remotePlayers: E2eRemotePlayerView[] = engine.remotePlayers.map(
     (rp: CharacterState): E2eRemotePlayerView => {
       const animator: SpriteAnimator | undefined = engine.remotePlayerAnimators.get(rp.id);
-      return { ...toPlayerView(rp), animState: animator ? animator.getState() : null };
+      return { ...toPlayerView(rp, engine), animState: animator ? animator.getState() : null };
     },
   );
   const usableSkills: E2eSkillView[] = engine.playerUsableSkills.map(
@@ -287,7 +289,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
     floor: engine.floor,
     floorTransitionTimer: engine.floorTransitionTimer,
     godMode: engine.godMode,
-    player: player ? toPlayerView(player) : null,
+    player: player ? toPlayerView(player, engine) : null,
     localAnimState: engine.spriteAnimator.getState(),
     remotePlayers,
     zombies: engine.zombies.map(toZombieView),
