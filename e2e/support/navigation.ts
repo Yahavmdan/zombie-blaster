@@ -261,3 +261,17 @@ export function openGroundX(s: E2eSnapshot, span: number): number | null {
   }
   return null;
 }
+
+/**
+ * Like `openGroundX`, but also clear of the exit's column: Eaters leave the pile under the exit
+ * alone, so corpses meant as their food go elsewhere.
+ */
+export function mealGroundX(s: E2eSnapshot, span: number): number | null {
+  const above: LevelPlatform[] = levelPlatforms(s).filter((p: LevelPlatform): boolean => p !== GROUND);
+  const margin: number = 40;
+  for (let x: number = 40; x + span < WORLD.width - 40; x += 10) {
+    const clearOfExit: boolean = x >= s.exitPile.columnRight + margin || x + span <= s.exitPile.columnLeft - margin;
+    if (clearOfExit && above.every((p: LevelPlatform): boolean => p.x >= x + span || p.x + p.width <= x)) return x;
+  }
+  return null;
+}

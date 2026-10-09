@@ -2,7 +2,7 @@ import { TestInfo } from '@playwright/test';
 import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer } from '../../support/game-player';
 import { E2eCorpseView, E2eSnapshot, E2eVfxLogEntry, E2eZombieView } from '../../support/probe';
-import { LevelPlatform, levelPlatforms, openGroundX } from '../../support/navigation';
+import { LevelPlatform, levelPlatforms, mealGroundX } from '../../support/navigation';
 import { WORLD } from '../../support/invariants';
 
 /** Lying corpses that draw an Eater (ZOMBIE_EATER_SPAWN_MIN_CORPSES). */
@@ -32,11 +32,11 @@ test.describe('eater zombie', { tag: '@solo' }, (): void => {
     expect(start.floor).toBe(1);
     expect(eaters(start), 'no Eater before any corpse lies around').toHaveLength(0);
 
-    let x: number | null = openGroundX(start, PILE_SPAN);
+    let x: number | null = mealGroundX(start, PILE_SPAN);
     for (let seed: number = 1; x === null && seed <= 20; seed++) {
       await p.probe.setLayoutSeed(seed);
       await p.wait(300);
-      x = openGroundX(await p.probe.state(), PILE_SPAN);
+      x = mealGroundX(await p.probe.state(), PILE_SPAN);
     }
     expect(x, 'a floor layout with open ground').not.toBeNull();
 
@@ -132,7 +132,11 @@ test.describe('eater zombie', { tag: '@solo' }, (): void => {
     const ledges: LevelPlatform[] = levelPlatforms(s0).filter(
       (pl: LevelPlatform): boolean =>
         // A regular ledge (the safe spot sits higher: zombies never go up there).
-        pl.y < WORLD.groundY && pl.y > spot.y && pl.width >= 128,
+        pl.y < WORLD.groundY &&
+        pl.y > spot.y &&
+        pl.width >= 128 &&
+        // Not over the exit's column (Eaters leave the pile there alone).
+        (pl.x >= s0.exitPile.columnRight || pl.x + pl.width <= s0.exitPile.columnLeft),
     );
     expect(ledges.length, 'a ledge above the ground').toBeGreaterThan(0);
     const ledge: LevelPlatform = ledges[0];
@@ -161,5 +165,30 @@ test.describe('eater zombie', { tag: '@solo' }, (): void => {
       (s: E2eSnapshot): boolean => upThere(s).length < MEALS,
       { timeoutMs: EATER_ARRIVES_MS + 30_000 },
     );
+  });
+
+  test('the pile under the exit and corpses on the safe spot are no food: they draw no Eater', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    test.setTimeout(90_000);
+    const p: GamePlayer = await solo('warrior');
+    await p.probe.setGodMode(true);
+    const s0: E2eSnapshot = await p.probe.state();
+    const spot: { x: number; y: number; width: number } = s0.level.safeSpot!;
+    await p.probe.teleport(spot.x + 4, spot.y - WORLD.playerHeight);
+    await p.probe.dropCorpses(s0.exitPile.centerX, MEALS);
+    await p.probe.dropCorpses(spot.x + spot.width - 30, MEALS);
+    const landed: E2eSnapshot = await p.probe.waitFor(
+      'all the corpses land',
+      (s: E2eSnapshot): boolean =>
+        s.corpseViews.filter((c: E2eCorpseView): boolean => c.isGrounded).length === MEALS * 2,
+      { timeoutMs: 15_000 },
+    );
+    await p.wait(EATER_ARRIVES_MS);
+    const later: E2eSnapshot = await p.probe.state();
+    expect(eaters(later), 'no Eater came for them').toHaveLength(0);
+    expect(later.corpses, 'none eaten').toBe(landed.corpses);
   });
 });

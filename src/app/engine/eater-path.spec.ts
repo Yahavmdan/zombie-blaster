@@ -71,6 +71,13 @@ describe('eater path', (): void => {
     expect(step).toEqual({ aimX: 300, jump: false, jumpVx: 0, drop: true });
   });
 
+  it('on a head or a pile (no platform underfoot) it steps off toward a goal below instead of dropping', (): void => {
+    const onHead: Feet = { x: 500, y: GAME_CONSTANTS.GROUND_Y - 44 };
+    const step: EaterStep = eaterStep(onHead, HALF, onGround(505), [GROUND], G);
+    expect(step.drop).toBe(false);
+    expect(Math.abs(step.aimX - onHead.x), 'off to the side').toBeGreaterThan(HALF * 2);
+  });
+
   it('never climbs by the safe spot or a solid prop', (): void => {
     const safe: Platform = { ...LOW, safe: true };
     const prop: Platform = { ...LOW, x: 300, solid: true };

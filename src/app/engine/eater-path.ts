@@ -47,7 +47,14 @@ export function eaterStep(
     drop: false,
   });
 
-  if (rise < -tolerance) return { ...walk(goal.x), drop: feet.y < GAME_CONSTANTS.GROUND_Y };
+  if (rise < -tolerance) {
+    const platform: Platform | null = surfaceUnder(feet, platforms);
+    if (platform && platform.y < GAME_CONSTANTS.GROUND_Y) return { ...walk(goal.x), drop: true };
+    // On a head or a pile there is nothing to drop through: step off it toward the goal.
+    const dir: number = goal.x >= feet.x ? 1 : -1;
+    const clear: number = halfWidth * GAME_CONSTANTS.ZOMBIE_EATER_STEP_OFF_WIDTHS;
+    return walk(Math.abs(goal.x - feet.x) > clear ? goal.x : feet.x + dir * clear);
+  }
   if (rise <= tolerance) return walk(goal.x);
 
   const reach: number = eaterJumpReach(gravity);
