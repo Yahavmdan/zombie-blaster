@@ -170,6 +170,88 @@ test.describe('connection resilience', { tag: '@online' }, (): void => {
     ).toBe(true);
   });
 
+  test('a host whose connection drops comes back as a guest, in sync with the new host', async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }): Promise<void> => {
+    test.setTimeout(120_000);
+    const session: RoomSession = await room(
+      [
+        { name: 'Host', classId: 'warrior' },
+        { name: 'Guest', classId: 'assassin' },
+      ],
+      'host-recon',
+    );
+    const [host, guest]: GamePlayer[] = session.players;
+    await host.probe.setGodMode(true);
+    await guest.probe.setGodMode(true);
+    await host.probe.waitFor('zombies', (s: E2eSnapshot): boolean => s.zombies.length > 0, {
+      timeoutMs: 20_000,
+    });
+
+    await host.dropConnection();
+    await guest.probe.waitFor('guest promoted to host', (s: E2eSnapshot): boolean => s.role === 'host', {
+      timeoutMs: 15_000,
+    });
+    await expect
+      .poll((): number => host.net.ofType('received', 'reconnect-result').length, {
+        timeout: 25_000,
+        message: 'old host resumes its session',
+      })
+      .toBeGreaterThan(0);
+    await host.probe.waitFor('old host now runs as a guest', (s: E2eSnapshot): boolean => s.role === 'client', {
+      timeoutMs: 10_000,
+    });
+
+    // One world: the old host shows the zombies the new host simulates.
+    const zombieIds: (s: E2eSnapshot) => string = (s: E2eSnapshot): string =>
+      s.zombies
+        .map((z: E2eZombieView): string => z.id)
+        .sort()
+        .join('|');
+    await expect
+      .poll(
+        async (): Promise<boolean> => {
+          const [a, b]: E2eSnapshot[] = await Promise.all([host.probe.state(), guest.probe.state()]);
+          return a.zombies.length > 0 && zombieIds(a) === zombieIds(b);
+        },
+        { timeout: 15_000, message: 'old host and new host show the same zombies' },
+      )
+      .toBe(true);
+  });
+
+  test('leaving a multiplayer game for the menu ends the connection and the session', async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }): Promise<void> => {
+    const session: RoomSession = await room(
+      [
+        { name: 'Host', classId: 'warrior' },
+        { name: 'Guest', classId: 'mage' },
+      ],
+      'menu-exit',
+    );
+    const [host, guest]: GamePlayer[] = session.players;
+    await guest.probe.showGameOver();
+    await guest.page.getByTestId('game-gameover-button-menu').click();
+    await host.probe.waitFor('host sees the guest leave', (s: E2eSnapshot): boolean => s.remotePlayers.length === 0, {
+      timeoutMs: 10_000,
+    });
+    await expect
+      .poll(async (): Promise<number> => guest.openGameSocketCount(), {
+        timeout: 5_000,
+        message: 'the game socket is closed on the menu',
+      })
+      .toBe(0);
+
+    // A later network drop must not try to resume the room the player left.
+    await guest.dropConnection();
+    await guest.wait(4_000);
+    expect(guest.net.ofType('sent', 'reconnect'), 'no session resume for a left room').toEqual([]);
+  });
+
   test('effects queued while disconnected are delivered after reconnecting', async ({
     room,
   }: {

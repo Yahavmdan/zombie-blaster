@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, VfxEvent } from '@shared/index';
 import { SpecialDropType, SpecialDropDefinition } from '@shared/game-entities';
-import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload, HostMigratedPayload } from '@shared/multiplayer';
+import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload, HostMigratedPayload, ReconnectResultPayload, RoomInfo, RoomPlayer, RoomUpdatedPayload } from '@shared/multiplayer';
 import { ActiveSpecialEffect, BoulderState, CagePuzzleState, LooseProp, PlateState, SpringState, ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
@@ -154,6 +154,8 @@ export class GameComponent implements OnInit, OnDestroy {
     }
     if (this.isMultiplayer && this.roomId) {
       this.ws.send(ClientMessageType.LeaveRoom, { roomId: this.roomId });
+      // Out of the game means out of the room: no socket left open, no session to resume on a later drop.
+      this.ws.disconnect();
     }
   }
 
@@ -225,32 +227,31 @@ export class GameComponent implements OnInit, OnDestroy {
         this.checkAllPlayersDead();
       });
 
-    if (this.isHost) {
-      this.ws.onMessage(ServerMessageType.ZombieDamage)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe((msg: ServerMessage): void => {
-          const payload: RemoteZombieDamagePayload =
-            msg.payload as RemoteZombieDamagePayload;
-          this.gameCanvas()?.applyRemoteDamage(payload.events);
-        });
-    }
+    // Both subscriptions stay for the whole game: the role can change (host migration, a host resuming as guest).
+    this.ws.onMessage(ServerMessageType.ZombieDamage)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((msg: ServerMessage): void => {
+        if (!this.isHost) return;
+        const payload: RemoteZombieDamagePayload =
+          msg.payload as RemoteZombieDamagePayload;
+        this.gameCanvas()?.applyRemoteDamage(payload.events);
+      });
 
-    if (!this.isHost) {
-      this.ws.onMessage(ServerMessageType.ZombieAttackPlayer)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe((msg: ServerMessage): void => {
-          const payload: ZombieAttackPlayerPayload =
-            msg.payload as ZombieAttackPlayerPayload;
-          const myId: string = this.gameState.player()?.id ?? '';
-          if (payload.targetPlayerId === myId) {
-            this.gameCanvas()?.applyIncomingZombieDamage(
-              payload.damage,
-              payload.knockbackDir,
-              payload.isPoisonAttack,
-            );
-          }
-        });
-    }
+    this.ws.onMessage(ServerMessageType.ZombieAttackPlayer)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((msg: ServerMessage): void => {
+        if (this.isHost) return;
+        const payload: ZombieAttackPlayerPayload =
+          msg.payload as ZombieAttackPlayerPayload;
+        const myId: string = this.gameState.player()?.id ?? '';
+        if (payload.targetPlayerId === myId) {
+          this.gameCanvas()?.applyIncomingZombieDamage(
+            payload.damage,
+            payload.knockbackDir,
+            payload.isPoisonAttack,
+          );
+        }
+      });
 
     this.ws.onMessage(ServerMessageType.PlayerRevived)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -275,6 +276,21 @@ export class GameComponent implements OnInit, OnDestroy {
         if (payload.newHostId === myId) {
           this.promoteToHost();
         }
+      });
+
+    // A host that dropped comes back as a guest when the server migrated the room meanwhile
+    // (and a guest that finds the room empty comes back as its host): follow the server's view.
+    this.ws.onMessage(ServerMessageType.ReconnectResult)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((msg: ServerMessage): void => {
+        const payload: ReconnectResultPayload = msg.payload as ReconnectResultPayload;
+        if (payload.success && payload.room) this.syncRoleWithRoom(payload.room);
+      });
+
+    this.ws.onMessage(ServerMessageType.RoomUpdated)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((msg: ServerMessage): void => {
+        this.syncRoleWithRoom((msg.payload as RoomUpdatedPayload).room);
       });
 
     this.zone.runOutsideAngular((): void => {
@@ -322,7 +338,8 @@ export class GameComponent implements OnInit, OnDestroy {
         xp: current.xp,
         xpToNext: current.xpToNext,
         stats: current.stats,
-        derived: current.derived,
+        // The engine's derived stats include the buffs running right now (Hyper Body, Claw Mastery, ...).
+        derived: enginePlayer.derived,
         allocatedStats: current.allocatedStats,
         unallocatedStatPoints: current.unallocatedStatPoints,
         unallocatedSkillPoints: current.unallocatedSkillPoints,
@@ -716,18 +733,24 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
   private promoteToHost(): void {
+    if (this.isHost) return;
     this.isHost = true;
     this.gameCanvas()?.promoteToHost();
+  }
 
-    this.ws.onMessage(ServerMessageType.ZombieDamage)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((msg: ServerMessage): void => {
-        const payload: RemoteZombieDamagePayload =
-          msg.payload as RemoteZombieDamagePayload;
-        this.gameCanvas()?.applyRemoteDamage(payload.events);
-      });
+  /** Stops simulating the world: from now on the host's game-sync drives it. */
+  private demoteToGuest(): void {
+    if (!this.isHost) return;
+    this.isHost = false;
+    this.gameCanvas()?.demoteToGuest();
+  }
 
-    console.log('[Game] This client has been promoted to host');
+  private syncRoleWithRoom(room: RoomInfo): void {
+    const myId: string = this.gameState.player()?.id ?? '';
+    const me: RoomPlayer | undefined = room.players.find((p: RoomPlayer): boolean => p.id === myId);
+    if (!me) return;
+    if (me.isHost) this.promoteToHost();
+    else this.demoteToGuest();
   }
 
   private buildE2eControls(): E2eControls {
@@ -744,6 +767,7 @@ export class GameComponent implements OnInit, OnDestroy {
       selectClass: (classId: string): void => this.devSelectClass(classId as CharacterClass),
       activateSpecialDrop: (type: string): void => this.activateSpecialDrop(type as SpecialDropType),
       isGameOver: (): boolean => this.isGameOver(),
+      showGameOver: (): void => this.onGameOver(),
     };
   }
 

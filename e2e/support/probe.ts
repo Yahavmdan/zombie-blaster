@@ -181,6 +181,25 @@ export class GameProbe {
     );
   }
 
+  /** Setup only: shows the game-over screen. */
+  async showGameOver(): Promise<void> {
+    await this.page.evaluate((): void => window.__zbE2e?.controls?.showGameOver());
+  }
+
+  /** Setup only: puts a drop in the local world (`special` needs a SpecialDropType). */
+  async spawnDrop(type: string, x: number, y: number, specialType: string | null = null): Promise<void> {
+    await this.page.evaluate(
+      (args: [string, number, number, string | null]): void =>
+        window.__zbE2e?.engine?.spawnDrop(args[0], args[1], args[2], args[3]),
+      [type, x, y, specialType] as [string, number, number, string | null],
+    );
+  }
+
+  /** Setup only: a lethal zombie hit on the local player through the normal damage path. */
+  async knockOut(): Promise<void> {
+    await this.page.evaluate((): void => window.__zbE2e?.engine?.knockOut());
+  }
+
   async isGameOver(): Promise<boolean> {
     return this.page.evaluate((): boolean => window.__zbE2e?.controls?.isGameOver() ?? false);
   }

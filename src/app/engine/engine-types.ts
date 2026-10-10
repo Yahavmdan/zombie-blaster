@@ -378,6 +378,8 @@ export interface IGameEngine {
   reviveTargetId: string | null;
   /** Key the carry prompt shows (the player's binding). */
   carryKeyLabel: string;
+  /** Keys shown in the special-drop prompt (follow rebinding). */
+  dropPromptKeyLabels: { confirm: string; decline: string };
   reviveProgressTicks: number;
 
   activeSpecialEffects: ActiveSpecialEffect[];

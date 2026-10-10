@@ -274,6 +274,115 @@ test.describe('game server edge cases', { tag: ['@protocol', '@external-safe'] }
     outsider.close();
   });
 
+  test('zombie-damage above the per-hit cap is rejected and never reaches the host', async (): Promise<void> => {
+    const host: { client: RawClient; roomId: string } = await hostWithRoom();
+    const guest: { client: RawClient; playerId: string } = await joinAs(host.roomId, 'Nuker');
+    const hostMark: number = host.client.received.length;
+    const mark: number = guest.client.received.length;
+    guest.client.send('zombie-damage', { roomId: host.roomId, events: [{ zombieId: 'z1', damage: 1e300, killed: true }] });
+    const reply: RawMessage = await guest.client.waitFor('error', (): boolean => true, 3_000, mark);
+    expect((reply.payload as { code: string }).code).toBe('INVALID_PAYLOAD');
+    await expect(host.client.waitFor('zombie-damage', (): boolean => true, 1_000, hostMark)).rejects.toThrow();
+
+    // A normal hit still goes through.
+    guest.client.send('zombie-damage', { roomId: host.roomId, events: [{ zombieId: 'z1', damage: 250, killed: false }] });
+    await host.client.waitFor('zombie-damage', (): boolean => true, 3_000, hostMark);
+    host.client.close();
+    guest.client.close();
+  });
+
+  test('an oversized frame closes the sender and is not relayed to the room', async (): Promise<void> => {
+    const host: { client: RawClient; roomId: string } = await hostWithRoom();
+    const guest: { client: RawClient; playerId: string } = await joinAs(host.roomId, 'Victim');
+    const mark: number = guest.client.received.length;
+    host.client.send('game-sync', { player: { id: 'x' }, pad: 'x'.repeat(2_000_000) });
+    await expect
+      .poll((): boolean => host.client.isOpen, { timeout: 5_000, message: 'server closes the flooding socket' })
+      .toBe(false);
+    await expect(guest.client.waitFor('game-sync', (): boolean => true, 1_000, mark)).rejects.toThrow();
+    guest.client.close();
+  });
+
+  test('a kicked player cannot rejoin the room straight away', async (): Promise<void> => {
+    const host: { client: RawClient; roomId: string } = await hostWithRoom();
+    const guest: { client: RawClient; playerId: string } = await joinAs(host.roomId, 'Pest');
+    host.client.send('kick-player', { roomId: host.roomId, playerId: guest.playerId });
+    await guest.client.waitFor('player-kicked');
+    const mark: number = guest.client.received.length;
+    guest.client.send('join-room', { roomId: host.roomId, playerName: 'Pest', classId: 'mage' });
+    const reply: RawMessage = await replyAfter(guest.client, mark, 'room-joined');
+    expect(reply.type).toBe('error');
+    expect((reply.payload as { code: string }).code).toBe('KICKED');
+    host.client.close();
+    guest.client.close();
+  });
+
+  test('player-input is not a message the server relays', async (): Promise<void> => {
+    const host: { client: RawClient; roomId: string } = await hostWithRoom();
+    const outsider: RawClient = await RawClient.connect();
+    const hostMark: number = host.client.received.length;
+    const mark: number = outsider.received.length;
+    outsider.send('player-input', { roomId: host.roomId, keys: { left: true } });
+    const reply: RawMessage = await outsider.waitFor('error', (): boolean => true, 3_000, mark);
+    expect((reply.payload as { code: string }).code).toBe('UNKNOWN_TYPE');
+    await expect(host.client.waitFor('player-input', (): boolean => true, 1_000, hostMark)).rejects.toThrow();
+    host.client.close();
+    outsider.close();
+  });
+
+  test('a resumed session keeps its player id', async (): Promise<void> => {
+    const host: { client: RawClient; roomId: string } = await hostWithRoom();
+    const first: { client: RawClient; playerId: string } = await joinAs(host.roomId, 'Steady');
+    const token: string = welcomeToken(first.client);
+    await gone(first.client);
+
+    const back: RawClient = await RawClient.connect();
+    back.send('reconnect', { reconnectToken: token, playerName: 'Steady', classId: 'mage' });
+    const r: RawMessage = await back.waitFor('reconnect-result');
+    const result: { success: boolean; playerId: string; room: RoomInfoView } = r.payload as {
+      success: boolean;
+      playerId: string;
+      room: RoomInfoView;
+    };
+    expect(result.success).toBe(true);
+    expect(result.playerId, 'same id as before the drop').toBe(first.playerId);
+    expect(result.room.players.map((pl: { id: string }): string => pl.id)).toContain(first.playerId);
+    back.close();
+    host.client.close();
+  });
+
+  test('a host that drops mid-game and resumes comes back as a guest', async (): Promise<void> => {
+    const host: { client: RawClient; roomId: string } = await hostWithRoom();
+    const guest: { client: RawClient; playerId: string } = await joinAs(host.roomId, 'Heir');
+    guest.client.send('toggle-ready', { roomId: host.roomId });
+    await host.client.waitFor('room-updated', (p: unknown): boolean =>
+      (p as { room: { players: Array<{ isReady: boolean }> } }).room.players.every(
+        (pl: { isReady: boolean }): boolean => pl.isReady,
+      ),
+    );
+    host.client.send('start-game', { roomId: host.roomId });
+    await guest.client.waitFor('game-started');
+    const token: string = welcomeToken(host.client);
+    await gone(host.client);
+    await guest.client.waitFor('host-migrated');
+
+    const back: RawClient = await RawClient.connect();
+    back.send('reconnect', { reconnectToken: token, playerName: 'RawHost', classId: 'warrior' });
+    const r: RawMessage = await back.waitFor('reconnect-result');
+    const result: { success: boolean; playerId: string; room: RoomInfoView } = r.payload as {
+      success: boolean;
+      playerId: string;
+      room: RoomInfoView;
+    };
+    expect(result.success).toBe(true);
+    const me: { id: string; isHost: boolean } | undefined = result.room.players.find(
+      (pl: { id: string }): boolean => pl.id === result.playerId,
+    );
+    expect(me?.isHost, 'the old host is a guest now').toBe(false);
+    back.close();
+    guest.client.close();
+  });
+
   test('a blank room name is rejected', async (): Promise<void> => {
     const c: RawClient = await RawClient.connect();
     const mark: number = c.received.length;

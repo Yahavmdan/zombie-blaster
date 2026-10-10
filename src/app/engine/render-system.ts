@@ -1943,8 +1943,9 @@ export class RenderSystem {
     const promptY: number = boxY + boxH - 14;
 
     ctx.globalAlpha = pulse;
-    fillOutlinedText(ctx, '[Y] Activate', boxX + boxW / 2 - 70, promptY, CANVAS_TOXIC_HI);
-    fillOutlinedText(ctx, '[N] Nope', boxX + boxW / 2 + 70, promptY, CANVAS_BLOOD_HI);
+    const keys: { confirm: string; decline: string } = this.e.dropPromptKeyLabels;
+    fillOutlinedText(ctx, `[${keys.confirm}] Activate`, boxX + boxW / 2 - 70, promptY, CANVAS_TOXIC_HI);
+    fillOutlinedText(ctx, `[${keys.decline}] Nope`, boxX + boxW / 2 + 70, promptY, CANVAS_BLOOD_HI);
 
     ctx.globalAlpha = 1;
     ctx.restore();

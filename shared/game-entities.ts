@@ -226,6 +226,8 @@ export const ACTION_INFO: Record<string, ActionInfo> = {
   openInventory: { label: 'Inventory', icon: 'bag' },
   revive: { label: 'Revive', icon: 'revive' },
   carry: { label: 'Carry Corpse', icon: 'zombie' },
+  confirmDrop: { label: 'Take Drop', icon: 'star' },
+  declineDrop: { label: 'Skip Drop', icon: 'close' },
   quickSlot1: { label: 'QSlot 1', icon: 'slot' },
   quickSlot2: { label: 'QSlot 2', icon: 'slot' },
   quickSlot3: { label: 'QSlot 3', icon: 'slot' },

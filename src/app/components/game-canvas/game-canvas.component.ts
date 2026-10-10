@@ -17,7 +17,7 @@ import {
 } from '@angular/core';
 import { CharacterClass, CharacterState, SKILLS, SkillDefinition, SkillType, VfxEvent } from '@shared/index';
 import { BoulderState, CagePuzzleState, DropType, LooseProp, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
-import { GameAction } from '@shared/messages';
+import { GameAction, KeyBindings } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
 import { InputKeys } from '@shared/messages';
@@ -27,6 +27,8 @@ import { QuickSlotService } from '../../services/quick-slot.service';
 import { attachEngineProbe } from '../../testing/e2e-hooks';
 
 const UI_ACTIONS: Set<string> = new Set<string>(['openStats', 'openSkills', 'openShop', 'openInventory']);
+/** Answer the special-drop prompt; they never reach the engine as held keys. */
+const DROP_PROMPT_ACTIONS: Set<string> = new Set<string>(['confirmDrop', 'declineDrop']);
 
 /** Typing in a dialog's text field must not toggle dialogs. */
 function isTextField(target: EventTarget | null): boolean {
@@ -82,6 +84,15 @@ export class GameCanvasComponent implements OnDestroy {
     return keys.length > 0 ? formatKeyName(keys[0]) : '?';
   });
 
+  /** Keys shown in the special-drop prompt (follow rebinding). */
+  private readonly dropPromptKeyLabels: Signal<{ confirm: string; decline: string }> = computed(
+    (): { confirm: string; decline: string } => {
+      const b: KeyBindings = this.keyBindingsService.bindings();
+      const label: (keys: string[]) => string = (keys: string[]): string => (keys.length > 0 ? formatKeyName(keys[0]) : '?');
+      return { confirm: label(b.confirmDrop), decline: label(b.declineDrop) };
+    },
+  );
+
   readonly canvasRef: Signal<ElementRef<HTMLCanvasElement>> = viewChild.required<ElementRef<HTMLCanvasElement>>('gameCanvas');
 
   private engine: GameEngine | null = null;
@@ -89,7 +100,7 @@ export class GameCanvasComponent implements OnDestroy {
   private currentClassId: CharacterClass | null = null;
   private pendingMultiplayerHost: boolean = false;
   private pendingMultiplayerClient: boolean = false;
-  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false, quickSlot9: false, quickSlot10: false, quickSlot11: false, quickSlot12: false };
+  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, confirmDrop: false, declineDrop: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false, quickSlot9: false, quickSlot10: false, quickSlot11: false, quickSlot12: false };
   private readonly boundKeyDown: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyDown(e);
   private readonly boundKeyUp: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyUp(e);
   /** Switching tabs or windows swallows the key-ups: let go of everything so nothing stays held. */
@@ -108,6 +119,11 @@ export class GameCanvasComponent implements OnDestroy {
     effect((): void => {
       const label: string = this.carryKeyLabel();
       if (this.engine) this.engine.carryKeyLabel = label;
+    });
+
+    effect((): void => {
+      const labels: { confirm: string; decline: string } = this.dropPromptKeyLabels();
+      if (this.engine) this.engine.dropPromptKeyLabels = labels;
     });
 
     effect((): void => {
@@ -215,6 +231,15 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
+  demoteToGuest(): void {
+    this.pendingMultiplayerHost = false;
+    this.pendingMultiplayerClient = true;
+    if (this.engine) {
+      this.engine.isMultiplayerHost = false;
+      this.engine.isMultiplayerClient = true;
+    }
+  }
+
   getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     return this.engine?.getStateSnapshot() ?? null;
   }
@@ -309,6 +334,7 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine.isMultiplayerHost = this.pendingMultiplayerHost;
     this.engine.isMultiplayerClient = this.pendingMultiplayerClient;
     this.engine.carryKeyLabel = this.carryKeyLabel();
+    this.engine.dropPromptKeyLabels = this.dropPromptKeyLabels();
     if (isDevMode()) {
       this.detachE2eProbe = attachEngineProbe(this.engine);
     }
@@ -367,23 +393,16 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onKeyDown(e: KeyboardEvent): void {
-    if (this.inputDisabled()) {
-      if (this.dialogKeysEnabled() && !isTextField(e.target)) this.pressDialogKey(e);
+    // The prompt runs on a timer while the game goes on, so it answers with the stats, skills,
+    // shop or inventory open too (not under settings, where keys are being rebound).
+    if (this.dialogKeysEnabled() && !isTextField(e.target) && this.answerDropPrompt(e.key)) {
+      e.preventDefault();
       return;
     }
 
-    if (this.engine?.hasPendingSpecialDrop()) {
-      const key: string = e.key.toLowerCase();
-      if (key === 'y') {
-        this.engine.confirmPendingDrop();
-        e.preventDefault();
-        return;
-      }
-      if (key === 'n') {
-        this.engine.declinePendingDrop();
-        e.preventDefault();
-        return;
-      }
+    if (this.inputDisabled()) {
+      if (this.dialogKeysEnabled() && !isTextField(e.target)) this.pressDialogKey(e);
+      return;
     }
 
     // Bound keys never reach the browser: attacking on Control while moving would otherwise
@@ -391,10 +410,21 @@ export class GameCanvasComponent implements OnDestroy {
     if (this.pressBinding(e.key)) e.preventDefault();
   }
 
+  /** Confirms or declines a pending special drop if `key` is bound to that. Returns whether it answered. */
+  private answerDropPrompt(key: string): boolean {
+    if (!this.engine?.hasPendingSpecialDrop()) return false;
+    const action: GameAction | null = this.keyBindingsService.getActionForKey(key);
+    if (action === 'confirmDrop') this.engine.confirmPendingDrop();
+    else if (action === 'declineDrop') this.engine.declinePendingDrop();
+    else return false;
+    return true;
+  }
+
   /** Presses whatever action a key or mouse button is bound to. Returns false when it is unbound. */
   private pressBinding(key: string): boolean {
     const action: GameAction | null = this.keyBindingsService.getActionForKey(key);
     if (!action) return false;
+    if (DROP_PROMPT_ACTIONS.has(action)) return true;
 
     if (UI_ACTIONS.has(action)) {
       this.emitUiAction(action);
@@ -467,8 +497,12 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onMouseDown(e: MouseEvent): void {
-    if (this.inputDisabled()) return;
     const key: string | null = mouseButtonKey(e.button);
+    if (key && this.dialogKeysEnabled() && this.answerDropPrompt(key)) {
+      e.preventDefault();
+      return;
+    }
+    if (this.inputDisabled()) return;
     // preventDefault stops middle-click autoscroll on a bound button.
     if (key && this.pressBinding(key)) e.preventDefault();
   }

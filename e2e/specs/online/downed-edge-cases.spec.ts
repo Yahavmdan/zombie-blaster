@@ -54,4 +54,63 @@ test.describe('downed players', { tag: '@online' }, (): void => {
     ).toEqual({ isGrounded: true, velocityY: 0 });
     expect(Math.round(feet), `feet over the platform at ${surface}`).toBeLessThanOrEqual(surface);
   });
+
+  test('a downed player picks up nothing', async ({ room }: { room: RoomFactory }): Promise<void> => {
+    const session: RoomSession = await room([
+      { name: 'Host', classId: 'warrior' },
+      { name: 'Downed', classId: 'mage' },
+    ]);
+    const guest: GamePlayer = session.guests[0];
+    await session.host.probe.setGodMode(true);
+    await guest.probe.knockOut();
+    await guest.probe.waitFor('guest is down', (s: E2eSnapshot): boolean => s.player!.isDown, {
+      timeoutMs: 3_000,
+    });
+    await guest.wait(800);
+
+    const before: E2eSnapshot = await guest.probe.state();
+    const p: NonNullable<E2eSnapshot['player']> = before.player!;
+    await guest.probe.spawnDrop('gold', p.x, p.y);
+    await guest.probe.spawnDrop('special', p.x, p.y, 'low-gravity');
+    await guest.wait(1_000);
+
+    const after: E2eSnapshot = await guest.probe.state();
+    expect(after.player!.gold, 'no gold picked up while down').toBe(before.player!.gold);
+    expect(after.hasPendingSpecialDrop, 'no special-drop prompt while down').toBe(false);
+    expect(
+      after.drops.map((d: E2eSnapshot['drops'][number]): string => d.type).sort(),
+      'both drops still lie there',
+    ).toEqual(['gold', 'special']);
+  });
+
+  test('a special drop whose prompt is open when the player goes down stays in the world', async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }): Promise<void> => {
+    const session: RoomSession = await room([
+      { name: 'Host', classId: 'warrior' },
+      { name: 'Downed', classId: 'mage' },
+    ]);
+    const guest: GamePlayer = session.guests[0];
+    await session.host.probe.setGodMode(true);
+    const p: NonNullable<E2eSnapshot['player']> = (await guest.probe.state()).player!;
+    await guest.probe.spawnDrop('special', p.x, p.y, 'low-gravity');
+    await guest.probe.waitFor('prompt open', (s: E2eSnapshot): boolean => s.hasPendingSpecialDrop, {
+      timeoutMs: 3_000,
+    });
+    await guest.probe.knockOut();
+    await guest.probe.waitFor('guest is down', (s: E2eSnapshot): boolean => s.player!.isDown, {
+      timeoutMs: 3_000,
+    });
+    const s: E2eSnapshot = await guest.probe.waitFor(
+      'prompt closed',
+      (st: E2eSnapshot): boolean => !st.hasPendingSpecialDrop,
+      { timeoutMs: 2_000 },
+    );
+    expect(
+      s.drops.filter((d: E2eSnapshot['drops'][number]): boolean => d.type === 'special'),
+      'the special drop is back in the world, not destroyed',
+    ).toHaveLength(1);
+  });
 });

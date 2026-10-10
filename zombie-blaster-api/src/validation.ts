@@ -3,7 +3,6 @@ import type {
   CreateRoomPayload,
   JoinRoomPayload,
   KickPlayerPayload,
-  LobbyPlayerInputPayload,
   LobbyChatPayload,
   ReconnectPayload,
   RevivePlayerPayload,
@@ -23,12 +22,15 @@ export const LIMITS: {
   chatMessage: number;
   id: number;
   damageEvents: number;
+  damagePerHit: number;
 } = {
   roomName: 40,
   playerName: 24,
   chatMessage: 200,
   id: 64,
   damageEvents: 64,
+  // A maxed character's biggest crit with every multiplier is a few tens of thousands.
+  damagePerHit: 1_000_000,
 };
 
 const CLASS_IDS: Set<string> = new Set<string>(Object.values(CharacterClass));
@@ -72,23 +74,13 @@ export function isJoinRoomPayload(p: unknown): p is JoinRoomPayload {
   return isObject(p) && isId(p['roomId']) && isText(p['playerName'], LIMITS.playerName, false) && isClassId(p['classId']);
 }
 
-/** toggle-ready, start-game, leave-room, player-input: anything that names a room. */
+/** toggle-ready, start-game: anything that names a room. */
 export function isRoomIdPayload(p: unknown): p is StartGamePayload {
   return isObject(p) && isId(p['roomId']);
 }
 
 export function isKickPlayerPayload(p: unknown): p is KickPlayerPayload {
   return isObject(p) && isId(p['roomId']) && isId(p['playerId']);
-}
-
-/** Keys are relayed to other players as-is; only the envelope is checked. */
-export function isPlayerInputPayload(p: unknown): p is LobbyPlayerInputPayload {
-  return (
-    isObject(p) &&
-    isId(p['roomId']) &&
-    isObject(p['keys']) &&
-    (p['attackSkillId'] === undefined || isId(p['attackSkillId']))
-  );
 }
 
 export function isChatPayload(p: unknown): p is LobbyChatPayload {
@@ -101,7 +93,12 @@ export function isZombieDamagePayload(p: unknown): p is Pick<ZombieDamagePayload
   if (events.length === 0 || events.length > LIMITS.damageEvents) return false;
   return events.every(
     (e: unknown): boolean =>
-      isObject(e) && isId(e['zombieId']) && isFiniteNumber(e['damage']) && e['damage'] >= 0 && typeof e['killed'] === 'boolean',
+      isObject(e) &&
+      isId(e['zombieId']) &&
+      isFiniteNumber(e['damage']) &&
+      e['damage'] >= 0 &&
+      e['damage'] <= LIMITS.damagePerHit &&
+      typeof e['killed'] === 'boolean',
   );
 }
 

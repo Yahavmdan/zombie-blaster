@@ -21,6 +21,8 @@ export interface E2ePlayerView {
   maxHp: number;
   mp: number;
   maxMp: number;
+  /** Crit chance in percent, buffs included. */
+  critRate: number;
   level: number;
   isGrounded: boolean;
   isAttacking: boolean;
@@ -394,6 +396,8 @@ export interface E2eControls {
   selectClass(classId: string): void;
   activateSpecialDrop(type: string): void;
   isGameOver(): boolean;
+  /** Shows the game-over screen (setup for testing its buttons). */
+  showGameOver(): void;
 }
 
 export interface E2eEngineControls {
@@ -413,6 +417,10 @@ export interface E2eEngineControls {
   clearPickables(from: number, to: number): void;
   /** Solo/host only: the sky strikes on the next tick (the normal scheduler path, event included). */
   strikeLightningNow(): void;
+  /** Puts a drop (`gold`, `hp-potion`, `mp-potion`, or `special` with a SpecialDropType) in the local world at x, y. */
+  spawnDrop(type: string, x: number, y: number, specialType: string | null): void;
+  /** A lethal zombie hit on the local player through the normal damage path (downed online, dead solo). */
+  knockOut(): void;
 }
 
 export interface ZbE2eApi {

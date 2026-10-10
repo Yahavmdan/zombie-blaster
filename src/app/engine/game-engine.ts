@@ -93,6 +93,7 @@ import {
 import { RenderSystem } from './render-system';
 import { restsOnSafeSpot } from './safe-spot';
 import { WorkerInterval } from './worker-interval';
+import { refreshDerivedStats } from './derived-stats';
 
 export type { Particle };
 export { ParticleShape, FadeMode };
@@ -136,7 +137,7 @@ export class GameEngine implements IGameEngine {
   /** Seed for this run's floor layouts: the host picks it, clients adopt it from game-sync. */
   layoutSeed: number = Math.floor(Math.random() * 0x7fffffff);
   level: LevelLayout = generateLevel(this.layoutSeed, 1);
-  keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false, quickSlot9: false, quickSlot10: false, quickSlot11: false, quickSlot12: false };
+  keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, confirmDrop: false, declineDrop: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false, quickSlot9: false, quickSlot10: false, quickSlot11: false, quickSlot12: false };
   attackCooldown: number = 0;
   attackAnimTicks: number = 0;
   attackHitPending: boolean = false;
@@ -229,6 +230,7 @@ export class GameEngine implements IGameEngine {
 
   reviveTargetId: string | null = null;
   carryKeyLabel: string = 'E';
+  dropPromptKeyLabels: { confirm: string; decline: string } = { confirm: 'Y', decline: 'N' };
   reviveProgressTicks: number = 0;
 
   activeSpecialEffects: ActiveSpecialEffect[] = [];
@@ -558,18 +560,19 @@ export class GameEngine implements IGameEngine {
     this.player.xp = player.xp;
     this.player.xpToNext = player.xpToNext;
     this.player.stats = { ...player.stats };
-    this.player.derived = { ...player.derived };
     this.player.allocatedStats = { ...player.allocatedStats };
     this.player.unallocatedStatPoints = player.unallocatedStatPoints;
     this.player.unallocatedSkillPoints = player.unallocatedSkillPoints;
     this.player.skillLevels = { ...player.skillLevels };
-    this.player.activeBuffs = [...player.activeBuffs];
     this.player.inventory = { ...player.inventory };
     this.player.hp = Math.max(this.player.hp, player.hp);
     this.player.mp = Math.max(this.player.mp, player.mp);
+    // Buffs live here (they tick every frame); the app's copy may be a few frames old.
+    // Derived stats follow the new progression with the buffs still running.
+    refreshDerivedStats(this.player);
     if (leveled) {
-      this.player.hp = player.hp;
-      this.player.mp = player.mp;
+      this.player.hp = this.player.derived.maxHp;
+      this.player.mp = this.player.derived.maxMp;
       this.vfxSystem.spawnLevelUpEffect();
       const LEVEL_UP_LIFE_TICKS: number = 120;
       this.levelUpNotification = {

@@ -20,6 +20,7 @@ import {
   resolveAutoPotionId,
 } from '@shared/index';
 import { DropType, PotionDefinition, ShopItemDefinition, ZombieState } from '@shared/game-entities';
+import { calculateDerived, calculateDerivedWithBuffs, totalStats } from '../engine/derived-stats';
 
 @Injectable({ providedIn: 'root' })
 export class GameStateService {
@@ -105,30 +106,11 @@ export class GameStateService {
   }
 
   calculateDerived(baseStats: CharacterStats, allocatedStats: CharacterStats, classId: CharacterClass, level: number = 1): CharacterDerived {
-    const w: ClassStatWeights = CLASS_STAT_WEIGHTS[classId];
-    const totalStats: CharacterStats = this.getTotalStats(baseStats, allocatedStats);
-
-    const primaryValue: number = totalStats[w.primaryStat];
-    const secondaryValue: number = totalStats[w.secondaryStat];
-
-    return {
-      maxHp: GAME_CONSTANTS.PLAYER_BASE_HP + totalStats.str * w.hpPerStr + (level - 1) * GAME_CONSTANTS.PLAYER_HP_PER_LEVEL,
-      maxMp: GAME_CONSTANTS.PLAYER_BASE_MP + totalStats.int * w.mpPerInt + (level - 1) * GAME_CONSTANTS.PLAYER_MP_PER_LEVEL,
-      attack: Math.floor(primaryValue * w.attackFromPrimary + secondaryValue * w.attackFromSecondary),
-      defense: Math.floor(totalStats.str * w.defenseFromStr + totalStats.dex * w.defenseFromDex),
-      speed: GAME_CONSTANTS.PLAYER_MOVE_SPEED + totalStats.dex * GAME_CONSTANTS.PLAYER_SPEED_PER_DEX,
-      critRate: Math.min(totalStats.luk * w.critFromLuk, GAME_CONSTANTS.PLAYER_CRIT_RATE_CAP),
-      critDamage: GAME_CONSTANTS.PLAYER_CRIT_DAMAGE_BASE + totalStats.luk * w.critDmgFromLuk,
-    };
+    return calculateDerived(baseStats, allocatedStats, classId, level);
   }
 
   getTotalStats(baseStats: CharacterStats, allocatedStats: CharacterStats): CharacterStats {
-    return {
-      str: baseStats.str + allocatedStats.str,
-      dex: baseStats.dex + allocatedStats.dex,
-      int: baseStats.int + allocatedStats.int,
-      luk: baseStats.luk + allocatedStats.luk,
-    };
+    return totalStats(baseStats, allocatedStats);
   }
 
   calculateDerivedWithBuffs(
@@ -138,25 +120,7 @@ export class GameStateService {
     activeBuffs: ActiveBuff[],
     level: number = 1,
   ): CharacterDerived {
-    const derived: CharacterDerived = this.calculateDerived(baseStats, allocatedStats, classId, level);
-
-    for (const buff of activeBuffs) {
-      if (buff.remainingMs <= 0) continue;
-
-      const target: string = buff.stat;
-      if (target === 'allDamagePercent') {
-        derived.attack = Math.floor(derived.attack * (1 + buff.value / 100));
-      } else if (target === 'maxHpMaxMpPercent') {
-        derived.maxHp = Math.floor(derived.maxHp * (1 + buff.value / 100));
-        derived.maxMp = Math.floor(derived.maxMp * (1 + buff.value / 100));
-      } else if (target in derived) {
-        (derived as unknown as Record<string, number>)[target] += buff.value;
-      }
-    }
-
-    derived.critRate = Math.min(derived.critRate, GAME_CONSTANTS.PLAYER_CRIT_RATE_CAP);
-
-    return derived;
+    return calculateDerivedWithBuffs(baseStats, allocatedStats, classId, activeBuffs, level);
   }
 
   addXp(amount: number): void {
