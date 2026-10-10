@@ -38,6 +38,7 @@
     />
     <app-settings
       (openChanged)="onSettingsOpenChanged($event)"
+      (quitRequested)="backToMenu()"
     />
     <app-quick-slots
       [player]="currentPlayerDisplay()"
@@ -272,7 +273,7 @@
       <button
         class="px-btn px-btn--primary"
         data-testid="game-nochar-button-select"
-        (click)="backToMenu()"
+        (click)="selectCharacter()"
       >
         Select character
       </button>

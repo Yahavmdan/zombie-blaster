@@ -331,6 +331,10 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
   `document.hidden` + `visibilitychange`, rAF parked, page timers capped at 1/s; worker timers
   untouched. Online, the engine ticks from a `WorkerInterval` while hidden and the sync timer is
   always one; solo pauses. Specs: `online/background-host.spec.ts`, `solo/background-tab.spec.ts`.
+- Key bindings and quick slots persist in localStorage (`zb.keyBindings`, `zb.quickSlots`); every Playwright context starts empty, so tests still see defaults. A new character keeps them (only another class's skills leave the quick slots).
+- A multiplayer tab saves its game to sessionStorage on `pagehide` (`SessionResumeService`); `page.reload()` resumes the same player through the server's reconnect window (role follows `reconnect-result`). Settings has a two-click "Quit to menu" (`game-settings-button-quit`). A co-op player who died respawns on the next floor (`FLOOR_RESPAWN_HP_PERCENT`). Specs: `solo/session-and-settings.spec.ts`, `online/resilience.spec.ts`.
+- Playwright never sends `KeyboardEvent.repeat`; to test a held key, dispatch `new KeyboardEvent('keydown', { key, repeat: true })` on `window`. Panel keys and prompt answers ignore repeats.
+- Integer rolls use `randomInt(min, max)` from `shared/random.ts` (both ends included).
 - `dropConnection()` closes the app's sockets (init-script tracked) to test reconnect. A resumed session keeps its player id, and the client follows the role in `reconnect-result` / `room-updated` (a host that dropped while the room migrated comes back as a guest). Leaving the game page disconnects the socket and clears the session. `probe.showGameOver()` opens the game-over screen to test its buttons.
 - Budgets in `network-budget.spec.ts` are regression guards. Raise them only deliberately.
   Baseline numbers + optimization backlog: `docs/netcode-optimizations.md` (update after netcode changes).

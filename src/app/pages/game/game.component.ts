@@ -20,6 +20,7 @@ import { ShopComponent } from '../../components/shop/shop.component';
 import { InventoryComponent } from '../../components/inventory/inventory.component';
 import { QuickSlotsComponent } from '../../components/quick-slots/quick-slots.component';
 import { QuickSlotService } from '../../services/quick-slot.service';
+import { ResumeState, SessionResumeService } from '../../services/session-resume.service';
 import { attachGameControls } from '../../testing/e2e-hooks';
 import { E2eControls } from '../../testing/e2e-api';
 import { WorkerInterval } from '../../engine/worker-interval';
@@ -43,6 +44,13 @@ export class GameComponent implements OnInit, OnDestroy {
   private readonly zone: NgZone = inject(NgZone);
   private readonly destroyRef: DestroyRef = inject(DestroyRef);
   private readonly quickSlotService: QuickSlotService = inject(QuickSlotService);
+  private readonly sessionResume: SessionResumeService = inject(SessionResumeService);
+  /** Saves the running game as the tab unloads, so a reload can resume it. */
+  private readonly saveForReload: () => void = (): void => {
+    const player: CharacterState | null = this.gameState.player();
+    const reconnectToken: string | null = this.ws.currentReconnectToken;
+    if (player && reconnectToken) this.sessionResume.save({ roomId: this.roomId, reconnectToken, player });
+  };
   private readonly gameCanvas: Signal<GameCanvasComponent | undefined> = viewChild(GameCanvasComponent);
 
   private syncTimer: WorkerInterval | null = null;
@@ -111,6 +119,11 @@ export class GameComponent implements OnInit, OnDestroy {
     this.isMultiplayer = mode === GameMode.Multiplayer && this.roomId !== '';
     this.isHost = this.route.snapshot.queryParamMap.get('isHost') === '1';
 
+    // A reloaded tab: the character is gone from memory, but the page saved it on the way out.
+    const resume: ResumeState | null =
+      this.isMultiplayer && !this.gameState.player() ? this.sessionResume.take(this.roomId) : null;
+    if (resume) this.gameState.player.set(resume.player);
+
     this.syncPlayerDisplay();
 
     if (this.isDev) {
@@ -126,6 +139,9 @@ export class GameComponent implements OnInit, OnDestroy {
           classId: player.classId,
         });
       }
+      // The server keeps the dropped session for its reconnect window; resume it (the role follows).
+      if (resume) this.ws.resumeSession(resume.reconnectToken);
+      window.addEventListener('pagehide', this.saveForReload);
 
       this.ws.serverShutdown$
         .pipe(takeUntilDestroyed(this.destroyRef))
@@ -153,6 +169,8 @@ export class GameComponent implements OnInit, OnDestroy {
       this.syncTimer = null;
     }
     if (this.isMultiplayer && this.roomId) {
+      window.removeEventListener('pagehide', this.saveForReload);
+      this.sessionResume.clear();
       this.ws.send(ClientMessageType.LeaveRoom, { roomId: this.roomId });
       // Out of the game means out of the room: no socket left open, no session to resume on a later drop.
       this.ws.disconnect();
@@ -714,6 +732,14 @@ export class GameComponent implements OnInit, OnDestroy {
     this.floor.set(1);
     this.score.set(0);
     this.syncPlayerDisplay();
+  }
+
+  /** From the "No character selected" page: pick one, for the mode this page was in. */
+  selectCharacter(): void {
+    const mode: string = this.route.snapshot.queryParamMap.get('mode') === GameMode.Multiplayer
+      ? GameMode.Multiplayer
+      : GameMode.SinglePlayer;
+    void this.router.navigate(['/character-select'], { queryParams: { mode } });
   }
 
   backToMenu(): void {

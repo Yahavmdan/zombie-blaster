@@ -83,6 +83,12 @@ export class Room {
     this.kickedUntil.set(id, until);
   }
 
+  /** Names are compared trimmed and case-insensitive: "Bob" and " bob " can't share a room. */
+  isNameTaken(name: string): boolean {
+    const wanted: string = name.trim().toLowerCase();
+    return this.players.some((p: RoomPlayer): boolean => p.name.trim().toLowerCase() === wanted);
+  }
+
   isKicked(id: string, now: number): boolean {
     const until: number | undefined = this.kickedUntil.get(id);
     if (until === undefined) return false;

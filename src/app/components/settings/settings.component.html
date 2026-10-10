@@ -29,6 +29,14 @@
             ><app-pixel-icon [icon]="'book'" [size]="16" /> Skills</button>
           </div>
           <button
+            class="kb-quit px-btn px-btn--sm"
+            [class.px-btn--ghost]="!quitArmed()"
+            [class.px-btn--primary]="quitArmed()"
+            title="Leave this game for the main menu"
+            data-testid="game-settings-button-quit"
+            (click)="onQuitClick()"
+          ><app-pixel-icon [icon]="'arrow-left'" [size]="16" /> {{ quitArmed() ? 'Really quit?' : 'Quit to menu' }}</button>
+          <button
             class="kb-close px-btn px-close"
             title="Close"
             data-testid="game-settings-button-close"

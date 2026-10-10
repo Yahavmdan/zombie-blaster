@@ -94,6 +94,7 @@ import { RenderSystem } from './render-system';
 import { restsOnSafeSpot } from './safe-spot';
 import { WorkerInterval } from './worker-interval';
 import { refreshDerivedStats } from './derived-stats';
+import { respawnForNewFloor } from './floor-respawn';
 
 export type { Particle };
 export { ParticleShape, FadeMode };
@@ -1094,6 +1095,7 @@ export class GameEngine implements IGameEngine {
       this.player.velocityX = 0;
       this.player.velocityY = 0;
       this.player.isGrounded = true;
+      if (respawnForNewFloor(this.player)) this.onPlayerUpdate?.(this.player);
     }
   }
 

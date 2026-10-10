@@ -1,4 +1,4 @@
-import { Injectable, WritableSignal, signal } from '@angular/core';
+import { Injectable, WritableSignal, effect, signal } from '@angular/core';
 import { GameAction, KeyBindings } from '@shared/messages';
 import { DEFAULT_KEY_BINDINGS } from '@shared/game-constants';
 
@@ -37,13 +37,27 @@ export function mouseButtonKey(button: number): string | null {
   return MOUSE_BUTTON_KEYS[button] ?? null;
 }
 
+const STORAGE_KEY: string = 'zb.keyBindings';
+
 export function formatKeyName(key: string): string {
   return KEY_DISPLAY_MAP[key.toLowerCase()] ?? key.toUpperCase();
 }
 
 @Injectable({ providedIn: 'root' })
 export class KeyBindingsService {
-  readonly bindings: WritableSignal<KeyBindings> = signal<KeyBindings>(this.copyDefaults());
+  readonly bindings: WritableSignal<KeyBindings> = signal<KeyBindings>(this.loadSaved());
+
+  constructor() {
+    // The player's bindings outlive the tab: saved on every change, loaded at startup.
+    effect((): void => {
+      const b: KeyBindings = this.bindings();
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(b));
+      } catch {
+        // Storage blocked: bindings just last for this session.
+      }
+    });
+  }
 
   /** Makes `key` the action's only key and takes it from any other action: one key never does two things. */
   rebind(action: GameAction, key: string): void {
@@ -93,6 +107,37 @@ export class KeyBindingsService {
       }
     }
     return null;
+  }
+
+  /**
+   * Saved bindings over the defaults. An action added since the save gets its default keys,
+   * unless the player already uses one of them for something else.
+   */
+  private loadSaved(): KeyBindings {
+    const result: KeyBindings = this.copyDefaults();
+    let saved: unknown = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
+    } catch {
+      return result;
+    }
+    if (typeof saved !== 'object' || saved === null) return result;
+    const savedRecord: Record<string, unknown> = saved as Record<string, unknown>;
+    const actions: GameAction[] = Object.keys(result) as GameAction[];
+    const used: Set<string> = new Set<string>();
+    const restored: Set<GameAction> = new Set<GameAction>();
+    for (const action of actions) {
+      const keys: unknown = savedRecord[action];
+      if (!Array.isArray(keys) || !keys.every((k: unknown): boolean => typeof k === 'string')) continue;
+      result[action] = keys as string[];
+      restored.add(action);
+      for (const k of keys as string[]) used.add(k);
+    }
+    for (const action of actions) {
+      if (restored.has(action)) continue;
+      result[action] = result[action].filter((k: string): boolean => !used.has(k));
+    }
+    return result;
   }
 
   private copyDefaults(): KeyBindings {

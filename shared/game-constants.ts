@@ -438,6 +438,7 @@ export const GAME_CONSTANTS = {
   ALLY_VFX_ALPHA: 0.7, // Particles replayed from other players draw at this opacity
   REVIVE_RANGE: 60, // Pixels — reviver must be within this distance
   REVIVE_HP_PERCENT: 30, // Percent of max HP the revived player comes back with
+  FLOOR_RESPAWN_HP_PERCENT: 50, // Co-op: a player who died is back on the next floor with this percent of max HP
 
   // ─── Special Drops ────────────────────────────────
   SPECIAL_DROP_CHANCE_NORMAL: 0.008, // Chance (0-1) a normal zombie drops a special item

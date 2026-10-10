@@ -204,6 +204,25 @@ Design questions (decided: Eaters leave both alone, `eater-meals.ts`):
 - Host vs guest animation: 24 of 250 samples differ, mostly host "jump" vs guest "idle" (the
   drop-down loop flickering `isGrounded`); positions drift at most 43 px.
 
+## Round 5 (2026-10-10): endgame (not changed, proposals)
+
+Verified in code: puzzles exist only on floors 2-5 (`PUZZLE_*_FLOOR`, exact `floor ===` checks), so
+floor 1 and every floor from 6 up are plain "kill, pile, climb". There is no last floor and no win
+(`advanceFloor` is just `floor++`). The exit stops rising at y 150: solo from floor 15 (floor 14 is
+154), 2 players from floor 9, 3 from floor 4, 4 from floor 1. The zombie cap
+(`min((10 + (floor - 1) * 2) * players, 30 * players)`) maxes out at floor 11. From there on the run
+only gets longer, never different.
+
+Options, cheapest first:
+- A goal: floor 10 (or 12) is the last; reaching its exit shows a win screen with time, kills, deaths.
+- Puzzle rotation: from floor 6, each floor picks one of the four puzzles (seeded by the layout seed,
+  so host and guests agree), harder each lap (more scale kg, more plate weight, more cage hits).
+- Late-floor modifiers per floor (darkness, low gravity, Eaters only, a boss) instead of more of the same.
+- Keep scaling past the caps slowly (zombie stats already scale per floor; the count and exit don't).
+
+Also changed in this round: a co-op player who died is back on the next floor with
+`FLOOR_RESPAWN_HP_PERCENT` (50 %) of max HP, so one death no longer benches them for the rest of the run.
+
 ## Suggested order
 
 1. Exit gate (progression is impossible today).

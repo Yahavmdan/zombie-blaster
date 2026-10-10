@@ -6,3 +6,4 @@ export * from './multiplayer';
 export * from './skill';
 export * from './skill-utils';
 export * from './pixel-icon';
+export * from './random';

@@ -14,7 +14,6 @@ import {
   GameMode,
 } from '@shared/index';
 import { GameStateService } from '../../services/game-state.service';
-import { KeyBindingsService } from '../../services/key-bindings.service';
 import { QuickSlotService } from '../../services/quick-slot.service';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
 import { classToSpriteSet, SpriteSet } from '../../engine/sprite-animator';
@@ -33,7 +32,6 @@ export class CharacterSelectComponent implements OnInit {
   private readonly router: Router = inject(Router);
   private readonly route: ActivatedRoute = inject(ActivatedRoute);
   private readonly gameState: GameStateService = inject(GameStateService);
-  private readonly keyBindingsService: KeyBindingsService = inject(KeyBindingsService);
   private readonly quickSlotService: QuickSlotService = inject(QuickSlotService);
 
   readonly gameMode: WritableSignal<GameMode> = signal<GameMode>(GameMode.SinglePlayer);
@@ -122,8 +120,8 @@ export class CharacterSelectComponent implements OnInit {
     const classId: CharacterClass | null = this.selectedClass();
     if (!classId || !this.nameControl.valid) return;
 
-    this.keyBindingsService.resetToDefaults();
-    this.quickSlotService.resetToDefaults();
+    // Bindings and slots are the player's (saved across games); only another class's skills go.
+    this.quickSlotService.dropOtherClassSkills(classId);
 
     if (this.gameMode() === GameMode.SinglePlayer) {
       this.gameState.createPlayer(this.nameControl.value, classId);

@@ -63,6 +63,20 @@ export class WebSocketService {
     this.sessionInfo = info;
   }
 
+  /** The token that resumes this connection's session after a drop or a page reload. */
+  get currentReconnectToken(): string | null {
+    return this.reconnectToken;
+  }
+
+  /**
+   * Connects and resumes the session `token` belonged to (a reloaded page). Call setSessionInfo
+   * before the welcome arrives; the resume goes out right after it.
+   */
+  resumeSession(token: string): void {
+    this.pendingReconnectToken = token;
+    this.connect();
+  }
+
   connect(url: string = DEFAULT_WS_URL): void {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       this._status$.next(this._currentStatus);
