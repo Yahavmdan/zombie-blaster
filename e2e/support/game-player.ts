@@ -22,6 +22,9 @@ export interface SkyLuma {
 
 export const ALL_CLASSES: ClassId[] = ['warrior', 'ranger', 'mage', 'assassin', 'priest'];
 
+/** Default keys of skill slots 1..7 (shared/game-constants.ts DEFAULT_KEY_BINDINGS skill1..skill7). */
+export const SKILL_SLOT_KEYS: string[] = ['1', '2', '3', '4', '5', '6', '9'];
+
 /** Default key bindings (shared/game-constants.ts DEFAULT_KEY_BINDINGS), as Playwright key names. */
 export const KEYS: {
   left: string;
@@ -315,9 +318,9 @@ export class GamePlayer {
     await this.press(KEYS.attack, 80);
   }
 
-  /** Skill slot 1..6 (usable skills sorted by required level). */
+  /** Presses the default key of skill slot 1..7 (DEFAULT_KEY_BINDINGS: 1-6, then 9; 7/8 are potions). */
   async castSkill(slot: number): Promise<void> {
-    await this.press(String(slot), 80);
+    await this.press(SKILL_SLOT_KEYS[slot - 1], 80);
   }
 
   async face(direction: 'left' | 'right'): Promise<void> {

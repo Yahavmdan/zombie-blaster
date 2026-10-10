@@ -1183,13 +1183,14 @@ export class ZombieSystem {
     const puzzle: BoulderPuzzleLayout | null = this.e.boulderPuzzle;
     const boulder: BoulderState | null = this.e.boulder;
 
+    // Only someone on their feet walks out: a downed body lying on the exit doesn't finish the floor.
     const candidates: CharacterState[] = [];
-    if (this.e.player && !this.e.player.isDead) {
+    if (this.e.player && !this.e.player.isDead && !this.e.player.isDown) {
       candidates.push(this.e.player);
     }
     if (this.e.isMultiplayerHost) {
       for (const rp of this.e.remotePlayers) {
-        if (!rp.isDead) {
+        if (!rp.isDead && !rp.isDown) {
           candidates.push(rp);
         }
       }

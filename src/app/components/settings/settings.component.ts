@@ -149,6 +149,7 @@ export class SettingsComponent implements OnDestroy {
     { action: 'skill4', label: 'Skill 4', icon: 'spark' },
     { action: 'skill5', label: 'Skill 5', icon: 'spark' },
     { action: 'skill6', label: 'Skill 6', icon: 'spark' },
+    { action: 'skill7', label: 'Skill 7', icon: 'spark' },
     { action: 'useHpPotion', label: 'HP Pot', icon: 'heart' },
     { action: 'useMpPotion', label: 'MP Pot', icon: 'mana' },
     { action: 'openStats', label: 'Stats', icon: 'chart' },
@@ -421,7 +422,9 @@ export class SettingsComponent implements OnDestroy {
           (a: QuickSlotAction): boolean => !slots[a],
         );
         if (emptySlot) {
-          this.keyBindingsService.assignKeyToAction(keyCode, emptySlot);
+          // The dropped key becomes the slot's only key: an empty slot may still sit on a mouse
+          // button (9-12 do by default), which would otherwise cast it too.
+          this.keyBindingsService.rebind(emptySlot, keyCode);
           this.quickSlotService.assign(emptySlot, entry);
         }
       }

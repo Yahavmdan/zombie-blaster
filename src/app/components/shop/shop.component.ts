@@ -101,20 +101,28 @@ export class ShopComponent {
   );
 
   onQuantityChange(itemId: string, delta: number): void {
+    const current: number = this.clampQuantity(itemId, this.quantities()[itemId] ?? 1);
     this.quantities.update((qtys: Record<string, number>): Record<string, number> => {
-      const current: number = qtys[itemId] ?? 1;
-      const next: number = Math.max(1, current + delta);
-      return { ...qtys, [itemId]: next };
+      return { ...qtys, [itemId]: this.clampQuantity(itemId, current + delta) };
     });
   }
 
   onQuantityInput(itemId: string, event: Event): void {
     const el: HTMLInputElement = event.target as HTMLInputElement;
     const parsed: number = parseInt(el.value, 10);
-    const value: number = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+    const value: number = this.clampQuantity(itemId, Number.isNaN(parsed) ? 1 : parsed);
     this.quantities.update((qtys: Record<string, number>): Record<string, number> => {
       return { ...qtys, [itemId]: value };
     });
+    // The bound [value] may not change (it was already clamped), so the field must be corrected here.
+    el.value = String(value);
+  }
+
+  /** 1 up to what the gold buys (at least 1, so the field never shows 0). */
+  private clampQuantity(itemId: string, wanted: number): number {
+    const row: ShopRow | undefined = this.rows().find((r: ShopRow): boolean => r.item.id === itemId);
+    const max: number = Math.max(1, row?.maxAffordable ?? 1);
+    return Math.min(Math.max(1, wanted), max);
   }
 
   onBuy(itemId: string, quantity: number): void {

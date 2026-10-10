@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, InputSignal, OutputEmitterRef, Signal, input, output, computed, inject } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { ActiveBuff, CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost, getSkillHpCost, KeyBindings, GameAction, getTotalPotionsByCategory } from '@shared/index';
+import { ActiveBuff, CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost, getUsableSkills, getSkillHpCost, KeyBindings, GameAction, getTotalPotionsByCategory } from '@shared/index';
 import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
 import { PixelIconId } from '@shared/pixel-icon';
@@ -100,14 +100,8 @@ export class HudComponent {
   readonly skillSlots: Signal<SkillSlot[]> = computed((): SkillSlot[] => {
     const p: CharacterState = this.playerData();
     const bindings: KeyBindings = this.keyBindingsService.bindings();
-    const skillActions: GameAction[] = ['skill1', 'skill2', 'skill3', 'skill4', 'skill5', 'skill6'];
-    const usableSkills: SkillDefinition[] = SKILLS.filter(
-      (s: SkillDefinition) =>
-        s.classId === p.classId &&
-        (s.type === SkillType.Active || s.type === SkillType.Buff) &&
-        (p.skillLevels[s.id] ?? 0) > 0,
-    ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
-     .slice(0, 6);
+    const skillActions: GameAction[] = ['skill1', 'skill2', 'skill3', 'skill4', 'skill5', 'skill6', 'skill7'];
+    const usableSkills: SkillDefinition[] = getUsableSkills(p.classId, p.skillLevels);
     return usableSkills.map((skill: SkillDefinition, idx: number): SkillSlot => {
       const level: number = p.skillLevels[skill.id] ?? 0;
       const action: GameAction = skillActions[idx];

@@ -9,6 +9,7 @@ import {
   SkillType,
   VfxEvent,
   VfxEventType,
+  getUsableSkills,
   getSkillDamageMultiplier,
   getSkillMpCost,
   getSkillHpCost,
@@ -51,6 +52,19 @@ export class CombatSystem {
     return p.activeBuffs.some(
       (b: ActiveBuff): boolean => b.stat === 'darkSight' && b.remainingMs > 0,
     );
+  }
+
+  /** Melee can't touch the local player mid power-dash or hidden in Dark Sight (host and guests alike). */
+  dodgesZombieHits(): boolean {
+    return this.e.dashPhase !== null || this.hasDarkSight();
+  }
+
+  /** Power Stance: a hit lands but, by its chance, doesn't knock the player back. */
+  resistsKnockback(p: CharacterState): boolean {
+    const kbResistBuff: ActiveBuff | undefined = p.activeBuffs.find(
+      (b: ActiveBuff): boolean => b.stat === 'knockbackResist' && b.remainingMs > 0,
+    );
+    return !!kbResistBuff && Math.random() * 100 < kbResistBuff.value;
   }
 
   private cancelDarkSight(): void {
@@ -1384,13 +1398,7 @@ export class CombatSystem {
 
     const p: CharacterState | null = this.e.player;
     if (p) {
-      const available: SkillDefinition[] = SKILLS.filter(
-        (s: SkillDefinition) =>
-          s.classId === p.classId &&
-          (s.type === SkillType.Active || s.type === SkillType.Buff) &&
-          (p.skillLevels[s.id] ?? 0) > 0,
-      ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
-       .slice(0, 6);
+      const available: SkillDefinition[] = getUsableSkills(p.classId, p.skillLevels);
       if (available.length !== this.e.playerUsableSkills.length) {
         this.e.playerUsableSkills = available;
       }
@@ -1441,9 +1449,8 @@ export class CombatSystem {
   applyZombieDamageToPlayer(damage: number, z: ZombieState): void {
     const p: CharacterState | null = this.e.player;
     if (!p || p.isDown || this.e.invincibilityFrames > 0) return;
-    if (this.e.dashPhase) return;
     if (this.e.godMode) return;
-    if (this.hasDarkSight()) return;
+    if (this.dodgesZombieHits()) return;
 
     p.hp -= damage;
     this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
@@ -1451,12 +1458,7 @@ export class CombatSystem {
 
     this.interruptReviveChannel();
 
-    const kbResistBuff: ActiveBuff | undefined = p.activeBuffs.find(
-      (b: ActiveBuff) => b.stat === 'knockbackResist' && b.remainingMs > 0,
-    );
-    const resistedKnockback: boolean = !!kbResistBuff && Math.random() * 100 < kbResistBuff.value;
-
-    if (!resistedKnockback) {
+    if (!this.resistsKnockback(p)) {
       const knockDir: number = p.x > z.x ? 1 : -1;
       p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
       p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;

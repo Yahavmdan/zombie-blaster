@@ -2,10 +2,9 @@ import {
   ActiveBuff,
   CharacterState,
   GAME_CONSTANTS,
-  SKILLS,
   SPECIAL_DROP_DEFINITIONS,
+  getUsableSkills,
   SkillDefinition,
-  SkillType,
   VfxEvent,
   VfxEventType,
 } from '@shared/index';
@@ -138,7 +137,7 @@ export class GameEngine implements IGameEngine {
   /** Seed for this run's floor layouts: the host picks it, clients adopt it from game-sync. */
   layoutSeed: number = Math.floor(Math.random() * 0x7fffffff);
   level: LevelLayout = generateLevel(this.layoutSeed, 1);
-  keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, confirmDrop: false, declineDrop: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false, quickSlot9: false, quickSlot10: false, quickSlot11: false, quickSlot12: false };
+  keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, skill7: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, confirmDrop: false, declineDrop: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false, quickSlot9: false, quickSlot10: false, quickSlot11: false, quickSlot12: false };
   attackCooldown: number = 0;
   attackAnimTicks: number = 0;
   attackHitPending: boolean = false;
@@ -484,13 +483,7 @@ export class GameEngine implements IGameEngine {
     this.reviveProgressTicks = 0;
     this.pendingReviveTargetIds.length = 0;
     this.floor = 1;
-    this.playerUsableSkills = SKILLS.filter(
-      (s: SkillDefinition) =>
-        s.classId === player.classId &&
-        (s.type === SkillType.Active || s.type === SkillType.Buff) &&
-        (player.skillLevels[s.id] ?? 0) > 0,
-    ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
-     .slice(0, 6);
+    this.playerUsableSkills = getUsableSkills(player.classId, player.skillLevels);
     this.skillCooldowns.clear();
     this.passiveRecoveryTimers.clear();
     this.playerStandingStillTicks = 0;
@@ -498,6 +491,20 @@ export class GameEngine implements IGameEngine {
     this.autoPotionCooldown = 0;
     this.doubleJumpUsed = false;
     this.doubleJumpAnimTicks = 0;
+    // "Try again" reuses this engine: nothing from the run that ended may carry over.
+    this.pendingSpecialDropConfirm = null;
+    this.pendingSpecialDropActivations = [];
+    this.dashPhase = null;
+    this.floorTransitionTimer = 0;
+    this.levelUpNotification = null;
+    this.attackCooldown = 0;
+    this.attackAnimTicks = 0;
+    this.attackHitPending = false;
+    this.invincibilityFrames = 0;
+    this.potionCooldown = 0;
+    this.jumpBufferTicks = 0;
+    this.ropeJumpCooldown = 0;
+    this.platformDropTimer = 0;
     this.zombieSystem.startFloor();
     this.lastTimestamp = performance.now();
     document.addEventListener('visibilitychange', this.onVisibilityChange);
@@ -601,13 +608,7 @@ export class GameEngine implements IGameEngine {
         y: this.player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
       });
     }
-    this.playerUsableSkills = SKILLS.filter(
-      (s: SkillDefinition) =>
-        s.classId === this.player!.classId &&
-        (s.type === SkillType.Active || s.type === SkillType.Buff) &&
-        (this.player!.skillLevels[s.id] ?? 0) > 0,
-    ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
-     .slice(0, 6);
+    this.playerUsableSkills = getUsableSkills(this.player.classId, this.player.skillLevels);
   }
 
   private loop(timestamp: number): void {
@@ -950,6 +951,7 @@ export class GameEngine implements IGameEngine {
     if (this.keys.skill4) this.combatSystem.tryPerformSkill(3);
     if (this.keys.skill5) this.combatSystem.tryPerformSkill(4);
     if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
+    if (this.keys.skill7) this.combatSystem.tryPerformSkill(6);
   }
 
   getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
@@ -1307,6 +1309,8 @@ export class GameEngine implements IGameEngine {
     if (this.invincibilityFrames > 0) return;
     // The host aimed at where it last saw us; we already made it up to the safe spot (or went away).
     if (this.isOutOfReach(p)) return;
+    // Same rules as a hit on the host's own player: no hit mid-dash or in Dark Sight.
+    if (this.combatSystem.dodgesZombieHits()) return;
 
     p.hp -= damage;
     this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
@@ -1314,11 +1318,13 @@ export class GameEngine implements IGameEngine {
 
     this.combatSystem.interruptReviveChannel();
 
-    p.velocityX = knockbackDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
-    p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
-    p.isGrounded = false;
-    if (p.isClimbing) {
-      p.isClimbing = false;
+    if (!this.combatSystem.resistsKnockback(p)) {
+      p.velocityX = knockbackDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
+      p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
+      p.isGrounded = false;
+      if (p.isClimbing) {
+        p.isClimbing = false;
+      }
     }
 
     this.vfxSystem.spawnHitParticles(

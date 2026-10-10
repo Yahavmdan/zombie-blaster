@@ -46,8 +46,19 @@ function isId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= LIMITS.id;
 }
 
+/**
+ * Characters that print nothing but which trim() keeps: zero-width spaces and joiners, bidi marks,
+ * word joiners, the BOM, soft hyphen, Hangul fillers, the blank Braille pattern.
+ */
+const INVISIBLE_CHARS: RegExp = /[\u00AD\u115F\u1160\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2800\u3164\uFEFF\uFFA0]/g;
+
+/** A string with something visible in it (not only spaces or invisible characters). */
+function hasVisibleText(value: string): boolean {
+  return value.replace(INVISIBLE_CHARS, '').trim().length > 0;
+}
+
 function isText(value: unknown, maxLength: number, allowEmpty: boolean): value is string {
-  return typeof value === 'string' && value.length <= maxLength && (allowEmpty || value.trim().length > 0);
+  return typeof value === 'string' && value.length <= maxLength && (allowEmpty || hasVisibleText(value));
 }
 
 function isFiniteNumber(value: unknown): value is number {

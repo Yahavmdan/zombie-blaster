@@ -470,6 +470,12 @@ export const GAME_CONSTANTS = {
   MAGIC_TWIN_OFFSET_X: 25, // Horizontal offset behind the player in pixels
   MAGIC_TWIN_ALPHA: 0.4, // Opacity of the twin sprite
 
+  // ─── Input ──────────────────────────────────────
+  INPUT_TAP_PULSE_MS: 60, // How long a tap-on-release key (Alt) holds its action down: spans ~3 engine ticks
+
+  // ─── Skill bar ──────────────────────────────────
+  SKILL_SLOT_COUNT: 7, // Skill keys (skill1..skill7): a class never has more Active + Buff skills than this
+
   // ─── Dark Sight ─────────────────────────────────
   DARK_SIGHT_ALPHA: 0.5, // Player opacity while Dark Sight is active
 
@@ -1228,7 +1234,7 @@ export const SKILLS: SkillDefinition[] = [
       { mpCost: 24, hpCost: 45, damage: 1.75, range: 250, stunDurationMs: 3000 },
       { mpCost: 24, hpCost: 44, damage: 1.80, range: 260, stunDurationMs: 3000 },
       { mpCost: 24, hpCost: 43, damage: 1.85, range: 270, stunDurationMs: 3000 },
-      { mpCost: 24, hpCost: 42, damage: 1.90, range: 190, stunDurationMs: 3000 },
+      { mpCost: 24, hpCost: 42, damage: 1.90, range: 280, stunDurationMs: 3000 },
       { mpCost: 24, hpCost: 41, damage: 1.95, range: 290, stunDurationMs: 3000 },
       { mpCost: 24, hpCost: 40, damage: 2.00, range: 300, stunDurationMs: 3000 },
       { mpCost: 30, hpCost: 39, damage: 2.04, range: 310, stunDurationMs: 2000 },
@@ -1740,6 +1746,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   skill4: ['4'],
   skill5: ['5'],
   skill6: ['6'],
+  skill7: ['9'],
   openStats: ['p'],
   openSkills: ['o'],
   useHpPotion: ['7'],
@@ -1908,3 +1915,18 @@ export const SHOP_ITEMS: ShopItemDefinition[] = POTION_DEFINITIONS.map(
     potionId: p.id,
   }),
 );
+
+/**
+ * The skills on a player's skill bar: learned Active and Buff skills of the class, by required
+ * level. Slot i (0-based) is cast by the `skill{i+1}` key.
+ */
+export function getUsableSkills(classId: CharacterClass, skillLevels: Record<string, number>): SkillDefinition[] {
+  return SKILLS.filter(
+    (s: SkillDefinition): boolean =>
+      s.classId === classId &&
+      (s.type === SkillType.Active || s.type === SkillType.Buff) &&
+      (skillLevels[s.id] ?? 0) > 0,
+  )
+    .sort((a: SkillDefinition, b: SkillDefinition): number => a.requiredCharacterLevel - b.requiredCharacterLevel)
+    .slice(0, GAME_CONSTANTS.SKILL_SLOT_COUNT);
+}

@@ -313,8 +313,9 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
   flag (config: list + html into `e2e/.report/data/*.png`). To eyeball small art (carried corpses), a throwaway spec can `page.screenshot({ path, clip })` around `state().player` and you upscale the crop (System.Drawing, NearestNeighbor); delete the spec after.
 - Physics gotcha: tiny velocities snap to 0 (`PLAYER_MIN_VELOCITY`); any per-tick acceleration
   smaller than that must skip the snap (air control was silently dead until fixed).
-- Skills live in slots 1..6 = usable Active/Buff skills sorted by required level
-  (`state().usableSkills[].slot`). Ranger/Mage/Priest currently have only passives (tests skip them).
+- Skills live in slots 1..7 (keys 1-6 and 9; 7/8 are potions) = usable Active/Buff skills sorted by required level
+  (`state().usableSkills[].slot`, `castSkill(slot)`; one list: `getUsableSkills` in game-constants,
+  `SKILL_SLOT_COUNT`). Ranger/Mage/Priest currently have only passives (tests skip them).
 - Particles cap at 400: wait for effects to fade before measuring "effect appeared".
 - Probe setup helpers that inject entities (`dropCorpses`) must also register sprite instances
   (`setState`/`setFinalFrame`), or the entities are invisible in screenshots while physics still works.
@@ -353,6 +354,7 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
   tab is NOT dropped by the server (pings still answered) and catches up by itself after waking.
   Spec: `online/afk.spec.ts`.
 - Key bindings and quick slots persist in localStorage (`zb.keyBindings`, `zb.quickSlots`); every Playwright context starts empty, so tests still see defaults. A new character keeps them (only another class's skills leave the quick slots).
+- Digit keys bind by physical key (`bindingKey`: Shift+1 is still "1"), and a key releases what its press pressed even if modifiers changed. Alt (quick slot 5, HP potion) acts on release only after a clean tap: any other key or a window blur in between cancels it (Alt+Tab). Test with `player.press('Alt', 80)`. A skill or potion dropped on a plain key in settings makes that key the empty slot's only key.
 - A multiplayer tab saves its game to sessionStorage on `pagehide` (`SessionResumeService`); `page.reload()` resumes the same player through the server's reconnect window (role follows `reconnect-result`). Settings has a two-click "Quit to menu" (`game-settings-button-quit`). A co-op player who died respawns on the next floor (`FLOOR_RESPAWN_HP_PERCENT`). Specs: `solo/session-and-settings.spec.ts`, `online/resilience.spec.ts`.
 - Co-op death: `knockOut()` each player (god mode on the survivor until its turn); each bleeds out in 30 s (`downTimer` from 1500) and the game-over screen shows on every screen only once all are dead: `online/bleed-out.spec.ts` (~80 s per test). Guest leaving / host migration with 3 players: `online/three-player-room.spec.ts` (`net.reset()` before the drop: frame payloads are kept for the first 5000 frames only), lobby guest leave in `online/lobby.spec.ts`, raw leave/migration in `protocol/server-edge-cases.spec.ts`.
 - Playwright never sends `KeyboardEvent.repeat`; to test a held key, dispatch `new KeyboardEvent('keydown', { key, repeat: true })` on `window`. Panel keys and prompt answers ignore repeats.
@@ -368,6 +370,15 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
 - A `test.fail` pin can fail for the wrong reason (wrong message name, god mode, a setup timeout).
   Before trusting one, read why it failed: `--grep @bug --reporter=json` and print each
   `results[].errors[0].message`.
+  Pins that need something to happen by chance (a zombie swing) must loop until it happens with a
+  generous deadline, or they "unexpectedly pass" under load. Timer pins: check the arithmetic of
+  every window involved (the 60 s room timer pin first failed on the *second* window expiring).
+- Never start a second `playwright test` in the same slot while one runs: each run wipes
+  `e2e/.results`, and the other run then fails with trace ENOENT and stray console errors.
+- Shop test ids use the shop item id, which is `shop-` + the potion id
+  (`shop-item-button-buy-shop-hp-potion-2`, `shop-item-input-qty-shop-hp-potion-1`).
+- Edge-case sweep (2026-10-10) pins: `protocol/server-gaps.spec.ts`, `solo/edge-sweep.spec.ts`,
+  `solo/ui-sweep.spec.ts`, `online/edge-sweep-coop.spec.ts`, unit `engine/skill-level-data.spec.ts`.
 - Protocol edge cases (reconnect twice, reconnect from another room, repeat start, guest revive,
   full room): `protocol/server-edge-cases.spec.ts`. UI edge cases: `solo/ui-edge-cases.spec.ts`.
 - A room whose last player drops stays open (hidden from `room-list`) for the 60 s reconnect

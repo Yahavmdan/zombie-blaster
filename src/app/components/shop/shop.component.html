@@ -72,13 +72,12 @@
           <label class="shop-auto-label">HP potion</label>
           <select
             class="shop-auto-select px-input"
-            [value]="autoPotionHpId() ?? ''"
             (change)="onAutoPotionHpChange($event)"
             data-testid="shop-auto-select-hp"
           >
-            <option value="">None</option>
+            <option value="" [selected]="!autoPotionHpId()">None</option>
             @for (pot of hpPotionOptions(); track pot.id) {
-              <option [value]="pot.id">{{ pot.name }}</option>
+              <option [value]="pot.id" [selected]="pot.id === autoPotionHpId()">{{ pot.name }}</option>
             }
           </select>
         </div>
@@ -86,13 +85,12 @@
           <label class="shop-auto-label">MP potion</label>
           <select
             class="shop-auto-select px-input"
-            [value]="autoPotionMpId() ?? ''"
             (change)="onAutoPotionMpChange($event)"
             data-testid="shop-auto-select-mp"
           >
-            <option value="">None</option>
+            <option value="" [selected]="!autoPotionMpId()">None</option>
             @for (pot of mpPotionOptions(); track pot.id) {
-              <option [value]="pot.id">{{ pot.name }}</option>
+              <option [value]="pot.id" [selected]="pot.id === autoPotionMpId()">{{ pot.name }}</option>
             }
           </select>
         </div>

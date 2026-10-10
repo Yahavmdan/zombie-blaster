@@ -144,15 +144,20 @@ export class WebSocketService {
     const isReconnect: boolean = this.reconnectAttempt > 0;
     this.setStatus(isReconnect ? 'reconnecting' : 'connecting');
 
-    this.ws = new WebSocket(this.wsUrl);
+    const socket: WebSocket = new WebSocket(this.wsUrl);
+    this.ws = socket;
 
-    this.ws.onopen = (): void => {
+    // A replaced socket (disconnect() then connect(), e.g. browser Back from the game to the lobby)
+    // can still fire late events: they must never touch the current one or schedule a reconnect.
+    socket.onopen = (): void => {
+      if (this.ws !== socket) return;
       this.setStatus('connected');
       this.reconnectAttempt = 0;
       this.startPing();
     };
 
-    this.ws.onmessage = (event: MessageEvent): void => {
+    socket.onmessage = (event: MessageEvent): void => {
+      if (this.ws !== socket) return;
       try {
         const msg: ServerMessage = JSON.parse(event.data as string) as ServerMessage;
         this.handleInternalMessage(msg);
@@ -162,7 +167,8 @@ export class WebSocketService {
       }
     };
 
-    this.ws.onclose = (): void => {
+    socket.onclose = (): void => {
+      if (this.ws !== socket) return;
       this.stopPing();
       if (!this.intentionalDisconnect && this.autoReconnect) {
         if (this.reconnectToken && this.sessionInfo) {
@@ -174,7 +180,7 @@ export class WebSocketService {
       }
     };
 
-    this.ws.onerror = (): void => {
+    socket.onerror = (): void => {
       /* onclose fires after onerror — reconnect logic lives there */
     };
   }
