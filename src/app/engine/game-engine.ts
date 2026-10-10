@@ -241,6 +241,7 @@ export class GameEngine implements IGameEngine {
   showCollisionBoxes: boolean = false;
   isMultiplayerHost: boolean = false;
   isMultiplayerClient: boolean = false;
+  isLocalAfk: boolean = false;
   pendingLocalKills: Set<string> = new Set<string>();
   pendingRemoteAttacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [];
   pendingReviveTargetIds: string[] = [];
@@ -432,6 +433,11 @@ export class GameEngine implements IGameEngine {
 
   isInSafeSpot(x: number, y: number): boolean {
     return restsOnSafeSpot(this.platforms, x, y);
+  }
+
+  isOutOfReach(p: CharacterState): boolean {
+    const afk: boolean = p === this.player ? this.isLocalAfk : p.isAfk === true;
+    return afk || this.isInSafeSpot(p.x, p.y);
   }
 
   requestHitStop(ticks: number): void {
@@ -959,7 +965,7 @@ export class GameEngine implements IGameEngine {
     const pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> = [...this.pendingPullEvents];
     this.pendingPullEvents.length = 0;
     return {
-      player: { ...this.player },
+      player: { ...this.player, isAfk: this.isLocalAfk },
       zombies: this.zombies
         .filter((z: ZombieState) => !z.isDead)
         .map((z: ZombieState): ZombieState => ({ ...z })),
@@ -1299,8 +1305,8 @@ export class GameEngine implements IGameEngine {
     if (!p || p.isDead || p.isDown) return;
     if (this.godMode) return;
     if (this.invincibilityFrames > 0) return;
-    // The host aimed at where it last saw us; we already made it up to the safe spot.
-    if (this.isInSafeSpot(p.x, p.y)) return;
+    // The host aimed at where it last saw us; we already made it up to the safe spot (or went away).
+    if (this.isOutOfReach(p)) return;
 
     p.hp -= damage;
     this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;

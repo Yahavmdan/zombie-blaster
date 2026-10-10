@@ -363,6 +363,10 @@ export const GAME_CONSTANTS = {
   // ─── Particles ──────────────────────────────────
   MAX_PARTICLES: 400, // Maximum particles alive at once (oldest removed when exceeded)
   MAX_PENDING_VFX_EVENTS: 300, // Outbound VFX events kept while the socket is down (oldest dropped beyond this)
+
+  // ─── Away from keyboard (online) ───
+  AFK_TIMEOUT_MS: 120_000, // No key, mouse or touch input this long (hidden tab included): the player is frozen behind the away overlay
+  AFK_SEAT_HOLD_MS: 60 * 60_000, // The server keeps an away player's seat this long after its socket dies (a discarded or sleeping tab); others get 60 s
   PARTICLE_LIFETIME_MS: 600, // Default particle lifetime in milliseconds
   HIT_PARTICLE_COUNT: 6, // Number of particles spawned per hit
   HIT_PARTICLE_VELOCITY: 6, // Speed of hit particles flying outward

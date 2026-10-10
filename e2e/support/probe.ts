@@ -186,6 +186,11 @@ export class GameProbe {
     await this.page.evaluate((): void => window.__zbE2e?.controls?.showGameOver());
   }
 
+  /** Setup only: how long without input (ms, counted from now) before this player is marked away. */
+  async setAfkTimeout(ms: number): Promise<void> {
+    await this.page.evaluate((t: number): void => window.__zbE2e?.controls?.setAfkTimeoutMs(t), ms);
+  }
+
   /** Setup only: puts a drop in the local world (`special` needs a SpecialDropType). */
   async spawnDrop(type: string, x: number, y: number, specialType: string | null = null): Promise<void> {
     await this.page.evaluate(

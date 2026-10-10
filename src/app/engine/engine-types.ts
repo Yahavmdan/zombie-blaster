@@ -389,6 +389,8 @@ export interface IGameEngine {
   showCollisionBoxes: boolean;
   isMultiplayerHost: boolean;
   isMultiplayerClient: boolean;
+  /** The local player is away from the keyboard (online): frozen, sent as `player.isAfk`. */
+  isLocalAfk: boolean;
   pendingLocalKills: Set<string>;
   pendingRemoteAttacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>;
   pendingReviveTargetIds: string[];
@@ -406,6 +408,8 @@ export interface IGameEngine {
   requestHitStop(ticks: number): void;
   /** A player whose top-left corner is at (x, y) rests on the floor's safe spot (out of every attack's reach). */
   isInSafeSpot(x: number, y: number): boolean;
+  /** Out of every attack's reach: resting on the safe spot, or away from the keyboard. */
+  isOutOfReach(p: CharacterState): boolean;
   /** Removes the gate holding the boulder (its collision) for good on this floor. */
   breakPuzzleGate(): void;
   /** Removes the puzzle wall (collision + art) for good on this floor. */

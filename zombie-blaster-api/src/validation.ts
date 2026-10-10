@@ -6,6 +6,7 @@ import type {
   LobbyChatPayload,
   ReconnectPayload,
   RevivePlayerPayload,
+  SetAfkPayload,
   StartGamePayload,
   ZombieAttackPlayerPayload,
   ZombieDamagePayload,
@@ -121,6 +122,10 @@ export function isRevivePlayerPayload(p: unknown): p is Pick<RevivePlayerPayload
 
 export function isReconnectPayload(p: unknown): p is ReconnectPayload {
   return isObject(p) && isId(p['reconnectToken']) && isText(p['playerName'], LIMITS.playerName, false) && isClassId(p['classId']);
+}
+
+export function isSetAfkPayload(p: unknown): p is SetAfkPayload {
+  return isObject(p) && typeof p['afk'] === 'boolean';
 }
 
 /** game-sync and player-state are relayed as-is; they only need to be objects carrying a player. */

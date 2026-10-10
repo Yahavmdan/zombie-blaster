@@ -99,6 +99,7 @@ function toPlayerView(p: CharacterState, engine: GameEngine): E2ePlayerView {
     isDoubleJumping: p.isDoubleJumping,
     isDead: p.isDead,
     isDown: p.isDown,
+    isAfk: p === engine.player ? engine.isLocalAfk : p.isAfk === true,
     downTimer: p.downTimer,
     unallocatedStatPoints: p.unallocatedStatPoints,
     unallocatedSkillPoints: p.unallocatedSkillPoints,
@@ -327,6 +328,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
   return {
     at: performance.now(),
     role: resolveRole(engine),
+    afk: engine.isLocalAfk,
     floor: engine.floor,
     floorTransitionTimer: engine.floorTransitionTimer,
     godMode: engine.godMode,

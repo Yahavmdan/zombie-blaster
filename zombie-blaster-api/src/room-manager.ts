@@ -91,13 +91,16 @@ export class RoomManager {
     this.rooms.delete(roomId);
   }
 
-  /** Removes old rooms nobody is in. A room with players stays, however old: they are connected and using it. */
-  cleanupStaleRooms(maxAgeMs: number): number {
+  /**
+   * Removes old rooms nobody is in. A room with players stays, however old: they are connected and
+   * using it. So does one in `heldRoomIds`: a dropped player may still resume a seat there.
+   */
+  cleanupStaleRooms(maxAgeMs: number, heldRoomIds: Set<string>): number {
     const now: number = Date.now();
     let removed: number = 0;
 
     for (const [id, room] of this.rooms) {
-      if (now - room.createdAt > maxAgeMs && room.playerCount === 0) {
+      if (now - room.createdAt > maxAgeMs && room.playerCount === 0 && !heldRoomIds.has(id)) {
         this.removeRoom(id);
         removed++;
       }

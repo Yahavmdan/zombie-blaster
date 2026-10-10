@@ -58,6 +58,7 @@ export class Room {
       classId,
       isHost: host,
       isReady: host || this._status === ('in-game' as RoomStatus),
+      isAfk: false,
     };
     this._players.set(id, player);
     return player;
@@ -70,12 +71,34 @@ export class Room {
     this._players.delete(id);
 
     if (player.isHost && this._players.size > 0) {
-      const newHost: RoomPlayer = this._players.values().next().value!;
-      newHost.isHost = true;
-      newHost.isReady = true;
+      // An active player runs the world if there is one; an away one only when everyone is away.
+      const active: RoomPlayer | undefined = this.players.find((p: RoomPlayer): boolean => !p.isAfk);
+      this.makeHost(active ?? this._players.values().next().value!);
     }
 
     return true;
+  }
+
+  /**
+   * Marks a player away or back. The host role never stays on an away player while someone is
+   * active: returns the new host's id when it moved, else null.
+   */
+  setAfk(id: string, afk: boolean): string | null {
+    const player: RoomPlayer | undefined = this._players.get(id);
+    if (!player) return null;
+    player.isAfk = afk;
+    const host: RoomPlayer | undefined = this.players.find((p: RoomPlayer): boolean => p.isHost);
+    if (!host || !host.isAfk) return null;
+    const active: RoomPlayer | undefined = this.players.find((p: RoomPlayer): boolean => !p.isAfk);
+    if (!active) return null;
+    host.isHost = false;
+    this.makeHost(active);
+    return active.id;
+  }
+
+  private makeHost(player: RoomPlayer): void {
+    player.isHost = true;
+    player.isReady = true;
   }
 
   /** Keeps a kicked player out until `until` (ms). Removing them from the room is the caller's job. */

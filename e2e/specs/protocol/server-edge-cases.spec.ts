@@ -511,7 +511,50 @@ test.describe('game server edge cases', { tag: ['@protocol', '@external-safe'] }
     a.client.close();
     b.client.close();
   });
-});
+  test('set-afk: an away host hands the role to the active guest; with everyone away it stays put', async (): Promise<void> => {
+    const host: { client: RawClient; roomId: string } = await hostWithRoom();
+    const guest: { client: RawClient; playerId: string } = await joinAs(host.roomId, 'Awake');
+    const hostIsAway: (p: unknown) => boolean = (p: unknown): boolean =>
+      (p as { room: { players: Array<{ id: string; isHost: boolean; isAfk: boolean }> } }).room.players.some(
+        (pl: { id: string; isHost: boolean; isAfk: boolean }): boolean =>
+          pl.isAfk && !pl.isHost && pl.id !== guest.playerId,
+      );
+
+    let mark: number = guest.client.received.length;
+    host.client.send('set-afk', { afk: true });
+    const moved: RawMessage = await guest.client.waitFor('room-updated', hostIsAway, 3_000, mark);
+    const players: Array<{ id: string; isHost: boolean }> = (
+      moved.payload as { room: RoomInfoView }
+    ).room.players;
+    expect(
+      players.find((pl: { id: string; isHost: boolean }): boolean => pl.id === guest.playerId)?.isHost,
+      'the active guest hosts now',
+    ).toBe(true);
+
+    // Everyone away: nobody active to take it, so the host role stays where it is.
+    mark = guest.client.received.length;
+    guest.client.send('set-afk', { afk: true });
+    const allAway: RawMessage = await guest.client.waitFor('room-updated', (): boolean => true, 3_000, mark);
+    expect(
+      (allAway.payload as { room: RoomInfoView }).room.players.find(
+        (pl: { id: string; isHost: boolean }): boolean => pl.id === guest.playerId,
+      )?.isHost,
+    ).toBe(true);
+
+    mark = host.client.received.length;
+    host.client.send('set-afk', { afk: 'yes' });
+    const bad: RawMessage = await host.client.waitFor('error', (): boolean => true, 3_000, mark);
+    expect((bad.payload as { code: string }).code).toBe('INVALID_PAYLOAD');
+    host.client.close();
+    guest.client.close();
+  });
+
+  test('set-afk outside a room changes nothing and keeps the socket', async (): Promise<void> => {
+    const c: RawClient = await RawClient.connect();
+    c.send('set-afk', { afk: true });
+    expect((await roomList(c)).length, 'still answering').toBeGreaterThanOrEqual(0);
+    c.close();
+  });});
 
 /** Readies every guest, starts the game and waits until everyone got game-started. */
 async function startGame(host: { client: RawClient; roomId: string }, guests: RawClient[]): Promise<void> {

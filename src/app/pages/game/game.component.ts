@@ -2,9 +2,9 @@ import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inj
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, VfxEvent } from '@shared/index';
+import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, VfxEvent, GAME_CONSTANTS } from '@shared/index';
 import { SpecialDropType, SpecialDropDefinition } from '@shared/game-entities';
-import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload, HostMigratedPayload, ReconnectResultPayload, RoomInfo, RoomPlayer, RoomUpdatedPayload } from '@shared/multiplayer';
+import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload, HostMigratedPayload, ReconnectResultPayload, RoomInfo, RoomPlayer, RoomUpdatedPayload, SetAfkPayload } from '@shared/multiplayer';
 import { ActiveSpecialEffect, BoulderState, CagePuzzleState, LooseProp, PlateState, SpringState, ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
@@ -25,6 +25,16 @@ import { attachGameControls } from '../../testing/e2e-hooks';
 import { E2eControls } from '../../testing/e2e-api';
 import { WorkerInterval } from '../../engine/worker-interval';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+
+/**
+ * Online only. `away`: no input for AFK_TIMEOUT_MS, the player is frozen behind the overlay.
+ * `rejoining`: Continue is resuming the seat over a new socket. `lost`: the server no longer
+ * holds the seat (resume refused or the connection gave up), so the game can't catch up.
+ */
+export type AfkState = 'none' | 'away' | 'rejoining' | 'lost';
+
+/** Any of these on the page means someone is at the keyboard. */
+const ACTIVITY_EVENTS: readonly string[] = ['keydown', 'mousedown', 'mousemove', 'wheel', 'touchstart'];
 
 @Component({
   selector: 'app-game',
@@ -59,6 +69,13 @@ export class GameComponent implements OnInit, OnDestroy {
   private isHost: boolean = false;
   private roomId: string = '';
   private remotePlayerStates: Map<string, CharacterState> = new Map<string, CharacterState>();
+  private lastInputAt: number = Date.now();
+  private afkTimeoutMs: number = GAME_CONSTANTS.AFK_TIMEOUT_MS;
+  /** The server holds our seat in the room: false from a dropped socket until a resume succeeds. */
+  private seatConfirmed: boolean = true;
+  private readonly markActive: () => void = (): void => {
+    this.lastInputAt = Date.now();
+  };
 
   readonly player: WritableSignal<CharacterState | null> = this.gameState.player;
   readonly floor: WritableSignal<number> = signal<number>(1);
@@ -72,6 +89,8 @@ export class GameComponent implements OnInit, OnDestroy {
   readonly currentPlayerDisplay: WritableSignal<CharacterState> = signal<CharacterState>(null!);
   readonly availableSkills: Signal<SkillDefinition[]> = this.gameState.availableSkills;
   readonly shutdownWarning: WritableSignal<string> = signal<string>('');
+  readonly afkState: WritableSignal<AfkState> = signal<AfkState>('none');
+  readonly afkLostReason: WritableSignal<string> = signal<string>('');
 
   constructor() {
     effect((): void => {
@@ -100,6 +119,10 @@ export class GameComponent implements OnInit, OnDestroy {
       if (canvas) {
         canvas.setShowCollisionBoxes(enabled);
       }
+    });
+    effect((): void => {
+      const away: boolean = this.afkState() !== 'none';
+      this.gameCanvas()?.setAfk(away);
     });
     effect((): void => {
       const canvas: GameCanvasComponent | undefined = this.gameCanvas();
@@ -142,6 +165,9 @@ export class GameComponent implements OnInit, OnDestroy {
       // The server keeps the dropped session for its reconnect window; resume it (the role follows).
       if (resume) this.ws.resumeSession(resume.reconnectToken);
       window.addEventListener('pagehide', this.saveForReload);
+      for (const type of ACTIVITY_EVENTS) {
+        window.addEventListener(type, this.markActive, { capture: true, passive: true });
+      }
 
       this.ws.serverShutdown$
         .pipe(takeUntilDestroyed(this.destroyRef))
@@ -156,6 +182,10 @@ export class GameComponent implements OnInit, OnDestroy {
           if (status === 'connected' && this.shutdownWarning()) {
             this.shutdownWarning.set('');
           }
+          // A new socket is in no room until the server accepts the resume.
+          if (status === 'connecting' || status === 'reconnecting') this.seatConfirmed = false;
+          // The retries gave up. An away player can still try again with Continue.
+          if (status === 'error' && this.afkState() !== 'away') this.loseSeat('Connection lost');
         });
 
       this.setupMultiplayer();
@@ -170,6 +200,9 @@ export class GameComponent implements OnInit, OnDestroy {
     }
     if (this.isMultiplayer && this.roomId) {
       window.removeEventListener('pagehide', this.saveForReload);
+      for (const type of ACTIVITY_EVENTS) {
+        window.removeEventListener(type, this.markActive, { capture: true });
+      }
       this.sessionResume.clear();
       this.ws.send(ClientMessageType.LeaveRoom, { roomId: this.roomId });
       // Out of the game means out of the room: no socket left open, no session to resume on a later drop.
@@ -302,7 +335,14 @@ export class GameComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
         const payload: ReconnectResultPayload = msg.payload as ReconnectResultPayload;
-        if (payload.success && payload.room) this.syncRoleWithRoom(payload.room);
+        if (!payload.success || !payload.room) {
+          // Playing on alone would look like the others froze: say so instead.
+          this.loseSeat(payload.reason ?? 'The server no longer holds your seat');
+          return;
+        }
+        this.seatConfirmed = true;
+        this.syncRoleWithRoom(payload.room);
+        this.onSeatResumed(payload.room);
       });
 
     this.ws.onMessage(ServerMessageType.RoomUpdated)
@@ -316,6 +356,10 @@ export class GameComponent implements OnInit, OnDestroy {
       // A worker timer keeps the 50 ms pace in a background tab (page timers drop to ~1/s).
       this.syncTimer = new WorkerInterval(SYNC_INTERVAL_MS, (): void => {
         if (!this.isMultiplayer) return;
+        // Runs on the worker's pace, so a hidden tab goes away too.
+        if (this.afkState() === 'none' && Date.now() - this.lastInputAt >= this.afkTimeoutMs) {
+          this.goAway();
+        }
         // Don't drain the outbound queues while the socket is down: the snapshot
         // would be dropped and its attacks, revives and effects lost. They go out
         // with the first snapshot after reconnecting.
@@ -758,6 +802,57 @@ export class GameComponent implements OnInit, OnDestroy {
     this.inventoryOpen.set(false);
   }
 
+  /** Nobody at the keyboard: freeze the player behind the overlay and tell the room (the server holds the seat longer). */
+  private goAway(): void {
+    this.afkState.set('away');
+    this.closeAllDialogs();
+    this.sendAfk(true);
+  }
+
+  /** "Continue": back in the game, rejoining first when the seat went with a dropped socket. */
+  continueFromAfk(): void {
+    this.lastInputAt = Date.now();
+    if (this.ws.isOpen && this.seatConfirmed) {
+      this.backFromAway();
+      return;
+    }
+    this.afkState.set('rejoining');
+    this.ws.reconnectNow();
+  }
+
+  private backFromAway(): void {
+    this.afkState.set('none');
+    this.sendAfk(false);
+  }
+
+  /** The seat is ours again. The host's game-sync brings the world up to date from here. */
+  private onSeatResumed(room: RoomInfo): void {
+    const state: AfkState = this.afkState();
+    if (state === 'rejoining') {
+      this.backFromAway();
+      return;
+    }
+    const myId: string = this.gameState.player()?.id ?? '';
+    const me: RoomPlayer | undefined = room.players.find((p: RoomPlayer): boolean => p.id === myId);
+    // A tab the browser discarded while we were away reloads into a held seat: still away.
+    if (state === 'none' && me?.isAfk) {
+      this.afkState.set('away');
+      return;
+    }
+    // Went away while the socket was down: the server has to know now.
+    if (state === 'away' && !me?.isAfk) this.sendAfk(true);
+  }
+
+  private loseSeat(reason: string): void {
+    this.afkLostReason.set(reason);
+    this.afkState.set('lost');
+  }
+
+  private sendAfk(afk: boolean): void {
+    const payload: SetAfkPayload = { afk };
+    if (this.ws.isOpen) this.ws.send(ClientMessageType.SetAfk, payload);
+  }
+
   private promoteToHost(): void {
     if (this.isHost) return;
     this.isHost = true;
@@ -799,6 +894,10 @@ export class GameComponent implements OnInit, OnDestroy {
         if (!p) return;
         this.gameState.addGold(amount - p.inventory.gold);
         this.syncCanvasProgression();
+      },
+      setAfkTimeoutMs: (ms: number): void => {
+        this.afkTimeoutMs = ms;
+        this.lastInputAt = Date.now();
       },
     };
   }

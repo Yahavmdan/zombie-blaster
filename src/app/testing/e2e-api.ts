@@ -30,6 +30,8 @@ export interface E2ePlayerView {
   isDoubleJumping: boolean;
   isDead: boolean;
   isDown: boolean;
+  /** Away from the keyboard (online): frozen, out of every attack's reach. */
+  isAfk: boolean;
   /** Ticks left before a downed player dies. */
   downTimer: number;
   unallocatedStatPoints: number;
@@ -348,6 +350,8 @@ export interface E2ePlateView {
 export interface E2eSnapshot {
   at: number;
   role: E2eRole;
+  /** The local player is away from the keyboard (the away overlay is up). */
+  afk: boolean;
   floor: number;
   floorTransitionTimer: number;
   godMode: boolean;
@@ -402,6 +406,8 @@ export interface E2eControls {
   showGameOver(): void;
   /** Setup only: the local player's gold. */
   setGold(amount: number): void;
+  /** Online setup: idle this long (ms, counted from now) and the player is marked away. */
+  setAfkTimeoutMs(ms: number): void;
 }
 
 export interface E2eEngineControls {

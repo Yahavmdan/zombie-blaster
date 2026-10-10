@@ -533,6 +533,10 @@ export class RenderSystem {
       fillOutlinedText(ctx, rp.name, rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 12, classColor);
       ctx.font = pixelFont(10);
       fillOutlinedText(ctx, `Lv.${rp.level}`, rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 2, CANVAS_BONE);
+      if (rp.isAfk) {
+        ctx.font = pixelFont(12, 700);
+        fillOutlinedText(ctx, 'Away', rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 30, CANVAS_BONE_DIM);
+      }
 
       const hpPercent: number = rp.hp / rp.derived.maxHp;
       const barWidth: number = 40;

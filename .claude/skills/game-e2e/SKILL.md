@@ -340,6 +340,18 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
   `document.hidden` + `visibilitychange`, rAF parked, page timers capped at 1/s; worker timers
   untouched. Online, the engine ticks from a `WorkerInterval` while hidden and the sync timer is
   always one; solo pauses. Specs: `online/background-host.spec.ts`, `solo/background-tab.spec.ts`.
+- **Away from keyboard (online)**: no key/mouse/touch input for `AFK_TIMEOUT_MS` (2 min, hidden tab
+  included; checked on the sync worker tick) shows the away overlay (`game-afk-overlay`,
+  `data-state` away / rejoining / lost), freezes the player (input off, zombies and projectiles skip
+  them: `engine.isOutOfReach`) and sends `set-afk`. Others see `remotePlayers[].isAfk` and an "Away"
+  tag; the server moves the host role to an active player and holds an away player's seat for
+  `AFK_SEAT_HOLD_MS` after its socket dies (others: 60 s). Continue resumes the seat if needed;
+  a refused resume shows `lost` with a Main menu button (no more silently playing alone).
+  Setup: `probe.setAfkTimeout(ms)` (counts from now; probe calls are not input). Probe: `state().afk`.
+  The real 20-30 min failure was Chrome **discarding** the tab: emulate with `goto('about:blank')`,
+  wait, `goto(gameUrl)` (pagehide saves, reload resumes). A CDP `Page.setWebLifecycleState frozen`
+  tab is NOT dropped by the server (pings still answered) and catches up by itself after waking.
+  Spec: `online/afk.spec.ts`.
 - Key bindings and quick slots persist in localStorage (`zb.keyBindings`, `zb.quickSlots`); every Playwright context starts empty, so tests still see defaults. A new character keeps them (only another class's skills leave the quick slots).
 - A multiplayer tab saves its game to sessionStorage on `pagehide` (`SessionResumeService`); `page.reload()` resumes the same player through the server's reconnect window (role follows `reconnect-result`). Settings has a two-click "Quit to menu" (`game-settings-button-quit`). A co-op player who died respawns on the next floor (`FLOOR_RESPAWN_HP_PERCENT`). Specs: `solo/session-and-settings.spec.ts`, `online/resilience.spec.ts`.
 - Co-op death: `knockOut()` each player (god mode on the survivor until its turn); each bleeds out in 30 s (`downTimer` from 1500) and the game-over screen shows on every screen only once all are dead: `online/bleed-out.spec.ts` (~80 s per test). Guest leaving / host migration with 3 players: `online/three-player-room.spec.ts` (`net.reset()` before the drop: frame payloads are kept for the first 5000 frames only), lobby guest leave in `online/lobby.spec.ts`, raw leave/migration in `protocol/server-edge-cases.spec.ts`.

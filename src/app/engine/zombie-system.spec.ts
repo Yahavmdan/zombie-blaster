@@ -213,6 +213,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     showCollisionBoxes: false,
     isMultiplayerHost: false,
     isMultiplayerClient: false,
+    isLocalAfk: false,
     pendingLocalKills: new Set<string>(),
     pendingRemoteAttacks: [],
     pendingReviveTargetIds: [],
@@ -227,6 +228,10 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     applyLevel: vi.fn(),
     requestHitStop: vi.fn(),
     isInSafeSpot: vi.fn((): boolean => false),
+    isOutOfReach(this: IGameEngine, p: CharacterState): boolean {
+      const afk: boolean = p === this.player ? this.isLocalAfk : p.isAfk === true;
+      return afk || this.isInSafeSpot(p.x, p.y);
+    },
     boulderPuzzle: null,
     boulder: null,
     springPuzzle: null,
@@ -465,6 +470,16 @@ describe('ZombieSystem — safe spot', () => {
     expect(zombieSystem['getAllTargets']()).toHaveLength(0);
     player.y = GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT;
     expect(zombieSystem['getAllTargets']()).toHaveLength(1);
+  });
+
+  it('a player away from the keyboard is no target, local or remote', (): void => {
+    const remote: CharacterState = makePlayer({ id: 'remote', x: 300, isAfk: true });
+    engine.remotePlayers = [remote];
+    engine.isLocalAfk = true;
+    expect(zombieSystem['getAllTargets']()).toHaveLength(0);
+    engine.isLocalAfk = false;
+    remote.isAfk = false;
+    expect(zombieSystem['getAllTargets']()).toHaveLength(2);
   });
 
   it('zombies never land on the safe spot: they fall through it', (): void => {

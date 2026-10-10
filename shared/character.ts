@@ -67,6 +67,8 @@ export interface CharacterState {
   isClimbing: boolean;
   isDead: boolean;
   isDown: boolean;
+  /** Away from keyboard (online): frozen behind the away overlay; zombies leave the player alone. */
+  isAfk?: boolean;
   /** Id of the downed teammate this player is channeling a revive on (pauses their bleed-out). */
   revivingPlayerId?: string | null;
   /** Corpses and loose props (ids) this player wants to carry, bottom of the stack first: their request, confirmed by the host through `ZombieCorpse.carrierId` / `LooseProp.carrierId`. */

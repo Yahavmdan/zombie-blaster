@@ -35,11 +35,11 @@ export class ProjectileSystem {
     );
   }
 
-  /** Players resting on the safe spot are out of every attack's reach. */
+  /** Players resting on the safe spot or away from the keyboard are out of every attack's reach. */
   private getAllTargets(): ProjectileTarget[] {
     const targets: ProjectileTarget[] = [];
     const p: CharacterState | null = this.e.player;
-    if (p && !p.isDead && !this.e.isInSafeSpot(p.x, p.y)) {
+    if (p && !p.isDead && !this.e.isOutOfReach(p)) {
       targets.push({
         id: p.id,
         x: p.x,
@@ -51,7 +51,7 @@ export class ProjectileSystem {
       });
     }
     for (const rp of this.e.remotePlayers) {
-      if (rp.isDead || this.e.isInSafeSpot(rp.x, rp.y)) continue;
+      if (rp.isDead || this.e.isOutOfReach(rp)) continue;
       targets.push({
         id: rp.id,
         x: rp.x,

@@ -493,6 +493,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     showCollisionBoxes: false,
     isMultiplayerHost: false,
     isMultiplayerClient: false,
+    isLocalAfk: false,
     pendingLocalKills: new Set<string>(),
     pendingRemoteAttacks: [],
     pendingReviveTargetIds: [],
@@ -507,6 +508,10 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     applyLevel: vi.fn(),
     requestHitStop: vi.fn(),
     isInSafeSpot: vi.fn((): boolean => false),
+    isOutOfReach(this: IGameEngine, p: CharacterState): boolean {
+      const afk: boolean = p === this.player ? this.isLocalAfk : p.isAfk === true;
+      return afk || this.isInSafeSpot(p.x, p.y);
+    },
     boulderPuzzle: null,
     boulder: null,
     springPuzzle: null,

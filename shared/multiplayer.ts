@@ -19,6 +19,8 @@ export interface RoomPlayer {
   classId: CharacterClass;
   isHost: boolean;
   isReady: boolean;
+  /** Away from keyboard: the server holds the seat longer and moves the host role to an active player. */
+  isAfk: boolean;
 }
 
 export interface RoomInfo {
@@ -71,6 +73,7 @@ export enum ClientMessageType {
   ZombieAttackPlayer = 'zombie-attack-player',
   RevivePlayer = 'revive-player',
   Reconnect = 'reconnect',
+  SetAfk = 'set-afk',
 }
 
 export interface CreateRoomPayload {
@@ -234,6 +237,11 @@ export interface ReconnectResultPayload {
   room: RoomInfo | null;
   playerId: string;
   reason?: string;
+}
+
+/** The player went away from the keyboard (afk) or came back. */
+export interface SetAfkPayload {
+  afk: boolean;
 }
 
 export interface HostMigratedPayload {
