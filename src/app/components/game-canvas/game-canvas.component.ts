@@ -166,6 +166,13 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
+  /** Away from the keyboard (online): zombies leave the player alone; the others see it in `player.isAfk`. */
+  setAfk(afk: boolean): void {
+    if (this.engine) {
+      this.engine.isLocalAfk = afk;
+    }
+  }
+
   setShowCollisionBoxes(enabled: boolean): void {
     if (this.engine) {
       this.engine.showCollisionBoxes = enabled;

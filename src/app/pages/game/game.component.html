@@ -6,8 +6,8 @@
   <div class="game-wrapper">
     <app-game-canvas
       [player]="p"
-      [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen() || shopOpen() || inventoryOpen() || devDialogOpen() || isGameOver()"
-      [dialogKeysEnabled]="!settingsOpen() && !devDialogOpen() && !isGameOver()"
+      [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen() || shopOpen() || inventoryOpen() || devDialogOpen() || isGameOver() || afkState() !== 'none'"
+      [dialogKeysEnabled]="!settingsOpen() && !devDialogOpen() && !isGameOver() && afkState() === 'none'"
       (playerUpdated)="onPlayerUpdate($event)"
       (xpGained)="onXpGained($event)"
       (scoreUpdated)="onScoreUpdate($event)"
@@ -260,6 +260,44 @@
             >
               Main menu
             </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    @if (afkState() !== 'none' && !isGameOver()) {
+      <div class="afk-overlay" data-testid="game-afk-overlay" [attr.data-state]="afkState()">
+        <div class="afk-panel px-panel">
+          <h2 class="afk-title px-header">
+            <app-pixel-icon [icon]="'moon'" [size]="24" />
+            @switch (afkState()) {
+              @case ('lost') { Lost the horde }
+              @case ('rejoining') { Finding your crew }
+              @default { You dozed off }
+            }
+          </h2>
+          <p class="afk-text" data-testid="game-afk-text-status">
+            @switch (afkState()) {
+              @case ('lost') { Your seat in this room is gone ({{ afkLostReason() }}). Head back to the menu and join again. }
+              @case ('rejoining') { Getting back in the room... }
+              @default { You're frozen in place and the dead leave you be. Your crew fights on. }
+            }
+          </p>
+          <div class="afk-actions">
+            @if (afkState() === 'lost') {
+              <button class="px-btn px-btn--primary" data-testid="game-afk-button-menu" (click)="backToMenu()">
+                Main menu
+              </button>
+            } @else {
+              <button
+                class="px-btn px-btn--primary"
+                data-testid="game-afk-button-continue"
+                [disabled]="afkState() === 'rejoining'"
+                (click)="continueFromAfk()"
+              >
+                Continue
+              </button>
+            }
           </div>
         </div>
       </div>

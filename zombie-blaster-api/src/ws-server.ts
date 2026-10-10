@@ -12,6 +12,7 @@ import {
   isReconnectPayload,
   isRevivePlayerPayload,
   isRoomIdPayload,
+  isSetAfkPayload,
   isStateSnapshotPayload,
   isZombieAttackPlayerPayload,
   isZombieDamagePayload,
@@ -39,10 +40,12 @@ import type {
   HostMigratedPayload,
   RemoteZombieDamagePayload,
   RevivePlayerPayload,
+  SetAfkPayload,
   ZombieAttackPlayerPayload,
   ZombieDamagePayload,
 } from '../../shared/multiplayer.js';
 import type { CharacterState } from '../../shared/character.js';
+import { GAME_CONSTANTS } from '../../shared/game-constants.js';
 
 interface ConnectedClient {
   id: string;
@@ -57,6 +60,8 @@ interface DisconnectedSession {
   playerName: string;
   classId: string;
   disconnectedAt: number;
+  /** Away when the socket died (a discarded or sleeping tab): the seat is held for AFK_SEAT_HOLD_MS. */
+  isAfk: boolean;
 }
 
 const HEARTBEAT_INTERVAL_MS: number = 30_000;
@@ -75,8 +80,6 @@ export class GameWebSocketServer {
   private readonly roomManager: RoomManager = new RoomManager();
   private readonly clients: Map<string, ConnectedClient> = new Map<string, ConnectedClient>();
   private readonly disconnectedSessions: Map<string, DisconnectedSession> = new Map<string, DisconnectedSession>();
-  /** Room id -> the timer that deletes it if still empty. One per room: a newer drop restarts the wait. */
-  private readonly emptyRoomTimers: Map<string, ReturnType<typeof setTimeout>> = new Map<string, ReturnType<typeof setTimeout>>();
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private isShuttingDown: boolean = false;
@@ -214,6 +217,10 @@ export class GameWebSocketServer {
       case 'reconnect':
         if (!isReconnectPayload(payload)) return this.rejectPayload(clientId, type);
         this.handleReconnect(clientId, payload);
+        break;
+      case 'set-afk':
+        if (!isSetAfkPayload(payload)) return this.rejectPayload(clientId, type);
+        this.handleSetAfk(clientId, payload);
         break;
       case 'ping':
         this.send(clientId, 'pong' as ServerMessageType, {});
@@ -534,7 +541,7 @@ export class GameWebSocketServer {
     }
 
     const now: number = Date.now();
-    if (now - session.disconnectedAt > RECONNECT_WINDOW_MS) {
+    if (!this.isSeatHeld(session, now)) {
       this.disconnectedSessions.delete(payload.reconnectToken);
       this.refuseResume(clientId, 'Reconnect window expired');
       return;
@@ -576,6 +583,10 @@ export class GameWebSocketServer {
       return;
     }
 
+    // Still away until the player says otherwise (an away host hands the role on right here).
+    const afkHostId: string | null = session.isAfk ? rejoined.setAfk(playerId, true) : null;
+    if (afkHostId) this.broadcastHostMigrated(rejoined, afkHostId, playerId);
+
     // The token for the next drop is the one this socket's welcome already handed out.
     console.log(`[WS] Client ${playerId} reconnected to room "${room.name}" (${room.id})`);
 
@@ -595,21 +606,6 @@ export class GameWebSocketServer {
       };
       this.send(playerId, 'game-started' as ServerMessageType, gamePayload);
     }
-  }
-
-  /**
-   * Deletes a room emptied by a drop once the reconnect window has passed with nobody back. An
-   * earlier timer is replaced: it would delete the room inside the newest drop's window.
-   */
-  private scheduleEmptyRoomRemoval(roomId: string): void {
-    const previous: ReturnType<typeof setTimeout> | undefined = this.emptyRoomTimers.get(roomId);
-    if (previous) clearTimeout(previous);
-    const timer: ReturnType<typeof setTimeout> = setTimeout((): void => {
-      this.emptyRoomTimers.delete(roomId);
-      this.roomManager.removeIfEmpty(roomId);
-    }, RECONNECT_WINDOW_MS);
-    timer.unref();
-    this.emptyRoomTimers.set(roomId, timer);
   }
 
   private refuseResume(clientId: string, reason: string): void {
@@ -654,6 +650,37 @@ export class GameWebSocketServer {
     this.broadcastToRoom(room, 'game-sync' as ServerMessageType, payload, clientId);
   }
 
+  private handleSetAfk(clientId: string, payload: SetAfkPayload): void {
+    const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
+    if (!room) return;
+    const previousHostId: string | null = room.hostId;
+    const newHostId: string | null = room.setAfk(clientId, payload.afk);
+    if (newHostId && previousHostId && room.status === ('in-game' as string)) {
+      this.broadcastHostMigrated(room, newHostId, previousHostId);
+    }
+    this.broadcastRoomUpdate(room);
+  }
+
+  private broadcastHostMigrated(room: Room, newHostId: string, previousHostId: string): void {
+    const migrationPayload: HostMigratedPayload = { newHostId, previousHostId };
+    this.broadcastToRoom(room, 'host-migrated' as ServerMessageType, migrationPayload);
+    console.log(`[Room] Host migrated from ${previousHostId} to ${newHostId} in room "${room.name}"`);
+  }
+
+  /** A dropped player's seat: 60 s to come back, or AFK_SEAT_HOLD_MS for one that was away. */
+  private isSeatHeld(session: DisconnectedSession, now: number): boolean {
+    const holdMs: number = session.isAfk ? GAME_CONSTANTS.AFK_SEAT_HOLD_MS : RECONNECT_WINDOW_MS;
+    return now - session.disconnectedAt <= holdMs;
+  }
+
+  private heldRoomIds(now: number): Set<string> {
+    const held: Set<string> = new Set<string>();
+    for (const session of this.disconnectedSessions.values()) {
+      if (this.isSeatHeld(session, now)) held.add(session.roomId);
+    }
+    return held;
+  }
+
   private handlePlayerState(clientId: string, payload: unknown): void {
     const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
     if (!room) return;
@@ -673,6 +700,7 @@ export class GameWebSocketServer {
 
     const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
 
+    let holdMs: number = RECONNECT_WINDOW_MS;
     if (room) {
       const player: RoomPlayer | undefined = room.getPlayer(clientId);
       if (player) {
@@ -682,8 +710,10 @@ export class GameWebSocketServer {
           playerName: player.name,
           classId: player.classId,
           disconnectedAt: Date.now(),
+          isAfk: player.isAfk,
         };
         this.disconnectedSessions.set(client.reconnectToken, session);
+        if (player.isAfk) holdMs = GAME_CONSTANTS.AFK_SEAT_HOLD_MS;
       }
     }
 
@@ -696,19 +726,16 @@ export class GameWebSocketServer {
 
     const result = this.roomManager.leaveRoom(clientId, true);
     if (result?.wasEmpty) {
-      this.scheduleEmptyRoomRemoval(result.room.id);
+      const roomId: string = result.room.id;
+      // Kept while any dropped player may still resume a seat in it (the stale cleanup gets the rest).
+      setTimeout((): void => {
+        if (!this.heldRoomIds(Date.now()).has(roomId)) this.roomManager.removeIfEmpty(roomId);
+      }, holdMs + 1).unref();
     }
     if (result && !result.wasEmpty) {
       if (wasHost && wasInGame) {
         const newHostId: string | null = result.room.hostId;
-        if (newHostId) {
-          const migrationPayload: HostMigratedPayload = {
-            newHostId,
-            previousHostId: clientId,
-          };
-          this.broadcastToRoom(result.room, 'host-migrated' as ServerMessageType, migrationPayload);
-          console.log(`[Room] Host migrated from ${clientId} to ${newHostId} in room "${result.room.name}"`);
-        }
+        if (newHostId) this.broadcastHostMigrated(result.room, newHostId, clientId);
       }
       this.broadcastRoomUpdate(result.room);
     }
@@ -775,7 +802,7 @@ export class GameWebSocketServer {
 
   private startCleanup(): void {
     this.cleanupTimer = setInterval((): void => {
-      const removed: number = this.roomManager.cleanupStaleRooms(STALE_ROOM_MAX_AGE_MS);
+      const removed: number = this.roomManager.cleanupStaleRooms(STALE_ROOM_MAX_AGE_MS, this.heldRoomIds(Date.now()));
       if (removed > 0) {
         console.log(`[Cleanup] Removed ${removed} stale rooms`);
       }
@@ -783,10 +810,10 @@ export class GameWebSocketServer {
     }, STALE_CLEANUP_INTERVAL_MS);
   }
 
-  /** Forgets sessions nobody resumed within the reconnect window. */
+  /** Forgets sessions nobody resumed while their seat was held. */
   private pruneExpiredSessions(now: number): void {
     for (const [token, session] of this.disconnectedSessions) {
-      if (now - session.disconnectedAt > RECONNECT_WINDOW_MS) {
+      if (!this.isSeatHeld(session, now)) {
         this.disconnectedSessions.delete(token);
       }
     }

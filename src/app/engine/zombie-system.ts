@@ -70,11 +70,11 @@ export class ZombieSystem {
     return players.filter((pl: CharacterState): boolean => !pl.isDead && !pl.isDown).length;
   }
 
-  /** Players zombies can hunt and hit: anyone resting on the safe spot is out of reach. */
+  /** Players zombies can hunt and hit: anyone resting on the safe spot or away from the keyboard is out of reach. */
   private getAllTargets(): TargetInfo[] {
     const targets: TargetInfo[] = [];
     const p: CharacterState | null = this.e.player;
-    if (p && !p.isDead && !p.isDown && !this.e.isInSafeSpot(p.x, p.y)) {
+    if (p && !p.isDead && !p.isDown && !this.e.isOutOfReach(p)) {
       targets.push({
         id: p.id,
         x: p.x,
@@ -86,7 +86,7 @@ export class ZombieSystem {
       });
     }
     for (const rp of this.e.remotePlayers) {
-      if (rp.isDead || rp.isDown || this.e.isInSafeSpot(rp.x, rp.y)) continue;
+      if (rp.isDead || rp.isDown || this.e.isOutOfReach(rp)) continue;
       targets.push({
         id: rp.id,
         x: rp.x,

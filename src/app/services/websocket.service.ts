@@ -77,6 +77,18 @@ export class WebSocketService {
     this.connect();
   }
 
+  /**
+   * Reconnects right away (the automatic retries may have given up while the tab slept) and
+   * resumes the session the dropped socket had. Does nothing while a socket is open or opening.
+   */
+  reconnectNow(): void {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
+    this.cancelReconnect();
+    this.intentionalDisconnect = false;
+    this.reconnectAttempt = 0;
+    this.openSocket();
+  }
+
   connect(url: string = DEFAULT_WS_URL): void {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       this._status$.next(this._currentStatus);
