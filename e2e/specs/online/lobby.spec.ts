@@ -68,6 +68,40 @@ test.describe('lobby and rooms', { tag: '@online' }, (): void => {
     }).toPass({ timeout: 10_000 });
   });
 
+  test('a guest who leaves before the game starts is back in the room list, the room stays', async ({
+    browser,
+  }: {
+    browser: Browser;
+  }): Promise<void> => {
+    const host: GamePlayer = await openInLobby(browser, 'Host', 'warrior');
+    const guest: GamePlayer = await openInLobby(browser, 'Leaver', 'mage');
+    const room: string = uniqueRoomName('guest-leave');
+    await host.createRoom(room);
+    await guest.joinRoom(room);
+    await expect(host.page.locator('.player-row')).toHaveCount(2);
+    await expect(host.page.locator('.room-player-count')).toContainText('2 /');
+
+    await guest.page.getByTestId('lobby-room-button-leave').click();
+    await expect(guest.page.getByTestId('lobby-create-button-create'), 'guest is back in the room browser').toBeVisible();
+    await expect(guest.page.getByTestId('lobby-room-button-ready')).toBeHidden();
+
+    await expect(host.page.locator('.player-row'), 'host sees only themself').toHaveCount(1);
+    await expect(host.page.locator('.room-player-count')).toContainText('1 /');
+    await expect(host.page.locator('.player-row--self')).toContainText('Host');
+    await expect(host.page.getByTestId('lobby-room-button-start'), 'host can still start alone').toBeEnabled();
+
+    await expect(async (): Promise<void> => {
+      await guest.page.getByTestId('lobby-rooms-button-refresh').click();
+      await expect(guest.roomCard(room), 'the room still exists, now with 1 player').toContainText('1 /', {
+        timeout: 1_000,
+      });
+    }).toPass({ timeout: 10_000 });
+
+    // The leaver can join again.
+    await guest.joinRoom(room);
+    await expect(host.page.locator('.player-row')).toHaveCount(2);
+  });
+
   test('a kicked player returns to the browser and can host a new room', async ({
     browser,
   }: {
