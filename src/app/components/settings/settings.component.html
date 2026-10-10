@@ -137,6 +137,7 @@
             <button
               class="kb-action-chip px-chip kb-action-chip--clear"
               [class.kb-action-chip--disabled]="!selectedKey()"
+              data-testid="game-settings-action-clear"
               (click)="onClearSelectedKey()"
             >
               <app-pixel-icon class="kb-chip-icon" [icon]="'close'" [size]="16" />

@@ -375,6 +375,8 @@ export interface E2eSnapshot {
   /** Floor-5 plate: weight, door (null on other floors). */
   plate: E2ePlateView | null;
   drops: E2eDropView[];
+  /** Hostile shots in flight: spitter acid and dragon fireballs. */
+  zombieProjectiles: { spitter: number; dragon: number };
   /** Ticks until the potion keys work again. */
   potionCooldownTicks: number;
   /** Ticks of post-hit invincibility left for the local player. */
@@ -398,6 +400,8 @@ export interface E2eControls {
   isGameOver(): boolean;
   /** Shows the game-over screen (setup for testing its buttons). */
   showGameOver(): void;
+  /** Setup only: the local player's gold. */
+  setGold(amount: number): void;
 }
 
 export interface E2eEngineControls {
@@ -421,6 +425,13 @@ export interface E2eEngineControls {
   spawnDrop(type: string, x: number, y: number, specialType: string | null): void;
   /** A lethal zombie hit on the local player through the normal damage path (downed online, dead solo). */
   knockOut(): void;
+  /** Setup only: the local player's HP and MP (clamped to 1..max), as if hurt and spent. */
+  setVitals(hp: number, mp: number): void;
+  /**
+   * Solo/host setup only: N regular spawns now, each through the normal spawn roll (the floor's
+   * zombie types, at most one boss at a time), ignoring the spawn timer and the alive cap.
+   */
+  spawnRolledZombies(count: number): void;
 }
 
 export interface ZbE2eApi {

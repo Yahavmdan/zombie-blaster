@@ -97,6 +97,11 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   At most 2 zombies swing at one player at once (attack tokens). Damage ramps from 40% on floor 1
   to full by floor 5. Zombies only chase players within 640 px (`ZOMBIE_DETECTION_RANGE`);
   nobody is waiting for them at the exit (no lure, spawns spread over the map).
+  Types by floor: runners from 2, tanks from 3, spitters from 4, a boss on floors 5/10/15...
+  (4% per spawn), the dragon on 10/20... (2%), one boss at a time. Natural spawns are too slow
+  for rare types: `probe.spawnRolledZombies(n)` runs the real spawn roll n times now (no timer,
+  no alive cap); `setFloor` clears them. `state().zombieProjectiles` {spitter, dragon} counts
+  shots in flight. Spec: `solo/zombie-types.spec.ts`.
 - **Eaters** (crawl on all fours, art from `generate-eater-sprites.cjs`) never come with the regular
   spawns: from floor 1, while >= 3 lying unclaimed corpses exist, one rises every 10-20 s (max 2
   per player) near a corpse, smells corpses across the whole screen, runs to them (3.5x speed,
@@ -118,6 +123,10 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
 - Potions: key 7 (HP +50) / 8 (MP +30), 30-tick cooldown, start with 3 each, 30/20 gold.
   Auto-potion needs the class's auto-potion passive; without it nothing drinks for you.
   Dev builds start with 1,000,000 gold (`game-state.service.ts`), prod with 0.
+  Setup: `probe.setGold(n)` (shop budget), `probe.setVitals(hp, mp)` (hurt/drained; set them
+  healthy BEFORE `maxAllSkills`, or the freshly learned auto-potion drinks in the gap).
+  Specs: `solo/shop.spec.ts` (buy, qty, no gold), `solo/passives.spec.ts` (every class's
+  auto-potion, warrior HP recovery: +50 per 10 s standing still, none while hopping).
 - Menus (stats/skills/shop) do NOT pause the game and give NO damage reduction: open them only when
   no zombie is within ~200 px, or rest on the safe spot first.
 - Revive: hold F within 60 px for 100 ticks (2 s); a hit cancels it; the downed player's bleed-out
@@ -352,4 +361,7 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
   window; the first player back becomes host. Only `leave-room` deletes an empty room at once.
 - Dialog keys (P/O/B/I) work while a dialog is open: the same key closes it, another switches. They do
   nothing while settings or the game-over screen show. Rebinding a key takes it from its old action.
+  Settings keyboard: click `game-settings-key-<key>` then an action chip (`game-settings-action-<action>`,
+  Clear = `game-settings-action-clear`), right-click a key clears it, `game-settings-button-reset`
+  restores (and saves) the defaults. Spec: `solo/settings-keys.spec.ts`.
   "Try again" keeps bindings and quick slots; a quick-slot potion obeys the potion cooldown.

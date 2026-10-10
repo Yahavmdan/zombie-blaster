@@ -536,6 +536,11 @@ export class GameEngine implements IGameEngine {
     this.zombieSystem.startFloor();
   }
 
+  /** One regular spawn now (the floor's type roll, at most one boss at a time); e2e probe setup. */
+  spawnRolledZombie(): void {
+    this.zombieSystem.spawnRolledZombie();
+  }
+
   setKeys(keys: InputKeys): void {
     if (keys.jump && !this.keys.jump) {
       this.jumpBufferTicks = GAME_CONSTANTS.JUMP_BUFFER_TICKS;
