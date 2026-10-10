@@ -106,6 +106,9 @@ export class SettingsComponent implements OnDestroy {
   readonly rebindingAction: WritableSignal<GameAction | null> = signal<GameAction | null>(null);
   readonly sidePanelTab: WritableSignal<'inventory' | 'skills' | null> = signal<'inventory' | 'skills' | null>(null);
   readonly openChanged: OutputEmitterRef<boolean> = output<boolean>();
+  /** The player confirmed leaving the game (two clicks: the first only arms the button). */
+  readonly quitRequested: OutputEmitterRef<void> = output<void>();
+  readonly quitArmed: WritableSignal<boolean> = signal<boolean>(false);
 
   private rebindKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private rebindMouseHandler: ((e: MouseEvent) => void) | null = null;
@@ -240,10 +243,20 @@ export class SettingsComponent implements OnDestroy {
     this.isOpen.set(next);
     this.openChanged.emit(next);
     if (!next) {
+      this.quitArmed.set(false);
       this.selectedKey.set(null);
       this.sidePanelTab.set(null);
       this.cancelRebind();
     }
+  }
+
+  onQuitClick(): void {
+    if (!this.quitArmed()) {
+      this.quitArmed.set(true);
+      return;
+    }
+    this.quitArmed.set(false);
+    this.quitRequested.emit();
   }
 
   keyName(code: string): string {

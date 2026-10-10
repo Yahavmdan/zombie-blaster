@@ -287,4 +287,94 @@ test.describe('connection resilience', { tag: '@online' }, (): void => {
       .toBe(true);
     expect(sendWarnings, 'sync loop does not spam sends while the socket is down').toEqual([]);
   });
+
+  test('a guest who reloads the page mid-game comes back into the same game', async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }): Promise<void> => {
+    test.setTimeout(120_000);
+    const session: RoomSession = await room(
+      [
+        { name: 'Host', classId: 'warrior' },
+        { name: 'Reloader', classId: 'mage' },
+      ],
+      'reload',
+    );
+    const [host, guest]: GamePlayer[] = session.players;
+    await host.probe.setGodMode(true);
+    const before: E2eSnapshot = await guest.probe.state();
+
+    await guest.page.reload();
+    await expect(guest.page.getByTestId('game-nochar-button-select'), 'no "No character" page').toBeHidden();
+    await guest.probe.waitForReady();
+    const after: E2eSnapshot = await guest.probe.waitFor(
+      'reloaded guest sees the host again',
+      (s: E2eSnapshot): boolean => s.remotePlayers.length === 1,
+      { timeoutMs: 20_000 },
+    );
+    expect(after.player!.id, 'same player').toBe(before.player!.id);
+    expect(after.player!.classId).toBe('mage');
+    expect(after.role).toBe('client');
+    await host.probe.waitFor('host sees the guest again', (s: E2eSnapshot): boolean => s.remotePlayers.length === 1, {
+      timeoutMs: 15_000,
+    });
+  });
+
+  test('quitting from settings leaves the multiplayer game', async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }): Promise<void> => {
+    const session: RoomSession = await room(
+      [
+        { name: 'Host', classId: 'warrior' },
+        { name: 'Quitter', classId: 'ranger' },
+      ],
+      'quit',
+    );
+    const [host, guest]: GamePlayer[] = session.players;
+    await guest.page.getByTestId('game-settings-button-toggle').click();
+    await guest.page.getByTestId('game-settings-button-quit').click();
+    await guest.page.getByTestId('game-settings-button-quit').click();
+    await expect(guest.page.getByTestId('menu-main-button-multiplayer')).toBeVisible();
+    await host.probe.waitFor('host sees the guest leave', (s: E2eSnapshot): boolean => s.remotePlayers.length === 0, {
+      timeoutMs: 10_000,
+    });
+    expect(await guest.openGameSocketCount(), 'socket closed').toBe(0);
+  });
+
+  test('a co-op player who died is back on the next floor', async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }): Promise<void> => {
+    test.setTimeout(120_000);
+    const session: RoomSession = await room(
+      [
+        { name: 'Host', classId: 'warrior' },
+        { name: 'Fallen', classId: 'priest' },
+      ],
+      'respawn',
+    );
+    const [host, guest]: GamePlayer[] = session.players;
+    await host.probe.setGodMode(true);
+    await guest.probe.knockOut();
+    await guest.probe.waitFor('guest bled out', (s: E2eSnapshot): boolean => s.player!.isDead, {
+      timeoutMs: 45_000,
+    });
+
+    await host.probe.setFloor(2);
+    const s: E2eSnapshot = await guest.probe.waitFor(
+      'guest alive again on floor 2',
+      (st: E2eSnapshot): boolean => st.floor === 2 && !st.player!.isDead && !st.player!.isDown && st.player!.hp > 0,
+      { timeoutMs: 10_000 },
+    );
+    expect(s.player!.hp).toBeLessThanOrEqual(s.player!.maxHp);
+    await host.probe.waitFor(
+      'host sees the guest alive',
+      (st: E2eSnapshot): boolean => st.remotePlayers.some((rp: E2eSnapshot['remotePlayers'][number]): boolean => !rp.isDead),
+      { timeoutMs: 10_000 },
+    );
+  });
 });

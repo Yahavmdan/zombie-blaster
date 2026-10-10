@@ -2,6 +2,7 @@ import {
   CharacterState,
   GAME_CONSTANTS,
   ZOMBIE_TYPES,
+  randomInt,
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
@@ -16,6 +17,7 @@ import { BoulderPuzzleLayout, IGameEngine, Platform } from './engine-types';
 import { Box, keepOutOfWall, leavesThroughOpening } from './boulder-puzzle';
 import { EXIT_CAGE, exitCageGroundBox } from './cage-puzzle';
 import { isDoorOpen } from './plate-puzzle';
+import { respawnForNewFloor } from './floor-respawn';
 import { PhysicsSystem } from './physics-system';
 import { CombatSystem } from './combat-system';
 import { DropSystem } from './drop-system';
@@ -173,8 +175,7 @@ export class ZombieSystem {
         // An Eater after a meal steers every tick: a slow reaction ran it past the corpse and back.
         z.reactionDelay = this.isEaterHunting(z)
           ? 0
-          : GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS +
-            Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MAX_TICKS - GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS));
+          : randomInt(GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS, GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MAX_TICKS);
       }
 
       if (z.jumpCooldown > 0) z.jumpCooldown--;
@@ -385,12 +386,10 @@ export class ZombieSystem {
       }
       z.attackAnimTimer = zDef.attackAnimTicks + (isRanged ? 0 : GAME_CONSTANTS.ZOMBIE_ATTACK_WINDUP_TICKS);
       z.attackHasHit = false;
-      z.attackCooldown = GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN +
-        Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX - GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN));
+      z.attackCooldown = randomInt(GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN, GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX);
       if (!isRanged) {
-        z.attackHesitation = Math.floor(zDef.hesitationMin + Math.random() * (zDef.hesitationMax - zDef.hesitationMin));
-        z.hesitationRange = GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MIN +
-          Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MAX - GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MIN));
+        z.attackHesitation = randomInt(zDef.hesitationMin, zDef.hesitationMax);
+        z.hesitationRange = randomInt(GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MIN, GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MAX);
       }
     }
   }
@@ -422,7 +421,7 @@ export class ZombieSystem {
       );
       if (!hit) continue;
 
-      const baseHit: number = z.instanceDamageMin + Math.floor(Math.random() * (z.instanceDamageMax - z.instanceDamageMin + 1));
+      const baseHit: number = randomInt(z.instanceDamageMin, z.instanceDamageMax);
       const rawDamage: number = Math.max(1, baseHit - target.defense);
 
       if (target.isLocal) {
@@ -753,8 +752,7 @@ export class ZombieSystem {
     z.velocityX = 0;
     z.attackAnimTimer = zDef.attackAnimTicks + GAME_CONSTANTS.ZOMBIE_ATTACK_WINDUP_TICKS;
     z.attackHasHit = false;
-    z.attackCooldown = GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN +
-      Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX - GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN));
+    z.attackCooldown = randomInt(GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN, GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX);
   }
 
   /** An Eater's bite lands on every zombie in its reach too (its kills leave corpses: food). */
@@ -767,7 +765,7 @@ export class ZombieSystem {
         o.x, o.y, o.instanceWidth, o.instanceHeight,
       );
       if (!hit) continue;
-      const damage: number = z.instanceDamageMin + Math.floor(Math.random() * (z.instanceDamageMax - z.instanceDamageMin + 1));
+      const damage: number = randomInt(z.instanceDamageMin, z.instanceDamageMax);
       this.combat.applyEaterBiteToZombie(o, z, Math.max(1, damage));
     }
   }
@@ -835,8 +833,7 @@ export class ZombieSystem {
     if (z.type !== ZombieType.Eater && z.attackAnimTimer <= 0 && z.attackCooldown <= 0 && Math.random() < GAME_CONSTANTS.ZOMBIE_IDLE_ATTACK_CHANCE) {
       z.attackAnimTimer = zDef.attackAnimTicks;
       z.attackHasHit = true;
-      z.attackCooldown = GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN +
-        Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX - GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN));
+      z.attackCooldown = randomInt(GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN, GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX);
       z.velocityX = 0;
     }
   }
@@ -848,8 +845,7 @@ export class ZombieSystem {
   private zombieJump(z: ZombieState): void {
     z.velocityY = GAME_CONSTANTS.ZOMBIE_JUMP_FORCE;
     z.isGrounded = false;
-    z.jumpCooldown = GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MIN +
-      Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MAX - GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MIN));
+    z.jumpCooldown = randomInt(GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MIN, GAME_CONSTANTS.ZOMBIE_JUMP_COOLDOWN_MAX);
   }
 
   private getZombieStackDepth(z: ZombieState): number {
@@ -1018,8 +1014,7 @@ export class ZombieSystem {
   }
 
   private rollEaterSpawnDelay(): number {
-    return GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_DELAY_MIN_TICKS +
-      Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_DELAY_MAX_TICKS - GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_DELAY_MIN_TICKS));
+    return randomInt(GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_DELAY_MIN_TICKS, GAME_CONSTANTS.ZOMBIE_EATER_SPAWN_DELAY_MAX_TICKS);
   }
 
   private isMealClaimed(corpse: ZombieCorpse): boolean {
@@ -1054,7 +1049,7 @@ export class ZombieSystem {
     const platMinX: number = Math.max(0, plat.x);
     const platMaxX: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - width, plat.x + plat.width - width);
     const x: number = keepOutOfWall(
-      platMinX + Math.floor(Math.random() * (platMaxX - platMinX + 1)),
+      randomInt(platMinX, platMaxX),
       width,
       this.e.puzzleWall(),
     );
@@ -1107,15 +1102,15 @@ export class ZombieSystem {
     );
     const damageScale: number = (1 + (this.e.floor - 1) * GAME_CONSTANTS.ZOMBIE_DAMAGE_SCALE_PER_WAVE) * earlyFloorMult;
 
-    const rolledHp: number = Math.floor((zDef.hpMin + Math.random() * (zDef.hpMax - zDef.hpMin)) * hpScale);
+    const rolledHp: number = Math.floor(randomInt(zDef.hpMin, zDef.hpMax) * hpScale);
     const rolledSpeed: number = zDef.speedMin + Math.random() * (zDef.speedMax - zDef.speedMin);
-    const rolledDamageMin: number = Math.floor((zDef.damageMinLow + Math.random() * (zDef.damageMinHigh - zDef.damageMinLow)) * damageScale);
-    const rolledDamageMax: number = Math.floor((zDef.damageMaxLow + Math.random() * (zDef.damageMaxHigh - zDef.damageMaxLow)) * damageScale);
+    const rolledDamageMin: number = Math.floor(randomInt(zDef.damageMinLow, zDef.damageMinHigh) * damageScale);
+    const rolledDamageMax: number = Math.floor(randomInt(zDef.damageMaxLow, zDef.damageMaxHigh) * damageScale);
     const rolledKnockback: number = zDef.knockbackMin + Math.random() * (zDef.knockbackMax - zDef.knockbackMin);
-    const rolledHesitation: number = Math.floor(zDef.hesitationMin + Math.random() * (zDef.hesitationMax - zDef.hesitationMin));
-    const rolledXp: number = Math.floor(zDef.xpRewardMin + Math.random() * (zDef.xpRewardMax - zDef.xpRewardMin));
-    const rolledWidth: number = Math.floor(zDef.widthMin + Math.random() * (zDef.widthMax - zDef.widthMin));
-    const rolledHeight: number = Math.floor(zDef.heightMin + Math.random() * (zDef.heightMax - zDef.heightMin));
+    const rolledHesitation: number = randomInt(zDef.hesitationMin, zDef.hesitationMax);
+    const rolledXp: number = randomInt(zDef.xpRewardMin, zDef.xpRewardMax);
+    const rolledWidth: number = randomInt(zDef.widthMin, zDef.widthMax);
+    const rolledHeight: number = randomInt(zDef.heightMin, zDef.heightMax);
 
     const spot: { x: number; y: number } = at
       ? {
@@ -1149,8 +1144,7 @@ export class ZombieSystem {
       attackAnimTimer: 0,
       attackHasHit: false,
       attackHesitation: rolledHesitation,
-      hesitationRange: GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MIN +
-        Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MAX - GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MIN)),
+      hesitationRange: randomInt(GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MIN, GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MAX),
       facing,
       instanceSpeed: rolledSpeed,
       instanceDamageMin: rolledDamageMin,
@@ -1163,8 +1157,7 @@ export class ZombieSystem {
         (GAME_CONSTANTS.ZOMBIE_ORBIT_MIN + Math.random() * (GAME_CONSTANTS.ZOMBIE_ORBIT_MAX - GAME_CONSTANTS.ZOMBIE_ORBIT_MIN)),
       platformDropTimer: 0,
       spawnTimer: 0,
-      reactionDelay: GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS +
-        Math.floor(Math.random() * (GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MAX_TICKS - GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS)),
+      reactionDelay: randomInt(GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MIN_TICKS, GAME_CONSTANTS.ZOMBIE_REACTION_DELAY_MAX_TICKS),
       eatingTargetId: null,
       eatingTimer: 0,
       magnetPull: null,
@@ -1235,6 +1228,8 @@ export class ZombieSystem {
     this.e.zombieCorpses = [];
 
     this.resetPlayerToGround(this.e.player);
+    // Online only (solo death ends the run): whoever died is back for the new floor.
+    if (this.e.isMultiplayerHost && respawnForNewFloor(this.e.player)) this.e.onPlayerUpdate?.(this.e.player!);
     for (const rp of this.e.remotePlayers) {
       this.resetPlayerToGround(rp);
     }

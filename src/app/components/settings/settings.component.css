@@ -69,6 +69,10 @@
   --btn-bg: var(--steel-hi);
 }
 
+.kb-quit {
+  white-space: nowrap;
+}
+
 .kb-close {
   margin-left: 4px;
 }

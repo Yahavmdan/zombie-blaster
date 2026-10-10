@@ -393,6 +393,12 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onKeyDown(e: KeyboardEvent): void {
+    // A held key auto-repeats: panel keys and prompt answers act once per press, not on every repeat.
+    if (e.repeat && this.isOneShotKey(e.key)) {
+      e.preventDefault();
+      return;
+    }
+
     // The prompt runs on a timer while the game goes on, so it answers with the stats, skills,
     // shop or inventory open too (not under settings, where keys are being rebound).
     if (this.dialogKeysEnabled() && !isTextField(e.target) && this.answerDropPrompt(e.key)) {
@@ -408,6 +414,11 @@ export class GameCanvasComponent implements OnDestroy {
     // Bound keys never reach the browser: attacking on Control while moving would otherwise
     // fire shortcuts (Ctrl+A select-all, Ctrl+D bookmark, Ctrl+P print, ...).
     if (this.pressBinding(e.key)) e.preventDefault();
+  }
+
+  private isOneShotKey(key: string): boolean {
+    const action: GameAction | null = this.keyBindingsService.getActionForKey(key);
+    return action !== null && (UI_ACTIONS.has(action) || DROP_PROMPT_ACTIONS.has(action));
   }
 
   /** Confirms or declines a pending special drop if `key` is bound to that. Returns whether it answered. */

@@ -6,6 +6,7 @@ import {
   resolveAutoPotionId,
   SPECIAL_DROP_DEFINITIONS,
   VfxEventType,
+  randomInt,
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
@@ -39,8 +40,7 @@ export class DropSystem {
       this.spawnDrop(DropType.MpPotion, dropX + 10, dropY, GAME_CONSTANTS.MP_POTION_RESTORE);
     }
     if (Math.random() < GAME_CONSTANTS.DROP_GOLD_CHANCE) {
-      const goldAmount: number = GAME_CONSTANTS.DROP_GOLD_MIN +
-        Math.floor(Math.random() * (GAME_CONSTANTS.DROP_GOLD_MAX - GAME_CONSTANTS.DROP_GOLD_MIN)) +
+      const goldAmount: number = randomInt(GAME_CONSTANTS.DROP_GOLD_MIN, GAME_CONSTANTS.DROP_GOLD_MAX) +
         this.e.floor * GAME_CONSTANTS.DROP_GOLD_WAVE_BONUS;
       this.spawnDrop(DropType.Gold, dropX - 10, dropY, goldAmount);
     }

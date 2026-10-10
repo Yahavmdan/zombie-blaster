@@ -383,6 +383,18 @@ test.describe('game server edge cases', { tag: ['@protocol', '@external-safe'] }
     guest.client.close();
   });
 
+  test('a second player with the same name (any case) cannot join', async (): Promise<void> => {
+    const host: { client: RawClient; roomId: string } = await hostWithRoom();
+    const twin: RawClient = await RawClient.connect();
+    const mark: number = twin.received.length;
+    twin.send('join-room', { roomId: host.roomId, playerName: ' rawhost ', classId: 'mage' });
+    const reply: RawMessage = await replyAfter(twin, mark, 'room-joined');
+    expect(reply.type).toBe('error');
+    expect((reply.payload as { code: string }).code).toBe('NAME_TAKEN');
+    host.client.close();
+    twin.close();
+  });
+
   test('a blank room name is rejected', async (): Promise<void> => {
     const c: RawClient = await RawClient.connect();
     const mark: number = c.received.length;

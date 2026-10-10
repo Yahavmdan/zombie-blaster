@@ -261,6 +261,11 @@ export class GameWebSocketServer {
       return;
     }
 
+    if (this.roomManager.getRoom(payload.roomId)?.isNameTaken(payload.playerName)) {
+      this.sendError(clientId, 'NAME_TAKEN', 'Someone in this room already goes by that name');
+      return;
+    }
+
     const room: Room | null = this.roomManager.joinRoom(
       payload.roomId,
       clientId,
@@ -555,6 +560,17 @@ export class GameWebSocketServer {
         room: null,
         playerId: clientId,
         reason: 'Room no longer exists',
+      };
+      this.send(clientId, 'reconnect-result' as ServerMessageType, result);
+      return;
+    }
+
+    if (room.isNameTaken(payload.playerName)) {
+      const result: ReconnectResultPayload = {
+        success: false,
+        room: null,
+        playerId: clientId,
+        reason: 'Someone in the room took that name meanwhile',
       };
       this.send(clientId, 'reconnect-result' as ServerMessageType, result);
       return;

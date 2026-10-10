@@ -3,6 +3,7 @@ import {
   CharacterState,
   GAME_CONSTANTS,
   VfxEventType,
+  randomInt,
 } from '@shared/index';
 import { ZombieState } from '@shared/game-entities';
 import { DragonProjectile, IGameEngine, SpitterProjectile } from './engine-types';
@@ -93,7 +94,7 @@ export class ProjectileSystem {
     const dist: number = Math.sqrt(dx * dx + dy * dy);
     const speed: number = GAME_CONSTANTS.DRAGON_PROJECTILE_SPEED;
 
-    const baseHit: number = z.instanceDamageMin + Math.floor(Math.random() * (z.instanceDamageMax - z.instanceDamageMin + 1));
+    const baseHit: number = randomInt(z.instanceDamageMin, z.instanceDamageMax);
 
     this.e.dragonProjectiles.push({
       x: startX,
@@ -129,7 +130,7 @@ export class ProjectileSystem {
     const dist: number = Math.sqrt(dx * dx + dy * dy);
     const speed: number = GAME_CONSTANTS.SPITTER_PROJECTILE_SPEED;
 
-    const baseHit: number = z.instanceDamageMin + Math.floor(Math.random() * (z.instanceDamageMax - z.instanceDamageMin + 1));
+    const baseHit: number = randomInt(z.instanceDamageMin, z.instanceDamageMax);
 
     this.e.spitterProjectiles.push({
       x: startX,
