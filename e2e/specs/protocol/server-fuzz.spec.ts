@@ -14,7 +14,6 @@ const CLIENT_MESSAGE_TYPES: string[] = [
   'list-rooms',
   'toggle-ready',
   'start-game',
-  'player-input',
   'game-sync',
   'player-state',
   'kick-player',
@@ -193,7 +192,10 @@ test.describe('game server protocol', { tag: ['@protocol', '@external-safe'] }, 
   test('a multi-megabyte frame does not kill the server', async (): Promise<void> => {
     const host: { client: RawClient; roomId: string } = await hostWithRoom();
     host.client.send('player-state', { player: { id: 'x' }, junk: 'z'.repeat(3_000_000) });
-    expect(await host.client.ping(5_000)).toBe(true);
-    host.client.close();
+    // Over maxPayload: the sender is cut off, everyone else carries on.
+    await expect.poll((): boolean => host.client.isOpen, { timeout: 5_000 }).toBe(false);
+    const other: RawClient = await RawClient.connect();
+    expect(await other.ping(5_000)).toBe(true);
+    other.close();
   });
 });

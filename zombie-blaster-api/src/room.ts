@@ -14,6 +14,8 @@ export class Room {
   readonly createdAt: number;
   private _status: RoomStatus = 'waiting' as RoomStatus;
   private readonly _players: Map<string, RoomPlayer> = new Map<string, RoomPlayer>();
+  /** Kicked player id -> time (ms) until which they may not join again. */
+  private readonly kickedUntil: Map<string, number> = new Map<string, number>();
 
   constructor(name: string) {
     this.id = uuidv4();
@@ -74,6 +76,19 @@ export class Room {
     }
 
     return true;
+  }
+
+  /** Keeps a kicked player out until `until` (ms). Removing them from the room is the caller's job. */
+  kick(id: string, until: number): void {
+    this.kickedUntil.set(id, until);
+  }
+
+  isKicked(id: string, now: number): boolean {
+    const until: number | undefined = this.kickedUntil.get(id);
+    if (until === undefined) return false;
+    if (now < until) return true;
+    this.kickedUntil.delete(id);
+    return false;
   }
 
   getPlayer(id: string): RoomPlayer | undefined {

@@ -50,6 +50,9 @@ export interface InputKeys {
   openInventory: boolean;
   revive: boolean;
   carry: boolean;
+  /** Answers the special-drop prompt (Y / N by default). */
+  confirmDrop: boolean;
+  declineDrop: boolean;
   quickSlot1: boolean;
   quickSlot2: boolean;
   quickSlot3: boolean;

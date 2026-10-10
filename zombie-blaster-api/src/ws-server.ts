@@ -9,7 +9,6 @@ import {
   isCreateRoomPayload,
   isJoinRoomPayload,
   isKickPlayerPayload,
-  isPlayerInputPayload,
   isReconnectPayload,
   isRevivePlayerPayload,
   isRoomIdPayload,
@@ -25,7 +24,6 @@ import type {
   ToggleReadyPayload,
   StartGamePayload,
   KickPlayerPayload,
-  LobbyPlayerInputPayload,
   LobbyChatPayload,
   RoomCreatedPayload,
   RoomJoinedPayload,
@@ -66,6 +64,10 @@ const STALE_ROOM_MAX_AGE_MS: number = 3_600_000;
 const STALE_CLEANUP_INTERVAL_MS: number = 300_000;
 const GRACEFUL_SHUTDOWN_MS: number = 10_000;
 const RECONNECT_WINDOW_MS: number = 60_000;
+/** Largest frame accepted; ws closes the socket (1009) on anything bigger. A 4-player game-sync is ~21 KB. */
+const MAX_PAYLOAD_BYTES: number = 256 * 1024;
+/** How long a kicked player is kept out of the room they were kicked from. */
+const KICK_REJOIN_COOLDOWN_MS: number = 5 * 60_000;
 
 export class GameWebSocketServer {
   private readonly httpServer: HttpServer;
@@ -88,7 +90,7 @@ export class GameWebSocketServer {
       console.error('[HTTP] Server error:', err);
     });
 
-    this.wss = new WebSocketServer({ server: this.httpServer });
+    this.wss = new WebSocketServer({ server: this.httpServer, maxPayload: MAX_PAYLOAD_BYTES });
     this.setupServer();
     this.startHeartbeat();
     this.startCleanup();
@@ -118,16 +120,17 @@ export class GameWebSocketServer {
         client.isAlive = true;
       });
 
+      // client.id, not clientId: a resumed session takes over its old id (handleReconnect).
       ws.on('message', (data: Buffer): void => {
-        this.handleMessage(clientId, data);
+        this.handleMessage(client.id, data);
       });
 
       ws.on('close', (): void => {
-        this.handleDisconnect(clientId);
+        this.handleDisconnect(client);
       });
 
       ws.on('error', (err: Error): void => {
-        console.error(`[WS] Client ${clientId} error:`, err.message);
+        console.error(`[WS] Client ${client.id} error:`, err.message);
       });
     });
   }
@@ -177,10 +180,6 @@ export class GameWebSocketServer {
       case 'start-game':
         if (!isRoomIdPayload(payload)) return this.rejectPayload(clientId, type);
         this.handleStartGame(clientId, payload);
-        break;
-      case 'player-input':
-        if (!isPlayerInputPayload(payload)) return this.rejectPayload(clientId, type);
-        this.handlePlayerInput(clientId, payload);
         break;
       case 'game-sync':
         if (!isStateSnapshotPayload(payload)) return this.rejectPayload(clientId, type);
@@ -254,6 +253,11 @@ export class GameWebSocketServer {
     const existing: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
     if (existing) {
       this.sendError(clientId, 'ALREADY_IN_ROOM', 'Leave your current room first');
+      return;
+    }
+
+    if (this.roomManager.getRoom(payload.roomId)?.isKicked(clientId, Date.now())) {
+      this.sendError(clientId, 'KICKED', 'You were kicked from this room; try again later');
       return;
     }
 
@@ -414,17 +418,6 @@ export class GameWebSocketServer {
     this.broadcastToRoom(room, 'game-started' as ServerMessageType, gamePayload);
   }
 
-  private handlePlayerInput(clientId: string, payload: LobbyPlayerInputPayload): void {
-    const room: Room | undefined = this.roomManager.getRoom(payload.roomId);
-    if (!room) return;
-
-    this.broadcastToRoom(room, 'player-input' as ServerMessageType, {
-      playerId: clientId,
-      keys: payload.keys,
-      attackSkillId: payload.attackSkillId,
-    }, clientId);
-  }
-
   private handleKickPlayer(clientId: string, payload: KickPlayerPayload): void {
     const room: Room | undefined = this.roomManager.getRoom(payload.roomId);
     if (!room) return;
@@ -447,6 +440,7 @@ export class GameWebSocketServer {
     const wasInGame: boolean = room.status === ('in-game' as string);
     // Leave through the RoomManager so the player-to-room mapping is released too.
     this.roomManager.leaveRoom(payload.playerId);
+    room.kick(payload.playerId, Date.now() + KICK_REJOIN_COOLDOWN_MS);
     this.send(payload.playerId, 'player-kicked' as ServerMessageType, { roomId: room.id });
     if (wasInGame) {
       this.broadcastToRoom(room, 'player-left' as ServerMessageType, { playerId: payload.playerId });
@@ -566,9 +560,12 @@ export class GameWebSocketServer {
       return;
     }
 
+    // The player comes back under its old id, so every client (and its own game state) still knows it.
+    const playerId: string = this.adoptId(clientId, session.clientId);
+
     const rejoined: Room | null = this.roomManager.joinRoom(
       session.roomId,
-      clientId,
+      playerId,
       payload.playerName,
       payload.classId as import('../../shared/character.js').CharacterClass,
     );
@@ -577,23 +574,23 @@ export class GameWebSocketServer {
       const result: ReconnectResultPayload = {
         success: false,
         room: null,
-        playerId: clientId,
+        playerId,
         reason: 'Could not rejoin room (room may be full)',
       };
-      this.send(clientId, 'reconnect-result' as ServerMessageType, result);
+      this.send(playerId, 'reconnect-result' as ServerMessageType, result);
       return;
     }
 
     // The token for the next drop is the one this socket's welcome already handed out.
-    console.log(`[WS] Client ${clientId} reconnected to room "${room.name}" (${room.id})`);
+    console.log(`[WS] Client ${playerId} reconnected to room "${room.name}" (${room.id})`);
 
     const result: ReconnectResultPayload = {
       success: true,
       room: rejoined.toInfo(),
-      playerId: clientId,
+      playerId,
     };
-    this.send(clientId, 'reconnect-result' as ServerMessageType, result);
-    this.broadcastRoomUpdate(rejoined, clientId);
+    this.send(playerId, 'reconnect-result' as ServerMessageType, result);
+    this.broadcastRoomUpdate(rejoined, playerId);
     this.broadcastRoomListToLobby();
 
     if (rejoined.status === ('in-game' as string)) {
@@ -601,8 +598,18 @@ export class GameWebSocketServer {
         roomId: rejoined.id,
         players: [],
       };
-      this.send(clientId, 'game-started' as ServerMessageType, gamePayload);
+      this.send(playerId, 'game-started' as ServerMessageType, gamePayload);
     }
+  }
+
+  /** Moves a socket to a resumed session's id. Keeps the current id if that one is somehow still connected. */
+  private adoptId(currentId: string, resumedId: string): string {
+    const client: ConnectedClient | undefined = this.clients.get(currentId);
+    if (!client || this.clients.has(resumedId)) return currentId;
+    this.clients.delete(currentId);
+    client.id = resumedId;
+    this.clients.set(resumedId, client);
+    return resumedId;
   }
 
   private handleGameSync(clientId: string, payload: unknown): void {
@@ -624,13 +631,15 @@ export class GameWebSocketServer {
     this.broadcastToRoom(room, 'player-state-broadcast' as ServerMessageType, wrapped, clientId);
   }
 
-  private handleDisconnect(clientId: string): void {
+  private handleDisconnect(client: ConnectedClient): void {
+    // The heartbeat may already have handled this socket before its close event fires.
+    if (this.clients.get(client.id) !== client) return;
+    const clientId: string = client.id;
     console.log(`[WS] Client disconnected: ${clientId}`);
 
-    const client: ConnectedClient | undefined = this.clients.get(clientId);
     const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
 
-    if (room && client) {
+    if (room) {
       const player: RoomPlayer | undefined = room.getPlayer(clientId);
       if (player) {
         const session: DisconnectedSession = {
@@ -722,7 +731,7 @@ export class GameWebSocketServer {
         if (!client.isAlive) {
           console.log(`[WS] Client ${id} timed out`);
           client.ws.terminate();
-          this.handleDisconnect(id);
+          this.handleDisconnect(client);
           continue;
         }
         client.isAlive = false;
@@ -737,7 +746,17 @@ export class GameWebSocketServer {
       if (removed > 0) {
         console.log(`[Cleanup] Removed ${removed} stale rooms`);
       }
+      this.pruneExpiredSessions(Date.now());
     }, STALE_CLEANUP_INTERVAL_MS);
+  }
+
+  /** Forgets sessions nobody resumed within the reconnect window. */
+  private pruneExpiredSessions(now: number): void {
+    for (const [token, session] of this.disconnectedSessions) {
+      if (now - session.disconnectedAt > RECONNECT_WINDOW_MS) {
+        this.disconnectedSessions.delete(token);
+      }
+    }
   }
 
   shutdown(): void {

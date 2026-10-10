@@ -1,5 +1,5 @@
 import { CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, isZombieWindingUp } from '@shared/index';
-import { ActiveSpecialEffect, BoulderState, CagePuzzleState, CageState, LooseProp, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
+import { ActiveSpecialEffect, DropType, SpecialDropType, BoulderState, CagePuzzleState, CageState, LooseProp, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, PlayerTint, Rope, SpringPuzzleLayout } from '../engine/engine-types';
 import { EXIT_CAGE, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
 import { doorBox, isDoorOpen, isHeld, plateBox } from '../engine/plate-puzzle';
@@ -91,6 +91,7 @@ function toPlayerView(p: CharacterState, engine: GameEngine): E2ePlayerView {
     maxHp: p.derived.maxHp,
     mp: p.mp,
     maxMp: p.derived.maxMp,
+    critRate: p.derived.critRate,
     level: p.level,
     isGrounded: p.isGrounded,
     isAttacking: p.isAttacking,
@@ -428,6 +429,30 @@ const engineControls: E2eEngineControls = {
     const engine: GameEngine | null = currentEngine;
     if (!engine || engine.isMultiplayerClient) return;
     engine.lightningTimerMs = 0;
+  },
+  spawnDrop(type: string, x: number, y: number, specialType: string | null): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine) return;
+    const special: boolean = type === DropType.Special;
+    engine.worldDrops.push({
+      id: `e2e-drop-${Date.now()}`,
+      type: type as DropType,
+      specialType: special ? (specialType as SpecialDropType) : undefined,
+      x,
+      y,
+      velocityY: 0,
+      value: type === DropType.Gold ? 10 : 0,
+      lifetime: special ? GAME_CONSTANTS.SPECIAL_DROP_LIFETIME : GAME_CONSTANTS.DROP_LIFETIME,
+      isGrounded: false,
+    });
+  },
+  knockOut(): void {
+    const engine: GameEngine | null = currentEngine;
+    const p: CharacterState | null = engine?.player ?? null;
+    if (!engine || !p) return;
+    engine.godMode = false;
+    engine.invincibilityFrames = 0;
+    engine.applyIncomingZombieDamage(p.hp, 0, false);
   },
   dropCorpses(centerX: number, count: number): void {
     const engine: GameEngine | null = currentEngine;

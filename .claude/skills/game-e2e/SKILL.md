@@ -233,7 +233,8 @@ Driving tips:
   - A ready pile beats `escapeSurround`: running from the crowd walked the bot onto a ladder.
   - Always validate exit/climb specs with `--workers=5` (plus fairness specs) to reproduce suite load.
   - The brain restocks MP potions (5) for classes with skills; the game has no MP regen.
-- Special drops open a Y/N prompt with a timer; the brain presses Y.
+- Special drops open a prompt with a timer; the brain presses Y. Its keys are the bindable `confirmDrop` / `declineDrop` actions (Y / N by default), answered with the stats/skills/shop/inventory open too; a key the player bound to another action keeps that action. A downed player neither picks up nor pulls drops, and an open prompt's drop goes back into the world when they go down. Setup: `probe.spawnDrop(type, x, y, specialType)` (on the player: the magnet pulls it in) and `probe.knockOut()` (lethal hit through the normal path: downed online). Specs: `solo/buffs-and-drops.spec.ts`, `online/downed-edge-cases.spec.ts`.
+- Buffs on derived stats (Hyper Body max HP/MP, Claw Mastery crit) apply at once: the engine recomputes `derived` when a buff starts or ends (`engine/derived-stats.ts`) and owns `activeBuffs`; `syncProgression` keeps them. `state().player.critRate`, `maxHp`, `maxMp` show it. A maxed-out assassin already sits at the crit cap (60): test crit buffs on a low-level one.
 - **Exploding barrels**: an attack on a lying barrel (beside it, facing it, within 24 px, level
   with it; any player, the host decides) lights its fuse: `level.props[].fuseTicks` counts 150
   ticks (3 s, "3-2-1" over it), then it blows up: `exploded: true`, gone from the world and
@@ -330,7 +331,7 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
   `document.hidden` + `visibilitychange`, rAF parked, page timers capped at 1/s; worker timers
   untouched. Online, the engine ticks from a `WorkerInterval` while hidden and the sync timer is
   always one; solo pauses. Specs: `online/background-host.spec.ts`, `solo/background-tab.spec.ts`.
-- `dropConnection()` closes the app's sockets (init-script tracked) to test reconnect.
+- `dropConnection()` closes the app's sockets (init-script tracked) to test reconnect. A resumed session keeps its player id, and the client follows the role in `reconnect-result` / `room-updated` (a host that dropped while the room migrated comes back as a guest). Leaving the game page disconnects the socket and clears the session. `probe.showGameOver()` opens the game-over screen to test its buttons.
 - Budgets in `network-budget.spec.ts` are regression guards. Raise them only deliberately.
   Baseline numbers + optimization backlog: `docs/netcode-optimizations.md` (update after netcode changes).
 - Chaos failures print their seed; rerun with the same seed to reproduce.

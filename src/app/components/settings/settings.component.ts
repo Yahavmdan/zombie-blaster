@@ -152,6 +152,8 @@ export class SettingsComponent implements OnDestroy {
     { action: 'openSkills', label: 'Skills', icon: 'book' },
     { action: 'openShop', label: 'Shop', icon: 'shop' },
     { action: 'openInventory', label: 'Inv', icon: 'bag' },
+    { action: 'confirmDrop', label: 'Take drop', icon: 'star' },
+    { action: 'declineDrop', label: 'Skip drop', icon: 'close' },
   ];
 
   readonly keyActionMap: Signal<Record<string, KeyBinding>> = computed((): Record<string, KeyBinding> => {

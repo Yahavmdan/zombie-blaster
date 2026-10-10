@@ -41,7 +41,6 @@ export enum ServerMessageType {
   GameStateUpdate = 'game-state-update',
   GameSync = 'game-sync',
   PlayerStateBroadcast = 'player-state-broadcast',
-  PlayerInput = 'player-input',
   Error = 'error',
   PlayerKicked = 'player-kicked',
   ChatMessage = 'chat-message',
@@ -63,7 +62,6 @@ export enum ClientMessageType {
   ListRooms = 'list-rooms',
   ToggleReady = 'toggle-ready',
   StartGame = 'start-game',
-  PlayerInput = 'player-input',
   GameSync = 'game-sync',
   PlayerState = 'player-state',
   KickPlayer = 'kick-player',
@@ -102,12 +100,6 @@ export interface StartGamePayload {
 export interface KickPlayerPayload {
   roomId: string;
   playerId: string;
-}
-
-export interface LobbyPlayerInputPayload {
-  roomId: string;
-  keys: import('./messages').InputKeys;
-  attackSkillId?: string;
 }
 
 export interface LobbyChatPayload {

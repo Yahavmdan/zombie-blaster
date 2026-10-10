@@ -139,6 +139,8 @@ export class DropSystem {
     const playerCx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
     const playerCy: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
     const magnetRadius: number = GAME_CONSTANTS.DROP_MAGNET_RADIUS;
+    // Downed or dead, the player neither pulls nor picks up anything: the loot waits for them.
+    const canPickUp: boolean = !p.isDown && !p.isDead;
 
     for (const drop of this.e.worldDrops) {
       const size: number = drop.type === DropType.Special
@@ -150,7 +152,7 @@ export class DropSystem {
       const dy: number = playerCy - dropCy;
       const dist: number = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist < magnetRadius && dist > 0) {
+      if (canPickUp && dist < magnetRadius && dist > 0) {
         const speed: number = GAME_CONSTANTS.DROP_MAGNET_SPEED;
         drop.x += (dx / dist) * speed;
         drop.y += (dy / dist) * speed;
@@ -208,7 +210,7 @@ export class DropSystem {
       drop.x = keepOutOfWall(drop.x, size, this.e.puzzleWall());
       drop.lifetime--;
 
-      if (this.physics.rectsOverlap(
+      if (canPickUp && this.physics.rectsOverlap(
         p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT,
         drop.x, drop.y, size, size,
       )) {
@@ -344,6 +346,21 @@ export class DropSystem {
     this.e.pendingSpecialDropConfirm = pending;
   }
 
+  private returnSpecialDrop(pending: PendingSpecialDropConfirm): void {
+    const size: number = GAME_CONSTANTS.SPECIAL_DROP_SIZE;
+    this.e.worldDrops.push({
+      id: crypto.randomUUID(),
+      type: DropType.Special,
+      specialType: pending.type,
+      x: pending.cx - size / 2,
+      y: pending.cy - size / 2,
+      velocityY: 0,
+      value: 0,
+      lifetime: GAME_CONSTANTS.SPECIAL_DROP_LIFETIME,
+      isGrounded: false,
+    });
+  }
+
   confirmPendingDrop(): void {
     const pending: PendingSpecialDropConfirm | null = this.e.pendingSpecialDropConfirm;
     if (!pending) return;
@@ -361,6 +378,8 @@ export class DropSystem {
 
     const p: CharacterState | null = this.e.player;
     if (!p || p.isDead || p.isDown) {
+      // Going down is no answer: the drop goes back into the world instead of vanishing.
+      this.returnSpecialDrop(pending);
       this.e.pendingSpecialDropConfirm = null;
       return;
     }

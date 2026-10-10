@@ -27,6 +27,7 @@ import {
 import { ZombieState, ZombieType } from '@shared/game-entities';
 import { ZombieCorpse } from '@shared/game-entities';
 import { DashPhaseState, IGameEngine, PlayerProjectile } from './engine-types';
+import { refreshDerivedStats } from './derived-stats';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
@@ -58,6 +59,7 @@ export class CombatSystem {
     p.activeBuffs = p.activeBuffs.filter(
       (b: ActiveBuff): boolean => b.skillId !== 'assassin-dark-sight',
     );
+    refreshDerivedStats(p);
     this.e.onPlayerUpdate?.(p);
   }
 
@@ -1154,6 +1156,8 @@ export class CombatSystem {
         value: secondaryValue,
       });
     }
+    // Buffs on max HP/MP, crit, attack, ... take effect now, not at the next level-up.
+    refreshDerivedStats(p);
 
     const playerCX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
     const buffCY: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
@@ -1196,6 +1200,7 @@ export class CombatSystem {
     );
 
     if (p.activeBuffs.length !== beforeCount) {
+      refreshDerivedStats(p);
       this.e.onPlayerUpdate?.(p);
     }
   }

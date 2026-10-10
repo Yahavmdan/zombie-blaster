@@ -1743,6 +1743,8 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   openInventory: ['i'],
   revive: ['f'],
   carry: ['e'],
+  confirmDrop: ['y'],
+  declineDrop: ['n'],
   quickSlot1: ['shift'],
   quickSlot2: ['insert'],
   quickSlot3: ['home'],
