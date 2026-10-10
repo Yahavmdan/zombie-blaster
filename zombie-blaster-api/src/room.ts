@@ -48,12 +48,14 @@ export class Room {
     if (this.isFull) return null;
     if (this._status !== ('waiting' as RoomStatus) && this._status !== ('in-game' as RoomStatus)) return null;
 
+    // A room kept open for reconnects can be empty: whoever comes back first hosts it.
+    const host: boolean = isHost || this._players.size === 0;
     const player: RoomPlayer = {
       id,
       name,
       classId,
-      isHost,
-      isReady: isHost || this._status === ('in-game' as RoomStatus),
+      isHost: host,
+      isReady: host || this._status === ('in-game' as RoomStatus),
     };
     this._players.set(id, player);
     return player;
@@ -94,7 +96,7 @@ export class Room {
   }
 
   startGame(): boolean {
-    if (!this.canStart()) return false;
+    if (this._status !== ('waiting' as RoomStatus) || !this.canStart()) return false;
     this._status = 'in-game' as RoomStatus;
     return true;
   }

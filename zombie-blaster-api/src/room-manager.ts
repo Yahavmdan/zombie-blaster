@@ -25,7 +25,8 @@ export class RoomManager {
     return room;
   }
 
-  leaveRoom(playerId: string): { room: Room; wasEmpty: boolean } | null {
+  /** `keepIfEmpty`: a dropped connection keeps its emptied room open for the reconnect window. */
+  leaveRoom(playerId: string, keepIfEmpty: boolean = false): { room: Room; wasEmpty: boolean } | null {
     const roomId: string | undefined = this.playerToRoom.get(playerId);
     if (!roomId) return null;
 
@@ -36,11 +37,19 @@ export class RoomManager {
     this.playerToRoom.delete(playerId);
 
     const wasEmpty: boolean = room.playerCount === 0;
-    if (wasEmpty) {
+    if (wasEmpty && !keepIfEmpty) {
       this.rooms.delete(roomId);
     }
 
     return { room, wasEmpty };
+  }
+
+  /** Deletes a room kept open for reconnects once nobody came back. */
+  removeIfEmpty(roomId: string): void {
+    const room: Room | undefined = this.rooms.get(roomId);
+    if (room && room.playerCount === 0) {
+      this.rooms.delete(roomId);
+    }
   }
 
   getRoom(roomId: string): Room | undefined {
@@ -56,6 +65,7 @@ export class RoomManager {
   listRooms(): RoomInfo[] {
     const result: RoomInfo[] = [];
     for (const room of this.rooms.values()) {
+      if (room.playerCount === 0) continue;
       if (room.status === ('waiting' as unknown) || room.status === ('in-game' as unknown)) {
         result.push(room.toInfo());
       }

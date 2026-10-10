@@ -20,7 +20,6 @@ import { ShopComponent } from '../../components/shop/shop.component';
 import { InventoryComponent } from '../../components/inventory/inventory.component';
 import { QuickSlotsComponent } from '../../components/quick-slots/quick-slots.component';
 import { QuickSlotService } from '../../services/quick-slot.service';
-import { KeyBindingsService } from '../../services/key-bindings.service';
 import { attachGameControls } from '../../testing/e2e-hooks';
 import { E2eControls } from '../../testing/e2e-api';
 import { WorkerInterval } from '../../engine/worker-interval';
@@ -44,7 +43,6 @@ export class GameComponent implements OnInit, OnDestroy {
   private readonly zone: NgZone = inject(NgZone);
   private readonly destroyRef: DestroyRef = inject(DestroyRef);
   private readonly quickSlotService: QuickSlotService = inject(QuickSlotService);
-  private readonly keyBindingsService: KeyBindingsService = inject(KeyBindingsService);
   private readonly gameCanvas: Signal<GameCanvasComponent | undefined> = viewChild(GameCanvasComponent);
 
   private syncTimer: WorkerInterval | null = null;
@@ -491,7 +489,8 @@ export class GameComponent implements OnInit, OnDestroy {
     }
 
     if (entry.type === 'potion') {
-      const used: boolean = this.gameState.usePotion(entry.id);
+      const used: boolean =
+        this.gameCanvas()?.drinkQuickSlotPotion((): boolean => this.gameState.usePotion(entry.id)) ?? false;
       if (used) {
         const updated: CharacterState | null = this.gameState.player();
         if (updated) {
@@ -688,9 +687,8 @@ export class GameComponent implements OnInit, OnDestroy {
   retry(): void {
     const p: CharacterState | null = this.gameState.player();
     if (!p) return;
+    // Same character class again: key bindings and quick slots stay as the player set them.
     this.gameState.createPlayer(p.name, p.classId);
-    this.keyBindingsService.resetToDefaults();
-    this.quickSlotService.resetToDefaults();
     this.isGameOver.set(false);
     this.statPanelOpen.set(false);
     this.skillPanelOpen.set(false);

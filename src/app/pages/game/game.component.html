@@ -6,7 +6,8 @@
   <div class="game-wrapper">
     <app-game-canvas
       [player]="p"
-      [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen() || shopOpen() || inventoryOpen() || devDialogOpen()"
+      [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen() || shopOpen() || inventoryOpen() || devDialogOpen() || isGameOver()"
+      [dialogKeysEnabled]="!settingsOpen() && !devDialogOpen() && !isGameOver()"
       (playerUpdated)="onPlayerUpdate($event)"
       (xpGained)="onXpGained($event)"
       (scoreUpdated)="onScoreUpdate($event)"

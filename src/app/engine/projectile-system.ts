@@ -205,7 +205,7 @@ export class ProjectileSystem {
             break;
           }
           const p: CharacterState | null = this.e.player;
-          if (p && this.e.invincibilityFrames <= 0) {
+          if (p && !p.isDown && !p.isDead && this.e.invincibilityFrames <= 0) {
             p.hp -= rawDamage;
             this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
             this.vfx.flashPlayerHurt(p);
@@ -214,10 +214,7 @@ export class ProjectileSystem {
             p.isGrounded = false;
 
             if (p.hp <= 0) {
-              p.hp = 0;
-              p.isDead = true;
-              this.e.onPlayerUpdate?.(p);
-              this.e.onGameOver?.();
+              this.knockOutPlayer(p);
             } else {
               this.e.onPlayerUpdate?.(p);
             }
@@ -286,7 +283,7 @@ export class ProjectileSystem {
             break;
           }
           const p: CharacterState | null = this.e.player;
-          if (p && this.e.invincibilityFrames <= 0) {
+          if (p && !p.isDown && !p.isDead && this.e.invincibilityFrames <= 0) {
             p.hp -= rawDamage;
             this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
             this.vfx.flashPlayerHurt(p);
@@ -303,10 +300,7 @@ export class ProjectileSystem {
             });
 
             if (p.hp <= 0) {
-              p.hp = 0;
-              p.isDead = true;
-              this.e.onPlayerUpdate?.(p);
-              this.e.onGameOver?.();
+              this.knockOutPlayer(p);
             } else {
               this.e.onPlayerUpdate?.(p);
             }
@@ -378,8 +372,25 @@ export class ProjectileSystem {
     this.vfx.tintPlayerPoisoned(p.id);
   }
 
+  /** A lethal projectile or poison hit: downed for a revive online, game over solo (as melee). */
+  private knockOutPlayer(p: CharacterState): void {
+    p.hp = 0;
+    this.e.poisonEffect = null;
+    if (this.e.isMultiplayerHost || this.e.isMultiplayerClient) {
+      p.isDown = true;
+      p.downTimer = GAME_CONSTANTS.REVIVE_WINDOW_TICKS;
+      this.e.onPlayerUpdate?.(p);
+      this.e.onPlayerDowned?.();
+    } else {
+      p.isDead = true;
+      this.e.onPlayerUpdate?.(p);
+      this.e.onGameOver?.();
+    }
+  }
+
   updatePoisonEffect(): void {
-    if (!this.e.poisonEffect || !this.e.player || this.e.player.isDead) return;
+    const p: CharacterState | null = this.e.player;
+    if (!this.e.poisonEffect || !p || p.isDead || p.isDown) return;
 
     this.e.poisonEffect.remainingTicks--;
     this.e.poisonEffect.tickTimer--;
@@ -387,25 +398,21 @@ export class ProjectileSystem {
     if (this.e.poisonEffect.tickTimer <= 0) {
       this.e.poisonEffect.tickTimer = this.e.poisonEffect.tickInterval;
       if (!this.e.godMode && !this.isLocalPlayerDarkSighted()) {
-        this.e.player.hp -= this.e.poisonEffect.damagePerTick;
+        p.hp -= this.e.poisonEffect.damagePerTick;
         this.vfx.spawnDamageNumber(
-          this.e.player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
-          this.e.player.y - 10,
+          p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+          p.y - 10,
           this.e.poisonEffect.damagePerTick,
           false,
           '#00cc44',
         );
         this.vfx.spawnPoisonBubbles();
 
-        if (this.e.player.hp <= 0) {
-          this.e.player.hp = 0;
-          this.e.player.isDead = true;
-          this.e.onPlayerUpdate?.(this.e.player);
-          this.e.onGameOver?.();
-          this.e.poisonEffect = null;
+        if (p.hp <= 0) {
+          this.knockOutPlayer(p);
           return;
         }
-        this.e.onPlayerUpdate?.(this.e.player);
+        this.e.onPlayerUpdate?.(p);
       }
     }
 

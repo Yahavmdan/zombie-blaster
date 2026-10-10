@@ -45,7 +45,9 @@ export function formatKeyName(key: string): string {
 export class KeyBindingsService {
   readonly bindings: WritableSignal<KeyBindings> = signal<KeyBindings>(this.copyDefaults());
 
+  /** Makes `key` the action's only key and takes it from any other action: one key never does two things. */
   rebind(action: GameAction, key: string): void {
+    this.clearKey(key);
     const normalizedKey: string = key.toLowerCase();
     this.bindings.update((b: KeyBindings): KeyBindings => {
       return { ...b, [action]: [normalizedKey] };

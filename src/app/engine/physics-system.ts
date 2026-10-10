@@ -95,6 +95,15 @@ export class PhysicsSystem {
     this.e.onPlayerUpdate?.(p);
   }
 
+  /** A downed (or dead) body takes no input but still falls and lands like a stunned one. */
+  updateDownedBody(): void {
+    const p: CharacterState | null = this.e.player;
+    if (!p) return;
+    p.isClimbing = false;
+    this.applyStunnedMovement(p);
+    this.e.onPlayerUpdate?.(p);
+  }
+
   private applyStunnedMovement(p: CharacterState): void {
     p.velocityX *= GAME_CONSTANTS.PLAYER_FRICTION;
     if (Math.abs(p.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) p.velocityX = 0;
