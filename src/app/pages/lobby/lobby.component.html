@@ -30,7 +30,7 @@
             />
             <button
               class="btn btn--create px-btn px-btn--primary"
-              [disabled]="!isConnected()"
+              [disabled]="!canRequestRoom()"
               data-testid="lobby-create-button-create"
               (click)="createRoom()"
             >
@@ -73,7 +73,7 @@
                     </div>
                     <button
                       class="btn btn--join px-btn px-btn--good"
-                      [disabled]="room.players.length >= room.maxPlayers"
+                      [disabled]="room.players.length >= room.maxPlayers || roomRequestPending()"
                       (click)="joinRoom(room.id)"
                     >
                       Join

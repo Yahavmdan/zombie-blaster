@@ -69,6 +69,8 @@ export class LobbyComponent implements OnInit, OnDestroy {
   readonly playerId: WritableSignal<string> = signal<string>('');
   readonly errorMessage: WritableSignal<string> = signal<string>('');
   readonly shutdownWarning: WritableSignal<string> = signal<string>('');
+  /** A create/join request is on its way: a second click would only earn "already in a room". */
+  readonly roomRequestPending: WritableSignal<boolean> = signal<boolean>(false);
 
   readonly playerName: WritableSignal<string> = signal<string>('');
   readonly playerClass: WritableSignal<CharacterClass> = signal<CharacterClass>(CharacterClass.Warrior);
@@ -92,6 +94,10 @@ export class LobbyComponent implements OnInit, OnDestroy {
     return this.connectionStatus() === 'connected';
   });
 
+  readonly canRequestRoom: Signal<boolean> = computed((): boolean => {
+    return this.isConnected() && !this.roomRequestPending();
+  });
+
   /** Sentence-case connection state for the status chip. */
   readonly connectionLabel: Signal<string> = computed((): string => {
     const status: string = this.connectionStatus();
@@ -108,6 +114,9 @@ export class LobbyComponent implements OnInit, OnDestroy {
 
     this.ws.status$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((status: ConnectionStatus): void => {
       this.connectionStatus.set(status);
+      if (status !== 'connected') {
+        this.roomRequestPending.set(false);
+      }
       if (status === 'connected') {
         this.requestRoomList();
       }
@@ -124,6 +133,7 @@ export class LobbyComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
         const payload: RoomCreatedPayload = msg.payload as RoomCreatedPayload;
+        this.roomRequestPending.set(false);
         this.playerId.set(payload.playerId);
         this.currentRoom.set(payload.room);
         this.view.set('room');
@@ -139,6 +149,7 @@ export class LobbyComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
         const payload: RoomJoinedPayload = msg.payload as RoomJoinedPayload;
+        this.roomRequestPending.set(false);
         this.playerId.set(payload.playerId);
         this.currentRoom.set(payload.room);
         this.view.set('room');
@@ -194,6 +205,7 @@ export class LobbyComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
         const payload: ErrorPayload = msg.payload as ErrorPayload;
+        this.roomRequestPending.set(false);
         this.errorMessage.set(payload.message);
       });
 
@@ -245,6 +257,8 @@ export class LobbyComponent implements OnInit, OnDestroy {
   }
 
   createRoom(): void {
+    if (!this.canRequestRoom() || this.currentRoom()) return;
+    this.roomRequestPending.set(true);
     const roomName: string = this.newRoomNameInput.trim() || `${this.playerName()}'s Room`;
     this.ws.send(ClientMessageType.CreateRoom, {
       roomName,
@@ -254,6 +268,8 @@ export class LobbyComponent implements OnInit, OnDestroy {
   }
 
   joinRoom(roomId: string): void {
+    if (!this.canRequestRoom() || this.currentRoom()) return;
+    this.roomRequestPending.set(true);
     this.ws.send(ClientMessageType.JoinRoom, {
       roomId,
       playerName: this.playerName(),

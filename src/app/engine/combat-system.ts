@@ -54,6 +54,19 @@ export class CombatSystem {
     );
   }
 
+  /** Melee can't touch the local player mid power-dash or hidden in Dark Sight (host and guests alike). */
+  dodgesZombieHits(): boolean {
+    return this.e.dashPhase !== null || this.hasDarkSight();
+  }
+
+  /** Power Stance: a hit lands but, by its chance, doesn't knock the player back. */
+  resistsKnockback(p: CharacterState): boolean {
+    const kbResistBuff: ActiveBuff | undefined = p.activeBuffs.find(
+      (b: ActiveBuff): boolean => b.stat === 'knockbackResist' && b.remainingMs > 0,
+    );
+    return !!kbResistBuff && Math.random() * 100 < kbResistBuff.value;
+  }
+
   private cancelDarkSight(): void {
     const p: CharacterState | null = this.e.player;
     if (!p) return;
@@ -1436,9 +1449,8 @@ export class CombatSystem {
   applyZombieDamageToPlayer(damage: number, z: ZombieState): void {
     const p: CharacterState | null = this.e.player;
     if (!p || p.isDown || this.e.invincibilityFrames > 0) return;
-    if (this.e.dashPhase) return;
     if (this.e.godMode) return;
-    if (this.hasDarkSight()) return;
+    if (this.dodgesZombieHits()) return;
 
     p.hp -= damage;
     this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
@@ -1446,12 +1458,7 @@ export class CombatSystem {
 
     this.interruptReviveChannel();
 
-    const kbResistBuff: ActiveBuff | undefined = p.activeBuffs.find(
-      (b: ActiveBuff) => b.stat === 'knockbackResist' && b.remainingMs > 0,
-    );
-    const resistedKnockback: boolean = !!kbResistBuff && Math.random() * 100 < kbResistBuff.value;
-
-    if (!resistedKnockback) {
+    if (!this.resistsKnockback(p)) {
       const knockDir: number = p.x > z.x ? 1 : -1;
       p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
       p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;

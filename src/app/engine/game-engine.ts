@@ -1303,6 +1303,8 @@ export class GameEngine implements IGameEngine {
     if (this.invincibilityFrames > 0) return;
     // The host aimed at where it last saw us; we already made it up to the safe spot.
     if (this.isInSafeSpot(p.x, p.y)) return;
+    // Same rules as a hit on the host's own player: no hit mid-dash or in Dark Sight.
+    if (this.combatSystem.dodgesZombieHits()) return;
 
     p.hp -= damage;
     this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
@@ -1310,11 +1312,13 @@ export class GameEngine implements IGameEngine {
 
     this.combatSystem.interruptReviveChannel();
 
-    p.velocityX = knockbackDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
-    p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
-    p.isGrounded = false;
-    if (p.isClimbing) {
-      p.isClimbing = false;
+    if (!this.combatSystem.resistsKnockback(p)) {
+      p.velocityX = knockbackDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
+      p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
+      p.isGrounded = false;
+      if (p.isClimbing) {
+        p.isClimbing = false;
+      }
     }
 
     this.vfxSystem.spawnHitParticles(
