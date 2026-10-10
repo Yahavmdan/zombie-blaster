@@ -356,6 +356,15 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
 - A `test.fail` pin can fail for the wrong reason (wrong message name, god mode, a setup timeout).
   Before trusting one, read why it failed: `--grep @bug --reporter=json` and print each
   `results[].errors[0].message`.
+  Pins that need something to happen by chance (a zombie swing) must loop until it happens with a
+  generous deadline, or they "unexpectedly pass" under load. Timer pins: check the arithmetic of
+  every window involved (the 60 s room timer pin first failed on the *second* window expiring).
+- Never start a second `playwright test` in the same slot while one runs: each run wipes
+  `e2e/.results`, and the other run then fails with trace ENOENT and stray console errors.
+- Shop test ids use the shop item id, which is `shop-` + the potion id
+  (`shop-item-button-buy-shop-hp-potion-2`, `shop-item-input-qty-shop-hp-potion-1`).
+- Edge-case sweep (2026-10-10) pins: `protocol/server-gaps.spec.ts`, `solo/edge-sweep.spec.ts`,
+  `solo/ui-sweep.spec.ts`, `online/edge-sweep-coop.spec.ts`, unit `engine/skill-level-data.spec.ts`.
 - Protocol edge cases (reconnect twice, reconnect from another room, repeat start, guest revive,
   full room): `protocol/server-edge-cases.spec.ts`. UI edge cases: `solo/ui-edge-cases.spec.ts`.
 - A room whose last player drops stays open (hidden from `room-list`) for the 60 s reconnect
