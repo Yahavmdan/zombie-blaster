@@ -8,6 +8,20 @@ import type { CharacterClass } from '../../shared/character.js';
 
 const MAX_PLAYERS: number = 6;
 
+/** How names are compared: trimmed and case-insensitive. */
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/** Whether `key` is still barred at `now`; forgets it once its time is up. */
+function isStillBarred(barred: Map<string, number>, key: string, now: number): boolean {
+  const until: number | undefined = barred.get(key);
+  if (until === undefined) return false;
+  if (now < until) return true;
+  barred.delete(key);
+  return false;
+}
+
 export class Room {
   readonly id: string;
   readonly name: string;
@@ -16,6 +30,11 @@ export class Room {
   private readonly _players: Map<string, RoomPlayer> = new Map<string, RoomPlayer>();
   /** Kicked player id -> time (ms) until which they may not join again. */
   private readonly kickedUntil: Map<string, number> = new Map<string, number>();
+  /**
+   * Kicked player name (normalized) -> time (ms) until which it may not join again. A new socket
+   * gets a new id, so the id alone would let a kicked player straight back in by reconnecting.
+   */
+  private readonly kickedNamesUntil: Map<string, number> = new Map<string, number>();
 
   constructor(name: string) {
     this.id = uuidv4();
@@ -78,23 +97,21 @@ export class Room {
     return true;
   }
 
-  /** Keeps a kicked player out until `until` (ms). Removing them from the room is the caller's job. */
-  kick(id: string, until: number): void {
+  /** Keeps a kicked player (its id and its name) out until `until` (ms). Removing them from the room is the caller's job. */
+  kick(id: string, name: string, until: number): void {
     this.kickedUntil.set(id, until);
+    this.kickedNamesUntil.set(normalizeName(name), until);
   }
 
   /** Names are compared trimmed and case-insensitive: "Bob" and " bob " can't share a room. */
   isNameTaken(name: string): boolean {
-    const wanted: string = name.trim().toLowerCase();
-    return this.players.some((p: RoomPlayer): boolean => p.name.trim().toLowerCase() === wanted);
+    const wanted: string = normalizeName(name);
+    return this.players.some((p: RoomPlayer): boolean => normalizeName(p.name) === wanted);
   }
 
-  isKicked(id: string, now: number): boolean {
-    const until: number | undefined = this.kickedUntil.get(id);
-    if (until === undefined) return false;
-    if (now < until) return true;
-    this.kickedUntil.delete(id);
-    return false;
+  /** Kicked by this id or under this name, and the cooldown still runs. */
+  isKicked(id: string, name: string, now: number): boolean {
+    return isStillBarred(this.kickedUntil, id, now) || isStillBarred(this.kickedNamesUntil, normalizeName(name), now);
   }
 
   getPlayer(id: string): RoomPlayer | undefined {

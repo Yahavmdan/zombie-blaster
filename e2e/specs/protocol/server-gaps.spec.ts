@@ -4,8 +4,8 @@ import { uniqueRoomName } from '../../support/room';
 
 /**
  * Server corners found in the 2026-10-10 edge-case sweep: resume tokens, kicks across sockets,
- * kicks and host leaves mid-game, chat and revive relays, name validation. Known bugs are pinned
- * with `test.fail` and tagged `@bug`; delete both once the server is fixed.
+ * kicks and host leaves mid-game, chat and revive relays, name validation. The six resume, kick and
+ * name bugs it found were fixed the same day.
  */
 
 interface RoomPlayerView {
@@ -127,12 +127,7 @@ async function expectNothing(c: RawClient, type: string, mark: number): Promise<
 test.describe('game server gaps', { tag: ['@protocol', '@external-safe'] }, (): void => {
   test(
     'a kicked player cannot rejoin from a fresh connection either',
-    { tag: '@bug' },
     async (): Promise<void> => {
-      test.fail(
-        true,
-        'KNOWN BUG: the kick cooldown is keyed by the connection id (room.ts kickedUntil); a new socket gets a new id',
-      );
       const host: Hosted = await hostWithRoom();
       const guest: Joined = await joinAs(host.roomId, 'Pest');
       host.client.send('kick-player', { roomId: host.roomId, playerId: guest.playerId });
@@ -152,12 +147,7 @@ test.describe('game server gaps', { tag: ['@protocol', '@external-safe'] }, (): 
 
   test(
     'a resume refused because the name was taken can be retried once the name is free',
-    { tag: '@bug' },
     async (): Promise<void> => {
-      test.fail(
-        true,
-        'KNOWN BUG: handleReconnect deletes the session before the name/room/capacity checks, so a refused resume burns the token',
-      );
       const host: Hosted = await hostWithRoom();
       const guest: Joined = await joinAs(host.roomId, 'Flaky');
       const token: string = welcomeToken(guest.client);
@@ -188,12 +178,7 @@ test.describe('game server gaps', { tag: ['@protocol', '@external-safe'] }, (): 
 
   test(
     'a resumed player keeps the name and class it had before the drop',
-    { tag: '@bug' },
     async (): Promise<void> => {
-      test.fail(
-        true,
-        'KNOWN BUG: handleReconnect rejoins with payload.playerName/classId; the stored session name/class are never used',
-      );
       const host: Hosted = await hostWithRoom();
       const guest: Joined = await joinAs(host.roomId, 'Steady', 'mage');
       await startGame(host, [guest.client]);
@@ -217,12 +202,7 @@ test.describe('game server gaps', { tag: ['@protocol', '@external-safe'] }, (): 
 
   test(
     'a player whose old socket is still half-open can resume from a new one',
-    { tag: '@bug' },
     async (): Promise<void> => {
-      test.fail(
-        true,
-        'KNOWN BUG: a session exists only after the server sees the close (heartbeat: up to 60 s); a client that reconnects first is refused and gives up',
-      );
       const host: Hosted = await hostWithRoom();
       const guest: Joined = await joinAs(host.roomId, 'Commuter');
       const token: string = welcomeToken(guest.client);
@@ -242,12 +222,7 @@ test.describe('game server gaps', { tag: ['@protocol', '@external-safe'] }, (): 
 
   test(
     'a lone host that drops twice keeps its room for the whole second resume window',
-    { tag: '@bug' },
     async (): Promise<void> => {
-      test.fail(
-        true,
-        'KNOWN BUG: the first drop arms a 60 s removeIfEmpty timer that is never cancelled; it deletes the room inside the second window',
-      );
       test.setTimeout(120_000);
       const host: Hosted = await hostWithRoom();
       const firstToken: string = welcomeToken(host.client);
@@ -284,12 +259,7 @@ test.describe('game server gaps', { tag: ['@protocol', '@external-safe'] }, (): 
 
   test(
     'a name made only of invisible characters is refused',
-    { tag: '@bug' },
     async (): Promise<void> => {
-      test.fail(
-        true,
-        'KNOWN BUG: isText checks trim(), which keeps U+200B/U+3164, so an invisible name passes the "not blank" rule',
-      );
       const host: Hosted = await hostWithRoom();
       const ghost: RawClient = await RawClient.connect();
       const mark: number = ghost.received.length;

@@ -75,6 +75,8 @@ export class GameWebSocketServer {
   private readonly roomManager: RoomManager = new RoomManager();
   private readonly clients: Map<string, ConnectedClient> = new Map<string, ConnectedClient>();
   private readonly disconnectedSessions: Map<string, DisconnectedSession> = new Map<string, DisconnectedSession>();
+  /** Room id -> the timer that deletes it if still empty. One per room: a newer drop restarts the wait. */
+  private readonly emptyRoomTimers: Map<string, ReturnType<typeof setTimeout>> = new Map<string, ReturnType<typeof setTimeout>>();
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private isShuttingDown: boolean = false;
@@ -256,7 +258,7 @@ export class GameWebSocketServer {
       return;
     }
 
-    if (this.roomManager.getRoom(payload.roomId)?.isKicked(clientId, Date.now())) {
+    if (this.roomManager.getRoom(payload.roomId)?.isKicked(clientId, payload.playerName, Date.now())) {
       this.sendError(clientId, 'KICKED', 'You were kicked from this room; try again later');
       return;
     }
@@ -443,9 +445,10 @@ export class GameWebSocketServer {
     }
 
     const wasInGame: boolean = room.status === ('in-game' as string);
+    const kickedName: string = room.getPlayer(payload.playerId)!.name;
     // Leave through the RoomManager so the player-to-room mapping is released too.
     this.roomManager.leaveRoom(payload.playerId);
-    room.kick(payload.playerId, Date.now() + KICK_REJOIN_COOLDOWN_MS);
+    room.kick(payload.playerId, kickedName, Date.now() + KICK_REJOIN_COOLDOWN_MS);
     this.send(payload.playerId, 'player-kicked' as ServerMessageType, { roomId: room.id });
     if (wasInGame) {
       this.broadcastToRoom(room, 'player-left' as ServerMessageType, { playerId: payload.playerId });
@@ -515,85 +518,61 @@ export class GameWebSocketServer {
 
   private handleReconnect(clientId: string, payload: ReconnectPayload): void {
     if (this.roomManager.getRoomForPlayer(clientId)) {
-      const result: ReconnectResultPayload = {
-        success: false,
-        room: null,
-        playerId: clientId,
-        reason: 'Leave your current room first',
-      };
-      this.send(clientId, 'reconnect-result' as ServerMessageType, result);
+      this.refuseResume(clientId, 'Leave your current room first');
       return;
     }
+
+    // The old socket may still look alive (the network vanished; the heartbeat notices only after
+    // up to a minute). The token proves it is the same player: drop the old socket now, as if closed.
+    this.takeOverHalfOpenSocket(clientId, payload.reconnectToken);
 
     const session: DisconnectedSession | undefined = this.disconnectedSessions.get(payload.reconnectToken);
 
     if (!session) {
-      const result: ReconnectResultPayload = {
-        success: false,
-        room: null,
-        playerId: clientId,
-        reason: 'No session found for this token — it may have expired',
-      };
-      this.send(clientId, 'reconnect-result' as ServerMessageType, result);
+      this.refuseResume(clientId, 'No session found for this token — it may have expired');
       return;
     }
 
     const now: number = Date.now();
     if (now - session.disconnectedAt > RECONNECT_WINDOW_MS) {
       this.disconnectedSessions.delete(payload.reconnectToken);
-      const result: ReconnectResultPayload = {
-        success: false,
-        room: null,
-        playerId: clientId,
-        reason: 'Reconnect window expired',
-      };
-      this.send(clientId, 'reconnect-result' as ServerMessageType, result);
+      this.refuseResume(clientId, 'Reconnect window expired');
+      return;
+    }
+
+    const room: Room | undefined = this.roomManager.getRoom(session.roomId);
+    if (!room) {
+      this.disconnectedSessions.delete(payload.reconnectToken);
+      this.refuseResume(clientId, 'Room no longer exists');
+      return;
+    }
+
+    // Refusals below are temporary: the session (and its token) stays, so the player can retry.
+    if (room.isNameTaken(session.playerName)) {
+      this.refuseResume(clientId, 'Someone in the room took that name meanwhile');
+      return;
+    }
+
+    if (room.isFull) {
+      this.refuseResume(clientId, 'Could not rejoin room (room may be full)');
       return;
     }
 
     this.disconnectedSessions.delete(payload.reconnectToken);
 
-    const room: Room | undefined = this.roomManager.getRoom(session.roomId);
-    if (!room) {
-      const result: ReconnectResultPayload = {
-        success: false,
-        room: null,
-        playerId: clientId,
-        reason: 'Room no longer exists',
-      };
-      this.send(clientId, 'reconnect-result' as ServerMessageType, result);
-      return;
-    }
-
-    if (room.isNameTaken(payload.playerName)) {
-      const result: ReconnectResultPayload = {
-        success: false,
-        room: null,
-        playerId: clientId,
-        reason: 'Someone in the room took that name meanwhile',
-      };
-      this.send(clientId, 'reconnect-result' as ServerMessageType, result);
-      return;
-    }
-
     // The player comes back under its old id, so every client (and its own game state) still knows it.
     const playerId: string = this.adoptId(clientId, session.clientId);
 
+    // Name and class are the ones the player had: a resume is not a way to rename or switch class.
     const rejoined: Room | null = this.roomManager.joinRoom(
       session.roomId,
       playerId,
-      payload.playerName,
-      payload.classId as import('../../shared/character.js').CharacterClass,
+      session.playerName,
+      session.classId as import('../../shared/character.js').CharacterClass,
     );
 
     if (!rejoined) {
-      const result: ReconnectResultPayload = {
-        success: false,
-        room: null,
-        playerId,
-        reason: 'Could not rejoin room (room may be full)',
-      };
-      this.send(playerId, 'reconnect-result' as ServerMessageType, result);
+      this.refuseResume(playerId, 'Could not rejoin room (room may be full)');
       return;
     }
 
@@ -615,6 +594,45 @@ export class GameWebSocketServer {
         players: [],
       };
       this.send(playerId, 'game-started' as ServerMessageType, gamePayload);
+    }
+  }
+
+  /**
+   * Deletes a room emptied by a drop once the reconnect window has passed with nobody back. An
+   * earlier timer is replaced: it would delete the room inside the newest drop's window.
+   */
+  private scheduleEmptyRoomRemoval(roomId: string): void {
+    const previous: ReturnType<typeof setTimeout> | undefined = this.emptyRoomTimers.get(roomId);
+    if (previous) clearTimeout(previous);
+    const timer: ReturnType<typeof setTimeout> = setTimeout((): void => {
+      this.emptyRoomTimers.delete(roomId);
+      this.roomManager.removeIfEmpty(roomId);
+    }, RECONNECT_WINDOW_MS);
+    timer.unref();
+    this.emptyRoomTimers.set(roomId, timer);
+  }
+
+  private refuseResume(clientId: string, reason: string): void {
+    const result: ReconnectResultPayload = {
+      success: false,
+      room: null,
+      playerId: clientId,
+      reason,
+    };
+    this.send(clientId, 'reconnect-result' as ServerMessageType, result);
+  }
+
+  /**
+   * Another live socket whose welcome handed out `token` is the same player on a dead connection:
+   * it is dropped now (handleDisconnect opens its resume session). Your own socket's token resumes nothing.
+   */
+  private takeOverHalfOpenSocket(clientId: string, token: string): void {
+    for (const other of this.clients.values()) {
+      if (other.reconnectToken !== token || other.id === clientId) continue;
+      if (!this.roomManager.getRoomForPlayer(other.id)) return;
+      this.handleDisconnect(other);
+      other.ws.terminate();
+      return;
     }
   }
 
@@ -678,8 +696,7 @@ export class GameWebSocketServer {
 
     const result = this.roomManager.leaveRoom(clientId, true);
     if (result?.wasEmpty) {
-      const roomId: string = result.room.id;
-      setTimeout((): void => this.roomManager.removeIfEmpty(roomId), RECONNECT_WINDOW_MS).unref();
+      this.scheduleEmptyRoomRemoval(result.room.id);
     }
     if (result && !result.wasEmpty) {
       if (wasHost && wasInGame) {
