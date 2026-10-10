@@ -466,6 +466,9 @@ export const GAME_CONSTANTS = {
   MAGIC_TWIN_OFFSET_X: 25, // Horizontal offset behind the player in pixels
   MAGIC_TWIN_ALPHA: 0.4, // Opacity of the twin sprite
 
+  // ─── Input ──────────────────────────────────────
+  INPUT_TAP_PULSE_MS: 60, // How long a tap-on-release key (Alt) holds its action down: spans ~3 engine ticks
+
   // ─── Skill bar ──────────────────────────────────
   SKILL_SLOT_COUNT: 7, // Skill keys (skill1..skill7): a class never has more Active + Buff skills than this
 

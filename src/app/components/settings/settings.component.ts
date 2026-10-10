@@ -422,7 +422,9 @@ export class SettingsComponent implements OnDestroy {
           (a: QuickSlotAction): boolean => !slots[a],
         );
         if (emptySlot) {
-          this.keyBindingsService.assignKeyToAction(keyCode, emptySlot);
+          // The dropped key becomes the slot's only key: an empty slot may still sit on a mouse
+          // button (9-12 do by default), which would otherwise cast it too.
+          this.keyBindingsService.rebind(emptySlot, keyCode);
           this.quickSlotService.assign(emptySlot, entry);
         }
       }

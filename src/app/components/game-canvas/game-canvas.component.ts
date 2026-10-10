@@ -15,13 +15,13 @@ import {
   computed,
   isDevMode,
 } from '@angular/core';
-import { CharacterClass, CharacterState, SkillDefinition, VfxEvent, getUsableSkills } from '@shared/index';
+import { CharacterClass, CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, getUsableSkills } from '@shared/index';
 import { BoulderState, CagePuzzleState, DropType, LooseProp, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
 import { GameAction, KeyBindings } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
 import { InputKeys } from '@shared/messages';
-import { KeyBindingsService, formatKeyName, mouseButtonKey } from '../../services/key-bindings.service';
+import { KeyBindingsService, bindingKey, formatKeyName, isTapOnReleaseKey, mouseButtonKey } from '../../services/key-bindings.service';
 import { GameStateService } from '../../services/game-state.service';
 import { QuickSlotService } from '../../services/quick-slot.service';
 import { attachEngineProbe } from '../../testing/e2e-hooks';
@@ -109,6 +109,10 @@ export class GameCanvasComponent implements OnDestroy {
   private readonly boundMouseUp: (e: MouseEvent) => void = (e: MouseEvent): void => this.onMouseUp(e);
   private readonly boundContextMenu: (e: MouseEvent) => void = (e: MouseEvent): void => this.onContextMenu(e);
   private readonly heldQuickSlotActions: Map<string, GameAction> = new Map<string, GameAction>();
+  /** Physical key (e.code) -> binding key it pressed: its release lets go of the same action, whatever modifiers changed meanwhile. */
+  private readonly heldKeysByCode: Map<string, string> = new Map<string, string>();
+  /** A tap-on-release key (Alt) is down and nothing else was pressed since: it acts when let go. */
+  private pendingTapKey: string | null = null;
 
   constructor() {
     afterNextRender((): void => {
@@ -374,6 +378,8 @@ export class GameCanvasComponent implements OnDestroy {
       this.keys[action] = false;
     }
     this.heldQuickSlotActions.clear();
+    this.heldKeysByCode.clear();
+    this.pendingTapKey = null;
     this.engine?.setKeys({ ...this.keys });
   }
 
@@ -388,27 +394,40 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onKeyDown(e: KeyboardEvent): void {
+    const key: string = bindingKey(e);
+    if (!isTapOnReleaseKey(key)) this.pendingTapKey = null;
+
     // A held key auto-repeats: panel keys and prompt answers act once per press, not on every repeat.
-    if (e.repeat && this.isOneShotKey(e.key)) {
+    if (e.repeat && this.isOneShotKey(key)) {
       e.preventDefault();
       return;
     }
 
     // The prompt runs on a timer while the game goes on, so it answers with the stats, skills,
     // shop or inventory open too (not under settings, where keys are being rebound).
-    if (this.dialogKeysEnabled() && !isTextField(e.target) && this.answerDropPrompt(e.key)) {
+    if (this.dialogKeysEnabled() && !isTextField(e.target) && this.answerDropPrompt(key)) {
       e.preventDefault();
       return;
     }
 
     if (this.inputDisabled()) {
-      if (this.dialogKeysEnabled() && !isTextField(e.target)) this.pressDialogKey(e);
+      if (this.dialogKeysEnabled() && !isTextField(e.target)) this.pressDialogKey(e, key);
+      return;
+    }
+
+    // Alt also starts Alt+Tab and AltGr: its action waits for a clean release (see onKeyUp).
+    if (isTapOnReleaseKey(key) && this.keyBindingsService.getActionForKey(key)) {
+      if (!e.repeat) this.pendingTapKey = key;
+      e.preventDefault();
       return;
     }
 
     // Bound keys never reach the browser: attacking on Control while moving would otherwise
     // fire shortcuts (Ctrl+A select-all, Ctrl+D bookmark, Ctrl+P print, ...).
-    if (this.pressBinding(e.key)) e.preventDefault();
+    if (this.pressBinding(key)) {
+      this.heldKeysByCode.set(e.code, key);
+      e.preventDefault();
+    }
   }
 
   private isOneShotKey(key: string): boolean {
@@ -447,8 +466,8 @@ export class GameCanvasComponent implements OnDestroy {
     return true;
   }
 
-  private pressDialogKey(e: KeyboardEvent): void {
-    const action: GameAction | null = this.keyBindingsService.getActionForKey(e.key);
+  private pressDialogKey(e: KeyboardEvent, key: string): void {
+    const action: GameAction | null = this.keyBindingsService.getActionForKey(key);
     if (!action || !UI_ACTIONS.has(action)) return;
     this.emitUiAction(action);
     e.preventDefault();
@@ -481,7 +500,17 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onKeyUp(e: KeyboardEvent): void {
-    this.releaseBinding(e.key);
+    const key: string = this.heldKeysByCode.get(e.code) ?? bindingKey(e);
+    this.heldKeysByCode.delete(e.code);
+    if (this.pendingTapKey !== null && this.pendingTapKey === key) {
+      this.pendingTapKey = null;
+      if (this.inputDisabled() || !this.pressBinding(key)) return;
+      setTimeout((): void => {
+        this.releaseBinding(key);
+      }, GAME_CONSTANTS.INPUT_TAP_PULSE_MS);
+      return;
+    }
+    this.releaseBinding(key);
   }
 
   /** Releases whatever action a key or mouse button is bound to. Returns false when it is unbound. */

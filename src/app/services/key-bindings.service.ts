@@ -39,6 +39,19 @@ export function mouseButtonKey(button: number): string | null {
 
 const STORAGE_KEY: string = 'zb.keyBindings';
 
+/**
+ * The key a keyboard event means for bindings. Digits come from the physical key, so Shift+1 is
+ * still "1" (e.key would be "!", and its release would never let go of skill 1).
+ */
+export function bindingKey(e: KeyboardEvent): string {
+  return /^Digit[0-9]$/.test(e.code) ? e.code.slice(5) : e.key;
+}
+
+/** Keys whose action fires when they are let go, and only if no other key was pressed meanwhile (Alt+Tab, AltGr). */
+export function isTapOnReleaseKey(key: string): boolean {
+  return key.toLowerCase() === 'alt';
+}
+
 export function formatKeyName(key: string): string {
   return KEY_DISPLAY_MAP[key.toLowerCase()] ?? key.toUpperCase();
 }

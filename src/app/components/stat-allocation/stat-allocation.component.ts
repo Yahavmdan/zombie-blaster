@@ -125,6 +125,7 @@ export class StatAllocationComponent {
       previewAllocated,
       player.classId,
       player.activeBuffs,
+      player.level,
     );
 
     return {
