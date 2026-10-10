@@ -334,3 +334,17 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
 - Budgets in `network-budget.spec.ts` are regression guards. Raise them only deliberately.
   Baseline numbers + optimization backlog: `docs/netcode-optimizations.md` (update after netcode changes).
 - Chaos failures print their seed; rerun with the same seed to reproduce.
+- God mode makes skills free (no MP/HP cost): a test that measures MP spent must leave it off.
+- Full suite: ~15 min at 2 workers (155 tests). Under that load `cage-puzzle` "cut the other chains",
+  `exit` "zombies slain under the exit pile up" and `movement` "air control" have failed and then
+  passed alone: rerun a failure alone before calling it a bug.
+- A `test.fail` pin can fail for the wrong reason (wrong message name, god mode, a setup timeout).
+  Before trusting one, read why it failed: `--grep @bug --reporter=json` and print each
+  `results[].errors[0].message`.
+- Protocol edge cases (reconnect twice, reconnect from another room, repeat start, guest revive,
+  full room): `protocol/server-edge-cases.spec.ts`. UI edge cases: `solo/ui-edge-cases.spec.ts`.
+- A room whose last player drops stays open (hidden from `room-list`) for the 60 s reconnect
+  window; the first player back becomes host. Only `leave-room` deletes an empty room at once.
+- Dialog keys (P/O/B/I) work while a dialog is open: the same key closes it, another switches. They do
+  nothing while settings or the game-over screen show. Rebinding a key takes it from its old action.
+  "Try again" keeps bindings and quick slots; a quick-slot potion obeys the potion cooldown.

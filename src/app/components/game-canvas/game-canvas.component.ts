@@ -28,6 +28,11 @@ import { attachEngineProbe } from '../../testing/e2e-hooks';
 
 const UI_ACTIONS: Set<string> = new Set<string>(['openStats', 'openSkills', 'openShop', 'openInventory']);
 
+/** Typing in a dialog's text field must not toggle dialogs. */
+function isTextField(target: EventTarget | null): boolean {
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+}
+
 @Component({
   selector: 'app-game-canvas',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -44,6 +49,8 @@ export class GameCanvasComponent implements OnDestroy {
 
   readonly player: InputSignal<CharacterState> = input.required<CharacterState>();
   readonly inputDisabled: InputSignal<boolean> = input<boolean>(false);
+  /** While input is disabled by a dialog, its keys (P/O/B/I) still close it or switch to another one. */
+  readonly dialogKeysEnabled: InputSignal<boolean> = input<boolean>(false);
 
   readonly playerUpdated: OutputEmitterRef<CharacterState> = output<CharacterState>();
   readonly xpGained: OutputEmitterRef<number> = output<number>();
@@ -143,6 +150,10 @@ export class GameCanvasComponent implements OnDestroy {
     if (this.engine) {
       this.engine.showCollisionBoxes = enabled;
     }
+  }
+
+  drinkQuickSlotPotion(drink: () => boolean): boolean {
+    return this.engine?.drinkQuickSlotPotion(drink) ?? false;
   }
 
   triggerQuickSlotSkill(skillId: string): void {
@@ -356,7 +367,10 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onKeyDown(e: KeyboardEvent): void {
-    if (this.inputDisabled()) return;
+    if (this.inputDisabled()) {
+      if (this.dialogKeysEnabled() && !isTextField(e.target)) this.pressDialogKey(e);
+      return;
+    }
 
     if (this.engine?.hasPendingSpecialDrop()) {
       const key: string = e.key.toLowerCase();
@@ -395,6 +409,13 @@ export class GameCanvasComponent implements OnDestroy {
     this.keys[action] = true;
     this.engine?.setKeys({ ...this.keys });
     return true;
+  }
+
+  private pressDialogKey(e: KeyboardEvent): void {
+    const action: GameAction | null = this.keyBindingsService.getActionForKey(e.key);
+    if (!action || !UI_ACTIONS.has(action)) return;
+    this.emitUiAction(action);
+    e.preventDefault();
   }
 
   private emitUiAction(action: GameAction): void {

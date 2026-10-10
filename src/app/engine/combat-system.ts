@@ -439,6 +439,8 @@ export class CombatSystem {
       if (hpCost > 0 && p.hp <= hpCost) return;
       p.mp -= mpCost;
       if (hpCost > 0) p.hp -= hpCost;
+      // Report the cost before the hit: a kill's XP syncs progression back, which would refund unreported MP.
+      this.e.onPlayerUpdate?.(p);
     }
     this.e.skillCooldowns.set(skill.id, Math.floor(cooldownMs / this.e.fixedDt));
 

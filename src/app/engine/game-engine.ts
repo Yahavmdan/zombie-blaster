@@ -540,6 +540,15 @@ export class GameEngine implements IGameEngine {
     this.keys = keys;
   }
 
+  /** A potion from a quick slot: the same cooldown and alive/not-down rule as the potion keys. */
+  drinkQuickSlotPotion(drink: () => boolean): boolean {
+    const p: CharacterState | null = this.player;
+    if (!p || p.isDead || p.isDown || this.potionCooldown > 0) return false;
+    if (!drink()) return false;
+    this.potionCooldown = GAME_CONSTANTS.POTION_USE_COOLDOWN_TICKS;
+    return true;
+  }
+
   syncProgression(player: CharacterState): void {
     if (!this.player) return;
     const prevCharLevel: number = this.player.level;
@@ -630,6 +639,8 @@ export class GameEngine implements IGameEngine {
       this.updateReviveChannel();
       this.combatSystem.updateAttackTiming();
       this.updatePlayerActions();
+    } else {
+      this.physicsSystem.updateDownedBody();
     }
 
     this.combatSystem.updatePlayerProjectiles();
@@ -733,8 +744,8 @@ export class GameEngine implements IGameEngine {
       (rp: CharacterState): boolean => rp.revivingPlayerId === p.id && !rp.isDown && !rp.isDead,
     );
     if (!beingRevived) p.downTimer--;
+    // No sliding while down; gravity still pulls the body to the ground (updateDownedBody).
     p.velocityX = 0;
-    p.velocityY = 0;
 
     if (p.downTimer <= 0) {
       p.isDown = false;

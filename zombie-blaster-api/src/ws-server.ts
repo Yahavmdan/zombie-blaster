@@ -336,7 +336,12 @@ export class GameWebSocketServer {
       return;
     }
 
-    room.toggleReady(clientId);
+    if (!room.getPlayer(clientId)) {
+      this.sendError(clientId, 'NOT_IN_ROOM', 'You are not in this room');
+      return;
+    }
+
+    if (!room.toggleReady(clientId)) return;
     this.broadcastRoomUpdate(room);
   }
 
@@ -349,6 +354,11 @@ export class GameWebSocketServer {
 
     if (room.hostId !== clientId) {
       this.sendError(clientId, 'NOT_HOST', 'Only the host can start the game');
+      return;
+    }
+
+    if (room.status !== ('waiting' as string)) {
+      this.sendError(clientId, 'ALREADY_STARTED', 'The game has already started');
       return;
     }
 
@@ -493,6 +503,10 @@ export class GameWebSocketServer {
 
     const targetId: string = payload.targetPlayerId;
     if (!room.getPlayer(targetId)) return;
+    if (targetId === clientId) {
+      this.sendError(clientId, 'CANNOT_REVIVE_SELF', 'A teammate has to revive you');
+      return;
+    }
 
     this.send(targetId, 'player-revived' as ServerMessageType, {
       targetPlayerId: targetId,
@@ -501,6 +515,17 @@ export class GameWebSocketServer {
   }
 
   private handleReconnect(clientId: string, payload: ReconnectPayload): void {
+    if (this.roomManager.getRoomForPlayer(clientId)) {
+      const result: ReconnectResultPayload = {
+        success: false,
+        room: null,
+        playerId: clientId,
+        reason: 'Leave your current room first',
+      };
+      this.send(clientId, 'reconnect-result' as ServerMessageType, result);
+      return;
+    }
+
     const session: DisconnectedSession | undefined = this.disconnectedSessions.get(payload.reconnectToken);
 
     if (!session) {
@@ -559,12 +584,7 @@ export class GameWebSocketServer {
       return;
     }
 
-    const newToken: string = uuidv4();
-    const client: ConnectedClient | undefined = this.clients.get(clientId);
-    if (client) {
-      client.reconnectToken = newToken;
-    }
-
+    // The token for the next drop is the one this socket's welcome already handed out.
     console.log(`[WS] Client ${clientId} reconnected to room "${room.name}" (${room.id})`);
 
     const result: ReconnectResultPayload = {
@@ -631,7 +651,11 @@ export class GameWebSocketServer {
       this.broadcastToRoom(room, 'player-left' as ServerMessageType, { playerId: clientId }, clientId);
     }
 
-    const result = this.roomManager.leaveRoom(clientId);
+    const result = this.roomManager.leaveRoom(clientId, true);
+    if (result?.wasEmpty) {
+      const roomId: string = result.room.id;
+      setTimeout((): void => this.roomManager.removeIfEmpty(roomId), RECONNECT_WINDOW_MS).unref();
+    }
     if (result && !result.wasEmpty) {
       if (wasHost && wasInGame) {
         const newHostId: string | null = result.room.hostId;

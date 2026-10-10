@@ -62,7 +62,7 @@ export function isClientMessage(value: unknown): value is { type: string; payloa
 export function isCreateRoomPayload(p: unknown): p is CreateRoomPayload {
   return (
     isObject(p) &&
-    isText(p['roomName'], LIMITS.roomName, true) &&
+    isText(p['roomName'], LIMITS.roomName, false) &&
     isText(p['playerName'], LIMITS.playerName, false) &&
     isClassId(p['classId'])
   );
