@@ -42,6 +42,7 @@ export interface InputKeys {
   skill4: boolean;
   skill5: boolean;
   skill6: boolean;
+  skill7: boolean;
   openStats: boolean;
   openSkills: boolean;
   useHpPotion: boolean;

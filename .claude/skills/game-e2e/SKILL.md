@@ -313,8 +313,9 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
   flag (config: list + html into `e2e/.report/data/*.png`). To eyeball small art (carried corpses), a throwaway spec can `page.screenshot({ path, clip })` around `state().player` and you upscale the crop (System.Drawing, NearestNeighbor); delete the spec after.
 - Physics gotcha: tiny velocities snap to 0 (`PLAYER_MIN_VELOCITY`); any per-tick acceleration
   smaller than that must skip the snap (air control was silently dead until fixed).
-- Skills live in slots 1..6 = usable Active/Buff skills sorted by required level
-  (`state().usableSkills[].slot`). Ranger/Mage/Priest currently have only passives (tests skip them).
+- Skills live in slots 1..7 (keys 1-6 and 9; 7/8 are potions) = usable Active/Buff skills sorted by required level
+  (`state().usableSkills[].slot`, `castSkill(slot)`; one list: `getUsableSkills` in game-constants,
+  `SKILL_SLOT_COUNT`). Ranger/Mage/Priest currently have only passives (tests skip them).
 - Particles cap at 400: wait for effects to fade before measuring "effect appeared".
 - Probe setup helpers that inject entities (`dropCorpses`) must also register sprite instances
   (`setState`/`setFinalFrame`), or the entities are invisible in screenshots while physics still works.

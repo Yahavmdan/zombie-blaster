@@ -15,7 +15,7 @@ import {
   computed,
   isDevMode,
 } from '@angular/core';
-import { CharacterClass, CharacterState, SKILLS, SkillDefinition, SkillType, VfxEvent } from '@shared/index';
+import { CharacterClass, CharacterState, SkillDefinition, VfxEvent, getUsableSkills } from '@shared/index';
 import { BoulderState, CagePuzzleState, DropType, LooseProp, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
 import { GameAction, KeyBindings } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
@@ -100,7 +100,7 @@ export class GameCanvasComponent implements OnDestroy {
   private currentClassId: CharacterClass | null = null;
   private pendingMultiplayerHost: boolean = false;
   private pendingMultiplayerClient: boolean = false;
-  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, confirmDrop: false, declineDrop: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false, quickSlot9: false, quickSlot10: false, quickSlot11: false, quickSlot12: false };
+  private keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, skill7: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, confirmDrop: false, declineDrop: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false, quickSlot9: false, quickSlot10: false, quickSlot11: false, quickSlot12: false };
   private readonly boundKeyDown: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyDown(e);
   private readonly boundKeyUp: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => this.onKeyUp(e);
   /** Switching tabs or windows swallows the key-ups: let go of everything so nothing stays held. */
@@ -175,15 +175,10 @@ export class GameCanvasComponent implements OnDestroy {
   triggerQuickSlotSkill(skillId: string): void {
     const p: CharacterState | null = this.gameState.player();
     if (!p) return;
-    const usableSkills: SkillDefinition[] = SKILLS.filter(
-      (s: SkillDefinition): boolean =>
-        s.classId === p.classId &&
-        (s.type === SkillType.Active || s.type === SkillType.Buff) &&
-        (p.skillLevels[s.id] ?? 0) > 0,
-    ).sort((a: SkillDefinition, b: SkillDefinition): number => a.requiredCharacterLevel - b.requiredCharacterLevel);
+    const usableSkills: SkillDefinition[] = getUsableSkills(p.classId, p.skillLevels);
 
     const idx: number = usableSkills.findIndex((s: SkillDefinition): boolean => s.id === skillId);
-    if (idx === -1 || idx >= 6) return;
+    if (idx === -1) return;
 
     const skillAction: GameAction = `skill${idx + 1}` as GameAction;
     this.keys[skillAction] = true;

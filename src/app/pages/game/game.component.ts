@@ -492,6 +492,8 @@ export class GameComponent implements OnInit, OnDestroy {
     }
     const updated: CharacterState | null = this.gameState.player();
     if (updated) {
+      // The engine drinks for the player: it must know the choice, or its next update copies the old one back.
+      this.gameCanvas()?.syncProgression(updated);
       this.currentPlayerDisplay.set({ ...updated });
     }
   }

@@ -48,6 +48,23 @@ export class PhysicsSystem {
     return speed;
   }
 
+  /** Down + jump drops through ledges only: solid props and puzzle blocks are floors you can't fall into. */
+  private isDropThrough(plat: Platform): boolean {
+    return plat.y !== GAME_CONSTANTS.GROUND_Y && !plat.solid;
+  }
+
+  /** Feet rest on a solid platform (a prop, a puzzle block): down + jump jumps there instead of dropping. */
+  private isStandingOnSolid(p: CharacterState): boolean {
+    const feet: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT;
+    return this.e.platforms.some(
+      (plat: Platform): boolean =>
+        !!plat.solid &&
+        p.x + GAME_CONSTANTS.PLAYER_WIDTH > plat.x &&
+        p.x < plat.x + plat.width &&
+        Math.abs(feet - plat.y) <= 1,
+    );
+  }
+
   rectsOverlap(
     x1: number, y1: number, w1: number, h1: number,
     x2: number, y2: number, w2: number, h2: number,
@@ -117,7 +134,7 @@ export class PhysicsSystem {
     p.y += p.velocityY;
     p.isGrounded = false;
     for (const plat of this.e.platforms) {
-      if (this.e.platformDropTimer > 0 && plat.y !== GAME_CONSTANTS.GROUND_Y) continue;
+      if (this.e.platformDropTimer > 0 && this.isDropThrough(plat)) continue;
       if (this.isOnPlatform(p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, plat, p.velocityY)) {
         p.y = plat.y - GAME_CONSTANTS.PLAYER_HEIGHT;
         p.velocityY = 0;
@@ -278,7 +295,7 @@ export class PhysicsSystem {
     const jumpRequested: boolean = jumpKeyDown || this.e.jumpBufferTicks > 0;
     const canJump: boolean = p.isGrounded || this.coyoteTicks > 0;
     if (jumpRequested && canJump) {
-      if (p.isGrounded && this.e.keys.down && p.y + GAME_CONSTANTS.PLAYER_HEIGHT < GAME_CONSTANTS.GROUND_Y) {
+      if (p.isGrounded && this.e.keys.down && p.y + GAME_CONSTANTS.PLAYER_HEIGHT < GAME_CONSTANTS.GROUND_Y && !this.isStandingOnSolid(p)) {
         this.e.platformDropTimer = GAME_CONSTANTS.PLATFORM_DROP_TICKS;
         p.y += GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE + 1;
         p.isGrounded = false;
@@ -331,7 +348,7 @@ export class PhysicsSystem {
 
     p.isGrounded = false;
     for (const plat of this.e.platforms) {
-      if (this.e.platformDropTimer > 0 && plat.y !== GAME_CONSTANTS.GROUND_Y) continue;
+      if (this.e.platformDropTimer > 0 && this.isDropThrough(plat)) continue;
       if (this.isOnPlatform(p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, plat, p.velocityY)) {
         p.y = plat.y - GAME_CONSTANTS.PLAYER_HEIGHT;
         p.velocityY = 0;

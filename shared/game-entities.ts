@@ -218,6 +218,7 @@ export const ACTION_INFO: Record<string, ActionInfo> = {
   skill4: { label: 'Skill 4', icon: 'spark' },
   skill5: { label: 'Skill 5', icon: 'spark' },
   skill6: { label: 'Skill 6', icon: 'spark' },
+  skill7: { label: 'Skill 7', icon: 'spark' },
   openStats: { label: 'Stats', icon: 'chart' },
   openSkills: { label: 'Skills', icon: 'book' },
   useHpPotion: { label: 'HP Potion', icon: 'heart' },

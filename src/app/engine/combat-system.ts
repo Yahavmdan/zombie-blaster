@@ -9,6 +9,7 @@ import {
   SkillType,
   VfxEvent,
   VfxEventType,
+  getUsableSkills,
   getSkillDamageMultiplier,
   getSkillMpCost,
   getSkillHpCost,
@@ -1384,13 +1385,7 @@ export class CombatSystem {
 
     const p: CharacterState | null = this.e.player;
     if (p) {
-      const available: SkillDefinition[] = SKILLS.filter(
-        (s: SkillDefinition) =>
-          s.classId === p.classId &&
-          (s.type === SkillType.Active || s.type === SkillType.Buff) &&
-          (p.skillLevels[s.id] ?? 0) > 0,
-      ).sort((a: SkillDefinition, b: SkillDefinition) => a.requiredCharacterLevel - b.requiredCharacterLevel)
-       .slice(0, 6);
+      const available: SkillDefinition[] = getUsableSkills(p.classId, p.skillLevels);
       if (available.length !== this.e.playerUsableSkills.length) {
         this.e.playerUsableSkills = available;
       }

@@ -27,14 +27,7 @@ function levelDrops(): LevelDrop[] {
 }
 
 describe('skill level tables', () => {
-  // KNOWN BUG: warrior-dragon-roar level 18 has range 190 (17 has 270, 19 has 290). Remove `.fails` once fixed.
-  it.fails('never lose damage or range on a level-up', () => {
+  it('never lose damage or range on a level-up', () => {
     expect(levelDrops()).toEqual([]);
-  });
-
-  it('the only drop today is the Dragon Roar level-18 range typo', () => {
-    expect(levelDrops()).toEqual([
-      { skillId: 'warrior-dragon-roar', level: 18, field: 'range', from: 270, to: 190 },
-    ]);
   });
 });
