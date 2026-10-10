@@ -972,7 +972,7 @@ export class ZombieSystem {
 
     this.e.spawnTimer--;
     if (this.e.spawnTimer <= 0) {
-      this.spawnZombie();
+      this.spawnRolledZombie();
       const baseInterval: number = Math.max(
         GAME_CONSTANTS.ZOMBIE_SPAWN_MIN_INTERVAL_MS,
         GAME_CONSTANTS.ZOMBIE_SPAWN_INTERVAL_MS - this.e.floor * GAME_CONSTANTS.ZOMBIE_SPAWN_DECREASE_PER_WAVE,
@@ -1070,6 +1070,11 @@ export class ZombieSystem {
   /** Floor-4 cage: a zombie climbs out of it, centered on x, standing on `groundY`. */
   spawnZombieAt(x: number, groundY: number): void {
     this.spawnZombie({ x, groundY });
+  }
+
+  /** A regular spawn: the floor's type roll (bosses included) at a random spawn spot. */
+  spawnRolledZombie(): void {
+    this.spawnZombie();
   }
 
   /**

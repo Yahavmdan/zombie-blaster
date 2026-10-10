@@ -388,6 +388,10 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
     drops: engine.worldDrops.map(
       (d: WorldDrop): E2eDropView => ({ id: d.id, type: d.type, x: d.x, y: d.y, value: d.value }),
     ),
+    zombieProjectiles: {
+      spitter: engine.spitterProjectiles.length,
+      dragon: engine.dragonProjectiles.length,
+    },
     potionCooldownTicks: engine.potionCooldown,
     invincibilityFrames: engine.invincibilityFrames,
     vfx: {
@@ -453,6 +457,22 @@ const engineControls: E2eEngineControls = {
     engine.godMode = false;
     engine.invincibilityFrames = 0;
     engine.applyIncomingZombieDamage(p.hp, 0, false);
+  },
+  setVitals(hp: number, mp: number): void {
+    const engine: GameEngine | null = currentEngine;
+    const p: CharacterState | null = engine?.player ?? null;
+    if (!engine || !p) return;
+    p.hp = Math.max(1, Math.min(hp, p.derived.maxHp));
+    p.mp = Math.max(0, Math.min(mp, p.derived.maxMp));
+    // The app's copy follows, as after a hit (potions check it before they heal).
+    engine.onPlayerUpdate?.(p);
+  },
+  spawnRolledZombies(count: number): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine || engine.isMultiplayerClient) return;
+    for (let i: number = 0; i < count; i++) {
+      engine.spawnRolledZombie();
+    }
   },
   dropCorpses(centerX: number, count: number): void {
     const engine: GameEngine | null = currentEngine;

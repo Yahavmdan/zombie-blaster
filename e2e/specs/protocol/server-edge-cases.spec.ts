@@ -403,4 +403,130 @@ test.describe('game server edge cases', { tag: ['@protocol', '@external-safe'] }
     expect(reply.type).toBe('error');
     c.close();
   });
+
+  test('a guest who leaves the lobby gets room-left; the host keeps the room, listed with 1 player', async (): Promise<void> => {
+    const roomName: string = uniqueRoomName('raw-leave');
+    const host: { client: RawClient; roomId: string } = await hostWithRoom(roomName);
+    const guest: { client: RawClient; playerId: string } = await joinAs(host.roomId, 'Leaver');
+    const hostMark: number = host.client.received.length;
+    const guestMark: number = guest.client.received.length;
+
+    guest.client.send('leave-room', { roomId: host.roomId });
+    await guest.client.waitFor('room-left', (): boolean => true, 3_000, guestMark);
+    const update: RawMessage = await host.client.waitFor(
+      'room-updated',
+      (p: unknown): boolean => (p as { room: RoomInfoView }).room.players.length === 1,
+      3_000,
+      hostMark,
+    );
+    const players: RoomInfoView['players'] = (update.payload as { room: RoomInfoView }).room.players;
+    expect(players.map((pl: { name: string; isHost: boolean }): string => `${pl.name}:${pl.isHost}`)).toEqual([
+      'RawHost:true',
+    ]);
+    expect(
+      host.client.received.slice(hostMark).filter((m: RawMessage): boolean => m.type === 'host-migrated'),
+      'no host change when a guest leaves',
+    ).toEqual([]);
+
+    const listed: RoomInfoView | undefined = (await roomList(guest.client)).find(
+      (r: RoomInfoView): boolean => r.id === host.roomId,
+    );
+    expect(listed?.players.length, 'the room is still listed, with the host only').toBe(1);
+    host.client.close();
+    guest.client.close();
+  });
+
+  test('a guest who leaves mid-game: the others get player-left and keep their host', async (): Promise<void> => {
+    const host: { client: RawClient; roomId: string } = await hostWithRoom();
+    const stayer: { client: RawClient; playerId: string } = await joinAs(host.roomId, 'Stayer');
+    const leaver: { client: RawClient; playerId: string } = await joinAs(host.roomId, 'Quitter');
+    await startGame(host, [stayer.client, leaver.client]);
+    const marks: number[] = [host.client.received.length, stayer.client.received.length];
+
+    leaver.client.send('leave-room', { roomId: host.roomId });
+    await leaver.client.waitFor('room-left');
+    for (const [i, c] of [host.client, stayer.client].entries()) {
+      await c.waitFor(
+        'player-left',
+        (p: unknown): boolean => (p as { playerId: string }).playerId === leaver.playerId,
+        3_000,
+        marks[i],
+      );
+    }
+    expect(
+      host.client.received.slice(marks[0]).filter((m: RawMessage): boolean => m.type === 'host-migrated'),
+      'no host change when a guest leaves',
+    ).toEqual([]);
+
+    // The game goes on between the two who stayed.
+    const syncMark: number = stayer.client.received.length;
+    host.client.send('game-sync', { player: { id: 'host' }, zombies: [], corpses: [], floor: 1 });
+    await stayer.client.waitFor('game-sync', (): boolean => true, 3_000, syncMark);
+    host.client.close();
+    stayer.client.close();
+    leaver.client.close();
+  });
+
+  test('the host of a 3-player game drops: both guests get the same new host, only its game-sync is relayed', async (): Promise<void> => {
+    const host: { client: RawClient; roomId: string } = await hostWithRoom();
+    const a: { client: RawClient; playerId: string } = await joinAs(host.roomId, 'GuestA');
+    const b: { client: RawClient; playerId: string } = await joinAs(host.roomId, 'GuestB');
+    await startGame(host, [a.client, b.client]);
+    const marks: number[] = [a.client.received.length, b.client.received.length];
+
+    await gone(host.client);
+    const migrated: RawMessage[] = await Promise.all(
+      [a.client, b.client].map(
+        (c: RawClient, i: number): Promise<RawMessage> =>
+          c.waitFor('host-migrated', (): boolean => true, 3_000, marks[i]),
+      ),
+    );
+    const newHostIds: string[] = migrated.map((m: RawMessage): string => (m.payload as { newHostId: string }).newHostId);
+    expect(newHostIds[0], 'both guests are told the same new host').toBe(newHostIds[1]);
+    expect([a.playerId, b.playerId], 'the new host is one of the guests').toContain(newHostIds[0]);
+
+    const update: RawMessage = await a.client.waitFor(
+      'room-updated',
+      (p: unknown): boolean => (p as { room: RoomInfoView }).room.players.length === 2,
+      3_000,
+      marks[0],
+    );
+    const hosts: string[] = (update.payload as { room: RoomInfoView }).room.players
+      .filter((pl: { isHost: boolean }): boolean => pl.isHost)
+      .map((pl: { id: string }): string => pl.id);
+    expect(hosts, 'exactly one host in the room').toEqual([newHostIds[0]]);
+
+    const newHost: RawClient = newHostIds[0] === a.playerId ? a.client : b.client;
+    const follower: RawClient = newHost === a.client ? b.client : a.client;
+    let mark: number = newHost.received.length;
+    follower.send('game-sync', { player: { id: 'spoof' }, zombies: [], corpses: [], floor: 99 });
+    await expect(
+      newHost.waitFor('game-sync', (): boolean => true, 1_500, mark),
+      'the old guest cannot drive the world',
+    ).rejects.toThrow();
+
+    mark = follower.received.length;
+    newHost.send('game-sync', { player: { id: newHostIds[0] }, zombies: [], corpses: [], floor: 1 });
+    await follower.waitFor('game-sync', (): boolean => true, 3_000, mark);
+    a.client.close();
+    b.client.close();
+  });
 });
+
+/** Readies every guest, starts the game and waits until everyone got game-started. */
+async function startGame(host: { client: RawClient; roomId: string }, guests: RawClient[]): Promise<void> {
+  const mark: number = host.client.received.length;
+  for (const g of guests) g.send('toggle-ready', { roomId: host.roomId });
+  await host.client.waitFor(
+    'room-updated',
+    (p: unknown): boolean =>
+      (p as { room: { players: Array<{ isReady: boolean }> } }).room.players.length === guests.length + 1 &&
+      (p as { room: { players: Array<{ isReady: boolean }> } }).room.players.every(
+        (pl: { isReady: boolean }): boolean => pl.isReady,
+      ),
+    3_000,
+    mark,
+  );
+  host.client.send('start-game', { roomId: host.roomId });
+  for (const c of [host.client, ...guests]) await c.waitFor('game-started');
+}

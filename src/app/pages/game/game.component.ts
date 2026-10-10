@@ -794,6 +794,12 @@ export class GameComponent implements OnInit, OnDestroy {
       activateSpecialDrop: (type: string): void => this.activateSpecialDrop(type as SpecialDropType),
       isGameOver: (): boolean => this.isGameOver(),
       showGameOver: (): void => this.onGameOver(),
+      setGold: (amount: number): void => {
+        const p: CharacterState | null = this.gameState.player();
+        if (!p) return;
+        this.gameState.addGold(amount - p.inventory.gold);
+        this.syncCanvasProgression();
+      },
     };
   }
 

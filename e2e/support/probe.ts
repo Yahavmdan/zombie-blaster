@@ -200,6 +200,27 @@ export class GameProbe {
     await this.page.evaluate((): void => window.__zbE2e?.engine?.knockOut());
   }
 
+  /** Setup only: the local player's gold. */
+  async setGold(amount: number): Promise<void> {
+    await this.page.evaluate((n: number): void => window.__zbE2e?.controls?.setGold(n), amount);
+  }
+
+  /** Setup only: the local player's HP and MP (clamped to 1..max), as if hurt and spent. */
+  async setVitals(hp: number, mp: number): Promise<void> {
+    await this.page.evaluate(
+      (args: [number, number]): void => window.__zbE2e?.engine?.setVitals(args[0], args[1]),
+      [hp, mp] as [number, number],
+    );
+  }
+
+  /** Setup only (solo/host): N regular spawns now through the normal type roll (no timer, no cap). */
+  async spawnRolledZombies(count: number): Promise<void> {
+    await this.page.evaluate(
+      (n: number): void => window.__zbE2e?.engine?.spawnRolledZombies(n),
+      count,
+    );
+  }
+
   async isGameOver(): Promise<boolean> {
     return this.page.evaluate((): boolean => window.__zbE2e?.controls?.isGameOver() ?? false);
   }
