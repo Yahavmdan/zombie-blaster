@@ -32,7 +32,7 @@ describe('eater path', (): void => {
 
   it('runs straight to a goal on its own level', (): void => {
     const step: EaterStep = eaterStep(onGround(100), HALF, onGround(500), [GROUND, LOW], G);
-    expect(step).toEqual({ aimX: 500, jump: false, jumpVx: 0, drop: false });
+    expect(step).toEqual({ aimX: 500, jump: false, jumpVx: 0, drop: false, stepOff: false });
   });
 
   it('gets under the ledge a goal lies on, then jumps up through it', (): void => {
@@ -68,7 +68,7 @@ describe('eater path', (): void => {
 
   it('drops down to a goal below its platform', (): void => {
     const step: EaterStep = eaterStep({ x: 700, y: LOW.y }, HALF, onGround(300), [GROUND, LOW], G);
-    expect(step).toEqual({ aimX: 300, jump: false, jumpVx: 0, drop: true });
+    expect(step).toEqual({ aimX: 300, jump: false, jumpVx: 0, drop: true, stepOff: false });
   });
 
   it('on a head or a pile (no platform underfoot) it steps off toward a goal below instead of dropping', (): void => {
@@ -76,6 +76,59 @@ describe('eater path', (): void => {
     const step: EaterStep = eaterStep(onHead, HALF, onGround(505), [GROUND], G);
     expect(step.drop).toBe(false);
     expect(Math.abs(step.aimX - onHead.x), 'off to the side').toBeGreaterThan(HALF * 2);
+  });
+
+  /** Runs `ticks` steps at `speed` toward each step's aim; how often the way it heads turned around. */
+  function turnsWalking(start: Feet, goal: Feet, platforms: Platform[], ticks: number): number {
+    const speed: number = 3.5;
+    let x: number = start.x;
+    let heading: number = 0;
+    let turns: number = 0;
+    for (let i: number = 0; i < ticks; i++) {
+      const step: EaterStep = eaterStep({ x, y: start.y }, HALF, goal, platforms, G);
+      const dx: number = step.aimX - x;
+      if (Math.abs(dx) < 1) break;
+      const dir: number = Math.sign(dx);
+      if (heading !== 0 && dir !== heading) turns++;
+      heading = dir;
+      x += dir * Math.min(speed, Math.abs(dx));
+    }
+    return turns;
+  }
+
+  it('steps off a pile without turning back and forth over a goal right below it', (): void => {
+    const onPile: number = GAME_CONSTANTS.GROUND_Y - 44;
+    for (const startX of [498, 500, 502, 504]) {
+      expect(turnsWalking({ x: startX, y: onPile }, onGround(501), [GROUND], 30), `from ${startX}`).toBe(0);
+    }
+  });
+
+  describe('on a box stack', (): void => {
+    const box: Platform = { x: 760, y: LOW.y - 84, width: 27, height: 21, solid: true };
+    const stack: Platform[] = [GROUND, LOW, box];
+    const corpseBeside: Feet = { x: 750, y: LOW.y };
+
+    function offTheBox(aimX: number): boolean {
+      return aimX + HALF <= box.x || aimX - HALF >= box.x + box.width;
+    }
+
+    it('straddling its end, it walks off toward a goal right below, never dithering on top', (): void => {
+      const straddling: Feet = { x: 748, y: box.y };
+      const step: EaterStep = eaterStep(straddling, HALF, corpseBeside, stack, G);
+      expect(step.drop).toBe(false);
+      expect(offTheBox(step.aimX), `aim ${step.aimX} is off the box`).toBe(true);
+      for (const startX of [746, 748, 750, 752]) {
+        expect(turnsWalking({ x: startX, y: box.y }, corpseBeside, stack, 30), `from ${startX}`).toBe(0);
+      }
+    });
+
+    it('right on top, it walks off the end nearest the goal instead of dropping through the box', (): void => {
+      const step: EaterStep = eaterStep({ x: 773, y: box.y }, HALF, corpseBeside, stack, G);
+      expect(step.drop).toBe(false);
+      expect(step.aimX).toBeLessThanOrEqual(box.x - HALF);
+      const toTheRight: EaterStep = eaterStep({ x: 773, y: box.y }, HALF, { x: 795, y: LOW.y }, stack, G);
+      expect(toTheRight.aimX).toBeGreaterThanOrEqual(box.x + box.width + HALF);
+    });
   });
 
   it('never climbs by the safe spot or a solid prop', (): void => {
