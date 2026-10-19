@@ -9,8 +9,11 @@ import {
   E2eRemotePlayerView,
   E2eSkillView,
   E2eSnapshot,
+  E2eTreeSkillView,
   E2eVfxLogEntry,
 } from '../../support/probe';
+import { WORLD } from '../../support/invariants';
+import { WARRIOR, castSkill, comboOf, warriorArena } from '../../support/warrior';
 
 /**
  * "Every player always sees every other player's animations and effects."
@@ -105,6 +108,104 @@ async function castAllAndObserve(
   return evidence;
 }
 
+/**
+ * Warrior skills with an animation, fired from their skill-bar keys, in an order that keeps the
+ * caster standing until the backstep.
+ */
+const WARRIOR_BAR_SKILLS: string[] = [
+  WARRIOR.uppercut,
+  WARRIOR.slashBlast,
+  WARRIOR.powerStance,
+  WARRIOR.hyperBody,
+  WARRIOR.backstep,
+];
+
+function ownedTreeSkills(s: E2eSnapshot): string[] {
+  return s.treeSkills.filter((t: E2eTreeSkillView): boolean => t.owned).map((t: E2eTreeSkillView): string => t.id);
+}
+
+/**
+ * Puts the caster on open ground facing right (skills need room and no ladder overhead). The host
+ * owns the layout, so it finds the ground (keeping its own skills); a guest caster is moved there.
+ */
+async function casterOnOpenGround(host: GamePlayer, caster: GamePlayer): Promise<void> {
+  const x: number = await warriorArena(host, ownedTreeSkills(await host.probe.state()));
+  if (caster === host) return;
+  await caster.probe.teleport(x, WORLD.groundY - WORLD.playerHeight);
+  await caster.probe.waitFor(
+    `${caster.name} stands on the open ground`,
+    (s: E2eSnapshot): boolean =>
+      s.player!.isGrounded &&
+      Math.abs(s.player!.x - x) < 20 &&
+      Math.abs(s.player!.y + WORLD.playerHeight - WORLD.groundY) < 2,
+    { timeoutMs: 5_000 },
+  );
+  await caster.face('right');
+}
+
+/** Tree class: the caster fires every animated skill from its key; returns what the observer replayed for each. */
+async function treeCastAllAndObserve(
+  host: GamePlayer,
+  caster: GamePlayer,
+  observer: GamePlayer,
+  testInfo: TestInfo,
+): Promise<CastEvidence[]> {
+  const casterId: string = await idOf(caster);
+  await casterOnOpenGround(host, caster);
+  // The same skills, with the ones played here first on the skill bar.
+  const owned: string[] = ownedTreeSkills(await caster.probe.state());
+  await caster.probe.setTreeSkills([
+    ...WARRIOR_BAR_SKILLS,
+    ...owned.filter((id: string): boolean => !WARRIOR_BAR_SKILLS.includes(id)),
+  ]);
+  await caster.probe.waitFor('the bar skills are on the bar', (s: E2eSnapshot): boolean =>
+    WARRIOR_BAR_SKILLS.every(
+      (id: string): boolean => s.player!.skillBar.includes(id) || comboOf(s, id) !== null,
+    ),
+  );
+  const evidence: CastEvidence[] = [];
+  for (const skill of WARRIOR_BAR_SKILLS) {
+    await caster.face('right');
+    await caster.probe.waitFor(
+      'caster standing still',
+      (s: E2eSnapshot): boolean => s.player!.isGrounded && Math.abs(s.player!.velocityX) < 0.1,
+      { timeoutMs: 5_000 },
+    );
+    await waitObserverCalm(observer);
+    const mark: number = (await observer.probe.vfxLog()).reduce(
+      (m: number, e: E2eVfxLogEntry): number => Math.max(m, e.seq),
+      0,
+    );
+    await castSkill(caster, skill);
+    await observer.wait(900);
+    const fromCaster: E2eVfxLogEntry[] = (await observer.probe.vfxLog()).filter(
+      (e: E2eVfxLogEntry): boolean =>
+        e.seq > mark && e.direction === 'replayed' && e.playerId === casterId,
+    );
+    const animation: E2eVfxLogEntry[] = fromCaster.filter(
+      (e: E2eVfxLogEntry): boolean => e.type === 'skill-animation' && e.animationKey === skill,
+    );
+    evidence.push({
+      skill,
+      replayed: animation.map((e: E2eVfxLogEntry): string => `${e.type}:${e.animationKey}`),
+      rendered: animation.some((e: E2eVfxLogEntry): boolean => (e.particlesAdded ?? 0) > 0),
+    });
+    await observer.attachCanvas(testInfo, `sees ${skill}`);
+  }
+  return evidence;
+}
+
+/** Skill keys (legacy classes) or the skill bar (tree classes): what the observer saw of the caster's skills. */
+async function skillsSeen(
+  host: GamePlayer,
+  caster: GamePlayer,
+  observer: GamePlayer,
+  testInfo: TestInfo,
+): Promise<CastEvidence[]> {
+  if ((await caster.probe.state()).treeSkills.length === 0) return castAllAndObserve(caster, observer, testInfo);
+  return treeCastAllAndObserve(host, caster, observer, testInfo);
+}
+
 const PAIRS: Array<{ host: ClassId; guest: ClassId }> = [
   { host: 'warrior', guest: 'assassin' },
   { host: 'assassin', guest: 'warrior' },
@@ -195,8 +296,8 @@ test.describe('everyone sees everyone', { tag: ['@online', '@visual'] }, (): voi
       }
       await host.wait(1_500);
 
-      const hostCasts: CastEvidence[] = await castAllAndObserve(host, guest, testInfo);
-      const guestCasts: CastEvidence[] = await castAllAndObserve(guest, host, testInfo);
+      const hostCasts: CastEvidence[] = await skillsSeen(host, host, guest, testInfo);
+      const guestCasts: CastEvidence[] = await skillsSeen(host, guest, host, testInfo);
       await testInfo.attach('cast evidence', {
         body: JSON.stringify({ hostCasts, guestCasts }, null, 2),
         contentType: 'application/json',
@@ -206,6 +307,7 @@ test.describe('everyone sees everyone', { tag: ['@online', '@visual'] }, (): voi
         ['host→guest', hostCasts],
         ['guest→host', guestCasts],
       ] as Array<[string, CastEvidence[]]>) {
+        expect.soft(list.length, `${who}: the caster had skills to show`).toBeGreaterThan(0);
         for (const e of list) {
           expect
             .soft(e.replayed.length, `${who}: ${e.skill} reached the other player`)

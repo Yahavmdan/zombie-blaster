@@ -46,16 +46,15 @@ test.describe('controls, onboarding and menus', { tag: '@solo' }, (): void => {
       'skill points',
       (s: E2eSnapshot): boolean => s.player!.unallocatedSkillPoints > 0,
     );
+    // The warrior learns from the skill tree window (solo/skill-tree.spec.ts covers it in depth).
     await p.page.keyboard.press(KEYS.openSkills);
-    await expect(p.page.getByTestId('skill-tree-button-invest-warrior-power-strike')).toBeEnabled();
-    await p.page.getByTestId('skill-tree-button-invest-warrior-power-strike').click();
+    await p.page.getByTestId('tree-node-warrior-power-strike').click();
+    await expect(p.page.getByTestId('tree-learn-button')).toBeEnabled();
+    await p.page.getByTestId('tree-learn-button').click();
     await p.page.keyboard.press('Escape');
     const s: E2eSnapshot = await p.probe.waitFor(
-      'power strike usable',
-      (st: E2eSnapshot): boolean =>
-        st.usableSkills.some(
-          (k: E2eSnapshot['usableSkills'][number]): boolean => k.id === 'warrior-power-strike',
-        ),
+      'power strike learned',
+      (st: E2eSnapshot): boolean => st.player!.skillLevels['warrior-power-strike'] === 1,
     );
     expect(s.player!.level).toBe(2);
   });

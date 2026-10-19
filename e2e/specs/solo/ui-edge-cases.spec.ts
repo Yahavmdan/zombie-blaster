@@ -8,7 +8,13 @@ import { E2eSkillView, E2eSnapshot, E2eZombieView } from '../../support/probe';
  * already in use, what survives "Try again" and input behind the game-over screen.
  */
 
-const PANELS: string[] = ['app-stat-allocation', 'app-skill-tree', 'app-shop', 'app-inventory'];
+const PANELS: string[] = [
+  'app-stat-allocation',
+  'app-skill-tree',
+  'app-tree-skill-window',
+  'app-shop',
+  'app-inventory',
+];
 const MP_POTION: string = 'mp-potion-1';
 
 async function visiblePanels(player: GamePlayer): Promise<string[]> {
@@ -92,16 +98,18 @@ test.describe('in-game UI edge cases', { tag: '@solo' }, (): void => {
   }: {
     solo: SoloFactory;
   }): Promise<void> => {
-    const player: GamePlayer = await solo('warrior');
+    // A legacy skill-key class (the warrior's skill bar has its own specs): Lucky Seven spends MP.
+    const player: GamePlayer = await solo('assassin');
     // No god mode: it makes skills free, and this test needs MP spent.
     await player.probe.maxAllSkills();
     // quickSlot6 holds the MP potion by default; move it onto J, the attack key.
     await rebindQuickSlot(player, 'quickSlot6', KEYS.attack);
 
-    const strike: E2eSkillView | undefined = (await player.probe.state()).usableSkills.find(
-      (k: E2eSkillView): boolean => k.id === 'warrior-power-strike',
+    const luckySeven: E2eSkillView | undefined = (await player.probe.state()).usableSkills.find(
+      (k: E2eSkillView): boolean => k.id === 'assassin-lucky-seven',
     );
-    await player.castSkill(strike!.slot);
+    expect(luckySeven, 'lucky seven is usable').toBeDefined();
+    await player.castSkill(luckySeven!.slot);
     const spent: E2eSnapshot = await player.probe.waitFor(
       'MP spent',
       (s: E2eSnapshot): boolean => s.player!.mp < s.player!.maxMp,

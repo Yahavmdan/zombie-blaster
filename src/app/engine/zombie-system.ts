@@ -160,7 +160,15 @@ export class ZombieSystem {
         continue;
       }
 
-      if (z.knockbackFrames > 0) {
+      // Stunned by a warrior skill: no AI and no attacks, but it still falls and slides.
+      const stunned: boolean = z.stunTicks > 0;
+      if (stunned) {
+        z.stunTicks--;
+        z.attackAnimTimer = 0;
+        z.attackHasHit = false;
+        if (z.knockbackFrames > 0) z.knockbackFrames--;
+        else if (z.isGrounded) z.velocityX *= GAME_CONSTANTS.PLAYER_FRICTION;
+      } else if (z.knockbackFrames > 0) {
         z.knockbackFrames--;
         if (z.eatingTimer > 0) {
           z.eatingTimer = 0;
@@ -183,7 +191,7 @@ export class ZombieSystem {
       if (z.platformDropTimer > 0) z.platformDropTimer--;
 
       const nearestForHesitation: TargetInfo | null = this.findNearestTarget(z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2);
-      if (nearestForHesitation) {
+      if (nearestForHesitation && !stunned) {
         this.tickHesitation(z, nearestForHesitation);
       }
 
@@ -191,7 +199,7 @@ export class ZombieSystem {
       const spriteKey: string = this.e.zombieSpriteAnimator.getSpriteKey(z.type);
       this.e.zombieSpriteAnimator.tick(z.id, spriteKey);
 
-      this.updateZombieAttack(z, zDef);
+      if (!stunned) this.updateZombieAttack(z, zDef);
 
       if (z.type === ZombieType.DragonBoss) {
         const targetY: number = GAME_CONSTANTS.GROUND_Y - z.instanceHeight - GAME_CONSTANTS.DRAGON_HOVER_Y_OFFSET;
@@ -1166,6 +1174,7 @@ export class ZombieSystem {
       eatingTargetId: null,
       eatingTimer: 0,
       magnetPull: null,
+      stunTicks: 0,
     };
 
     const spriteKey: string = this.e.zombieSpriteAnimator.getSpriteKey(type);

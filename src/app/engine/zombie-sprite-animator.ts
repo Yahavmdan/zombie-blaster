@@ -152,6 +152,7 @@ export function zombieAnimState(z: ZombieState): ZombieAnimState {
   const isEater: boolean = z.type === ZombieType.Eater;
   if (z.isDead) return ZombieAnimState.Dead;
   if (z.magnetPull) return ZombieAnimState.Hurt;
+  if (z.stunTicks > 0) return ZombieAnimState.Hurt;
   if (isEater && z.eatingTimer > 0) return ZombieAnimState.Eating;
   if (isZombieWindingUp(z)) return ZombieAnimState.Idle;
   if (z.attackAnimTimer > 0) return isEater && eaterClaws(z) ? ZombieAnimState.AttackAlt1 : ZombieAnimState.Attack;

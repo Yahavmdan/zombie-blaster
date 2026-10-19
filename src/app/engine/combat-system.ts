@@ -14,6 +14,12 @@ import {
   getSkillHpCost,
   getSkillCooldown,
   getSkillRange,
+  getSkillTree,
+  ownedSkillByMechanic,
+  treeSkillValue,
+  TreeSkill,
+  ClassSkillTree,
+  ZombieEffectKind,
   getSkillStunDurationMs,
   getBuffEffectValue,
   getBuffDurationMs,
@@ -33,10 +39,25 @@ import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { DropSystem } from './drop-system';
 import { ZombieAnimState } from './zombie-sprite-animator';
-import { pullZombiesToward } from './magnet-pull';
+
+/** What a skill tree changes in combat (warrior Heavy Hands, Executioner, Last Stand, Counter, ...). */
+export interface CombatHooks {
+  /** Damage multiplier for a hit on this zombie (before crits). */
+  hitMultiplier(z: ZombieState, basic: boolean): number;
+  /** After a hit landed (the zombie may be dead). */
+  afterHit(z: ZombieState, damage: number, basic: boolean): void;
+  /** The local player killed a zombie. */
+  onKill(): void;
+  /** A zombie's hit is about to land on the local player: true when a parry eats it. */
+  tryParry(zombieX: number, zombie: ZombieState | null): boolean;
+  /** A skill's push, launch or stun on a zombie (a guest asks the host). */
+  affectZombie(z: ZombieState, kind: ZombieEffectKind, dir: number, force: number, stunMs: number): void;
+}
 
 export class CombatSystem {
   private clientDamageEvents: Array<{ zombieId: string; damage: number; killed: boolean }> = [];
+  /** Set by the skill tree system for classes that have one. */
+  hooks: CombatHooks | null = null;
 
   constructor(
     private readonly e: IGameEngine,
@@ -120,6 +141,26 @@ export class CombatSystem {
     this.e.spriteAnimator.restart();
   }
 
+  /** Ticks until the next basic swing (attack-speed buffs make it shorter). */
+  attackCooldownTicks(p: CharacterState): number {
+    let cooldownTicks: number = GAME_CONSTANTS.PLAYER_ATTACK_COOLDOWN_TICKS;
+    const atkSpeedBuff: ActiveBuff | undefined = p.activeBuffs.find(
+      (b: ActiveBuff): boolean => b.stat === 'attackSpeed' && b.remainingMs > 0,
+    );
+    if (atkSpeedBuff) {
+      cooldownTicks = Math.max(6, Math.floor(cooldownTicks * (1 - atkSpeedBuff.value / 100)));
+    }
+    return cooldownTicks;
+  }
+
+  /** Drops the swing in progress before it hits (a parry took over). */
+  cancelAttack(): void {
+    const p: CharacterState | null = this.e.player;
+    this.e.attackHitPending = false;
+    this.e.attackAnimTicks = 0;
+    if (p) p.isAttacking = false;
+  }
+
   private resolveAttackHit(): void {
     const p: CharacterState | null = this.e.player;
     if (!p || p.isDead) return;
@@ -152,7 +193,7 @@ export class CombatSystem {
 
     if (closest) {
       const isCrit: boolean = Math.random() * 100 < p.derived.critRate;
-      const specialDmgMult: number = this.drops.getEffectiveDamageMultiplier();
+      const specialDmgMult: number = this.drops.getEffectiveDamageMultiplier() * (this.hooks?.hitMultiplier(closest, true) ?? 1);
       let damage: number = Math.max(1, Math.floor((p.derived.attack + Math.floor(Math.random() * 5)) * specialDmgMult));
       if (isCrit) damage = Math.max(1, Math.floor(damage * p.derived.critDamage / 100));
 
@@ -173,6 +214,7 @@ export class CombatSystem {
       if (closest.hp <= 0) {
         this.handleZombieDeath(closest);
       }
+      this.hooks?.afterHit(closest, damage, true);
     }
 
     this.filterDeadZombies();
@@ -461,16 +503,6 @@ export class CombatSystem {
       return;
     }
 
-    if (skill.mechanic === 'pull') {
-      this.performPullSkill(skill, skillLevel, playerCX, playerCY);
-      return;
-    }
-
-    if (skill.mechanic === 'dash') {
-      this.performDashSkill(skill, skillLevel, playerCX, playerCY);
-      return;
-    }
-
     if (skill.mechanic === 'doubleJump') {
       this.performDoubleJump(skill, skillLevel, playerCX, playerCY);
       return;
@@ -575,16 +607,30 @@ export class CombatSystem {
   }
 
   private applySkillDamageToZombie(z: ZombieState, damageMultiplier: number, skillColor: string): void {
+    this.dealSkillDamage(z, damageMultiplier, skillColor, { knockback: true, forceCrit: false });
+  }
+
+  /**
+   * A skill hit on a zombie: attack × multiplier (with the tree's bonuses), crit roll, damage number,
+   * hit effects broadcast to every player, death. Returns the damage dealt.
+   */
+  dealSkillDamage(z: ZombieState, damageMultiplier: number, skillColor: string, opts: { knockback: boolean; forceCrit: boolean }): number {
     const p: CharacterState | null = this.e.player;
-    if (!p) return;
-    const isCrit: boolean = Math.random() * 100 < p.derived.critRate;
-    const specialDmgMult: number = this.drops.getEffectiveDamageMultiplier();
+    if (!p || z.isDead) return 0;
+    const isCrit: boolean = opts.forceCrit || Math.random() * 100 < p.derived.critRate;
+    const specialDmgMult: number = this.drops.getEffectiveDamageMultiplier() * (this.hooks?.hitMultiplier(z, false) ?? 1);
     let damage: number = Math.max(1, Math.floor(p.derived.attack * damageMultiplier * specialDmgMult) + Math.floor(Math.random() * 5));
     if (isCrit) damage = Math.max(1, Math.floor(damage * p.derived.critDamage / 100));
+    this.dealDamage(z, damage, isCrit, skillColor, opts.knockback);
+    return damage;
+  }
 
+  /** Exact damage to a zombie from the local player (an execution, a riposte): numbers, effects, death. */
+  dealDamage(z: ZombieState, damage: number, isCrit: boolean, skillColor: string, knockback: boolean): void {
+    if (z.isDead) return;
     z.hp -= damage;
     this.collectDamageEvent(z.id, damage, z.hp <= 0);
-    this.applyZombieKnockback(z);
+    if (knockback) this.applyZombieKnockback(z);
 
     const hitCx: number = z.x + z.instanceWidth / 2;
     const hitCy: number = z.y + z.instanceHeight / 2;
@@ -599,6 +645,13 @@ export class CombatSystem {
     if (z.hp <= 0) {
       this.handleZombieDeath(z);
     }
+    this.hooks?.afterHit(z, damage, false);
+  }
+
+  /** Ends a batch of hits: drops dead zombies and sends a guest's damage to the host. */
+  finishHits(): void {
+    this.filterDeadZombies();
+    this.flushDamageEvents();
   }
 
   private applyTwinMeleeDamage(z: ZombieState, baseDamage: number, twinColor: string): void {
@@ -630,78 +683,43 @@ export class CombatSystem {
     }
   }
 
-  private performPullSkill(skill: SkillDefinition, skillLevel: number, playerCX: number, playerCY: number): void {
+  /**
+   * Starts a power dash: vanish, streak `distance` px ahead through up to `maxTargets` zombies,
+   * reappear and hit them all. Returns false while a dash is already running.
+   */
+  startDash(distance: number, damageMultiplier: number, maxTargets: number, color: string): boolean {
     const p: CharacterState | null = this.e.player;
-    if (!p) return;
-
-    const rangePercent: number = getSkillRange(skill, skillLevel);
-    const pullRange: number = rangePercent * 4;
-
-    this.vfx.triggerSkillAnimation(skill.animationKey, playerCX, playerCY, p.facing, skillLevel);
-    this.pushSkillAnimationEvent(skill.animationKey, playerCX, playerCY, p.facing, skillLevel);
-
-    // Zombies belong to the host's simulation: a client only asks the host to pull (it then
-    // sees the drag through the synced `magnetPull` state, like every other player).
-    if (!this.e.isMultiplayerClient) {
-      pullZombiesToward(this.e.zombies, p.x, p.y, pullRange);
-    }
-
-    if (this.e.isMultiplayerClient) {
-      this.e.pendingPullEvents.push({
-        playerX: p.x,
-        playerY: p.y,
-        pullRange,
-        skillColor: skill.color,
-      });
-    }
-
-    this.e.onPlayerUpdate?.(p);
-  }
-
-  private performDashSkill(skill: SkillDefinition, skillLevel: number, playerCX: number, playerCY: number): void {
-    const p: CharacterState | null = this.e.player;
-    if (!p) return;
-    if (this.e.dashPhase) return;
-
-    const range: number = getSkillRange(skill, skillLevel);
-    const damageMultiplier: number = getSkillDamageMultiplier(skill, skillLevel);
+    if (!p || this.e.dashPhase) return false;
+    const playerCX: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const playerCY: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
     const dir: number = p.facing === Direction.Right ? 1 : -1;
 
     const startX: number = p.x;
     const endX: number = Math.max(0, Math.min(
-      startX + dir * range,
+      startX + dir * distance,
       GAME_CONSTANTS.CANVAS_WIDTH - GAME_CONSTANTS.PLAYER_WIDTH,
     ));
 
     const corridorLeft: number = Math.min(startX, endX);
     const corridorRight: number = Math.max(startX, endX) + GAME_CONSTANTS.PLAYER_WIDTH;
-    const corridorTop: number = p.y;
-    const corridorHeight: number = GAME_CONSTANTS.PLAYER_HEIGHT;
-
-    const maxTargets: number = 10;
-    let hitCount: number = 0;
     const hitZombies: ZombieState[] = [];
-
     for (const z of this.e.zombies) {
       if (z.isDead || z.spawnTimer > 0) continue;
-      if (hitCount >= maxTargets) break;
+      if (hitZombies.length >= maxTargets) break;
       if (this.physics.rectsOverlap(
-        corridorLeft, corridorTop, corridorRight - corridorLeft, corridorHeight,
+        corridorLeft, p.y, corridorRight - corridorLeft, GAME_CONSTANTS.PLAYER_HEIGHT,
         z.x, z.y, z.instanceWidth, z.instanceHeight,
       )) {
         hitZombies.push(z);
-        hitCount++;
       }
     }
 
-    const endCX: number = endX + GAME_CONSTANTS.PLAYER_WIDTH / 2;
-
-    const dashState: DashPhaseState = {
+    this.e.dashPhase = {
       startX,
       endX,
       playerY: p.y,
       startCX: playerCX,
-      endCX,
+      endCX: endX + GAME_CONSTANTS.PLAYER_WIDTH / 2,
       playerCY,
       facing: p.facing,
       dir,
@@ -710,45 +728,22 @@ export class CombatSystem {
       vanishTicks: 14,
       swishTicks: 10,
       appearTicks: 14,
-      skill,
-      skillLevel,
+      color,
       hitZombies,
       damageMultiplier,
       damageApplied: false,
     };
 
-    this.e.dashPhase = dashState;
-
     this.vfx.spawnPortalVortex(playerCX, playerCY, true);
     this.vfx.triggerScreenShake(6, 5);
     this.vfx.triggerScreenFlash('#9944ff', 5);
-
-    this.e.pendingVfxEvents.push({
-      type: VfxEventType.DashPortal,
-      playerId: p.id,
-      x: playerCX,
-      y: playerCY,
-      inward: true,
-    });
-    this.e.pendingVfxEvents.push({
-      type: VfxEventType.ScreenShake,
-      playerId: p.id,
-      x: 0,
-      y: 0,
-      frames: 6,
-      intensity: 5,
-    });
-    this.e.pendingVfxEvents.push({
-      type: VfxEventType.ScreenFlash,
-      playerId: p.id,
-      x: 0,
-      y: 0,
-      color: '#9944ff',
-      frames: 5,
-    });
+    this.e.pendingVfxEvents.push({ type: VfxEventType.DashPortal, playerId: p.id, x: playerCX, y: playerCY, inward: true });
+    this.e.pendingVfxEvents.push({ type: VfxEventType.ScreenShake, playerId: p.id, x: 0, y: 0, frames: 6, intensity: 5 });
+    this.e.pendingVfxEvents.push({ type: VfxEventType.ScreenFlash, playerId: p.id, x: 0, y: 0, color: '#9944ff', frames: 5 });
 
     p.isAttacking = true;
     p.velocityX = 0;
+    return true;
   }
 
   private performDoubleJump(skill: SkillDefinition, skillLevel: number, playerCX: number, playerCY: number): void {
@@ -1099,7 +1094,7 @@ export class CombatSystem {
     for (const z of dash.hitZombies) {
       if (z.isDead) continue;
       const isCrit: boolean = Math.random() * 100 < p.derived.critRate;
-      const specialDmgMult: number = this.drops.getEffectiveDamageMultiplier();
+      const specialDmgMult: number = this.drops.getEffectiveDamageMultiplier() * (this.hooks?.hitMultiplier(z, false) ?? 1);
       let damage: number = Math.max(1, Math.floor(p.derived.attack * dash.damageMultiplier * specialDmgMult) + Math.floor(Math.random() * 5));
       if (isCrit) damage = Math.max(1, Math.floor(damage * p.derived.critDamage / 100));
 
@@ -1112,15 +1107,16 @@ export class CombatSystem {
 
       const hitCx: number = z.x + z.instanceWidth / 2;
       const hitCy: number = z.y + z.instanceHeight / 2;
-      const dmgColor: string = isCrit ? '#ffaa00' : dash.skill.color;
-      this.vfx.spawnHitParticles(hitCx, hitCy, dash.skill.color);
+      const dmgColor: string = isCrit ? '#ffaa00' : dash.color;
+      this.vfx.spawnHitParticles(hitCx, hitCy, dash.color);
       this.vfx.spawnDamageNumber(hitCx, z.y - z.instanceHeight / 2, damage, isCrit, dmgColor);
       this.vfx.spawnHitMark(hitCx, hitCy);
-      this.pushZombieDamageVfx(hitCx, hitCy, z.y - z.instanceHeight / 2, damage, isCrit, dmgColor, dash.skill.color);
+      this.pushZombieDamageVfx(hitCx, hitCy, z.y - z.instanceHeight / 2, damage, isCrit, dmgColor, dash.color);
 
       if (z.hp <= 0) {
         this.handleZombieDeath(z);
       }
+      this.hooks?.afterHit(z, damage, false);
     }
 
     this.filterDeadZombies();
@@ -1221,6 +1217,9 @@ export class CombatSystem {
       this.e.passiveRecoveryTimers.clear();
     }
 
+    // Tree classes: TreeSkillSystem runs their passives.
+    if (getSkillTree(p.classId)) return;
+
     const passiveSkills: SkillDefinition[] = SKILLS.filter(
       (s: SkillDefinition) =>
         s.classId === p.classId &&
@@ -1286,18 +1285,10 @@ export class CombatSystem {
       return;
     }
 
-    const autoPotionSkill: SkillDefinition | undefined = SKILLS.find(
-      (s: SkillDefinition) =>
-        s.classId === p.classId &&
-        s.passiveEffect?.type === 'autoPotion' &&
-        (p.skillLevels[s.id] ?? 0) > 0,
-    );
-    if (!autoPotionSkill || !autoPotionSkill.passiveEffect) return;
-
-    const level: number = p.skillLevels[autoPotionSkill.id] ?? 0;
-    const successChance: number = getAutoPotionSuccessChance(autoPotionSkill, level);
-    const hpThreshold: number = autoPotionSkill.passiveEffect.hpThresholdPercent ?? GAME_CONSTANTS.AUTO_POTION_HP_THRESHOLD_PERCENT;
-    const mpThreshold: number = autoPotionSkill.passiveEffect.mpThresholdPercent ?? GAME_CONSTANTS.AUTO_POTION_MP_THRESHOLD_PERCENT;
+    const successChance: number = this.autoPotionChance(p);
+    if (successChance <= 0) return;
+    const hpThreshold: number = GAME_CONSTANTS.AUTO_POTION_HP_THRESHOLD_PERCENT;
+    const mpThreshold: number = GAME_CONSTANTS.AUTO_POTION_MP_THRESHOLD_PERCENT;
 
     const hpPercent: number = (p.hp / p.derived.maxHp) * 100;
     const mpPercent: number = (p.mp / p.derived.maxMp) * 100;
@@ -1375,6 +1366,22 @@ export class CombatSystem {
     }
   }
 
+  /** Chance (percent) that auto potion drinks when it should; 0 when the player doesn't have it. */
+  private autoPotionChance(p: CharacterState): number {
+    const tree: ClassSkillTree | null = getSkillTree(p.classId);
+    if (tree) {
+      const skill: TreeSkill | null = ownedSkillByMechanic(tree, p.skillLevels, 'auto-potion');
+      return skill ? treeSkillValue(skill, 'chance', p.stats) : 0;
+    }
+    const legacy: SkillDefinition | undefined = SKILLS.find(
+      (s: SkillDefinition) =>
+        s.classId === p.classId &&
+        s.passiveEffect?.type === 'autoPotion' &&
+        (p.skillLevels[s.id] ?? 0) > 0,
+    );
+    return legacy ? getAutoPotionSuccessChance(legacy, p.skillLevels[legacy.id] ?? 0) : 0;
+  }
+
   updateSkillCooldowns(): void {
     for (const [id, ticks] of this.e.skillCooldowns) {
       if (ticks > 0) {
@@ -1442,6 +1449,7 @@ export class CombatSystem {
     const p: CharacterState | null = this.e.player;
     if (!p || p.isDown || this.e.invincibilityFrames > 0) return;
     if (this.e.dashPhase) return;
+    if (this.hooks?.tryParry(z.x + z.instanceWidth / 2, z)) return;
     if (this.e.godMode) return;
     if (this.hasDarkSight()) return;
 
@@ -1485,6 +1493,10 @@ export class CombatSystem {
       color: '#ff4444',
     });
 
+    if (p.hp <= 0 && this.e.trySecondWind()) {
+      this.e.onPlayerUpdate?.(p);
+      return;
+    }
     if (p.hp <= 0) {
       p.hp = 0;
       const isMultiplayer: boolean = this.e.isMultiplayerHost || this.e.isMultiplayerClient;
@@ -1546,6 +1558,7 @@ export class CombatSystem {
     this.e.zombieCorpses.push(corpse);
 
     if (awardRewards) {
+      this.hooks?.onKill();
       const floorBonus: number = 1 + (this.e.floor - 1) * GAME_CONSTANTS.ZOMBIE_XP_SCALE_PER_WAVE;
       const xpReward: number = Math.floor(z.instanceXpReward * floorBonus);
       this.e.onXpGained?.(xpReward);

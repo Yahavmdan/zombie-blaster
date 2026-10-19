@@ -1,8 +1,10 @@
 import {
   CharacterState,
   Direction,
+  MagnetPullRequest,
   SkillDefinition,
   VfxEvent,
+  ZombieEffectRequest,
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
@@ -17,7 +19,6 @@ import {
   WorldDrop,
   ZombieCorpse,
   ZombieState,
-  ZombieType,
 } from '@shared/game-entities';
 import { CarryPose } from './corpse-carry';
 import { CorpseDrape } from './corpse-drape';
@@ -46,11 +47,17 @@ export interface DashPhaseState {
   vanishTicks: number;
   swishTicks: number;
   appearTicks: number;
-  skill: SkillDefinition;
-  skillLevel: number;
+  /** Hit particles and damage-number colour. */
+  color: string;
   hitZombies: ZombieState[];
   damageMultiplier: number;
   damageApplied: boolean;
+}
+
+/** A tree skill owns the body this tick (rooted, a charge run, a backstep, a leap, a dive). */
+export interface SkillMotion {
+  /** Keep the horizontal speed the skill set (no input, no friction); false = friction only. */
+  keepMomentum: boolean;
 }
 
 export interface DamageNumber {
@@ -396,7 +403,11 @@ export interface IGameEngine {
   pendingReviveTargetIds: string[];
   pendingSpecialDropActivations: SpecialDropType[];
   pendingVfxEvents: VfxEvent[];
-  pendingPullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>;
+  pendingPullEvents: Array<MagnetPullRequest>;
+  /** Pushes, launches and stuns a guest's skills ask of the host (sent in player-state). */
+  pendingZombieEffects: ZombieEffectRequest[];
+  /** Set each tick by the skill tree system; physics skips input while it is set. */
+  skillMotion: SkillMotion | null;
 
   zombieInterpolation: Map<string, EntityInterpolation>;
   remotePlayerInterpolation: Map<string, EntityInterpolation>;
@@ -404,6 +415,8 @@ export interface IGameEngine {
   repositionExitPlatform(): void;
   /** Builds the current floor's layout (collision + drawn map) from the shared seed. */
   applyLevel(): void;
+  /** A killing blow is about to land on the local player: true when a skill (Second Wind) saved them. */
+  trySecondWind(): boolean;
   /** Brief freeze-frame when the local player's hit lands (solo only). */
   requestHitStop(ticks: number): void;
   /** A player whose top-left corner is at (x, y) rests on the floor's safe spot (out of every attack's reach). */

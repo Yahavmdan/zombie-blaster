@@ -1,4 +1,4 @@
-import { CharacterState, GAME_CONSTANTS, SkillDefinition, VfxEvent, isZombieWindingUp } from '@shared/index';
+import { ActiveBuff, CharacterState, ClassSkillTree, GAME_CONSTANTS, ZOMBIE_TYPES, SkillDefinition, TreeSkill, VfxEvent, getSkillTree, isZombieWindingUp, ownsTreeSkill } from '@shared/index';
 import { ActiveSpecialEffect, DropType, SpecialDropType, BoulderState, CagePuzzleState, CageState, LooseProp, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, PlayerTint, Rope, SpringPuzzleLayout } from '../engine/engine-types';
 import { EXIT_CAGE, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
@@ -30,6 +30,7 @@ import {
   E2eRemotePlayerView,
   E2eRole,
   E2eSkillView,
+  E2eTreeSkillView,
   E2eSnapshot,
   E2eVfxEventView,
   E2eVfxLogEntry,
@@ -110,6 +111,8 @@ function toPlayerView(p: CharacterState, engine: GameEngine): E2ePlayerView {
     potions: { ...p.inventory.potions },
     carryingCorpseIds: [...(p.carryingCorpseIds ?? [])],
     tint: { hurtTicks: tint?.hurtTicks ?? 0, poisonTicks: tint?.poisonTicks ?? 0 },
+    skillBar: [...(p.skillBar ?? [])],
+    skillCharge: typeof p.skillCharge === 'number' ? p.skillCharge : null,
   };
 }
 
@@ -133,6 +136,11 @@ function toZombieView(z: ZombieState, engine: GameEngine): E2eZombieView {
     attackCooldown: z.attackCooldown,
     eating: z.eatingTimer > 0,
     animState: anim ? anim.state : null,
+    stunTicks: z.stunTicks,
+    ticksToHit: z.attackAnimTimer > 0 && !z.attackHasHit ? z.attackAnimTimer - ZOMBIE_TYPES[z.type].attackHitTick : null,
+    knockbackFrames: z.knockbackFrames,
+    isGrounded: z.isGrounded,
+    velocityY: z.velocityY,
   };
 }
 
@@ -325,6 +333,19 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
     }),
   );
 
+  const tree: ClassSkillTree | null = player ? getSkillTree(player.classId) : null;
+  const treeSkills: E2eTreeSkillView[] = (tree?.skills ?? []).map(
+    (s: TreeSkill): E2eTreeSkillView => ({
+      id: s.id,
+      name: s.name,
+      owned: player ? ownsTreeSkill(player.skillLevels, s.id) : false,
+      barSlot: player?.skillBar?.indexOf(s.id) ?? -1,
+      mechanic: s.mechanic,
+      combo: s.combo,
+      cooldownTicks: engine.skillCooldowns.get(s.id) ?? 0,
+    }),
+  );
+
   return {
     at: performance.now(),
     role: resolveRole(engine),
@@ -415,6 +436,10 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
       specialDropActivations: engine.pendingSpecialDropActivations.length,
     },
     usableSkills,
+    treeSkills,
+    buffs: (player?.activeBuffs ?? []).map((b: ActiveBuff): { skillId: string; stat: string; value: number; remainingMs: number } => ({
+      skillId: b.skillId, stat: b.stat, value: b.value, remainingMs: b.remainingMs,
+    })),
     activeSpecialEffects: engine.activeSpecialEffects.map(
       (e: ActiveSpecialEffect): string => e.type,
     ),
@@ -475,6 +500,11 @@ const engineControls: E2eEngineControls = {
     for (let i: number = 0; i < count; i++) {
       engine.spawnRolledZombie();
     }
+  },
+  spawnZombieAt(x: number): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine || engine.isMultiplayerClient) return;
+    engine.spawnZombieAt(x);
   },
   dropCorpses(centerX: number, count: number): void {
     const engine: GameEngine | null = currentEngine;

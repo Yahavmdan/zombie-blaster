@@ -12,7 +12,12 @@ import {
   SKILLS,
   SkillDefinition,
   SkillType,
+  ClassSkillTree,
+  TreeSkill,
   getPotionById,
+  getSkillTree,
+  isSlottable,
+  ownsTreeSkill,
 } from '@shared/index';
 import {
   QuickSlotEntry,
@@ -22,11 +27,13 @@ import {
   ACTION_INFO,
   ActionInfo,
 } from '@shared/game-entities';
-import { KeyBindings } from '@shared/messages';
+import { GameAction, KeyBindings, SKILL_KEY_ACTIONS } from '@shared/messages';
 import { QuickSlotService } from '../../services/quick-slot.service';
 import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
 import { PixelIconId } from '@shared/pixel-icon';
+
+const SKILL_KEY_SET: ReadonlySet<string> = new Set<string>(SKILL_KEY_ACTIONS);
 
 export interface QuickSlotDisplay {
   action: QuickSlotAction;
@@ -59,12 +66,36 @@ export class QuickSlotsComponent {
     const assignments: Record<string, QuickSlotEntry | null> = this.quickSlotService.slots();
     const bindings: KeyBindings = this.keyBindingsService.bindings();
     const p: CharacterState = this.player();
+    // Skill-tree classes: a skill key shows the skill on that bar slot, a skill entry the tree skill.
+    const tree: ClassSkillTree | null = getSkillTree(p.classId);
 
     return QUICK_SLOT_ACTIONS.map((action: QuickSlotAction): QuickSlotDisplay => {
-      const entry: QuickSlotEntry | null = assignments[action] ?? null;
+      const assigned: QuickSlotEntry | null = assignments[action] ?? null;
       const boundKeys: string[] = bindings[action] ?? [];
       const keyLabel: string = boundKeys.length > 0 ? formatKeyName(boundKeys[0]) : '—';
-
+      const skillOnly: boolean =
+        assigned !== null && (assigned.type === 'skill' || (assigned.type === 'keybind' && SKILL_KEY_SET.has(assigned.id)));
+      if (tree && assigned && skillOnly) {
+        const id: string | null =
+          assigned.type === 'skill' ? assigned.id : (p.skillBar?.[SKILL_KEY_ACTIONS.indexOf(assigned.id as GameAction)] ?? null);
+        const skill: TreeSkill | undefined = tree.skills.find(
+          (s: TreeSkill): boolean => s.id === id && isSlottable(s) && ownsTreeSkill(p.skillLevels, s.id),
+        );
+        if (!skill) {
+          return { action, entry: null, keyLabel, icon: 'spark', label: '', count: null, isEmpty: true, isBuff: false };
+        }
+        return {
+          action,
+          entry: assigned,
+          keyLabel,
+          icon: skill.icon,
+          label: skill.name,
+          count: null,
+          isEmpty: false,
+          isBuff: skill.type === SkillType.Buff,
+        };
+      }
+      const entry: QuickSlotEntry | null = assigned;
       if (!entry) {
         return { action, entry: null, keyLabel, icon: 'spark', label: '', count: null, isEmpty: true, isBuff: false };
       }

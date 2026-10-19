@@ -1,10 +1,9 @@
 import { TestInfo } from '@playwright/test';
 import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer } from '../../support/game-player';
-import { E2eSkillView, E2eSnapshot, E2eZombieView } from '../../support/probe';
+import { E2eSnapshot, E2eZombieView } from '../../support/probe';
 import { WORLD } from '../../support/invariants';
-
-const MAGNET_ID: string = 'warrior-monster-magnet';
+import { WARRIOR, castSkill, warriorArena, zombieAt } from '../../support/warrior';
 
 /** Horizontal gap between a zombie and the player, center to center. */
 function gapOf(s: E2eSnapshot, zombieId: string): number | null {
@@ -28,43 +27,22 @@ test.describe('monster magnet', { tag: '@solo' }, (): void => {
     test.setTimeout(90_000);
     const p: GamePlayer = await solo('warrior');
     await p.probe.maxOutPlayer();
-    await p.probe.setGodMode(true);
-    const magnet: E2eSkillView | undefined = (await p.probe.state()).usableSkills.find(
-      (k: E2eSkillView): boolean => k.id === MAGNET_ID,
-    );
-    expect(magnet, 'monster magnet is usable').toBeDefined();
+    const x: number = await warriorArena(p, [WARRIOR.monsterMagnet]);
 
     // A zombie standing well away from the player, on the same ground.
-    const ready: E2eSnapshot = await p.probe.waitFor(
-      'a zombie on the ground far from the player',
-      (s: E2eSnapshot): boolean =>
-        s.zombies.some((z: E2eZombieView): boolean => {
-          const gap: number | null = gapOf(s, z.id);
-          return (
-            !z.isDead &&
-            z.spawnTimer <= 0 &&
-            Math.abs(z.y + z.height - WORLD.groundY) < 4 &&
-            gap !== null &&
-            gap > 220 &&
-            gap < 600
-          );
-        }),
-      { timeoutMs: 40_000 },
-    );
-    const target: E2eZombieView = ready.zombies.find((z: E2eZombieView): boolean => {
-      const gap: number | null = gapOf(ready, z.id);
-      return !z.isDead && z.spawnTimer <= 0 && gap !== null && gap > 220 && gap < 600;
-    })!;
+    const target: string = await zombieAt(p, x + 320);
+    expect(gapOf(await p.probe.state(), target), 'the zombie starts far away').toBeGreaterThan(200);
 
-    await p.castSkill(magnet!.slot);
+    // The magnet's skill-bar key.
+    await castSkill(p, WARRIOR.monsterMagnet);
     const samples: Array<{ ms: number; gap: number; pull: number | null }> = [];
     const started: number = Date.now();
     while (Date.now() - started < 2_000) {
       const s: E2eSnapshot = await p.probe.state();
-      const gap: number | null = gapOf(s, target.id);
+      const gap: number | null = gapOf(s, target);
       if (gap === null) break;
       const view: E2eZombieView | undefined = s.zombies.find(
-        (z: E2eZombieView): boolean => z.id === target.id,
+        (z: E2eZombieView): boolean => z.id === target,
       );
       samples.push({ ms: Date.now() - started, gap, pull: view?.magnetPull ?? null });
       await p.wait(30);
@@ -75,7 +53,7 @@ test.describe('monster magnet', { tag: '@solo' }, (): void => {
     });
 
     const pulled: Array<{ ms: number; gap: number; pull: number | null }> = samples.filter(
-      (x: { pull: number | null }): boolean => x.pull !== null,
+      (s: { pull: number | null }): boolean => s.pull !== null,
     );
     expect(pulled.length, 'the zombie was under the magnet for several frames').toBeGreaterThan(3);
     expect(
@@ -83,7 +61,7 @@ test.describe('monster magnet', { tag: '@solo' }, (): void => {
       'no teleport: right after the cast it is still far away',
     ).toBeGreaterThan(150);
     const inFlight: number = pulled.filter(
-      (x: { gap: number }): boolean => x.gap > 60 && x.gap < samples[0].gap - 20,
+      (s: { gap: number }): boolean => s.gap > 60 && s.gap < samples[0].gap - 20,
     ).length;
     expect(inFlight, 'seen part-way along the drag, not just before and after').toBeGreaterThan(0);
     const last: { gap: number; pull: number | null } = samples[samples.length - 1];

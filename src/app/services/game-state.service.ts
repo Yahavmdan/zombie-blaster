@@ -15,12 +15,47 @@ import {
   SKILLS,
   SkillDefinition,
   SkillType,
+  ClassSkillTree,
+  TreeSkill,
+  autoSlotSkill,
+  countOwnedTreeSkills,
+  getSkillTree,
+  isSlottable,
+  normalizeSkillBar,
+  placeOnSkillBar,
+  skillPointsPerLevel,
+  startingSkillPoints,
+  treeSkillLockReason,
   getPotionById,
   getPotionRestoreAmount,
   resolveAutoPotionId,
 } from '@shared/index';
 import { DropType, PotionDefinition, ShopItemDefinition, ZombieState } from '@shared/game-entities';
 import { calculateDerived, calculateDerivedWithBuffs, totalStats } from '../engine/derived-stats';
+
+/** A skill bar with every slot empty. */
+function emptySkillBar(): Array<string | null> {
+  return new Array<string | null>(GAME_CONSTANTS.TREE_SKILL_BAR_SLOTS).fill(null);
+}
+
+/** The player's bar cleaned for the tree (owned slottable skills only, right length). */
+function barOf(
+  tree: ClassSkillTree,
+  skillLevels: Record<string, number>,
+  bar: ReadonlyArray<string | null> | undefined,
+): Array<string | null> {
+  return normalizeSkillBar(tree, skillLevels, bar, GAME_CONSTANTS.TREE_SKILL_BAR_SLOTS);
+}
+
+/** A bar filled with the owned actives and buffs among `ids`, in that order, until it is full. */
+function filledSkillBar(tree: ClassSkillTree, skillLevels: Record<string, number>, ids: string[]): Array<string | null> {
+  let bar: Array<string | null> = emptySkillBar();
+  for (const id of ids) {
+    const skill: TreeSkill | undefined = tree.skills.find((s: TreeSkill): boolean => s.id === id);
+    if (skill && isSlottable(skill) && (skillLevels[id] ?? 0) > 0) bar = autoSlotSkill(bar, id);
+  }
+  return bar;
+}
 
 @Injectable({ providedIn: 'root' })
 export class GameStateService {
@@ -86,9 +121,11 @@ export class GameStateService {
       isDown: false,
       downTimer: 0,
       unallocatedStatPoints: 0,
-      unallocatedSkillPoints: 0,
+      unallocatedSkillPoints: startingSkillPoints(classId),
       allocatedStats,
       skillLevels: {},
+      skillBar: getSkillTree(classId) ? emptySkillBar() : undefined,
+      respecCount: 0,
       activeBuffs: [],
       inventory: {
         potions: { 'hp-potion-1': 3, 'mp-potion-1': 3 },
@@ -136,7 +173,7 @@ export class GameStateService {
         xp -= xpToNext;
         level++;
         pendingStatPts += GAME_CONSTANTS.STAT_POINTS_PER_LEVEL;
-        pendingSkillPts += GAME_CONSTANTS.SKILL_POINTS_PER_LEVEL;
+        pendingSkillPts += skillPointsPerLevel(p.classId);
         xpToNext = Math.floor(GAME_CONSTANTS.XP_BASE * Math.pow(GAME_CONSTANTS.XP_GROWTH, level - 1));
       }
 
@@ -186,9 +223,59 @@ export class GameStateService {
     return SKILLS.filter((s: SkillDefinition) => s.classId === p.classId);
   });
 
+  /** Gold the next skill-tree respec costs (the first one is free). */
+  respecPrice(p: CharacterState): number {
+    return (p.respecCount ?? 0) > 0 ? GAME_CONSTANTS.RESPEC_GOLD_PER_LEVEL * p.level : 0;
+  }
+
+  /**
+   * Skill-tree classes: forget every learned tree skill and get the points back, for gold after the
+   * first time. Returns false when the player can't pay (or has no tree).
+   */
+  respecSkills(): boolean {
+    let done: boolean = false;
+    this.player.update((p: CharacterState | null): CharacterState | null => {
+      const tree: ClassSkillTree | null = p ? getSkillTree(p.classId) : null;
+      if (!p || !tree) return p;
+      const price: number = this.respecPrice(p);
+      if (p.inventory.gold < price) return p;
+      const refunded: number = countOwnedTreeSkills(tree, p.skillLevels);
+      const skillLevels: Record<string, number> = { ...p.skillLevels };
+      for (const skill of tree.skills) delete skillLevels[skill.id];
+      done = true;
+      return {
+        ...p,
+        skillLevels,
+        skillBar: emptySkillBar(),
+        unallocatedSkillPoints: p.unallocatedSkillPoints + refunded,
+        respecCount: (p.respecCount ?? 0) + 1,
+        inventory: { ...p.inventory, gold: p.inventory.gold - price },
+      };
+    });
+    return done;
+  }
+
   allocateSkillPoint(skillId: string): void {
     this.player.update((p: CharacterState | null) => {
       if (!p || p.unallocatedSkillPoints <= 0) return p;
+
+      // Skill-tree classes: one point owns the skill, if its tier and a parent are unlocked.
+      const tree: ClassSkillTree | null = getSkillTree(p.classId);
+      if (tree) {
+        const node: TreeSkill | undefined = tree.skills.find((s: TreeSkill): boolean => s.id === skillId);
+        if (!node) return p;
+        const locked: string | null = treeSkillLockReason(node, p.skillLevels, p.level, p.unallocatedSkillPoints, GAME_CONSTANTS.SKILL_TIER_LEVELS);
+        if (locked) return p;
+        const skillLevels: Record<string, number> = { ...p.skillLevels, [skillId]: 1 };
+        // A new active or buff takes the first free skill-bar slot, so its key works at once.
+        const bar: Array<string | null> = barOf(tree, skillLevels, p.skillBar);
+        return {
+          ...p,
+          skillLevels,
+          skillBar: isSlottable(node) ? autoSlotSkill(bar, skillId) : bar,
+          unallocatedSkillPoints: p.unallocatedSkillPoints - 1,
+        };
+      }
 
       const skillDef: SkillDefinition | undefined = SKILLS.find(
         (s: SkillDefinition) => s.id === skillId && s.classId === p.classId,
@@ -229,13 +316,7 @@ export class GameStateService {
   maxAllSkills(): void {
     this.player.update((p: CharacterState | null): CharacterState | null => {
       if (!p) return p;
-      const classSkills: SkillDefinition[] = SKILLS.filter(
-        (s: SkillDefinition) => s.classId === p.classId,
-      );
-      const newSkillLevels: Record<string, number> = { ...p.skillLevels };
-      for (const skill of classSkills) {
-        newSkillLevels[skill.id] = skill.maxLevel;
-      }
+      const newSkillLevels: Record<string, number> = { ...p.skillLevels, ...this.maxedSkillLevels(p.classId) };
       const derived: CharacterDerived = this.calculateDerivedWithBuffs(
         CHARACTER_CLASSES[p.classId].baseStats,
         p.allocatedStats,
@@ -243,8 +324,56 @@ export class GameStateService {
         p.activeBuffs,
         p.level,
       );
-      return { ...p, skillLevels: newSkillLevels, derived };
+      const tree: ClassSkillTree | null = getSkillTree(p.classId);
+      const skillBar: Array<string | null> | undefined = tree
+        ? filledSkillBar(tree, newSkillLevels, [
+            ...(p.skillBar ?? []).filter((id: string | null): id is string => id !== null),
+            ...tree.skills.map((s: TreeSkill): string => s.id),
+          ])
+        : p.skillBar;
+      return { ...p, skillLevels: newSkillLevels, skillBar, derived };
     });
+  }
+
+  /**
+   * Setup (dev, e2e): owns exactly these tree skills of the player's class, whatever the points. The
+   * actives and buffs among them fill the skill bar in the order given.
+   */
+  setTreeSkills(ids: string[]): void {
+    this.player.update((p: CharacterState | null): CharacterState | null => {
+      const tree: ClassSkillTree | null = p ? getSkillTree(p.classId) : null;
+      if (!p || !tree) return p;
+      const skillLevels: Record<string, number> = { ...p.skillLevels };
+      for (const skill of tree.skills) {
+        if (ids.includes(skill.id)) skillLevels[skill.id] = 1;
+        else delete skillLevels[skill.id];
+      }
+      return { ...p, skillLevels, skillBar: filledSkillBar(tree, skillLevels, ids) };
+    });
+  }
+
+  /** Skill-tree classes: puts a learned active or buff on a bar slot (null empties the slot). */
+  setSkillBarSlot(slot: number, skillId: string | null): void {
+    this.player.update((p: CharacterState | null): CharacterState | null => {
+      const tree: ClassSkillTree | null = p ? getSkillTree(p.classId) : null;
+      if (!p || !tree) return p;
+      const placed: Array<string | null> = placeOnSkillBar(barOf(tree, p.skillLevels, p.skillBar), slot, skillId);
+      return { ...p, skillBar: barOf(tree, p.skillLevels, placed) };
+    });
+  }
+
+  /** Every skill of the class at its top: owned for a tree class, max level otherwise. */
+  private maxedSkillLevels(classId: CharacterClass): Record<string, number> {
+    const levels: Record<string, number> = {};
+    const tree: ClassSkillTree | null = getSkillTree(classId);
+    if (tree) {
+      for (const skill of tree.skills) levels[skill.id] = 1;
+      return levels;
+    }
+    for (const skill of SKILLS.filter((s: SkillDefinition): boolean => s.classId === classId)) {
+      levels[skill.id] = skill.maxLevel;
+    }
+    return levels;
   }
 
   maxOutPlayer(): void {
@@ -268,13 +397,7 @@ export class GameStateService {
       const totalStats: CharacterStats = this.getTotalStats(baseSt, allocatedStats);
       const derived: CharacterDerived = this.calculateDerivedWithBuffs(baseSt, allocatedStats, p.classId, p.activeBuffs, targetLevel);
 
-      const classSkills: SkillDefinition[] = SKILLS.filter(
-        (s: SkillDefinition) => s.classId === p.classId,
-      );
-      const newSkillLevels: Record<string, number> = {};
-      for (const skill of classSkills) {
-        newSkillLevels[skill.id] = skill.maxLevel;
-      }
+      const newSkillLevels: Record<string, number> = this.maxedSkillLevels(p.classId);
 
       const xpToNext: number = Math.floor(GAME_CONSTANTS.XP_BASE * Math.pow(GAME_CONSTANTS.XP_GROWTH, targetLevel - 1));
 

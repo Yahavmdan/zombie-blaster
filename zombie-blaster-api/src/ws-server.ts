@@ -13,7 +13,10 @@ import {
   isRevivePlayerPayload,
   isRoomIdPayload,
   isSetAfkPayload,
+  isObject,
   isStateSnapshotPayload,
+  sanitizeTreeSkills,
+  UnknownRecord,
   isZombieAttackPlayerPayload,
   isZombieDamagePayload,
 } from './validation.js';
@@ -641,10 +644,11 @@ export class GameWebSocketServer {
     return resumedId;
   }
 
-  private handleGameSync(clientId: string, payload: unknown): void {
+  private handleGameSync(clientId: string, payload: UnknownRecord): void {
     const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
     if (!room) return;
     if (room.hostId !== clientId) return;
+    this.sanitizeRelayedPlayer(room, clientId, payload);
 
     this.broadcastToRoom(room, 'game-sync' as ServerMessageType, payload, clientId);
   }
@@ -680,15 +684,23 @@ export class GameWebSocketServer {
     return held;
   }
 
-  private handlePlayerState(clientId: string, payload: unknown): void {
+  private handlePlayerState(clientId: string, payload: UnknownRecord): void {
     const room: Room | undefined = this.roomManager.getRoomForPlayer(clientId);
     if (!room) return;
+    this.sanitizeRelayedPlayer(room, clientId, payload);
 
     const wrapped: { playerId: string; data: unknown } = {
       playerId: clientId,
       data: payload,
     };
     this.broadcastToRoom(room, 'player-state-broadcast' as ServerMessageType, wrapped, clientId);
+  }
+
+  /** The relayed player keeps only the tree skills its class, level and parents allow (see sanitizeTreeSkills). */
+  private sanitizeRelayedPlayer(room: Room, clientId: string, payload: UnknownRecord): void {
+    const seat: RoomPlayer | undefined = room.getPlayer(clientId);
+    const player: unknown = payload['player'];
+    if (seat && isObject(player)) sanitizeTreeSkills(player, seat.classId);
   }
 
   private handleDisconnect(client: ConnectedClient): void {

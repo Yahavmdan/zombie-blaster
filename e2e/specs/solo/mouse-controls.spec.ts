@@ -5,7 +5,8 @@ import { E2eSkillView, E2eSnapshot } from '../../support/probe';
 
 type MouseButton = 'left' | 'right' | 'middle';
 
-const POWER_STRIKE: string = 'warrior-power-strike';
+// Skill keys and quick slots: the assassin (the warrior's skill bar is covered in warrior-skills.spec.ts).
+const LUCKY_SEVEN: string = 'assassin-lucky-seven';
 const MP_POTION: string = 'mp-potion-1';
 
 /** Moves the cursor over the middle of the game canvas, clear of the HUD. */
@@ -60,8 +61,8 @@ test.describe('mouse controls', { tag: '@solo' }, (): void => {
   let player: GamePlayer;
 
   test.beforeEach(async ({ solo }: { solo: SoloFactory }): Promise<void> => {
-    player = await solo('warrior');
-    // Low level keeps MP regen slow enough to see a skill spend it; maxed skills make Power Strike usable.
+    player = await solo('assassin');
+    // Low level keeps MP regen slow enough to see a skill spend it; maxed skills make Lucky Seven usable.
     await player.probe.maxAllSkills();
     await player.probe.waitFor(
       'player grounded',
@@ -89,22 +90,22 @@ test.describe('mouse controls', { tag: '@solo' }, (): void => {
   test('a skill dropped on the right mouse button casts with a right-click', async (): Promise<void> => {
     await player.probe.setGodMode(true);
     await openSettings(player);
-    await dropOnMouseButton(player, 'skills', POWER_STRIKE, 'mouseright');
+    await dropOnMouseButton(player, 'skills', LUCKY_SEVEN, 'mouseright');
     await expect(player.page.getByTestId('game-settings-key-mouseright')).toContainText(
-      'Power Strike',
+      'Lucky Seven',
     );
     await closeSettings(player);
 
-    expect(skillCooldown(await player.probe.state(), POWER_STRIKE), 'skill starts ready').toBe(0);
+    expect(skillCooldown(await player.probe.state(), LUCKY_SEVEN), 'skill starts ready').toBe(0);
     await clickCanvas(player, 'right');
     await player.probe.waitFor(
-      'power strike cast by right-click',
-      (s: E2eSnapshot): boolean => skillCooldown(s, POWER_STRIKE) > 0,
+      'lucky seven cast by right-click',
+      (s: E2eSnapshot): boolean => skillCooldown(s, LUCKY_SEVEN) > 0,
       { timeoutMs: 2_000 },
     );
     await expect(player.page.getByTestId('quickslot-slot-quickSlot9')).toHaveAttribute(
       'title',
-      'Power Strike',
+      'Lucky Seven',
     );
   });
 
@@ -118,11 +119,11 @@ test.describe('mouse controls', { tag: '@solo' }, (): void => {
 
     // Spend some MP on a skill so the potion has something to restore.
     const skills: E2eSkillView[] = (await player.probe.state()).usableSkills;
-    const powerStrike: E2eSkillView | undefined = skills.find(
-      (k: E2eSkillView): boolean => k.id === POWER_STRIKE,
+    const luckySeven: E2eSkillView | undefined = skills.find(
+      (k: E2eSkillView): boolean => k.id === LUCKY_SEVEN,
     );
-    expect(powerStrike, `usable skills: ${JSON.stringify(skills)}`).toBeDefined();
-    await player.castSkill(powerStrike!.slot);
+    expect(luckySeven, `usable skills: ${JSON.stringify(skills)}`).toBeDefined();
+    await player.castSkill(luckySeven!.slot);
     const spent: E2eSnapshot = await player.probe.waitFor(
       'MP spent',
       (s: E2eSnapshot): boolean => s.player!.mp < s.player!.maxMp,

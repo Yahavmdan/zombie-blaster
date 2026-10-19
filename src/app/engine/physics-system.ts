@@ -81,6 +81,13 @@ export class PhysicsSystem {
       return;
     }
 
+    // A skill owns the body (roar root, shoulder charge, backstep, leap, dive): no input this tick.
+    if (this.e.skillMotion && !p.isClimbing) {
+      this.applyBodyMovement(p, this.e.skillMotion.keepMomentum);
+      this.e.onPlayerUpdate?.(p);
+      return;
+    }
+
     const activeRope: Rope | null = this.getActiveRope();
 
     if (p.isClimbing) {
@@ -105,8 +112,15 @@ export class PhysicsSystem {
   }
 
   private applyStunnedMovement(p: CharacterState): void {
-    p.velocityX *= GAME_CONSTANTS.PLAYER_FRICTION;
-    if (Math.abs(p.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) p.velocityX = 0;
+    this.applyBodyMovement(p, false);
+  }
+
+  /** Moves a body that takes no input: gravity, collisions, and friction unless it keeps its momentum. */
+  private applyBodyMovement(p: CharacterState, keepMomentum: boolean): void {
+    if (!keepMomentum) {
+      p.velocityX *= GAME_CONSTANTS.PLAYER_FRICTION;
+      if (Math.abs(p.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY) p.velocityX = 0;
+    }
     p.velocityY += this.getEffectiveGravity();
     if (p.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
       p.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;

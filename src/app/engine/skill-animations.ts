@@ -174,7 +174,140 @@ function inwardVortexParticles(x: number, y: number, level: number, color: strin
 //   'casting', 'magic8', 'midnight', 'protectioncircle', 'magickahit',
 //   'nebula', 'magicbubbles'
 
+/** Dust and sparks racing out both ways along the ground from a slam or a landing (y = the ground). */
+function groundWaveParticles(x: number, y: number, level: number, color: string): Particle[] {
+  const particles: Particle[] = [];
+  const count: number = 10 + Math.floor(level / 2);
+  for (const dir of [-1, 1]) {
+    for (let i: number = 0; i < count; i++) {
+      particles.push(makeParticle({
+        x: x + dir * (4 + Math.random() * 10),
+        y: y - Math.random() * 6,
+        vx: dir * (5 + Math.random() * 7),
+        vy: -(1 + Math.random() * 3),
+        life: 18 + Math.floor(Math.random() * 10),
+        maxLife: 28,
+        color: i % 3 === 0 ? '#ffffff' : color,
+        size: 4 + Math.random() * 4,
+        shape: i % 2 === 0 ? ParticleShape.Square : ParticleShape.Line,
+        rotation: dir > 0 ? 0 : Math.PI,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Quick,
+        scaleOverLife: true,
+      }));
+    }
+  }
+  return particles;
+}
+
+/** Particles flying straight up (an uppercut, a rising aura). */
+function risingParticles(x: number, y: number, level: number, color: string, count: number): Particle[] {
+  const particles: Particle[] = [];
+  const total: number = count + Math.floor(level / 3);
+  for (let i: number = 0; i < total; i++) {
+    particles.push(makeParticle({
+      x: x + (Math.random() - 0.5) * 30,
+      y: y + 10,
+      vx: (Math.random() - 0.5) * 1.5,
+      vy: -(5 + Math.random() * 6),
+      life: 20 + Math.floor(Math.random() * 12),
+      maxLife: 32,
+      color: i % 3 === 0 ? '#ffffff' : color,
+      size: 4 + Math.random() * 3,
+      shape: ParticleShape.Line,
+      rotation: -Math.PI / 2,
+      rotationSpeed: 0,
+      fadeMode: FadeMode.Late,
+      scaleOverLife: true,
+    }));
+  }
+  return particles;
+}
+
 export const SKILL_ANIMATIONS: Record<string, SkillAnimation> = {
+
+  // ─── Warrior tree moves ────────────────────────
+  'warrior-uppercut': {
+    spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
+      risingParticles(x, y, level, '#ff8844', 12),
+    screenShake: 3, screenShakeIntensity: 3, flashColor: null, flashFrames: 0,
+    spriteEffect: 'weaponhit',
+  },
+
+  'warrior-ground-slam': {
+    spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] => [
+      ...groundWaveParticles(x, y + 12, level, '#ffcc66'),
+      ...shockwaveRingParticles(x, y, level, '#ff8844'),
+    ],
+    screenShake: 10, screenShakeIntensity: 7, flashColor: '#fff3b0', flashFrames: 3,
+    spriteEffect: 'brightfire',
+  },
+
+  'warrior-shoulder-charge': {
+    spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] =>
+      projectileTrailParticles(x, y, facing, level, '#f2c14e', 10),
+    screenShake: 3, screenShakeIntensity: 3, flashColor: null, flashFrames: 0,
+    spriteEffect: 'weaponhit',
+  },
+
+  'warrior-backstep': {
+    spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
+      groundWaveParticles(x, y, Math.floor(level / 2), '#a89c84'),
+    screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: null,
+  },
+
+  'warrior-leap-strike': {
+    spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] => [
+      ...arcSlashParticles(x, y, facing, level, '#f2c14e', 10),
+      ...groundWaveParticles(x, y + 24, level, '#ffcc66'),
+    ],
+    screenShake: 6, screenShakeIntensity: 5, flashColor: null, flashFrames: 0,
+    spriteEffect: 'flamelash',
+  },
+
+  'warrior-counter': {
+    spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
+      radialBurstParticles(x, y, level, '#b5e05a', 14, ParticleShape.Star),
+    screenShake: 4, screenShakeIntensity: 4, flashColor: '#b5e05a', flashFrames: 3,
+    spriteEffect: 'weaponhit',
+  },
+
+  'warrior-executioner': {
+    spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] =>
+      arcSlashParticles(x, y, facing, level, '#e0503f', 12),
+    screenShake: 6, screenShakeIntensity: 5, flashColor: '#e0503f', flashFrames: 3,
+    spriteEffect: 'flamelash',
+  },
+
+  'warrior-rampage': {
+    spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
+      radialBurstParticles(x, y, level, '#f2c14e', 12, ParticleShape.Star),
+    screenShake: 3, screenShakeIntensity: 3, flashColor: null, flashFrames: 0,
+    spriteEffect: null,
+  },
+
+  'warrior-second-wind': {
+    spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
+      risingParticles(x, y, level, '#b5e05a', 16),
+    screenShake: 4, screenShakeIntensity: 3, flashColor: '#fff8e8', flashFrames: 4,
+    spriteEffect: 'protectioncircle',
+  },
+
+  'warrior-rally': {
+    spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
+      risingParticles(x, y, level, '#8fbf3a', 12),
+    screenShake: 0, screenShakeIntensity: 0, flashColor: null, flashFrames: 0,
+    spriteEffect: 'magicbubbles',
+  },
+
+  'warrior-last-stand': {
+    spawnParticles: (x: number, y: number, _facing: Direction, level: number): Particle[] =>
+      shockwaveRingParticles(x, y, level, '#e0503f'),
+    screenShake: 4, screenShakeIntensity: 3, flashColor: '#b8322a', flashFrames: 4,
+    spriteEffect: 'felspell',
+  },
+
 
   'warrior-power-strike': {
     spawnParticles: (x: number, y: number, facing: Direction, level: number): Particle[] =>

@@ -1,7 +1,9 @@
 import { TestInfo } from '@playwright/test';
 import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer, KEYS } from '../../support/game-player';
-import { E2eSnapshot, E2eZombieView } from '../../support/probe';
+import { E2eSnapshot, E2eVfxLogEntry, E2eZombieView } from '../../support/probe';
+import { vfxQueuedBy } from '../../support/vfx-gate';
+import { WARRIOR, animationsIn, castSkill, cooldownOf } from '../../support/warrior';
 import {
   currentPlatform,
   GROUND,
@@ -135,19 +137,19 @@ test.describe('safe spot', { tag: '@solo' }, (): void => {
   }): Promise<void> => {
     const p: GamePlayer = await solo('warrior');
     await p.probe.setGodMode(true);
-    await p.probe.levelUp(2);
-    await p.probe.maxAllSkills();
-    const s0: E2eSnapshot = await p.probe.waitFor('power strike ready', (s: E2eSnapshot): boolean =>
-      s.usableSkills.some(
-        (k: E2eSnapshot['usableSkills'][number]): boolean => k.id === 'warrior-power-strike',
-      ),
+    // An attack skill on the skill bar: slash blast.
+    await p.probe.setTreeSkills([WARRIOR.powerStrike, WARRIOR.slashBlast]);
+    const s0: E2eSnapshot = await p.probe.waitFor('slash blast owned', (s: E2eSnapshot): boolean =>
+      s.treeSkills.some((t: E2eSnapshot['treeSkills'][number]): boolean => t.id === WARRIOR.slashBlast && t.owned),
     );
-    const strike: E2eSnapshot['usableSkills'][number] = s0.usableSkills.find(
-      (k: E2eSnapshot['usableSkills'][number]): boolean => k.id === 'warrior-power-strike',
-    )!;
     const spot: SafeSpot = safeSpotOf(s0);
+    // Stand at the end away from the spot's own ladder (skills don't fire on a ladder).
+    const ladder: LevelRope | undefined = levelRopes(s0).find(
+      (r: LevelRope): boolean => r.x >= spot.x && r.x <= spot.x + spot.width && Math.abs(r.topY - spot.y) < 40,
+    );
+    const standLeft: boolean = !ladder || ladder.x > spot.x + spot.width / 2;
     await p.probe.teleport(
-      spot.x + spot.width / 2 - WORLD.playerWidth / 2,
+      standLeft ? spot.x + 4 : spot.x + spot.width - WORLD.playerWidth - 4,
       spot.y - WORLD.playerHeight,
     );
     await p.probe.waitFor(
@@ -168,27 +170,47 @@ test.describe('safe spot', { tag: '@solo' }, (): void => {
       while (Date.now() < end) {
         const s: E2eSnapshot = await p.probe.state();
         attacked = attacked || s.player!.isAttacking;
-        const k: E2eSnapshot['usableSkills'][number] | undefined = s.usableSkills.find(
-          (u: E2eSnapshot['usableSkills'][number]): boolean => u.id === strike.id,
-        );
-        cooldown = Math.max(cooldown, k?.cooldownTicks ?? 0);
+        cooldown = Math.max(cooldown, cooldownOf(s, WARRIOR.slashBlast));
         await p.wait(30);
       }
       await p.release(pressKey);
       return { attacked, cooldown };
     };
+    const slashBlast: () => Promise<{ cooldown: number; animations: string[] }> = async (): Promise<{
+      cooldown: number;
+      animations: string[];
+    }> => {
+      const events: E2eVfxLogEntry[] = await vfxQueuedBy(p, (): Promise<void> => castSkill(p, WARRIOR.slashBlast), 300);
+      return { cooldown: cooldownOf(await p.probe.state(), WARRIOR.slashBlast), animations: animationsIn(events) };
+    };
 
     expect((await attackedWhile(KEYS.attack)).attacked, 'no swing from the safe spot').toBe(false);
-    expect((await attackedWhile(String(strike.slot))).cooldown, 'power strike does not fire').toBe(
-      0,
-    );
+    const blocked: { cooldown: number; animations: string[] } = await slashBlast();
+    expect(blocked.cooldown, 'slash blast does not fire from the safe spot').toBe(0);
+    expect(blocked.animations, 'no slash blast animation').not.toContain(WARRIOR.slashBlast);
+    expect(
+      (await p.probe.state()).restingPlayerIds,
+      'the slash blast double tap kept the player on the safe spot',
+    ).toContain(s0.player!.id);
 
-    await p.probe.teleport(spot.x, GROUND.y - WORLD.playerHeight - 40);
+    // Ground clear of every ladder (a skill key on a ladder does nothing).
+    let groundX: number = spot.x;
+    for (let x: number = 80; x < WORLD.width - 80; x += 40) {
+      if (levelRopes(s0).every((r: LevelRope): boolean => Math.abs(r.x - (x + WORLD.playerWidth / 2)) > 80)) {
+        groundX = x;
+        break;
+      }
+    }
+    await p.probe.teleport(groundX, GROUND.y - WORLD.playerHeight - 40);
     await p.probe.waitFor(
       'back on the ground',
       (s: E2eSnapshot): boolean =>
         s.player!.isGrounded && !s.restingPlayerIds.includes(s.player!.id),
     );
     expect((await attackedWhile(KEYS.attack)).attacked, 'swings again on the ground').toBe(true);
+    await p.wait(800);
+    const fired: { cooldown: number; animations: string[] } = await slashBlast();
+    expect(fired.animations, 'slash blast fires on the ground').toContain(WARRIOR.slashBlast);
+    expect(fired.cooldown).toBeGreaterThan(0);
   });
 });

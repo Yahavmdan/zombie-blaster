@@ -1,8 +1,9 @@
 import {
-  ActiveBuff,
   CharacterState,
   GAME_CONSTANTS,
+  MagnetPullRequest,
   SKILLS,
+  ZombieEffectRequest,
   SPECIAL_DROP_DEFINITIONS,
   SkillDefinition,
   SkillType,
@@ -53,12 +54,15 @@ import {
   PlayerTint,
   PoisonEffect,
   Rope,
+  SkillMotion,
   SpitterProjectile,
 } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { DropSystem } from './drop-system';
 import { CombatSystem } from './combat-system';
+import { TreeSkillSystem } from './tree-skill-system';
+import { applyZombieEffect } from './zombie-effects';
 import { ProjectileSystem } from './projectile-system';
 import { ZombieSystem } from './zombie-system';
 import { BoulderPuzzleSystem } from './boulder-puzzle-system';
@@ -247,7 +251,10 @@ export class GameEngine implements IGameEngine {
   pendingReviveTargetIds: string[] = [];
   pendingSpecialDropActivations: SpecialDropType[] = [];
   pendingVfxEvents: VfxEvent[] = [];
-  pendingPullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> = [];
+  pendingPullEvents: Array<MagnetPullRequest> = [];
+  pendingZombieEffects: ZombieEffectRequest[] = [];
+  skillMotion: SkillMotion | null = null;
+  private mpRegenTicks: number = 0;
   remotePlayerAnimators: Map<string, SpriteAnimator> = new Map<string, SpriteAnimator>();
   zombieInterpolation: Map<string, EntityInterpolation> = new Map<string, EntityInterpolation>();
   remotePlayerInterpolation: Map<string, EntityInterpolation> = new Map<string, EntityInterpolation>();
@@ -261,6 +268,7 @@ export class GameEngine implements IGameEngine {
   private readonly vfxSystem: VfxSystem;
   private readonly dropSystem: DropSystem;
   private readonly combatSystem: CombatSystem;
+  private readonly treeSkillSystem: TreeSkillSystem;
   private readonly projectileSystem: ProjectileSystem;
   private readonly zombieSystem: ZombieSystem;
   private readonly boulderPuzzleSystem: BoulderPuzzleSystem;
@@ -281,6 +289,7 @@ export class GameEngine implements IGameEngine {
     this.vfxSystem = new VfxSystem(this);
     this.dropSystem = new DropSystem(this, this.physicsSystem, this.vfxSystem);
     this.combatSystem = new CombatSystem(this, this.physicsSystem, this.vfxSystem, this.dropSystem);
+    this.treeSkillSystem = new TreeSkillSystem(this, this.physicsSystem, this.vfxSystem, this.combatSystem);
     this.projectileSystem = new ProjectileSystem(this, this.physicsSystem, this.vfxSystem);
     this.zombieSystem = new ZombieSystem(this, this.physicsSystem, this.combatSystem, this.projectileSystem, this.dropSystem);
     this.boulderPuzzleSystem = new BoulderPuzzleSystem(this, this.combatSystem, this.vfxSystem);
@@ -480,6 +489,9 @@ export class GameEngine implements IGameEngine {
     this.activeSpecialEffects = [];
     this.pendingVfxEvents = [];
     this.pendingPullEvents = [];
+    this.pendingZombieEffects = [];
+    this.skillMotion = null;
+    this.mpRegenTicks = 0;
     this.reviveTargetId = null;
     this.reviveProgressTicks = 0;
     this.pendingReviveTargetIds.length = 0;
@@ -498,6 +510,8 @@ export class GameEngine implements IGameEngine {
     this.autoPotionCooldown = 0;
     this.doubleJumpUsed = false;
     this.doubleJumpAnimTicks = 0;
+    this.treeSkillSystem.reset();
+    this.combatSystem.hooks = this.treeSkillSystem.isActive() ? this.treeSkillSystem : null;
     this.zombieSystem.startFloor();
     this.lastTimestamp = performance.now();
     document.addEventListener('visibilitychange', this.onVisibilityChange);
@@ -542,6 +556,11 @@ export class GameEngine implements IGameEngine {
     this.zombieSystem.startFloor();
   }
 
+  /** A zombie climbing out of the ground at x (cage-release rules: never a boss); e2e probe setup. */
+  spawnZombieAt(x: number): void {
+    this.zombieSystem.spawnZombieAt(x, GAME_CONSTANTS.GROUND_Y);
+  }
+
   /** One regular spawn now (the floor's type roll, at most one boss at a time); e2e probe setup. */
   spawnRolledZombie(): void {
     this.zombieSystem.spawnRolledZombie();
@@ -552,6 +571,17 @@ export class GameEngine implements IGameEngine {
       this.jumpBufferTicks = GAME_CONSTANTS.JUMP_BUFFER_TICKS;
     }
     this.keys = keys;
+    if (this.treeSkillSystem.isActive()) this.treeSkillSystem.keysChanged(keys);
+  }
+
+  /** A menu opened or the window lost focus: skill-bar presses not fired yet are dropped. */
+  cancelQueuedSkills(): void {
+    this.treeSkillSystem.idle();
+  }
+
+  /** A quick slot holding a tree skill: fired on the next tick like its skill-bar key. */
+  queueTreeSkill(skillId: string): void {
+    if (this.treeSkillSystem.isActive()) this.treeSkillSystem.queueSkill(skillId);
   }
 
   /** A potion from a quick slot: the same cooldown and alive/not-down rule as the potion keys. */
@@ -576,6 +606,7 @@ export class GameEngine implements IGameEngine {
     this.player.unallocatedStatPoints = player.unallocatedStatPoints;
     this.player.unallocatedSkillPoints = player.unallocatedSkillPoints;
     this.player.skillLevels = { ...player.skillLevels };
+    this.player.skillBar = player.skillBar ? [...player.skillBar] : undefined;
     this.player.inventory = { ...player.inventory };
     this.player.hp = Math.max(this.player.hp, player.hp);
     this.player.mp = Math.max(this.player.mp, player.mp);
@@ -656,6 +687,7 @@ export class GameEngine implements IGameEngine {
       this.updatePlayerActions();
     } else {
       this.physicsSystem.updateDownedBody();
+      this.treeSkillSystem.downed();
     }
 
     this.combatSystem.updatePlayerProjectiles();
@@ -709,6 +741,8 @@ export class GameEngine implements IGameEngine {
     this.combatSystem.updateDashPhase();
     this.spriteEffectSystem.tick();
     if (playerCanAct) {
+      this.treeSkillSystem.updateTimers();
+      this.regenerateMp();
       this.combatSystem.updateActiveBuffs();
       this.combatSystem.updatePassiveSkills();
       this.combatSystem.updateAutoPotion();
@@ -741,10 +775,28 @@ export class GameEngine implements IGameEngine {
     }
   }
 
+  /** Every player slowly regains MP, so skills are never locked out for good. */
+  private regenerateMp(): void {
+    const p: CharacterState | null = this.player;
+    if (!p) return;
+    this.mpRegenTicks++;
+    if (this.mpRegenTicks < GAME_CONSTANTS.PLAYER_MP_REGEN_INTERVAL_TICKS) return;
+    this.mpRegenTicks = 0;
+    if (p.mp >= p.derived.maxMp) return;
+    p.mp = Math.min(p.derived.maxMp, p.mp + 1);
+    this.onPlayerUpdate?.(p);
+  }
+
+  /** Second Wind (warrior tree): a killing blow leaves the player at 1 HP once per floor. */
+  trySecondWind(): boolean {
+    return this.treeSkillSystem.trySecondWind();
+  }
+
   /** Single player has nobody to send to: drop what the systems queued for other players. */
   discardOutboundEvents(): void {
     this.pendingVfxEvents.length = 0;
     this.pendingPullEvents.length = 0;
+    this.pendingZombieEffects.length = 0;
     this.pendingRemoteAttacks.length = 0;
     this.pendingReviveTargetIds.length = 0;
     this.pendingSpecialDropActivations.length = 0;
@@ -816,9 +868,10 @@ export class GameEngine implements IGameEngine {
 
     this.reviveProgressTicks++;
 
-    if (this.reviveProgressTicks >= GAME_CONSTANTS.REVIVE_CHANNEL_TICKS) {
+    if (this.reviveProgressTicks >= this.treeSkillSystem.reviveChannelTicks()) {
       this.pendingReviveTargetIds.push(nearestDownId);
       this.onPlayerRevived?.(nearestDownId);
+      this.treeSkillSystem.onReviveDone(nearestDownId);
       this.reviveTargetId = null;
       this.reviveProgressTicks = 0;
     }
@@ -922,37 +975,46 @@ export class GameEngine implements IGameEngine {
   private updatePlayerActions(): void {
     if (!this.player) return;
 
+    this.treeSkillSystem.beginTick();
     this.physicsSystem.updatePlayer();
 
-    if (this.playerStunTicks > 0) return;
+    if (this.playerStunTicks > 0) {
+      this.treeSkillSystem.idle();
+      return;
+    }
 
     // Hands full: no attacks or skills while carrying corpses (attack throws them instead).
-    if (this.corpseCarrySystem.handleInput()) return;
+    if (this.corpseCarrySystem.handleInput()) {
+      this.treeSkillSystem.idle();
+      return;
+    }
 
     // Weapons down on the safe spot: zombies can't reach you there, so you can't hit them either.
     const resting: boolean = this.isInSafeSpot(this.player.x, this.player.y);
-    if (this.keys.attack && this.attackCooldown <= 0 && !resting) {
+    const treeClass: boolean = this.treeSkillSystem.isActive();
+    // A tree skill that owns the body (a dash, a slam, a charge run) leaves no hand free to swing.
+    const busy: boolean = treeClass && this.treeSkillSystem.busy();
+    // Attack-button combos (double tap, air hold, hold and let go) take the swing's place.
+    const comboTaken: boolean = treeClass && this.treeSkillSystem.updateAttack(resting);
+    if (this.keys.attack && this.attackCooldown <= 0 && !resting && !busy && !comboTaken) {
       this.combatSystem.performAttack();
-      let cooldownTicks: number = GAME_CONSTANTS.PLAYER_ATTACK_COOLDOWN_TICKS;
-      const atkSpeedBuff: ActiveBuff | undefined = this.player!.activeBuffs.find(
-        (b: ActiveBuff): boolean => b.stat === 'attackSpeed' && b.remainingMs > 0,
-      );
-      if (atkSpeedBuff) {
-        cooldownTicks = Math.max(6, Math.floor(cooldownTicks * (1 - atkSpeedBuff.value / 100)));
-      }
-      this.attackCooldown = cooldownTicks;
+      this.attackCooldown = this.combatSystem.attackCooldownTicks(this.player);
+    }
+    if (treeClass) {
+      // Skill-tree classes: keys 1-6 fire the skill on that skill-bar slot.
+      this.treeSkillSystem.updateInput(resting);
+    } else {
+      if (this.keys.skill1) this.combatSystem.tryPerformSkill(0);
+      if (this.keys.skill2) this.combatSystem.tryPerformSkill(1);
+      if (this.keys.skill3) this.combatSystem.tryPerformSkill(2);
+      if (this.keys.skill4) this.combatSystem.tryPerformSkill(3);
+      if (this.keys.skill5) this.combatSystem.tryPerformSkill(4);
+      if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
     }
     if (this.attackCooldown > 0) this.attackCooldown--;
-
-    if (this.keys.skill1) this.combatSystem.tryPerformSkill(0);
-    if (this.keys.skill2) this.combatSystem.tryPerformSkill(1);
-    if (this.keys.skill3) this.combatSystem.tryPerformSkill(2);
-    if (this.keys.skill4) this.combatSystem.tryPerformSkill(3);
-    if (this.keys.skill5) this.combatSystem.tryPerformSkill(4);
-    if (this.keys.skill6) this.combatSystem.tryPerformSkill(5);
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     if (!this.player) return null;
     const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
@@ -962,8 +1024,10 @@ export class GameEngine implements IGameEngine {
     this.pendingSpecialDropActivations.length = 0;
     const vfxEvents: VfxEvent[] = [...this.pendingVfxEvents];
     this.pendingVfxEvents.length = 0;
-    const pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> = [...this.pendingPullEvents];
+    const pullEvents: Array<MagnetPullRequest> = [...this.pendingPullEvents];
     this.pendingPullEvents.length = 0;
+    const zombieEffects: ZombieEffectRequest[] = [...this.pendingZombieEffects];
+    this.pendingZombieEffects.length = 0;
     return {
       player: { ...this.player, isAfk: this.isLocalAfk },
       zombies: this.zombies
@@ -987,6 +1051,7 @@ export class GameEngine implements IGameEngine {
       ),
       vfxEvents,
       pullEvents,
+      zombieEffects,
       spitterProjectiles: this.spitterProjectiles.map(
         (p: SpitterProjectile): SpitterProjectile => ({ ...p, trail: p.trail.map((t: { x: number; y: number; life: number }) => ({ ...t })) }),
       ),
@@ -1292,6 +1357,9 @@ export class GameEngine implements IGameEngine {
         case VfxEventType.Lightning:
           this.vfxSystem.strikeLightning(evt.x, evt.value!);
           break;
+        case VfxEventType.AllyBuff:
+          this.treeSkillSystem.applyAllyEffect(evt);
+          break;
       }
       // Other players' effects render a bit softer so your own read first.
       for (let i: number = particlesBefore; i < this.particles.length; i++) {
@@ -1307,6 +1375,7 @@ export class GameEngine implements IGameEngine {
     if (this.invincibilityFrames > 0) return;
     // The host aimed at where it last saw us; we already made it up to the safe spot (or went away).
     if (this.isOutOfReach(p)) return;
+    if (!isPoisonAttack && this.parryIncoming(p, knockbackDir)) return;
 
     p.hp -= damage;
     this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
@@ -1369,6 +1438,10 @@ export class GameEngine implements IGameEngine {
       });
     }
 
+    if (p.hp <= 0 && this.trySecondWind()) {
+      this.onPlayerUpdate?.(p);
+      return;
+    }
     if (p.hp <= 0) {
       p.hp = 0;
       const isMultiplayer: boolean = this.isMultiplayerHost || this.isMultiplayerClient;
@@ -1385,6 +1458,37 @@ export class GameEngine implements IGameEngine {
       return;
     }
     this.onPlayerUpdate?.(p);
+  }
+
+  /**
+   * A guest's parry (Counter): the host's hit names no zombie, only the push direction, so the
+   * attacker is the nearest zombie on the side the hit came from.
+   */
+  private parryIncoming(p: CharacterState, knockbackDir: number): boolean {
+    const cx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const side: number = knockbackDir > 0 ? -1 : 1;
+    let attacker: ZombieState | null = null;
+    let best: number = Infinity;
+    for (const z of this.zombies) {
+      // Only a zombie mid-swing can be parried (not a fireball that happens to come from that side).
+      if (z.isDead || z.attackAnimTimer <= 0) continue;
+      const dx: number = (z.x + z.instanceWidth / 2 - cx) * side;
+      if (dx < 0 || dx > GAME_CONSTANTS.ZOMBIE_ATTACK_RANGE + z.instanceWidth) continue;
+      if (dx < best) {
+        best = dx;
+        attacker = z;
+      }
+    }
+    return this.combatSystem.hooks?.tryParry(cx + side * GAME_CONSTANTS.PLAYER_WIDTH, attacker) ?? false;
+  }
+
+  /** Host: a guest's skill pushed, launched or stunned zombies (clamped in applyZombieEffect). */
+  applyRemoteZombieEffects(effects: ZombieEffectRequest[]): void {
+    if (!this.isMultiplayerHost) return;
+    for (const req of effects) {
+      const z: ZombieState | undefined = this.zombies.find((zombie: ZombieState): boolean => zombie.id === req.zombieId);
+      if (z) applyZombieEffect(z, req, this.fixedDt);
+    }
   }
 
   applyRemoteDamage(events: Array<{ zombieId: string; damage: number; killed: boolean }>): void {
@@ -1408,10 +1512,11 @@ export class GameEngine implements IGameEngine {
     this.combatSystem.filterDeadZombies();
   }
 
-  applyRemotePull(evt: { playerX: number; playerY: number; pullRange: number; skillColor: string }): void {
+  applyRemotePull(evt: MagnetPullRequest): void {
     if (!this.isMultiplayerHost) return;
 
-    pullZombiesToward(this.zombies, evt.playerX, evt.playerY, evt.pullRange);
+    const stunMs: number = Math.max(0, Math.min(evt.stunMs ?? 0, GAME_CONSTANTS.SKILL_MAX_REMOTE_STUN_MS));
+    pullZombiesToward(this.zombies, evt.playerX, evt.playerY, evt.pullRange, Math.round(stunMs / this.fixedDt));
   }
 
   setRemotePlayers(players: CharacterState[]): void {

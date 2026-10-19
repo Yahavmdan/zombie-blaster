@@ -1,11 +1,13 @@
 import { Locator } from '@playwright/test';
 import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer } from '../../support/game-player';
-import { E2eSkillView, E2eSnapshot, E2eZombieView } from '../../support/probe';
+import { E2eSnapshot, E2eVfxLogEntry, E2eZombieView } from '../../support/probe';
+import { vfxQueuedBy } from '../../support/vfx-gate';
+import { WARRIOR, animationsIn, castSkill, cooldownOf, warriorArena, zombieAt } from '../../support/warrior';
 
 /**
- * Gameplay corners no other spec reaches: a skill that kills, a potion on a quick slot pressed
- * twice.
+ * Gameplay corners no other spec reaches: a skill that kills, a skill key spammed, a potion on a
+ * quick slot pressed twice.
  */
 
 const HP_POTION: string = 'hp-potion-1';
@@ -15,12 +17,6 @@ function liveZombies(s: E2eSnapshot): E2eZombieView[] {
   return s.zombies.filter(
     (z: E2eZombieView): boolean => !z.isDead && z.spawnTimer <= 0 && z.type !== 'eater',
   );
-}
-
-/** Teleports beside the nearest grounded zombie, facing it. */
-async function standNextTo(player: GamePlayer, z: E2eZombieView): Promise<void> {
-  await player.probe.teleport(z.x - 40, z.y + z.height - 48);
-  await player.face('right');
 }
 
 async function middleClickCanvas(player: GamePlayer): Promise<void> {
@@ -42,43 +38,29 @@ test.describe('gameplay edge cases', { tag: '@solo' }, (): void => {
     test.setTimeout(90_000);
     const player: GamePlayer = await solo('warrior');
     await player.probe.maxOutPlayer();
-    await player.probe.setGodMode(false);
-    const strike: E2eSkillView | undefined = (await player.probe.state()).usableSkills.find(
-      (k: E2eSkillView): boolean => k.id === 'warrior-slash-blast',
-    );
-    expect(strike, 'slash blast is usable after maxing out').toBeDefined();
+    // Slash blast (double tap) on open ground; a maxed warrior kills a floor-1 walker outright.
+    const x: number = await warriorArena(player, [WARRIOR.powerStrike, WARRIOR.slashBlast], false);
 
     const deadline: number = Date.now() + 60_000;
     let measured: { before: number; after: number } | null = null;
     while (Date.now() < deadline && measured === null) {
-      const s: E2eSnapshot = await player.probe.state();
-      const target: E2eZombieView | undefined = liveZombies(s)[0];
-      if (
-        !target ||
-        s.usableSkills.find((k: E2eSkillView): boolean => k.id === strike!.id)!.cooldownTicks > 0
-      ) {
-        await player.wait(300);
-        continue;
-      }
-      await standNextTo(player, target);
-      const before: E2eSnapshot = await player.probe.state();
-      const kills0: Set<string> = new Set<string>(
-        liveZombies(before).map((z: E2eZombieView): string => z.id),
+      await player.probe.waitFor(
+        'slash blast ready',
+        (st: E2eSnapshot): boolean => cooldownOf(st, WARRIOR.slashBlast) === 0,
+        { timeoutMs: 5_000 },
       );
-      await player.castSkill(strike!.slot);
+      const target: string = await zombieAt(player, x + 50);
+      await player.face('right');
+      const before: E2eSnapshot = await player.probe.state();
+      await castSkill(player, WARRIOR.slashBlast, before);
       const after: E2eSnapshot = await player.probe.waitFor(
-        'skill cast',
-        (st: E2eSnapshot): boolean =>
-          st.usableSkills.find((k: E2eSkillView): boolean => k.id === strike!.id)!.cooldownTicks >
-          0,
+        'slash blast cast',
+        (st: E2eSnapshot): boolean => cooldownOf(st, WARRIOR.slashBlast) > 0,
         { timeoutMs: 2_000 },
       );
       await player.wait(400);
       const settled: E2eSnapshot = await player.probe.state();
-      const killed: boolean = [...kills0].some(
-        (id: string): boolean =>
-          !liveZombies(settled).some((z: E2eZombieView): boolean => z.id === id),
-      );
+      const killed: boolean = !liveZombies(settled).some((z: E2eZombieView): boolean => z.id === target);
       if (killed && settled.player!.level === after.player!.level) {
         measured = { before: before.player!.mp, after: settled.player!.mp };
       }
@@ -88,6 +70,43 @@ test.describe('gameplay edge cases', { tag: '@solo' }, (): void => {
       measured!.after,
       `MP before ${measured!.before}, after the killing cast ${measured!.after}`,
     ).toBeLessThan(measured!.before);
+  });
+
+  test('mashing attack respects the slash blast cooldown', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const player: GamePlayer = await solo('warrior');
+    await warriorArena(player, [WARRIOR.powerStrike, WARRIOR.slashBlast]);
+    await castSkill(player, WARRIOR.slashBlast);
+    const first: E2eSnapshot = await player.probe.waitFor(
+      'the first slash blast starts its cooldown',
+      (st: E2eSnapshot): boolean => cooldownOf(st, WARRIOR.slashBlast) > 0,
+      { timeoutMs: 2_000 },
+    );
+    const cooldownMs: number = cooldownOf(first, WARRIOR.slashBlast) * 20;
+    await player.probe.waitFor(
+      'cooldown over',
+      (st: E2eSnapshot): boolean => cooldownOf(st, WARRIOR.slashBlast) === 0,
+      { timeoutMs: 10_000 },
+    );
+
+    const spamStart: number = Date.now();
+    const queued: E2eVfxLogEntry[] = await vfxQueuedBy(
+      player,
+      async (): Promise<void> => {
+        // Every quick pair of presses is a double tap.
+        for (let i: number = 0; i < 30; i++) await player.attack();
+      },
+      0,
+    );
+    const elapsedMs: number = Date.now() - spamStart;
+    const casts: number = animationsIn(queued).filter((k: string): boolean => k === WARRIOR.slashBlast).length;
+    expect(casts, `${casts} slash blasts in ${elapsedMs}ms with a ${cooldownMs}ms cooldown`).toBeLessThanOrEqual(
+      Math.floor(elapsedMs / cooldownMs) + 1,
+    );
+    expect(casts).toBeGreaterThanOrEqual(1);
   });
 
   test('a potion on a quick slot respects the potion cooldown', async ({

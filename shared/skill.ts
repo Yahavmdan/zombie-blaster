@@ -5,6 +5,8 @@ export enum SkillType {
   Active = 'active',
   Buff = 'buff',
   Passive = 'passive',
+  /** Tree skills that trigger on their own when something happens (a parry, a lethal hit, low HP). */
+  Reactive = 'reactive',
 }
 
 export type PassiveCondition = 'always' | 'standingStill';

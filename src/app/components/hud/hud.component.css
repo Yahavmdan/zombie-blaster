@@ -110,6 +110,96 @@
   color: var(--bone-dim);
 }
 
+/* tree-class skill bar (keys 1-6): the shade drains as the cooldown runs */
+.cd-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cd {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+}
+
+.cd-shade {
+  position: absolute;
+  inset: auto 0 0;
+  background: var(--overlay);
+}
+
+.cd-time {
+  position: absolute;
+  font-size: var(--fs-12);
+  font-weight: 700;
+  color: var(--bone);
+  text-shadow: var(--text-shadow);
+}
+
+.cd--ready {
+  border-color: var(--edge-light);
+}
+
+.cd--empty {
+  background: var(--ink-2);
+}
+
+.cd-key {
+  position: absolute;
+  left: 1px;
+  top: -1px;
+  font-size: var(--fs-12);
+  color: var(--bone-dim);
+  text-shadow: var(--text-shadow);
+}
+
+/* "New move" plate after learning a tree skill, under the floor sign */
+.new-move {
+  position: absolute;
+  top: 56px;
+  left: 0;
+  right: 0;
+  width: max-content;
+  margin: 0 auto;
+  display: grid;
+  gap: 4px;
+  padding: 6px 12px;
+  border-top: var(--border) solid var(--gold);
+  animation: new-move-in 120ms steps(3);
+}
+
+.new-move-title {
+  font-size: var(--fs-14);
+  color: var(--gold);
+  text-shadow: var(--text-shadow);
+}
+
+.new-move-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.new-move-name {
+  font-size: var(--fs-16);
+  font-weight: 700;
+  text-shadow: var(--text-shadow);
+}
+
+.new-move-note {
+  font-size: var(--fs-14);
+  color: var(--bone-dim);
+}
+
+@keyframes new-move-in {
+  from {
+    transform: scale(0.8);
+  }
+}
+
 /* ---- top-center: hanging floor sign ---- */
 
 .hud-center {

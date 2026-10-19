@@ -12,7 +12,7 @@ import {
 } from '@shared/index';
 
 function makePlayer(overrides: Partial<CharacterState> = {}): CharacterState {
-  const classId: CharacterClass = overrides.classId ?? CharacterClass.Warrior;
+  const classId: CharacterClass = overrides.classId ?? CharacterClass.Assassin;
   const baseDef = CHARACTER_CLASSES[classId];
   return {
     id: 'test-player',
@@ -52,12 +52,13 @@ describe('SkillTreeComponent', () => {
   let component: SkillTreeComponent;
   let componentRef: ComponentRef<SkillTreeComponent>;
 
-  const warriorSkills: SkillDefinition[] = SKILLS.filter(
-    (s: SkillDefinition) => s.classId === CharacterClass.Warrior,
+  // The warrior moved to a skill tree; the assassin still levels skills in this window.
+  const legacySkills: SkillDefinition[] = SKILLS.filter(
+    (s: SkillDefinition) => s.classId === CharacterClass.Assassin,
   );
 
-  const skillWithMax30: SkillDefinition = warriorSkills.find(
-    (s: SkillDefinition) => s.maxLevel === 30,
+  const skillWithMax20: SkillDefinition = legacySkills.find(
+    (s: SkillDefinition) => s.maxLevel === 20,
   )!;
 
   beforeEach(async () => {
@@ -70,88 +71,88 @@ describe('SkillTreeComponent', () => {
     componentRef = fixture.componentRef;
   });
 
-  it('should show canInvest=true for a maxLevel:30 skill at level 20', () => {
-    const skillLevels: Record<string, number> = { [skillWithMax30.id]: 20 };
-    if (skillWithMax30.prerequisite) {
-      skillLevels[skillWithMax30.prerequisite.skillId] = skillWithMax30.prerequisite.level;
+  it('should show canInvest=true for a maxLevel:20 skill at level 19', () => {
+    const skillLevels: Record<string, number> = { [skillWithMax20.id]: 19 };
+    if (skillWithMax20.prerequisite) {
+      skillLevels[skillWithMax20.prerequisite.skillId] = skillWithMax20.prerequisite.level;
     }
 
     componentRef.setInput('player', makePlayer({
       unallocatedSkillPoints: 5,
       skillLevels,
     }));
-    componentRef.setInput('skills', warriorSkills);
+    componentRef.setInput('skills', legacySkills);
     fixture.detectChanges();
 
     const node: SkillTreeNode | undefined = component.skillNodes().find(
-      (n: SkillTreeNode) => n.skill.id === skillWithMax30.id,
+      (n: SkillTreeNode) => n.skill.id === skillWithMax20.id,
     );
 
     expect(node).toBeDefined();
-    expect(node!.currentLevel).toBe(20);
-    expect(node!.maxLevel).toBe(30);
+    expect(node!.currentLevel).toBe(19);
+    expect(node!.maxLevel).toBe(20);
     expect(node!.isMaxed).toBe(false);
     expect(node!.canInvest).toBe(true);
   });
 
-  it('should render the invest button as enabled at level 20 for maxLevel:30 skill', () => {
-    const skillLevels: Record<string, number> = { [skillWithMax30.id]: 20 };
-    if (skillWithMax30.prerequisite) {
-      skillLevels[skillWithMax30.prerequisite.skillId] = skillWithMax30.prerequisite.level;
+  it('should render the invest button as enabled at level 19 for maxLevel:20 skill', () => {
+    const skillLevels: Record<string, number> = { [skillWithMax20.id]: 19 };
+    if (skillWithMax20.prerequisite) {
+      skillLevels[skillWithMax20.prerequisite.skillId] = skillWithMax20.prerequisite.level;
     }
 
     componentRef.setInput('player', makePlayer({
       unallocatedSkillPoints: 5,
       skillLevels,
     }));
-    componentRef.setInput('skills', warriorSkills);
+    componentRef.setInput('skills', legacySkills);
     fixture.detectChanges();
 
     const investBtn: HTMLButtonElement | null = fixture.nativeElement.querySelector(
-      `[data-testid="skill-tree-button-invest-${skillWithMax30.id}"]`,
+      `[data-testid="skill-tree-button-invest-${skillWithMax20.id}"]`,
     );
 
     expect(investBtn).not.toBeNull();
     expect(investBtn!.disabled).toBe(false);
   });
 
-  it('should show level as 20/30 not 20/20 for maxLevel:30 skill', () => {
-    const skillLevels: Record<string, number> = { [skillWithMax30.id]: 20 };
-    if (skillWithMax30.prerequisite) {
-      skillLevels[skillWithMax30.prerequisite.skillId] = skillWithMax30.prerequisite.level;
+  it('should show level as 19/20 for a maxLevel:20 skill', () => {
+    const skillLevels: Record<string, number> = { [skillWithMax20.id]: 19 };
+    if (skillWithMax20.prerequisite) {
+      skillLevels[skillWithMax20.prerequisite.skillId] = skillWithMax20.prerequisite.level;
     }
 
     componentRef.setInput('player', makePlayer({
       unallocatedSkillPoints: 5,
       skillLevels,
     }));
-    componentRef.setInput('skills', warriorSkills);
+    componentRef.setInput('skills', legacySkills);
     fixture.detectChanges();
 
     const card: HTMLElement | null = fixture.nativeElement.querySelector(
-      `[data-testid="skill-tree-card-${skillWithMax30.id}"]`,
+      `[data-testid="skill-tree-card-${skillWithMax20.id}"]`,
     );
     expect(card).not.toBeNull();
 
     const levelText: string = card!.querySelector('.skill-card-level')?.textContent?.trim() ?? '';
-    expect(levelText).toBe('20/30');
+    expect(levelText).toBe('19/20');
   });
 
-  it('should show isMaxed=true only when currentLevel reaches actual maxLevel (30)', () => {
-    const skillLevels: Record<string, number> = { [skillWithMax30.id]: 30 };
-    if (skillWithMax30.prerequisite) {
-      skillLevels[skillWithMax30.prerequisite.skillId] = skillWithMax30.prerequisite.level;
+  it('should show isMaxed=true only when currentLevel reaches actual maxLevel (20)', () => {
+    const skillLevels: Record<string, number> = { [skillWithMax20.id]: 20 };
+    if (skillWithMax20.prerequisite) {
+      skillLevels[skillWithMax20.prerequisite.skillId] = skillWithMax20.prerequisite.level;
     }
 
     componentRef.setInput('player', makePlayer({
       unallocatedSkillPoints: 5,
       skillLevels,
     }));
-    componentRef.setInput('skills', warriorSkills);
+    componentRef.setInput('skills', legacySkills);
     fixture.detectChanges();
 
     const node: SkillTreeNode | undefined = component.skillNodes().find(
-      (n: SkillTreeNode) => n.skill.id === skillWithMax30.id,
+      (n: SkillTreeNode) => n.skill.id === skillWithMax20.id,
     );
 
     expect(node).toBeDefined();

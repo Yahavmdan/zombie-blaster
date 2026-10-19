@@ -19,6 +19,7 @@ import {
 } from './game-entities';
 import { KeyBindings } from './messages';
 import { SkillDefinition, SkillType } from './skill';
+import { AttackCombo, ClassSkillTree, TreeSkill } from './skill-tree';
 
 // ═══════════════════════════════════════════════════════════════
 //  GAME CONSTANTS
@@ -96,9 +97,9 @@ export const GAME_CONSTANTS = {
 
   // ─── XP & Leveling ─────────────────────────────
   XP_BASE: 120, // XP needed to reach level 2
-  XP_GROWTH: 1.6, // Each level requires this much more XP than the previous one
+  XP_GROWTH: 1.3, // Each level requires this much more XP than the previous one (skill-tree capstones at lv 16 stay reachable)
   STAT_POINTS_PER_LEVEL: 5, // Stat points awarded per level up
-  SKILL_POINTS_PER_LEVEL: 3, // Skill points awarded per level up
+  SKILL_POINTS_PER_LEVEL: 3, // Skill points per level up for classes without a skill tree (SKILLS levels)
   MAX_SKILL_LEVEL: 20, // Highest level any skill can be raised to
 
   // ─── Floor Progression ────────────────────────
@@ -476,6 +477,68 @@ export const GAME_CONSTANTS = {
   // ─── Tick Rate ──────────────────────────────────
   TICK_RATE: 50, // Game loop runs at this many ticks per second
 
+  // ─── Skill tree (classes in SKILL_TREES) ────────
+  TREE_SKILL_POINTS_PER_LEVEL: 1, // A tree class gets one point per level up; every skill costs one point
+  TREE_STARTING_SKILL_POINTS: 1, // ...and one point at level 1, so a skill is there from the start
+  SKILL_TIER_LEVELS: [1, 4, 8, 12, 16], // Character level that opens tiers 1..5 of a tree
+  RESPEC_GOLD_PER_LEVEL: 50, // Respec price per character level (the first respec is free)
+  PLAYER_MP_REGEN_INTERVAL_TICKS: 50, // Every player regains 1 MP this often (1 per second) so MP never locks skills out
+
+  // ─── Skill bar and HUD (tree classes) ──────────
+  TREE_SKILL_BAR_SLOTS: 6, // Skill-bar slots of a tree class (keys skill1..skill6); one key fires one skill
+  ATTACK_DOUBLE_TAP_MS: 300, // Two attack presses this close fire the double-tap skill (Slash Blast)
+  ATTACK_AIR_HOLD_MS: 250, // Attack held this long in the air fires the air-hold skill (Ground Slam)
+  ATTACK_HOLD_MS: 1000, // Attack held this long on the ground starts charging the hold skill (Power Dash)...
+  ATTACK_CHARGE_MS: 800, // ...which fills over this long; letting go fires it
+  SKILL_DASH_MIN_CHARGE: 0.5, // A dash let go as its charge starts covers this fraction of its distance (full charge: all of it)
+  SKILL_CHARGE_BAR_WIDTH_PX: 36, // The charge bar over a charging player...
+  SKILL_CHARGE_BAR_HEIGHT_PX: 4, // ...its height...
+  SKILL_CHARGE_BAR_RAISE_PX: 34, // ...and how far above the body's top it sits
+  NEW_MOVE_TOAST_MS: 6000, // The HUD's "New move" plate stays up this long after a tree skill is learned
+  SKILL_COOLDOWN_HUD_REFRESH_MS: 100, // The HUD's skill bar redraws its cooldown shades this often
+  TREE_SKILL_VFX_LEVEL: 10, // Particle density tree-skill animations play at (they have no skill level)
+
+  // ─── Warrior tree mechanics ─────────────────────
+  SKILL_STRIKE_RANGE_PX: 70, // Reach of single-target melee skills (power strike, uppercut) past the body
+  SKILL_UPPERCUT_EXTRA_STUN_MS: 600, // An uppercut zombie stays stunned this long after it lands
+  SKILL_SLAM_FALL_SPEED: 18, // Fall speed of a ground slam dive
+  SKILL_SLAM_FALL_PX_PER_BONUS: 200, // Each this many px fallen adds x1 to slam damage...
+  SKILL_SLAM_MAX_MULT: 2.5, // ...up to this multiplier
+  SKILL_SLAM_RADIUS_PER_KG: 0.5, // Slam shockwave grows by this many px per kg of the slammer (PLAYER_WEIGHT_KG)
+  SKILL_SLAM_POP_FORCE: -6, // Zombies in a slam shockwave pop up this hard...
+  SKILL_SLAM_STUN_MS: 480, // ...and stay stunned this long
+  SKILL_SLAM_FX_RAISE_PX: 16, // The slam animation plays this far above the feet
+  SKILL_CLEAVE_VERTICAL_REACH_PX: 24, // Slash blast also hits zombies this far above the head or below the feet
+  SKILL_HEAVY_HANDS_STAGGER_MS: 240, // Heavy hands: a basic hit staggers the zombie this long
+  SKILL_ROAR_ROOT_MS: 600, // Dragon roar roots the warrior this long
+  SKILL_RAMPAGE_CHAINS: 2, // Extra dashes a rampage can chain
+  SKILL_CHARGE_RUN_SPEED: 9, // Shoulder charge speed (px per tick)
+  SKILL_CHARGE_RUN_TICKS: 16, // Shoulder charge length
+  SKILL_CHARGE_RUN_HIT_PAD_PX: 6, // Shoulder charge hits zombies this close to the body
+  SKILL_KNOCKDOWN_MS: 1200, // Shoulder charge knockdown stun
+  SKILL_BACKSTEP_TICKS: 10, // Backstep hop duration
+  SKILL_BACKSTEP_HOP_FORCE: -4, // Backstep hop (negative = up)
+  SKILL_LEAP_JUMP_FORCE: -6, // Leap strike from the ground jumps this hard (negative = up) and covers its reach over the arc
+  SKILL_LEAP_DIVE_TICKS: 12, // Leap strike in the air covers its reach in this many ticks...
+  SKILL_LEAP_DIVE_FALL_SPEED: 9, // ...diving down this fast...
+  SKILL_LEAP_MAX_TICKS: 24, // ...and lands (hits) after at most this long, even still in the air
+  SKILL_LEAP_HIT_RADIUS_PX: 70, // Leap strike landing hit radius
+  SKILL_ADRENALINE_WINDOW_MS: 4000, // Adrenaline: kills within this window stack...
+  SKILL_ADRENALINE_MAX_STACKS: 3, // ...up to this many stacks
+  SKILL_IRON_RECOVERY_STILL_TICKS: 50, // Iron recovery heals after standing still this long...
+  SKILL_IRON_RECOVERY_INTERVAL_TICKS: 150, // ...then every this many ticks (3 s)
+  SKILL_PARRY_STUN_MS: 1000, // A parried zombie is stunned this long
+  SKILL_PARRY_IFRAME_TICKS: 12, // A parry leaves the warrior untouchable this long (one swing can't hit twice)
+  SKILL_PARRY_LOCKOUT_MS: 500, // A parry window that closed without a hit can't reopen for this long (no mashing)
+  SKILL_LAUNCH_DRIFT_SPEED: 1.5, // A launched zombie drifts sideways this fast
+  SKILL_SECOND_WIND_IFRAME_TICKS: 75, // Second wind: invulnerable this long after the save (1.5 s)...
+  SKILL_SECOND_WIND_HEAL_TICKS: 150, // ...then heals over this long (3 s)
+  SKILL_LAST_STAND_HP_PERCENT: 25, // Last stand kicks in below this HP percent
+  SKILL_MAX_REMOTE_STUN_MS: 3000, // Host clamp for a guest's stun request
+  SKILL_MAX_REMOTE_LAUNCH_FORCE: 16, // Host clamp for a guest's launch request (px per tick, upward)
+  SKILL_MAX_REMOTE_PUSH_FORCE: 14, // Host clamp for a guest's knockback request
+  SKILL_STUN_STAR_COLOR: '#ffe08a', // Stars circling a stunned zombie
+
 } as const;
 
 // ─── Special Drop Definitions ─────────────────────
@@ -784,527 +847,8 @@ export function isZombieWindingUp(z: ZombieState): boolean {
 
 export const SKILLS: SkillDefinition[] = [
 
-  // ═══ WARRIOR ═══
-  {
-    id: 'warrior-power-strike',
-    name: 'Power Strike',
-    classId: CharacterClass.Warrior,
-    type: SkillType.Active,
-    description: 'Use MP to deliver a killer blow to a single monster with a melee weapon.',
-    maxLevel: 20,
-    requiredCharacterLevel: 1,
-    icon: 'sword',
-    color: '#ff4444',
-    scaling: {
-      baseDamage: 1.65, damagePerLevel: 0.05,
-      baseMpCost: 4, mpCostPerLevel: 0.42,
-      baseCooldown: 800, cooldownReductionPerLevel: 15,
-      baseRange: 70, rangePerLevel: 1,
-    },
-    levelData: [
-      { mpCost: 4,  hpCost: 0, damage: 1.65 },
-      { mpCost: 4,  hpCost: 0, damage: 1.70 },
-      { mpCost: 4,  hpCost: 0, damage: 1.75 },
-      { mpCost: 4,  hpCost: 0, damage: 1.80 },
-      { mpCost: 5,  hpCost: 0, damage: 1.85 },
-      { mpCost: 5,  hpCost: 0, damage: 1.90 },
-      { mpCost: 5,  hpCost: 0, damage: 1.95 },
-      { mpCost: 6,  hpCost: 0, damage: 2.00 },
-      { mpCost: 6,  hpCost: 0, damage: 2.05 },
-      { mpCost: 7,  hpCost: 0, damage: 2.10 },
-      { mpCost: 7,  hpCost: 0, damage: 2.15 },
-      { mpCost: 8,  hpCost: 0, damage: 2.20 },
-      { mpCost: 8,  hpCost: 0, damage: 2.25 },
-      { mpCost: 9,  hpCost: 0, damage: 2.30 },
-      { mpCost: 9,  hpCost: 0, damage: 2.35 },
-      { mpCost: 10, hpCost: 0, damage: 2.40 },
-      { mpCost: 10, hpCost: 0, damage: 2.45 },
-      { mpCost: 11, hpCost: 0, damage: 2.50 },
-      { mpCost: 11, hpCost: 0, damage: 2.55 },
-      { mpCost: 12, hpCost: 0, damage: 2.60 },
-    ],
-    prerequisite: null,
-    buffEffect: null,
-    buffDuration: null,
-    hitCount: 1,
-    aoeRadius: 0,
-    animationKey: 'warrior-power-strike',
-    secondaryBuffEffect: null,
-    passiveEffect: null,
-    mechanic: 'damage',
-    maxTargets: 1,
-    hpCostIsPercent: false,
-    minHpPercent: 0,
-  },
-  {
-    id: 'warrior-slash-blast',
-    name: 'Slash Blast',
-    classId: CharacterClass.Warrior,
-    type: SkillType.Active,
-    description: 'Use HP and MP to attack up to 6 enemies around you with a melee weapon.',
-    maxLevel: 20,
-    requiredCharacterLevel: 5,
-    icon: 'whirl',
-    color: '#ff6644',
-    scaling: {
-      baseDamage: 0.72, damagePerLevel: 0.03,
-      baseMpCost: 6, mpCostPerLevel: 0.42,
-      baseCooldown: 1200, cooldownReductionPerLevel: 20,
-      baseRange: 140, rangePerLevel: 3,
-    },
-    levelData: [
-      { mpCost: 6,  hpCost: 8,  damage: 0.72 },
-      { mpCost: 6,  hpCost: 8,  damage: 0.75 },
-      { mpCost: 6,  hpCost: 8,  damage: 0.78 },
-      { mpCost: 6,  hpCost: 8,  damage: 0.81 },
-      { mpCost: 7,  hpCost: 9,  damage: 0.84 },
-      { mpCost: 7,  hpCost: 9,  damage: 0.87 },
-      { mpCost: 7,  hpCost: 9,  damage: 0.90 },
-      { mpCost: 8,  hpCost: 10, damage: 0.93 },
-      { mpCost: 8,  hpCost: 10, damage: 0.96 },
-      { mpCost: 9,  hpCost: 11, damage: 0.99 },
-      { mpCost: 9,  hpCost: 11, damage: 1.02 },
-      { mpCost: 10, hpCost: 12, damage: 1.05 },
-      { mpCost: 10, hpCost: 12, damage: 1.08 },
-      { mpCost: 11, hpCost: 13, damage: 1.11 },
-      { mpCost: 11, hpCost: 13, damage: 1.14 },
-      { mpCost: 12, hpCost: 14, damage: 1.17 },
-      { mpCost: 12, hpCost: 14, damage: 1.20 },
-      { mpCost: 13, hpCost: 15, damage: 1.23 },
-      { mpCost: 13, hpCost: 15, damage: 1.26 },
-      { mpCost: 14, hpCost: 16, damage: 1.30 },
-    ],
-    prerequisite: { skillId: 'warrior-power-strike', level: 1 },
-    buffEffect: null,
-    buffDuration: null,
-    hitCount: 1,
-    aoeRadius: 80,
-    animationKey: 'warrior-slash-blast',
-    secondaryBuffEffect: null,
-    passiveEffect: null,
-    mechanic: 'damage',
-    maxTargets: 6,
-    hpCostIsPercent: false,
-    minHpPercent: 0,
-  },
-
-  // ═══ WARRIOR ACTIVE (Dash) ═══
-  {
-    id: 'warrior-power-dash',
-    name: 'Power Dash',
-    classId: CharacterClass.Warrior,
-    type: SkillType.Active,
-    description: 'Make a mad dash forward, pushing off up to 10 monsters.',
-    maxLevel: 30,
-    requiredCharacterLevel: 10,
-    icon: 'wind',
-    color: '#ff8844',
-    scaling: {
-      baseDamage: 0.72, damagePerLevel: 0.02,
-      baseMpCost: 22, mpCostPerLevel: 2,
-      baseCooldown: 1500, cooldownReductionPerLevel: 20,
-      baseRange: 200, rangePerLevel: 4,
-    },
-    levelData: [
-      { mpCost: 22, hpCost: 0, damage: 0.72, range: 200 },
-      { mpCost: 24, hpCost: 0, damage: 0.74, range: 200 },
-      { mpCost: 26, hpCost: 0, damage: 0.76, range: 200 },
-      { mpCost: 28, hpCost: 0, damage: 0.78, range: 213 },
-      { mpCost: 30, hpCost: 0, damage: 0.80, range: 213 },
-      { mpCost: 32, hpCost: 0, damage: 0.82, range: 213 },
-      { mpCost: 34, hpCost: 0, damage: 0.84, range: 213 },
-      { mpCost: 36, hpCost: 0, damage: 0.86, range: 225 },
-      { mpCost: 38, hpCost: 0, damage: 0.88, range: 225 },
-      { mpCost: 40, hpCost: 0, damage: 0.90, range: 225 },
-      { mpCost: 42, hpCost: 0, damage: 0.92, range: 238 },
-      { mpCost: 44, hpCost: 0, damage: 0.94, range: 238 },
-      { mpCost: 46, hpCost: 0, damage: 0.96, range: 238 },
-      { mpCost: 48, hpCost: 0, damage: 0.98, range: 250 },
-      { mpCost: 50, hpCost: 0, damage: 1.00, range: 250 },
-      { mpCost: 52, hpCost: 0, damage: 1.02, range: 250 },
-      { mpCost: 54, hpCost: 0, damage: 1.04, range: 263 },
-      { mpCost: 56, hpCost: 0, damage: 1.06, range: 263 },
-      { mpCost: 58, hpCost: 0, damage: 1.08, range: 263 },
-      { mpCost: 60, hpCost: 0, damage: 1.10, range: 275 },
-      { mpCost: 59, hpCost: 0, damage: 1.12, range: 275 },
-      { mpCost: 58, hpCost: 0, damage: 1.14, range: 288 },
-      { mpCost: 57, hpCost: 0, damage: 1.16, range: 288 },
-      { mpCost: 56, hpCost: 0, damage: 1.18, range: 288 },
-      { mpCost: 55, hpCost: 0, damage: 1.20, range: 300 },
-      { mpCost: 54, hpCost: 0, damage: 1.22, range: 300 },
-      { mpCost: 53, hpCost: 0, damage: 1.24, range: 300 },
-      { mpCost: 52, hpCost: 0, damage: 1.26, range: 313 },
-      { mpCost: 51, hpCost: 0, damage: 1.28, range: 313 },
-      { mpCost: 50, hpCost: 0, damage: 1.30, range: 313 },
-    ],
-    prerequisite: { skillId: 'warrior-slash-blast', level: 5 },
-    buffEffect: null,
-    buffDuration: null,
-    hitCount: 1,
-    aoeRadius: 0,
-    animationKey: 'warrior-power-dash',
-    secondaryBuffEffect: null,
-    passiveEffect: null,
-    mechanic: 'dash',
-    maxTargets: 10,
-    hpCostIsPercent: false,
-    minHpPercent: 0,
-  },
-
-  // ═══ WARRIOR PASSIVE ═══
-  {
-    id: 'warrior-improved-hp-recovery',
-    name: 'Improved HP Recovery',
-    classId: CharacterClass.Warrior,
-    type: SkillType.Passive,
-    description: 'Recover additional HP every 10 seconds while standing still.',
-    maxLevel: 16,
-    requiredCharacterLevel: 1,
-    icon: 'heal',
-    color: '#44cc44',
-    scaling: {
-      baseDamage: 3, damagePerLevel: 3,
-      baseMpCost: 0, mpCostPerLevel: 0,
-      baseCooldown: 0, cooldownReductionPerLevel: 0,
-      baseRange: 0, rangePerLevel: 0,
-    },
-    levelData: [
-      { mpCost: 0, hpCost: 0, damage: 3 },
-      { mpCost: 0, hpCost: 0, damage: 6 },
-      { mpCost: 0, hpCost: 0, damage: 9 },
-      { mpCost: 0, hpCost: 0, damage: 12 },
-      { mpCost: 0, hpCost: 0, damage: 15 },
-      { mpCost: 0, hpCost: 0, damage: 18 },
-      { mpCost: 0, hpCost: 0, damage: 21 },
-      { mpCost: 0, hpCost: 0, damage: 24 },
-      { mpCost: 0, hpCost: 0, damage: 27 },
-      { mpCost: 0, hpCost: 0, damage: 30 },
-      { mpCost: 0, hpCost: 0, damage: 33 },
-      { mpCost: 0, hpCost: 0, damage: 36 },
-      { mpCost: 0, hpCost: 0, damage: 39 },
-      { mpCost: 0, hpCost: 0, damage: 42 },
-      { mpCost: 0, hpCost: 0, damage: 45 },
-      { mpCost: 0, hpCost: 0, damage: 50 },
-    ],
-    prerequisite: null,
-    buffEffect: null,
-    buffDuration: null,
-    hitCount: 0,
-    aoeRadius: 0,
-    animationKey: '',
-    secondaryBuffEffect: null,
-    passiveEffect: {
-      type: 'hpRecovery',
-      intervalMs: 10_000,
-      condition: 'standingStill',
-    },
-    mechanic: 'damage',
-    maxTargets: 0,
-    hpCostIsPercent: false,
-    minHpPercent: 0,
-  },
-
-  // ═══ WARRIOR BUFF (Defensive) ═══
-  {
-    id: 'warrior-power-stance',
-    name: 'Power Stance',
-    classId: CharacterClass.Warrior,
-    type: SkillType.Buff,
-    description: 'Enables one to stay at the same spot after being struck, resisting knock-back effects.',
-    maxLevel: 30,
-    requiredCharacterLevel: 7,
-    icon: 'shield',
-    color: '#ff9944',
-    scaling: {
-      baseDamage: 42, damagePerLevel: 1.65,
-      baseMpCost: 30, mpCostPerLevel: 0.8,
-      baseCooldown: 1000, cooldownReductionPerLevel: 0,
-      baseRange: 0, rangePerLevel: 0,
-    },
-    levelData: [
-      { mpCost: 30, hpCost: 0, damage: 42 },
-      { mpCost: 30, hpCost: 0, damage: 44 },
-      { mpCost: 30, hpCost: 0, damage: 46 },
-      { mpCost: 30, hpCost: 0, damage: 48 },
-      { mpCost: 30, hpCost: 0, damage: 50 },
-      { mpCost: 36, hpCost: 0, damage: 52 },
-      { mpCost: 36, hpCost: 0, damage: 54 },
-      { mpCost: 36, hpCost: 0, damage: 56 },
-      { mpCost: 36, hpCost: 0, damage: 58 },
-      { mpCost: 36, hpCost: 0, damage: 60 },
-      { mpCost: 42, hpCost: 0, damage: 62 },
-      { mpCost: 42, hpCost: 0, damage: 64 },
-      { mpCost: 42, hpCost: 0, damage: 66 },
-      { mpCost: 42, hpCost: 0, damage: 68 },
-      { mpCost: 42, hpCost: 0, damage: 70 },
-      { mpCost: 48, hpCost: 0, damage: 72 },
-      { mpCost: 48, hpCost: 0, damage: 74 },
-      { mpCost: 48, hpCost: 0, damage: 76 },
-      { mpCost: 48, hpCost: 0, damage: 78 },
-      { mpCost: 48, hpCost: 0, damage: 80 },
-      { mpCost: 54, hpCost: 0, damage: 81 },
-      { mpCost: 54, hpCost: 0, damage: 82 },
-      { mpCost: 54, hpCost: 0, damage: 83 },
-      { mpCost: 54, hpCost: 0, damage: 84 },
-      { mpCost: 54, hpCost: 0, damage: 85 },
-      { mpCost: 53, hpCost: 0, damage: 86 },
-      { mpCost: 52, hpCost: 0, damage: 87 },
-      { mpCost: 51, hpCost: 0, damage: 88 },
-      { mpCost: 50, hpCost: 0, damage: 89 },
-      { mpCost: 50, hpCost: 0, damage: 90 },
-    ],
-    prerequisite: null,
-    buffEffect: { stat: 'knockbackResist', baseValue: 42, valuePerLevel: 1.65 },
-    buffDuration: { baseDurationMs: 10_000, durationPerLevelMs: 10_000 },
-    hitCount: 0,
-    aoeRadius: 0,
-    animationKey: 'warrior-power-stance',
-    secondaryBuffEffect: null,
-    passiveEffect: null,
-    mechanic: 'damage',
-    maxTargets: 0,
-    hpCostIsPercent: false,
-    minHpPercent: 0,
-  },
-
-  // ═══ WARRIOR BUFF (Party) ═══
-  {
-    id: 'warrior-hyper-body',
-    name: 'Hyper Body',
-    classId: CharacterClass.Warrior,
-    type: SkillType.Buff,
-    description: 'Temporarily increases the Max HP and Max MP of all party members in the area.',
-    maxLevel: 30,
-    requiredCharacterLevel: 10,
-    icon: 'fist',
-    color: '#44ddaa',
-    scaling: {
-      baseDamage: 2, damagePerLevel: 2,
-      baseMpCost: 20, mpCostPerLevel: 1.4,
-      baseCooldown: 1000, cooldownReductionPerLevel: 0,
-      baseRange: 0, rangePerLevel: 0,
-    },
-    levelData: [
-      { mpCost: 20, hpCost: 0, damage: 2 },
-      { mpCost: 20, hpCost: 0, damage: 4 },
-      { mpCost: 20, hpCost: 0, damage: 6 },
-      { mpCost: 20, hpCost: 0, damage: 8 },
-      { mpCost: 20, hpCost: 0, damage: 10 },
-      { mpCost: 20, hpCost: 0, damage: 12 },
-      { mpCost: 20, hpCost: 0, damage: 14 },
-      { mpCost: 20, hpCost: 0, damage: 16 },
-      { mpCost: 20, hpCost: 0, damage: 18 },
-      { mpCost: 20, hpCost: 0, damage: 20 },
-      { mpCost: 40, hpCost: 0, damage: 22 },
-      { mpCost: 40, hpCost: 0, damage: 24 },
-      { mpCost: 40, hpCost: 0, damage: 26 },
-      { mpCost: 40, hpCost: 0, damage: 28 },
-      { mpCost: 40, hpCost: 0, damage: 30 },
-      { mpCost: 40, hpCost: 0, damage: 32 },
-      { mpCost: 40, hpCost: 0, damage: 34 },
-      { mpCost: 40, hpCost: 0, damage: 36 },
-      { mpCost: 40, hpCost: 0, damage: 38 },
-      { mpCost: 40, hpCost: 0, damage: 40 },
-      { mpCost: 60, hpCost: 0, damage: 42 },
-      { mpCost: 60, hpCost: 0, damage: 44 },
-      { mpCost: 60, hpCost: 0, damage: 46 },
-      { mpCost: 60, hpCost: 0, damage: 48 },
-      { mpCost: 50, hpCost: 0, damage: 50 },
-      { mpCost: 60, hpCost: 0, damage: 52 },
-      { mpCost: 60, hpCost: 0, damage: 54 },
-      { mpCost: 60, hpCost: 0, damage: 56 },
-      { mpCost: 60, hpCost: 0, damage: 58 },
-      { mpCost: 60, hpCost: 0, damage: 60 },
-    ],
-    prerequisite: null,
-    buffEffect: { stat: 'maxHpMaxMpPercent', baseValue: 2, valuePerLevel: 2 },
-    buffDuration: { baseDurationMs: 10_000, durationPerLevelMs: 10_000 },
-    hitCount: 0,
-    aoeRadius: 0,
-    animationKey: 'warrior-hyper-body',
-    secondaryBuffEffect: null,
-    passiveEffect: null,
-    mechanic: 'damage',
-    maxTargets: 0,
-    hpCostIsPercent: false,
-    minHpPercent: 0,
-  },
-
-  // ═══ WARRIOR ACTIVE (Utility) ═══
-  {
-    id: 'warrior-monster-magnet',
-    name: 'Monster Magnet',
-    classId: CharacterClass.Warrior,
-    type: SkillType.Active,
-    description: 'Pulls all monsters from afar (within range) right to you.',
-    maxLevel: 30,
-    requiredCharacterLevel: 5,
-    icon: 'magnet',
-    color: '#cc44ff',
-    scaling: {
-      baseDamage: 0, damagePerLevel: 0,
-      baseMpCost: 10, mpCostPerLevel: 0,
-      baseCooldown: 8000, cooldownReductionPerLevel: 80,
-      baseRange: 50, rangePerLevel: 0,
-    },
-    levelData: [
-      { mpCost: 10, hpCost: 0, damage: 0, range: 50 },
-      { mpCost: 10, hpCost: 0, damage: 0, range: 50 },
-      { mpCost: 10, hpCost: 0, damage: 0, range: 50 },
-      { mpCost: 10, hpCost: 0, damage: 0, range: 50 },
-      { mpCost: 10, hpCost: 0, damage: 0, range: 50 },
-      { mpCost: 13, hpCost: 0, damage: 0, range: 100 },
-      { mpCost: 13, hpCost: 0, damage: 0, range: 100 },
-      { mpCost: 13, hpCost: 0, damage: 0, range: 100 },
-      { mpCost: 13, hpCost: 0, damage: 0, range: 100 },
-      { mpCost: 13, hpCost: 0, damage: 0, range: 100 },
-      { mpCost: 18, hpCost: 0, damage: 0, range: 150 },
-      { mpCost: 18, hpCost: 0, damage: 0, range: 150 },
-      { mpCost: 18, hpCost: 0, damage: 0, range: 150 },
-      { mpCost: 18, hpCost: 0, damage: 0, range: 150 },
-      { mpCost: 18, hpCost: 0, damage: 0, range: 150 },
-      { mpCost: 21, hpCost: 0, damage: 0, range: 150 },
-      { mpCost: 21, hpCost: 0, damage: 0, range: 150 },
-      { mpCost: 21, hpCost: 0, damage: 0, range: 150 },
-      { mpCost: 21, hpCost: 0, damage: 0, range: 150 },
-      { mpCost: 21, hpCost: 0, damage: 0, range: 150 },
-      { mpCost: 26, hpCost: 0, damage: 0, range: 200 },
-      { mpCost: 26, hpCost: 0, damage: 0, range: 200 },
-      { mpCost: 26, hpCost: 0, damage: 0, range: 200 },
-      { mpCost: 26, hpCost: 0, damage: 0, range: 200 },
-      { mpCost: 26, hpCost: 0, damage: 0, range: 250 },
-      { mpCost: 25, hpCost: 0, damage: 0, range: 250 },
-      { mpCost: 24, hpCost: 0, damage: 0, range: 250 },
-      { mpCost: 23, hpCost: 0, damage: 0, range: 250 },
-      { mpCost: 22, hpCost: 0, damage: 0, range: 250 },
-      { mpCost: 21, hpCost: 0, damage: 0, range: 250 },
-    ],
-    prerequisite: null,
-    buffEffect: null,
-    buffDuration: null,
-    hitCount: 0,
-    aoeRadius: 0,
-    animationKey: 'warrior-monster-magnet',
-    secondaryBuffEffect: null,
-    passiveEffect: null,
-    mechanic: 'pull',
-    maxTargets: 0,
-    hpCostIsPercent: false,
-    minHpPercent: 0,
-  },
-
-  // ═══ WARRIOR ACTIVE (Dragon Roar) ═══
-  {
-    id: 'warrior-dragon-roar',
-    name: 'Dragon Roar',
-    classId: CharacterClass.Warrior,
-    type: SkillType.Active,
-    description: 'Sacrifice a large portion of HP to attack up to 15 monsters within a large area. Temporarily stuns the Knight. Only usable above 50% HP.',
-    maxLevel: 30,
-    requiredCharacterLevel: 10,
-    icon: 'dragon',
-    color: '#ff2200',
-    scaling: {
-      baseDamage: 0.96, damagePerLevel: 0.05,
-      baseMpCost: 16, mpCostPerLevel: 0.5,
-      baseCooldown: 6000, cooldownReductionPerLevel: 50,
-      baseRange: 110, rangePerLevel: 10,
-    },
-    levelData: [
-      { mpCost: 16, hpCost: 59, damage: 0.96, range: 110, stunDurationMs: 4000 },
-      { mpCost: 16, hpCost: 58, damage: 1.02, range: 120, stunDurationMs: 4000 },
-      { mpCost: 16, hpCost: 57, damage: 1.08, range: 130, stunDurationMs: 4000 },
-      { mpCost: 16, hpCost: 56, damage: 1.14, range: 140, stunDurationMs: 4000 },
-      { mpCost: 16, hpCost: 55, damage: 1.20, range: 150, stunDurationMs: 4000 },
-      { mpCost: 16, hpCost: 54, damage: 1.26, range: 160, stunDurationMs: 4000 },
-      { mpCost: 16, hpCost: 53, damage: 1.32, range: 170, stunDurationMs: 4000 },
-      { mpCost: 16, hpCost: 52, damage: 1.38, range: 180, stunDurationMs: 4000 },
-      { mpCost: 16, hpCost: 51, damage: 1.44, range: 190, stunDurationMs: 4000 },
-      { mpCost: 24, hpCost: 50, damage: 1.50, range: 200, stunDurationMs: 3000 },
-      { mpCost: 24, hpCost: 49, damage: 1.55, range: 210, stunDurationMs: 3000 },
-      { mpCost: 24, hpCost: 48, damage: 1.60, range: 220, stunDurationMs: 3000 },
-      { mpCost: 24, hpCost: 47, damage: 1.65, range: 230, stunDurationMs: 3000 },
-      { mpCost: 24, hpCost: 46, damage: 1.70, range: 240, stunDurationMs: 3000 },
-      { mpCost: 24, hpCost: 45, damage: 1.75, range: 250, stunDurationMs: 3000 },
-      { mpCost: 24, hpCost: 44, damage: 1.80, range: 260, stunDurationMs: 3000 },
-      { mpCost: 24, hpCost: 43, damage: 1.85, range: 270, stunDurationMs: 3000 },
-      { mpCost: 24, hpCost: 42, damage: 1.90, range: 190, stunDurationMs: 3000 },
-      { mpCost: 24, hpCost: 41, damage: 1.95, range: 290, stunDurationMs: 3000 },
-      { mpCost: 24, hpCost: 40, damage: 2.00, range: 300, stunDurationMs: 3000 },
-      { mpCost: 30, hpCost: 39, damage: 2.04, range: 310, stunDurationMs: 2000 },
-      { mpCost: 30, hpCost: 38, damage: 2.08, range: 320, stunDurationMs: 2000 },
-      { mpCost: 30, hpCost: 37, damage: 2.12, range: 330, stunDurationMs: 2000 },
-      { mpCost: 30, hpCost: 36, damage: 2.16, range: 340, stunDurationMs: 2000 },
-      { mpCost: 30, hpCost: 35, damage: 2.20, range: 350, stunDurationMs: 2000 },
-      { mpCost: 30, hpCost: 34, damage: 2.24, range: 360, stunDurationMs: 2000 },
-      { mpCost: 30, hpCost: 33, damage: 2.28, range: 370, stunDurationMs: 2000 },
-      { mpCost: 30, hpCost: 32, damage: 2.32, range: 380, stunDurationMs: 2000 },
-      { mpCost: 30, hpCost: 31, damage: 2.36, range: 390, stunDurationMs: 2000 },
-      { mpCost: 30, hpCost: 30, damage: 2.40, range: 400, stunDurationMs: 2000 },
-    ],
-    prerequisite: { skillId: 'warrior-slash-blast', level: 5 },
-    buffEffect: null,
-    buffDuration: null,
-    hitCount: 1,
-    aoeRadius: 200,
-    animationKey: 'warrior-dragon-roar',
-    secondaryBuffEffect: null,
-    passiveEffect: null,
-    mechanic: 'damage',
-    maxTargets: 15,
-    hpCostIsPercent: true,
-    minHpPercent: 50,
-  },
-
   // ═══ AUTO POTION (all classes) ═══
 
-  {
-    id: 'warrior-auto-potion',
-    name: 'Auto Potion',
-    classId: CharacterClass.Warrior,
-    type: SkillType.Passive,
-    description: 'Automatically uses a potion when HP drops below 50% or MP drops below 30%. Higher levels increase the success chance.',
-    maxLevel: 10,
-    requiredCharacterLevel: 1,
-    icon: 'flask',
-    color: '#ff6699',
-    scaling: {
-      baseDamage: 20, damagePerLevel: 7.78,
-      baseMpCost: 0, mpCostPerLevel: 0,
-      baseCooldown: 0, cooldownReductionPerLevel: 0,
-      baseRange: 0, rangePerLevel: 0,
-    },
-    levelData: [
-      { mpCost: 0, hpCost: 0, damage: 20 },
-      { mpCost: 0, hpCost: 0, damage: 28 },
-      { mpCost: 0, hpCost: 0, damage: 36 },
-      { mpCost: 0, hpCost: 0, damage: 43 },
-      { mpCost: 0, hpCost: 0, damage: 51 },
-      { mpCost: 0, hpCost: 0, damage: 59 },
-      { mpCost: 0, hpCost: 0, damage: 67 },
-      { mpCost: 0, hpCost: 0, damage: 74 },
-      { mpCost: 0, hpCost: 0, damage: 82 },
-      { mpCost: 0, hpCost: 0, damage: 90 },
-    ],
-    prerequisite: null,
-    buffEffect: null,
-    buffDuration: null,
-    hitCount: 0,
-    aoeRadius: 0,
-    animationKey: '',
-    secondaryBuffEffect: null,
-    passiveEffect: {
-      type: 'autoPotion',
-      intervalMs: 0,
-      condition: 'always',
-      hpThresholdPercent: 50,
-      mpThresholdPercent: 30,
-    },
-    mechanic: 'damage',
-    maxTargets: 0,
-    hpCostIsPercent: false,
-    minHpPercent: 0,
-  },
   {
     id: 'ranger-auto-potion',
     name: 'Auto Potion',
@@ -1726,6 +1270,261 @@ export const SKILLS: SkillDefinition[] = [
 ];
 
 // ─── Default Key Bindings ────────────────────────
+
+// ─── Skill trees ────────────────────────────────
+// Classes listed in SKILL_TREES use a skill tree instead of SKILLS levels: one point per level, one
+// point per skill, strength from stats (StatCurve), actives fired from a 6-slot skill bar (keys 1-6). The rest keep SKILLS.
+
+const BRAWN_COLOR: string = '#e0503f';
+const MOMENTUM_COLOR: string = '#f2c14e';
+const GRIT_COLOR: string = '#8fbf3a';
+
+type TreeSkillSpec = Partial<TreeSkill> &
+  Pick<TreeSkill, 'id' | 'name' | 'description' | 'branch' | 'tier' | 'column' | 'parents' | 'type' | 'mechanic' | 'icon' | 'color'>;
+
+/** A warrior tree skill; fills the fields most skills leave at zero. */
+function warriorSkill(skill: TreeSkillSpec): TreeSkill {
+  return {
+    classId: CharacterClass.Warrior,
+    animationKey: null,
+    damageMult: 0,
+    maxTargets: 0,
+    mpCost: 0,
+    hpCostPercent: 0,
+    minHpPercent: 0,
+    cooldownMs: 0,
+    curves: {},
+    buff: null,
+    capstone: false,
+    combo: null,
+    ...skill,
+  };
+}
+
+/** How each attack-button combo is done, for the tree window and the HUD. */
+export const ATTACK_COMBO_HINTS: Readonly<Record<AttackCombo, string>> = {
+  [AttackCombo.Hold]: `Hold attack ${GAME_CONSTANTS.ATTACK_HOLD_MS / 1000} s, then let go`,
+  [AttackCombo.AirHold]: 'Hold attack in the air',
+  [AttackCombo.DoubleTap]: 'Double-tap attack',
+};
+
+export const WARRIOR_SKILL_TREE: ClassSkillTree = {
+  classId: CharacterClass.Warrior,
+  branches: [
+    { id: 'brawn', name: 'Brawn', color: BRAWN_COLOR, icon: 'fist', blurb: 'Hit harder, hit more. Launch, slam, finish.' },
+    { id: 'momentum', name: 'Momentum', color: MOMENTUM_COLOR, icon: 'wind', blurb: 'Move fast, pull and push the crowd.' },
+    { id: 'grit', name: 'Grit', color: GRIT_COLOR, icon: 'shield', blurb: 'Survive, protect, get allies back up.' },
+  ],
+  skills: [
+    // ═══ Brawn ═══
+    warriorSkill({
+      id: 'warrior-power-strike', name: 'Power Strike', branch: 'brawn', tier: 1, column: 1, parents: [],
+      type: SkillType.Active, mechanic: 'strike',
+      icon: 'sword', color: BRAWN_COLOR, animationKey: 'warrior-power-strike',
+      description: 'A heavy blow on the zombie in front of you that sends it flying.',
+      damageMult: 2.2, maxTargets: 1, mpCost: 4, cooldownMs: 600,
+      curves: { knockback: { stat: 'str', min: 8, max: 18, half: 60 } },
+    }),
+    warriorSkill({
+      id: 'warrior-slash-blast', name: 'Slash Blast', branch: 'brawn', tier: 2, column: 0, parents: ['warrior-power-strike'],
+      type: SkillType.Active, mechanic: 'cleave', combo: AttackCombo.DoubleTap,
+      icon: 'whirl', color: BRAWN_COLOR, animationKey: 'warrior-slash-blast',
+      description: 'A spinning cleave that hits zombies on both sides of you.',
+      damageMult: 1.3, maxTargets: 6, mpCost: 8, cooldownMs: 1200,
+      curves: { radius: { stat: 'str', min: 70, max: 140, half: 60 } },
+    }),
+    warriorSkill({
+      id: 'warrior-uppercut', name: 'Rising Uppercut', branch: 'brawn', tier: 2, column: 2, parents: ['warrior-power-strike'],
+      type: SkillType.Active, mechanic: 'uppercut',
+      icon: 'arrow-up', color: BRAWN_COLOR, animationKey: 'warrior-uppercut',
+      description: 'Launches a zombie into the air. It lands stunned; hit it on the way down.',
+      damageMult: 1.5, maxTargets: 1, mpCost: 6, cooldownMs: 3000,
+      curves: { launch: { stat: 'str', min: 50, max: 110, half: 50 }, cooldownCut: { stat: 'dex', min: 0, max: 0.4, half: 60 } },
+    }),
+    warriorSkill({
+      id: 'warrior-ground-slam', name: 'Ground Slam', branch: 'brawn', tier: 3, column: 0, parents: ['warrior-slash-blast'],
+      type: SkillType.Active, mechanic: 'ground-slam', combo: AttackCombo.AirHold,
+      icon: 'arrow-down', color: BRAWN_COLOR, animationKey: 'warrior-ground-slam',
+      description: 'Dive down from the air and send a shockwave around where you land: the higher the fall, the bigger the hit.',
+      damageMult: 1, maxTargets: 10, mpCost: 10, cooldownMs: 4000,
+      curves: { radius: { stat: 'str', min: 60, max: 140, half: 60 } },
+    }),
+    warriorSkill({
+      id: 'warrior-heavy-hands', name: 'Heavy Hands', branch: 'brawn', tier: 3, column: 2, parents: ['warrior-uppercut'],
+      type: SkillType.Passive, mechanic: 'heavy-hands',
+      icon: 'fist', color: BRAWN_COLOR,
+      description: 'Basic hits stagger zombies and hit staggered, stunned or airborne zombies harder.',
+      curves: { percent: { stat: 'str', min: 10, max: 35, half: 60 } },
+    }),
+    warriorSkill({
+      id: 'warrior-executioner', name: 'Executioner', branch: 'brawn', tier: 4, column: 1, parents: ['warrior-ground-slam', 'warrior-heavy-hands'],
+      type: SkillType.Reactive, mechanic: 'executioner',
+      icon: 'skull', color: BRAWN_COLOR, animationKey: 'warrior-executioner',
+      description: 'Hitting a stunned zombie that is low on HP finishes it outright. Bosses are immune.',
+      curves: { percent: { stat: 'str', min: 10, max: 25, half: 80 } },
+    }),
+    warriorSkill({
+      id: 'warrior-dragon-roar', name: 'Dragon Roar', branch: 'brawn', tier: 5, column: 1, parents: ['warrior-executioner'],
+      type: SkillType.Active, mechanic: 'roar',
+      icon: 'dragon', color: BRAWN_COLOR, animationKey: 'warrior-dragon-roar',
+      description: 'A huge roar that hits everything around you and stuns whatever survives it. Costs HP.',
+      damageMult: 2.4, maxTargets: 15, mpCost: 20, hpCostPercent: 30, minHpPercent: 50, cooldownMs: 20000, capstone: true,
+      curves: { range: { stat: 'str', min: 160, max: 400, half: 80 }, stunMs: { stat: 'str', min: 1000, max: 3000, half: 60 } },
+    }),
+
+    // ═══ Momentum ═══
+    warriorSkill({
+      id: 'warrior-power-dash', name: 'Power Dash', branch: 'momentum', tier: 1, column: 1, parents: [],
+      type: SkillType.Active, mechanic: 'dash', combo: AttackCombo.Hold,
+      icon: 'wind', color: MOMENTUM_COLOR,
+      description: 'Dash forward through every zombie in the way. The longer the charge, the farther it goes.',
+      damageMult: 1.1, maxTargets: 10, mpCost: 12, cooldownMs: 1500,
+      curves: { distance: { stat: 'dex', min: 160, max: 320, half: 40 }, cooldownCut: { stat: 'dex', min: 0, max: 0.35, half: 60 } },
+    }),
+    warriorSkill({
+      id: 'warrior-shoulder-charge', name: 'Shoulder Charge', branch: 'momentum', tier: 2, column: 0, parents: ['warrior-power-dash'],
+      type: SkillType.Active, mechanic: 'shoulder-charge',
+      icon: 'boot', color: MOMENTUM_COLOR, animationKey: 'warrior-shoulder-charge',
+      description: 'Barrel forward through zombies and knock them down.',
+      damageMult: 1.2, maxTargets: 6, mpCost: 6, cooldownMs: 2500,
+      curves: { knockback: { stat: 'str', min: 6, max: 14, half: 60 } },
+    }),
+    warriorSkill({
+      id: 'warrior-backstep', name: 'Backstep', branch: 'momentum', tier: 2, column: 2, parents: ['warrior-power-dash'],
+      type: SkillType.Active, mechanic: 'backstep',
+      icon: 'arrow-left', color: MOMENTUM_COLOR, animationKey: 'warrior-backstep',
+      description: 'Hop back untouchable, still facing the enemy.',
+      cooldownMs: 800,
+      curves: { distance: { stat: 'dex', min: 50, max: 110, half: 40 }, iframesMs: { stat: 'dex', min: 150, max: 350, half: 60 } },
+    }),
+    warriorSkill({
+      id: 'warrior-monster-magnet', name: 'Monster Magnet', branch: 'momentum', tier: 3, column: 0, parents: ['warrior-shoulder-charge'],
+      type: SkillType.Active, mechanic: 'pull',
+      icon: 'magnet', color: MOMENTUM_COLOR, animationKey: 'warrior-monster-magnet',
+      description: 'Reels every zombie in range to your feet and stuns them. Bosses resist.',
+      mpCost: 14, cooldownMs: 8000,
+      curves: {
+        range: { stat: 'str', min: 200, max: 700, half: 80 },
+        stunMs: { stat: 'str', min: 1000, max: 2000, half: 60 },
+        cooldownCut: { stat: 'dex', min: 0, max: 0.3, half: 60 },
+      },
+    }),
+    warriorSkill({
+      id: 'warrior-leap-strike', name: 'Leap Strike', branch: 'momentum', tier: 3, column: 2, parents: ['warrior-backstep'],
+      type: SkillType.Active, mechanic: 'leap-strike',
+      icon: 'spring', color: MOMENTUM_COLOR, animationKey: 'warrior-leap-strike',
+      description: 'Leap forward and crash onto the zombies where you land.',
+      damageMult: 1.8, maxTargets: 4, mpCost: 8, cooldownMs: 3000,
+      curves: { distance: { stat: 'dex', min: 100, max: 200, half: 50 } },
+    }),
+    warriorSkill({
+      id: 'warrior-adrenaline', name: 'Adrenaline', branch: 'momentum', tier: 4, column: 1, parents: ['warrior-monster-magnet', 'warrior-leap-strike'],
+      type: SkillType.Passive, mechanic: 'adrenaline',
+      icon: 'spark', color: MOMENTUM_COLOR,
+      description: 'Kills in quick succession stack up attack speed and move speed.',
+      curves: { percent: { stat: 'dex', min: 4, max: 12, half: 40 } },
+    }),
+    warriorSkill({
+      id: 'warrior-rampage', name: 'Rampage', branch: 'momentum', tier: 5, column: 1, parents: ['warrior-adrenaline'],
+      type: SkillType.Passive, mechanic: 'rampage',
+      icon: 'star', color: MOMENTUM_COLOR, animationKey: 'warrior-rampage',
+      description: 'Tap attack as a dash ends to chain up to 2 more. A kill during a dash refunds its cooldown.',
+      mpCost: 6, capstone: true,
+      curves: { windowMs: { stat: 'dex', min: 300, max: 500, half: 40 } },
+    }),
+
+    // ═══ Grit ═══
+    warriorSkill({
+      id: 'warrior-iron-recovery', name: 'Iron Recovery', branch: 'grit', tier: 1, column: 0, parents: [],
+      type: SkillType.Passive, mechanic: 'hp-recovery',
+      icon: 'heal', color: GRIT_COLOR,
+      description: 'Standing still heals a share of your max HP every 3 seconds.',
+      curves: { healPercent: { stat: 'str', min: 2, max: 5, half: 60 } },
+    }),
+    warriorSkill({
+      id: 'warrior-auto-potion', name: 'Auto Potion', branch: 'grit', tier: 1, column: 2, parents: [],
+      type: SkillType.Passive, mechanic: 'auto-potion',
+      icon: 'flask', color: GRIT_COLOR,
+      description: 'Drinks a potion by itself when HP drops below 50% or MP below 30%.',
+      curves: { chance: { stat: 'luk', min: 30, max: 90, half: 30 } },
+    }),
+    warriorSkill({
+      id: 'warrior-power-stance', name: 'Power Stance', branch: 'grit', tier: 2, column: 0, parents: ['warrior-iron-recovery'],
+      type: SkillType.Buff, mechanic: 'buff',
+      icon: 'shield', color: GRIT_COLOR, animationKey: 'warrior-power-stance',
+      description: 'Brace: no knockback and more defense for a minute.',
+      mpCost: 20, cooldownMs: 60000,
+      curves: { percent: { stat: 'str', min: 10, max: 40, half: 60 } },
+      buff: { stat: 'defense', durationMs: 60000, valueCurve: 'percent', percentOfDerived: true, allyRadius: 0, extra: { stat: 'knockbackResist', value: 100 } },
+    }),
+    warriorSkill({
+      id: 'warrior-hyper-body', name: 'Hyper Body', branch: 'grit', tier: 2, column: 2, parents: ['warrior-auto-potion'],
+      type: SkillType.Buff, mechanic: 'buff',
+      icon: 'heart', color: GRIT_COLOR, animationKey: 'warrior-hyper-body',
+      description: 'Raises max HP and MP of you and every ally close by for a minute.',
+      mpCost: 30, cooldownMs: 90000,
+      curves: { percent: { stat: 'str', min: 15, max: 60, half: 60 } },
+      buff: { stat: 'maxHpMaxMpPercent', durationMs: 60000, valueCurve: 'percent', percentOfDerived: false, allyRadius: 300, extra: null },
+    }),
+    warriorSkill({
+      id: 'warrior-counter', name: 'Counter', branch: 'grit', tier: 3, column: 1, parents: ['warrior-power-stance', 'warrior-hyper-body'],
+      type: SkillType.Active, mechanic: 'counter',
+      icon: 'eclipse', color: GRIT_COLOR, animationKey: 'warrior-counter',
+      description: 'Press just before a hit lands: you take nothing, the zombie is stunned and you strike back with a crit.',
+      damageMult: 1.8, maxTargets: 1,
+      curves: { windowMs: { stat: 'dex', min: 200, max: 350, half: 40 } },
+    }),
+    warriorSkill({
+      id: 'warrior-second-wind', name: 'Second Wind', branch: 'grit', tier: 4, column: 0, parents: ['warrior-counter'],
+      type: SkillType.Reactive, mechanic: 'second-wind',
+      icon: 'moon', color: GRIT_COLOR, animationKey: 'warrior-second-wind',
+      description: 'Once per floor a killing blow leaves you at 1 HP, untouchable for a moment, then heals you.',
+      curves: { healPercent: { stat: 'str', min: 10, max: 30, half: 60 } },
+    }),
+    warriorSkill({
+      id: 'warrior-rally', name: 'Rally', branch: 'grit', tier: 4, column: 2, parents: ['warrior-counter'],
+      type: SkillType.Reactive, mechanic: 'rally',
+      icon: 'revive', color: GRIT_COLOR, animationKey: 'warrior-rally',
+      description: 'Revive allies faster, and they get back up with more HP.',
+      curves: { percent: { stat: 'str', min: 30, max: 60, half: 60 }, healPercent: { stat: 'luk', min: 25, max: 60, half: 30 } },
+    }),
+    warriorSkill({
+      id: 'warrior-last-stand', name: 'Last Stand', branch: 'grit', tier: 5, column: 1, parents: ['warrior-second-wind', 'warrior-rally'],
+      type: SkillType.Reactive, mechanic: 'last-stand',
+      icon: 'holy', color: GRIT_COLOR, animationKey: 'warrior-last-stand',
+      description: 'Below a quarter of your HP you hit harder and every hit heals you.',
+      capstone: true,
+      curves: { percent: { stat: 'str', min: 15, max: 40, half: 60 }, lifestealPercent: { stat: 'luk', min: 3, max: 8, half: 30 } },
+    }),
+  ],
+};
+
+export const SKILL_TREES: Partial<Record<CharacterClass, ClassSkillTree>> = {
+  [CharacterClass.Warrior]: WARRIOR_SKILL_TREE,
+};
+
+/** The class's skill tree, or null for a class that still uses SKILLS levels. */
+export function getSkillTree(classId: CharacterClass): ClassSkillTree | null {
+  return SKILL_TREES[classId] ?? null;
+}
+
+export function findTreeSkill(id: string): TreeSkill | null {
+  for (const tree of Object.values(SKILL_TREES)) {
+    const skill: TreeSkill | undefined = tree?.skills.find((s: TreeSkill): boolean => s.id === id);
+    if (skill) return skill;
+  }
+  return null;
+}
+
+/** Skill points a class gets per level up. */
+export function skillPointsPerLevel(classId: CharacterClass): number {
+  return getSkillTree(classId) ? GAME_CONSTANTS.TREE_SKILL_POINTS_PER_LEVEL : GAME_CONSTANTS.SKILL_POINTS_PER_LEVEL;
+}
+
+/** Skill points a new character of the class starts with. */
+export function startingSkillPoints(classId: CharacterClass): number {
+  return getSkillTree(classId) ? GAME_CONSTANTS.TREE_STARTING_SKILL_POINTS : 0;
+}
 
 export const DEFAULT_KEY_BINDINGS: KeyBindings = {
   left: ['a', 'arrowleft'],

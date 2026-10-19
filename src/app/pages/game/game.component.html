@@ -31,6 +31,7 @@
       [playerData]="currentPlayerDisplay()"
       [floor]="floor()"
       [score]="score()"
+      [cooldownMsOf]="skillCooldownMs"
       (statPanelRequested)="onStatPanelRequested()"
       (skillTreeRequested)="onSkillTreeRequested()"
       (shopRequested)="onShopRequested()"
@@ -195,7 +196,15 @@
       />
     }
 
-    @if (skillPanelOpen()) {
+    @if (skillPanelOpen() && hasSkillTree()) {
+      <app-tree-skill-window
+        [player]="currentPlayerDisplay()"
+        (learn)="onSkillAllocated($event)"
+        (respec)="onSkillsRespec()"
+        (assign)="onSkillBarAssigned($event)"
+        (closed)="onSkillPanelClosed()"
+      />
+    } @else if (skillPanelOpen()) {
       <app-skill-tree
         [player]="currentPlayerDisplay()"
         [skills]="availableSkills()"

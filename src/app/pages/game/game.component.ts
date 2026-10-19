@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inj
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, VfxEvent, GAME_CONSTANTS } from '@shared/index';
+import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, VfxEvent, GAME_CONSTANTS, MagnetPullRequest, ZombieEffectRequest } from '@shared/index';
 import { SpecialDropType, SpecialDropDefinition } from '@shared/game-entities';
 import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload, HostMigratedPayload, ReconnectResultPayload, RoomInfo, RoomPlayer, RoomUpdatedPayload, SetAfkPayload } from '@shared/multiplayer';
 import { ActiveSpecialEffect, BoulderState, CagePuzzleState, LooseProp, PlateState, SpringState, ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
@@ -16,6 +16,8 @@ import { HudComponent } from '../../components/hud/hud.component';
 import { SettingsComponent } from '../../components/settings/settings.component';
 import { StatAllocationComponent } from '../../components/stat-allocation/stat-allocation.component';
 import { SkillTreeComponent } from '../../components/skill-tree/skill-tree.component';
+import { SkillBarAssignment, TreeSkillWindowComponent } from '../../components/tree-skill-window/tree-skill-window.component';
+import { getSkillTree } from '@shared/game-constants';
 import { ShopComponent } from '../../components/shop/shop.component';
 import { InventoryComponent } from '../../components/inventory/inventory.component';
 import { QuickSlotsComponent } from '../../components/quick-slots/quick-slots.component';
@@ -39,7 +41,7 @@ const ACTIVITY_EVENTS: readonly string[] = ['keydown', 'mousedown', 'mousemove',
 @Component({
   selector: 'app-game',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PixelIconComponent, GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule],
+  imports: [PixelIconComponent, GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, TreeSkillWindowComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule],
   host: {
     class: 'game-page',
   },
@@ -88,6 +90,14 @@ export class GameComponent implements OnInit, OnDestroy {
   readonly inventoryOpen: WritableSignal<boolean> = signal<boolean>(false);
   readonly currentPlayerDisplay: WritableSignal<CharacterState> = signal<CharacterState>(null!);
   readonly availableSkills: Signal<SkillDefinition[]> = this.gameState.availableSkills;
+  /** Skill-tree classes get the tree window and the HUD cooldown row instead of skills on keys 1-6. */
+  readonly hasSkillTree: Signal<boolean> = computed((): boolean => {
+    const p: CharacterState | null = this.gameState.player();
+    return p !== null && getSkillTree(p.classId) !== null;
+  });
+  /** Remaining cooldown of a skill in the running engine (ms), read by the HUD. */
+  readonly skillCooldownMs: (skillId: string) => number = (skillId: string): number =>
+    this.gameCanvas()?.skillCooldownMs(skillId) ?? 0;
   readonly shutdownWarning: WritableSignal<string> = signal<string>('');
   readonly afkState: WritableSignal<AfkState> = signal<AfkState>('none');
   readonly afkLostReason: WritableSignal<string> = signal<string>('');
@@ -257,8 +267,8 @@ export class GameComponent implements OnInit, OnDestroy {
     this.ws.onMessage(ServerMessageType.PlayerStateBroadcast)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
-        const payload: { playerId: string; data: { player: CharacterState; revives?: string[]; specialDropActivations?: SpecialDropType[]; vfxEvents?: VfxEvent[]; pullEvents?: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> } } =
-          msg.payload as { playerId: string; data: { player: CharacterState; revives?: string[]; specialDropActivations?: SpecialDropType[]; vfxEvents?: VfxEvent[]; pullEvents?: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }> } };
+        const payload: { playerId: string; data: { player: CharacterState; revives?: string[]; specialDropActivations?: SpecialDropType[]; vfxEvents?: VfxEvent[]; pullEvents?: Array<MagnetPullRequest>; zombieEffects?: ZombieEffectRequest[] } } =
+          msg.payload as { playerId: string; data: { player: CharacterState; revives?: string[]; specialDropActivations?: SpecialDropType[]; vfxEvents?: VfxEvent[]; pullEvents?: Array<MagnetPullRequest>; zombieEffects?: ZombieEffectRequest[] } };
 
         this.remotePlayerStates.set(payload.playerId, payload.data.player);
         this.processIncomingRevives(payload.data.revives);
@@ -272,6 +282,9 @@ export class GameComponent implements OnInit, OnDestroy {
           for (const pullEvt of payload.data.pullEvents) {
             this.gameCanvas()?.applyRemotePull(pullEvt);
           }
+        }
+        if (this.isHost && payload.data.zombieEffects && payload.data.zombieEffects.length > 0) {
+          this.gameCanvas()?.applyRemoteZombieEffects(payload.data.zombieEffects);
         }
 
         this.updateRemotePlayersOnCanvas();
@@ -367,14 +380,14 @@ export class GameComponent implements OnInit, OnDestroy {
         const canvas: GameCanvasComponent | undefined = this.gameCanvas();
         if (!canvas) return;
 
-        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null =
+        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null =
           canvas.getStateSnapshot();
         if (!snapshot) return;
 
         if (this.isHost) {
           this.ws.send(ClientMessageType.GameSync, snapshot);
         } else {
-          this.ws.send(ClientMessageType.PlayerState, { player: snapshot.player, revives: snapshot.revives, specialDropActivations: snapshot.specialDropActivations, vfxEvents: snapshot.vfxEvents, pullEvents: snapshot.pullEvents });
+          this.ws.send(ClientMessageType.PlayerState, { player: snapshot.player, revives: snapshot.revives, specialDropActivations: snapshot.specialDropActivations, vfxEvents: snapshot.vfxEvents, pullEvents: snapshot.pullEvents, zombieEffects: snapshot.zombieEffects });
         }
       });
     });
@@ -396,6 +409,8 @@ export class GameComponent implements OnInit, OnDestroy {
     if (current) {
       const merged: CharacterState = {
         ...enginePlayer,
+        // A charge is live input (drawn from the engine and the relayed state), never kept or saved.
+        skillCharge: undefined,
         level: current.level,
         xp: current.xp,
         xpToNext: current.xpToNext,
@@ -406,6 +421,9 @@ export class GameComponent implements OnInit, OnDestroy {
         unallocatedStatPoints: current.unallocatedStatPoints,
         unallocatedSkillPoints: current.unallocatedSkillPoints,
         skillLevels: current.skillLevels,
+        skillBar: current.skillBar,
+        // The engine's copy never learns about respecs; keep the count so the next one is priced.
+        respecCount: current.respecCount,
       };
       this.gameState.player.set(merged);
       this.currentPlayerDisplay.set(merged);
@@ -497,6 +515,24 @@ export class GameComponent implements OnInit, OnDestroy {
 
   onSkillAllocated(skillId: string): void {
     this.gameState.allocateSkillPoint(skillId);
+    const updated: CharacterState | null = this.gameState.player();
+    if (updated) {
+      this.gameCanvas()?.syncProgression(updated);
+      this.currentPlayerDisplay.set({ ...updated });
+    }
+  }
+
+  onSkillsRespec(): void {
+    if (!this.gameState.respecSkills()) return;
+    const updated: CharacterState | null = this.gameState.player();
+    if (updated) {
+      this.gameCanvas()?.syncProgression(updated);
+      this.currentPlayerDisplay.set({ ...updated });
+    }
+  }
+
+  onSkillBarAssigned(assignment: SkillBarAssignment): void {
+    this.gameState.setSkillBarSlot(assignment.slot, assignment.skillId);
     const updated: CharacterState | null = this.gameState.player();
     if (updated) {
       this.gameCanvas()?.syncProgression(updated);
@@ -885,6 +921,10 @@ export class GameComponent implements OnInit, OnDestroy {
       },
       maxAllSkills: (): void => this.devMaxAllSkills(),
       maxOutPlayer: (): void => this.devMaxOutPlayer(),
+      setTreeSkills: (ids: string[]): void => {
+        this.gameState.setTreeSkills(ids);
+        this.syncCanvasProgression();
+      },
       selectClass: (classId: string): void => this.devSelectClass(classId as CharacterClass),
       activateSpecialDrop: (type: string): void => this.activateSpecialDrop(type as SpecialDropType),
       isGameOver: (): boolean => this.isGameOver(),
