@@ -14,7 +14,7 @@ $wt = "$(git rev-parse --show-toplevel)\.claude\skills\worktrees\wt.ps1"
 & $wt take feat/some-slug           # prints: READY <root>\<repo>-N (feat/some-slug), then starts its dev servers (-NoServe skips)
 & $wt take                          # free slot detached at the base; branch it later inside the slot
 & $wt status                        # slots, branch, who holds them, dirty count
-& $wt all                           # every worktree: dirty, pushed, behind base, PR, lock, Free
+& $wt all [-Markdown]               # every worktree: dirty, pushed, behind base, last commit, PR, lock, ports, Free
 & $wt release <repo>-N              # done: unlock + detach HEAD (refuses if dirty; -Force overrides)
 & $wt reset <all|name>              # clean worktree(s) -> latest base, unlock, re-sync deps
 & $wt sync <repo>-N [-Clean]        # re-sync deps
@@ -27,7 +27,12 @@ $wt = "$(git rev-parse --show-toplevel)\.claude\skills\worktrees\wt.ps1"
 Commands wrapping it: `/find-free-worktree-and <task>`, `/worktrees-status`, `/reset-worktree`.
 
 - `take`: fetches, picks a free clean slot (prefers one already on that branch, then a detached
-  one), switches to the existing local/remote branch or creates it from `-Base` (`--no-track`).
+  one, ties by slot number), switches to the existing local/remote branch or creates it from `-Base`
+  (`--no-track`); a slot already on that branch is fast-forwarded to its upstream when only behind.
+  Refuses when the branch is checked out in the primary or in a locked slot, naming that worktree
+  (git cannot check one branch out twice).
+- `all`: one parallel round of git/gh calls (~3 s). `-Markdown` prints the two tables
+  `/worktrees-status` shows (rows under 100 chars so the terminal does not wrap them).
 - Deps: every folder with a tracked `package-lock.json` (root and sub-apps). Hash of the lockfile +
   `patches/*` is stamped in `<folder>\node_modules\.wt-deps-hash`. Same hash = no install.
   Different = incremental `npm install`; if that rewrites the lockfile it is restored and `npm ci`
@@ -37,7 +42,11 @@ Commands wrapping it: `/find-free-worktree-and <task>`, `/worktrees-status`, `/r
   `init` / `reset` / `config`. No file = nothing copied.
 - Lock lives in the slot's private git dir (`.git\worktrees\<slot>\wt-slot.lock`), not in the tree.
 - One slot per session. Never switch branches in a slot another session holds (`status` shows holder).
-- After `take`, work only inside the printed path. Release when the branch is pushed.
+- After `take`, work only inside the printed path for the rest of the session, follow-up prompts
+  included. Do not run commands from the session's start directory, also not read-only ones.
+  Move to another worktree only when the user asks for it.
+- Release only when the user says the session's work is done. A pushed branch or an opened PR is not
+  done, because the user often asks for another round.
 - Ports: worktree N (primary = 1, `<repo>-N` = N) runs its dev servers on WEB_PORT=N*1111 and
   API_PORT=N*1111+1 (`take` prints them; `ports` repeats). In this repo `ng serve` proxies `/ws` to
   `API_PORT` (`proxy.conf.mjs`), the API listens on `PORT`, and `playwright.config.ts` reads
