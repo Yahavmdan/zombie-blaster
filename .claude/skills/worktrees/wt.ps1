@@ -13,7 +13,8 @@
 #   wt.ps1 release <slot|path> [-Force]
 #                                      stop its dev servers, unlock slot, detach HEAD so the branch is free elsewhere
 #   wt.ps1 sync <slot|path> [-Clean]   re-sync deps in a slot
-#   wt.ps1 all [-NoFetch]              every worktree of the repo: branch, dirty, ahead/behind, PR, lock, FREE
+#   wt.ps1 all [-NoFetch] [-Markdown]  every worktree of the repo: branch, dirty, ahead/behind, PR, lock, ports, FREE
+#                                      (-Markdown: the two tables /worktrees-status shows)
 #   wt.ps1 reset <all|name|path> [-Force] [-NoDeps]
 #                                      clean worktree -> latest base (the one on the base branch: pull --ff-only;
 #                                      others: detached at the base), unlock, re-sync deps.
@@ -39,7 +40,8 @@ param(
     [switch]$Force,
     [switch]$NoFetch,
     [switch]$NoDeps,
-    [switch]$NoServe
+    [switch]$NoServe,
+    [switch]$Markdown
 )
 # Continue, not Stop: PS 5.1 turns any native stderr line (git progress, npm warnings) into a
 # terminating error. Failures are decided by exit codes below.
@@ -259,7 +261,8 @@ function Show-Status {
 function Get-Worktrees {
     $list = @(); $cur = $null
     foreach ($line in @(git -C $Repo worktree list --porcelain) + '') {
-        if ($line -like 'worktree *') { $cur = [ordered]@{ Path = ($line.Substring(9) -replace '/', '\'); Branch = $null; Prunable = $false } }
+        if ($line -like 'worktree *') { $cur = [ordered]@{ Path = ($line.Substring(9) -replace '/', '\'); Branch = $null; Head = $null; Prunable = $false } }
+        elseif ($line -like 'HEAD *') { $cur.Head = $line.Substring(5) }
         elseif ($line -like 'branch refs/heads/*') { $cur.Branch = $line.Substring(18) }
         elseif ($line -like 'prunable*') { $cur.Prunable = $true }
         elseif ($line -eq '' -and $cur) { $list += [pscustomobject]$cur; $cur = $null }
@@ -267,13 +270,45 @@ function Get-Worktrees {
     $list
 }
 
-# One gh call for every PR state; branches with several PRs keep the newest. Fails open to '?'.
-function Get-PrStates {
+# Start a native command without waiting; Wait-Native collects it. `all` starts its git/gh calls at once:
+# run one by one they cost ~0.5 s of git per worktree, plus fetch (~2 s) and gh (~2 s).
+function Start-Native([string]$Exe, [string[]]$ArgList) {
+    $psi = New-Object Diagnostics.ProcessStartInfo $Exe
+    $psi.Arguments = ($ArgList | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' '
+    $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+    $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = [Text.Encoding]::UTF8
+    $p = [Diagnostics.Process]::Start($psi)
+    # Read both streams async, or a child that fills its stderr pipe blocks forever.
+    [pscustomobject]@{ Proc = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync() }
+}
+
+function Wait-Native($h) {
+    $h.Proc.WaitForExit()
+    [pscustomobject]@{ Code = $h.Proc.ExitCode; Lines = @($h.Out.Result -split "`r?`n" | Where-Object { $_ -ne '' }) }
+}
+
+# Every PR state from one gh call; branches with several PRs keep the newest. $null (shown '?') on failure.
+function Read-PrStates($result) {
+    if ($result.Code -ne 0 -or -not $result.Lines) { return $null }
     $map = @{}
-    $json = & gh pr list --repo (git -C $Repo remote get-url origin) --state all --author '@me' --limit 200 --json headRefName,state,number 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $json) { return $null }
-    foreach ($pr in ($json | ConvertFrom-Json | Sort-Object number)) { $map[$pr.headRefName] = "#$($pr.number) $($pr.state)" }
+    foreach ($pr in (($result.Lines -join "`n") | ConvertFrom-Json | Sort-Object number)) { $map[$pr.headRefName] = "#$($pr.number) $($pr.state)" }
     $map
+}
+
+# The private git dir of a worktree (lock file home), read from its .git file - no git call needed.
+function Get-GitDir([string]$Path) {
+    $g = Join-Path $Path '.git'
+    if (Test-Path $g -PathType Container) { return $g }
+    ((Get-Content $g -TotalCount 1) -replace '^gitdir:\s*', '') -replace '/', '\'
+}
+
+function Format-Age([long]$Epoch) {
+    $s = [long]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - $Epoch)
+    if ($s -lt 60) { return "${s}s" }
+    if ($s -lt 3600) { return "$([math]::Round($s / 60))m" }
+    if ($s -lt 86400) { return "$([math]::Round($s / 3600))h" }
+    "$([math]::Round($s / 86400))d"
 }
 
 # "web 2224 up, api 2223 down": the worktree's dev-server ports and whether something listens on them.
@@ -291,28 +326,30 @@ function Test-MergedAndGone([string]$Path, [string]$Branch) {
     $LASTEXITCODE -eq 0
 }
 
-function Get-WorktreeRow($wt, $prs, [int[]]$Listening) {
+# $f = facts gathered in parallel by Show-All: Dirty, Counts (origin/<branch>...HEAD, or $null when
+# there is no origin copy), Behind, Epoch. No $f = the worktree's directory is gone.
+function Get-WorktreeRow($wt, $prs, $f, [int[]]$Listening) {
     $name = Split-Path $wt.Path -Leaf
-    if ($wt.Prunable -or -not (Test-Path $wt.Path)) {
+    if (-not $f) {
         return [pscustomobject]@{ Name = $name; Branch = $wt.Branch; Dirty = '-'; Remote = '-'; BaseBehind = '-'; LastCommit = '-'; PR = '-'; Lock = '-'; Ports = '-'; Free = 'MISSING (prunable)' }
     }
     $p = $wt.Path
     $branch = $wt.Branch
-    if (-not $branch) { $branch = '(detached ' + (git -C $p rev-parse --short HEAD) + ')' }
-    $dirty = @(git -C $p status --porcelain).Count
+    if (-not $branch) { $branch = '(detached ' + $wt.Head.Substring(0, 10) + ')' }
+    $dirty = $f.Dirty
     $remote = '-'
     if ($wt.Branch) {
-        if (git -C $p rev-parse --verify --quiet "refs/remotes/origin/$($wt.Branch)") {
-            $c = (git -C $p rev-list --left-right --count "origin/$($wt.Branch)...HEAD") -split '\s+'
+        if ($f.Counts) {
+            $c = $f.Counts -split '\s+'
             $remote = "+$($c[1]) -$($c[0])"
             if ($c[0] -eq '0' -and $c[1] -eq '0') { $remote = 'in sync' }
         }
         elseif (Test-MergedAndGone $p $wt.Branch) { $remote = 'gone (merged)' }
         else { $remote = 'NOT PUSHED' }
     }
-    $behindBase = (git -C $p rev-list --count "HEAD..$Base")
+    $behindBase = $f.Behind
     $lock = '-'
-    $lockPath = Join-Path (git -C $p rev-parse --absolute-git-dir).Trim() 'wt-slot.lock'
+    $lockPath = Join-Path (Get-GitDir $p) 'wt-slot.lock'
     if (Test-Path $lockPath) { $lock = ((Get-Content $lockPath) -join ' @ ') }
     $pr = '-'
     if ($null -eq $prs) { $pr = '?' } elseif ($wt.Branch -and $prs.ContainsKey($wt.Branch)) { $pr = $prs[$wt.Branch] }
@@ -334,7 +371,7 @@ function Get-WorktreeRow($wt, $prs, [int[]]$Listening) {
         Dirty      = $dirty
         Remote     = $remote
         BaseBehind = $behindBase
-        LastCommit = (git -C $p log -1 --format=%cr)
+        LastCommit = (Format-Age $f.Epoch)
         PR         = $pr
         Lock       = $lock
         Ports      = (Get-PortsCell $p $Listening)
@@ -342,13 +379,82 @@ function Get-WorktreeRow($wt, $prs, [int[]]$Listening) {
     }
 }
 
+# Rows as the two markdown tables /worktrees-status shows, each row short enough not to wrap (< 100 chars).
+function Write-Markdown($rows) {
+    $out = @('| Name | Branch | Dirty | Remote | Behind | Last | PR | Lock | Ports web/api | Free |', '|---|---|---|---|---|---|---|---|---|---|')
+    $fix = @()
+    foreach ($r in $rows) {
+        $branch = $r.Branch -replace '^\(detached (\w+)\)$', 'detached $1'
+        $pr = ($r.PR -split ' ')[0]
+        $lock = '-'
+        if ($r.Lock -match '@ \S+T(\d\d:\d\d)') { $lock = $Matches[1] }
+        $ports = $r.Ports -replace '(web|api) ', '' -replace 'down', 'dn'
+        # Icons built from code points: PS 5.1 reads a BOM-less .ps1 as ANSI and would mangle literal emoji.
+        $free = [char]::ConvertFromUtf32(0x274C)
+        if ($r.Free -eq 'YES') { $free = [char]::ConvertFromUtf32(0x2705) } elseif ($r.Free -like 'MISSING*') { $free = 'MISSING' } elseif ($r.Free -eq 'no: primary') { $free = 'primary' }
+        $out += "| $($r.Name) | $branch | $($r.Dirty) | $($r.Remote) | $($r.BaseBehind) | $($r.LastCommit) | $pr | $lock | $ports | $free |"
+        if ($r.Free -like 'MISSING*') { $fix += "| $($r.Name) | Directory missing | git worktree prune |" }
+        if ($r.Dirty -is [int] -and $r.Dirty -gt 0) { $fix += "| $($r.Name) | $($r.Dirty) uncommitted files | Commit and push, or /reset-worktree $($r.Name) |" }
+        if ($r.Free -match 'unpushed branch') { $fix += "| $($r.Name) | Branch not pushed | Push |" }
+        if ($r.Free -match 'unpushed commits') { $fix += "| $($r.Name) | $($r.Remote -replace '^\+(\d+).*', '$1') commits not pushed | Push |" }
+        if ($r.Lock -ne '-' -and ($r.PR -match 'MERGED' -or $r.Remote -eq 'gone (merged)')) { $fix += "| $($r.Name) | Locked, but its branch is merged | /reset-worktree $($r.Name) |" }
+    }
+    $out += ''
+    if ($fix) { $out += @('| Worktree | Problem | Fix |', '|---|---|---|') + $fix } else { $out += 'Nothing needs attention.' }
+    $out -join "`n"
+}
+
 function Show-All {
-    if (-not $NoFetch) { Update-Remote }
-    $prs = Get-PrStates
+    $wts = @(Get-Worktrees)
+    $live = @($wts | Where-Object { -not $_.Prunable -and (Test-Path $_.Path) })
+    # Round 1, all at once: fetch, gh, and every worktree's status (the slow git call; it needs no fetch).
+    $fetch = $null
+    if (-not $NoFetch) { $fetch = Start-Native 'git' @('-C', $Repo, 'fetch', 'origin', '--quiet', '--prune') }
+    $gh = $null
+    $ghExe = (Get-Command gh -ErrorAction SilentlyContinue).Source
+    if ($ghExe) { $gh = Start-Native $ghExe @('pr', 'list', '--repo', (git -C $Repo remote get-url origin), '--state', 'all', '--author', '@me', '--limit', '200', '--json', 'headRefName,state,number') }
+    $status = @{}
+    foreach ($wt in $live) { $status[$wt.Path] = Start-Native 'git' @('-C', $wt.Path, 'status', '--porcelain') }
     $listening = Get-ListeningPorts
-    $rows = foreach ($wt in Get-Worktrees) { Get-WorktreeRow $wt $prs $listening }
-    Write-Host "repo $Repo, base $Base"
-    $rows | Format-Table -AutoSize | Out-String -Width 400 | Write-Host
+    # A concurrent fetch (another session) fails ours with 'cannot lock ref'; it updates the same refs.
+    if ($fetch -and (Wait-Native $fetch).Code -ne 0) { Write-Warning 'git fetch failed (likely a concurrent fetch) - continuing with current refs' }
+    # Round 2, after the fetch: compare every HEAD with its origin branch and with the base.
+    $remoteRefs = @{}
+    foreach ($ref in @(git -C $Repo for-each-ref --format='%(refname:short)' refs/remotes/origin)) { $remoteRefs[$ref] = $true }
+    $jobs = @{}
+    foreach ($wt in $live) {
+        $j = @{
+            Behind = Start-Native 'git' @('-C', $Repo, 'rev-list', '--count', "$($wt.Head)..$Base")
+            Epoch  = Start-Native 'git' @('-C', $Repo, 'log', '-1', '--format=%ct', $wt.Head)
+            Counts = $null
+        }
+        if ($wt.Branch -and $remoteRefs.ContainsKey("origin/$($wt.Branch)")) {
+            $j.Counts = Start-Native 'git' @('-C', $Repo, 'rev-list', '--left-right', '--count', "origin/$($wt.Branch)...$($wt.Head)")
+        }
+        $jobs[$wt.Path] = $j
+    }
+    $prs = $null
+    if ($gh) { $prs = Read-PrStates (Wait-Native $gh) }
+    $rows = foreach ($wt in $wts) {
+        $f = $null
+        if ($jobs.ContainsKey($wt.Path)) {
+            $j = $jobs[$wt.Path]
+            $counts = $null
+            if ($j.Counts) { $counts = (Wait-Native $j.Counts).Lines[0] }
+            $f = [pscustomobject]@{
+                Dirty  = (Wait-Native $status[$wt.Path]).Lines.Count
+                Counts = $counts
+                Behind = (Wait-Native $j.Behind).Lines[0]
+                Epoch  = [long](Wait-Native $j.Epoch).Lines[0]
+            }
+        }
+        Get-WorktreeRow $wt $prs $f $listening
+    }
+    if ($Markdown) { Write-Host (Write-Markdown $rows) }
+    else {
+        Write-Host "repo $Repo, base $Base"
+        $rows | Format-Table -AutoSize | Out-String -Width 400 | Write-Host
+    }
     if ($null -eq $prs) { Write-Host 'PR column: gh unavailable or failed (?)' }
 }
 
@@ -407,9 +513,23 @@ switch ($Cmd) {
         Update-Remote
 
         # Prefer a free slot already on this branch, then a detached one (nobody's branch), then any free clean slot.
-        $slots = Get-Slots | Sort-Object {
-            $b = git -C $_.FullName branch --show-current
+        # Ties keep Get-Slots order (lowest number first): PS 5.1 Sort-Object is not stable, so sort by index too.
+        $all = @(Get-Slots)
+        $slots = @(0..($all.Count - 1) | Where-Object { $all.Count -gt 0 } | Sort-Object {
+            $b = git -C $all[$_].FullName branch --show-current
             if ($Arg -and $b -eq $Arg) { 0 } elseif (-not $b) { 1 } else { 2 }
+        }, { $_ } | ForEach-Object { $all[$_] })
+        # git refuses to switch a second worktree onto a branch another one has checked out. When that worktree
+        # is locked (a session took it earlier) or is the primary, say where the branch lives instead of
+        # locking another slot only for its switch to fail.
+        if ($Arg) {
+            $holderWt = Get-Worktrees | Where-Object { $_.Branch -eq $Arg } | Select-Object -First 1
+            if ($holderWt -and $holderWt.Path -eq $Repo) {
+                throw "branch $Arg is checked out in the primary checkout $Repo - work there, or switch the primary off it first"
+            }
+            if ($holderWt -and (Test-Path (Get-LockPath $holderWt.Path))) {
+                throw "branch $Arg is already checked out in $($holderWt.Path) (slot locked: $((Get-Content (Get-LockPath $holderWt.Path)) -join ' @ ')). Work there if that lock is yours, or release it first: wt.ps1 release $(Split-Path $holderWt.Path -Leaf)"
+            }
         }
         $slot = $null
         $holder = $Arg
@@ -437,6 +557,13 @@ switch ($Cmd) {
                 if ($exists) { Invoke-Git $slot switch $Arg | Out-Null }
                 else { Invoke-Git $slot switch --no-track -c $Arg $Base | Out-Null }
             }
+            # A slot already on $Arg never switched, so it kept a stale tip: fast-forward to its upstream
+            # when it is only behind - never when it has local commits.
+            if ($Arg -and (git -C $slot rev-parse --abbrev-ref '@{u}' 2>$null)) {
+                $behind = [int](git -C $slot rev-list --count 'HEAD..@{u}')
+                $ahead = [int](git -C $slot rev-list --count '@{u}..HEAD')
+                if ($behind -gt 0 -and $ahead -eq 0) { Invoke-Git $slot merge --ff-only '@{u}' | Out-Null }
+            }
             Sync-Deps $slot -CleanInstall:$Clean
         }
         catch {
@@ -452,7 +579,8 @@ switch ($Cmd) {
 
     'stop' { Stop-DevServers (Resolve-Worktree $Arg) }
 
-    'all' { Show-All }
+    # Read-only report: a git probe's exit code (e.g. merge-base on an unmerged branch) is not a failure.
+    'all' { Show-All; exit 0 }
 
     'ports' {
         $ports = Get-SlotPorts $Arg

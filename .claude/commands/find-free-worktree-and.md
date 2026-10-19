@@ -29,6 +29,9 @@ Then it starts the slot's dev servers (API + frontend, from `dev-servers.txt`) h
 background on those ports and waits until they listen: `SERVE WEB up on http://localhost:<WEB_PORT>`.
 A port already in use is left as is and reported. Don't start them again yourself.
 
+`take <branch>` refuses when that branch is already checked out in the primary or in a locked slot,
+and names the worktree: work there if that session is yours, otherwise ask the user.
+
 No free slot: run `& $wt all`, show which worktrees are close to free, and ask the user whether to
 `/reset-worktree` one of them or grow the pool (`& $wt init -Count <n+1>`, a clean install each).
 Never pick a worktree that is dirty, locked, or on a branch with an open PR.
@@ -42,6 +45,10 @@ For the rest of the session the slot is the working directory:
 - Read / Edit / Write / Grep / Glob: absolute paths under `<path>` only.
 - git: run inside `<path>` (or `git -C <path>`). Never edit or switch branches in the primary
   checkout or any other worktree.
+- Follow-up prompts in this session (a re-review, review fixes, a question about the work) run in the
+  same slot. Do not go back to the directory the session started in, also not for read-only
+  commands: it is on another branch, so what you read or run there is not this task's code.
+- Move to another worktree only when the user asks for it.
 - Dev servers: already running on the slot's ports (`take` started them), never the defaults
   (4200/3001 belong to nobody; another slot may hold them). Logs: `wt-serve-web.log` /
   `wt-serve-api.log` in the slot's git dir (`git -C <path> rev-parse --absolute-git-dir`).
@@ -54,7 +61,11 @@ For the rest of the session the slot is the working directory:
 Execute `$ARGUMENTS` in the slot - if it is a `/command`, run that command's process there. If
 `$ARGUMENTS` is empty, ask what to do.
 
-When the work is pushed (or the user is done), release the slot: `& $wt release <slot>` - stops its
-dev servers; refuses if dirty.
+Keep the slot locked until the user says the session's work is done. A pushed branch or an opened PR
+is not "done": the user often asks for another round. When the user says done, release the slot:
+`& $wt release <slot>` - stops its dev servers; refuses if dirty.
+
+If the slot was released and the user asks for more work on the same task, take the same slot again
+(`& $wt take <branch>`, then confirm the printed path). Tell the user if `take` prints a different path.
 
 $ARGUMENTS
