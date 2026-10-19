@@ -84,6 +84,8 @@ export interface E2eZombieView {
   attackCooldown: number;
   /** Eater: true while it eats a corpse (host-simulated, synced). */
   eating: boolean;
+  /** Eater: the corpse it goes for or eats (null when hungry or none; set by the host's simulation). */
+  mealId: string | null;
   /** Sprite animation this client renders for the zombie (`walk`, `eating`, ...). */
   animState: string | null;
   /** Ticks the zombie stays stunned by a warrior skill (host-simulated, synced). */

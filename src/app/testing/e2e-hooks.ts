@@ -135,6 +135,7 @@ function toZombieView(z: ZombieState, engine: GameEngine): E2eZombieView {
     magnetPull: magnetPullProgress(z),
     attackCooldown: z.attackCooldown,
     eating: z.eatingTimer > 0,
+    mealId: z.eatingTargetId,
     animState: anim ? anim.state : null,
     stunTicks: z.stunTicks,
     ticksToHit: z.attackAnimTimer > 0 && !z.attackHasHit ? z.attackAnimTimer - ZOMBIE_TYPES[z.type].attackHitTick : null,

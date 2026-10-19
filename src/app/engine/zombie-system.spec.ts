@@ -784,6 +784,28 @@ describe('Eater zombie', (): void => {
       runUntilEaten(eater, 600);
     });
 
+    it('gets down off a box stack to a corpse lying right beside it, without dithering on top', (): void => {
+      const ledge: Platform = { x: 600, y: GAME_CONSTANTS.LEVEL_TIER_Y[0], width: 330, height: 32 };
+      const boxes: Platform[] = [0, 1, 2, 3].map(
+        (i: number): Platform => ({ x: 760, y: ledge.y - 21 * (i + 1), width: 27, height: 21, solid: true }),
+      );
+      engine.platforms = [...engine.platforms, ledge, ...boxes];
+      engine.zombieCorpses = [makeCorpse({ id: 'beside', x: 730, y: ledge.y - 50, isGrounded: true, landProcessed: true })];
+      // Straddling the top box's end: its body rests on the box, its center is past it, right over the corpse.
+      const eater: ZombieState = makeEater({ x: 731, y: boxes[3].y - 40, instanceWidth: 34 });
+      engine.zombies = [eater];
+      let turns: number = 0;
+      let facing: number = eater.facing;
+      for (let tick: number = 0; tick < 200 && eater.eatingTimer <= 0; tick++) {
+        zombieSystem.updateZombies();
+        const onTop: boolean = eater.y + eater.instanceHeight <= boxes[3].y + 1;
+        if (onTop && eater.facing !== facing) turns++;
+        facing = eater.facing;
+      }
+      expect(eater.eatingTimer, `still not eating; eater at ${eater.x}, ${eater.y}`).toBeGreaterThan(0);
+      expect(turns, 'it turned around on top of the stack').toBeLessThanOrEqual(1);
+    });
+
     it('two Eaters go for two different corpses', (): void => {
       engine.zombieCorpses = [lyingCorpse('a', 700), lyingCorpse('b', 1000)];
       const first: ZombieState = makeEater({ id: 'eater-1', x: 500 });
