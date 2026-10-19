@@ -80,6 +80,12 @@ export interface CharacterState {
   skillLevels: Record<string, number>;
   activeBuffs: ActiveBuff[];
   inventory: PlayerInventory;
+  /** Skill-tree classes: the skill on each bar slot (keys 1-6), null = empty. */
+  skillBar?: Array<string | null>;
+  /** Skill-tree respecs done so far (the first one is free). */
+  respecCount?: number;
+  /** A held attack charging its skill (Power Dash), 0..1; absent when nothing charges. Drawn over the player for everyone. */
+  skillCharge?: number;
 }
 
 export enum Direction {

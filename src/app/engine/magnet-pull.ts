@@ -81,6 +81,7 @@ export function pullZombiesToward(
   casterX: number,
   casterY: number,
   range: number,
+  stunTicks: number = 0,
 ): void {
   const casterCX: number = casterX + GAME_CONSTANTS.PLAYER_WIDTH / 2;
   const casterCY: number = casterY + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
@@ -96,5 +97,7 @@ export function pullZombiesToward(
     if (dist > range) continue;
     const offsetX: number = (Math.random() - 0.5) * spreadHalf * 2;
     startMagnetPull(z, casterX + offsetX, casterFeetY);
+    // The stun counts down once the drag lets go (a pulled zombie skips the stun tick).
+    z.stunTicks = Math.max(z.stunTicks, stunTicks);
   }
 }

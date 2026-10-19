@@ -1,11 +1,12 @@
 import { GamePlayer, KEYS } from './game-player';
 import { E2eSnapshot, E2eZombieView } from './probe';
+import { fightWithSkills, hasSkillTree } from './warrior';
 
 export interface BotOptions {
   durationMs: number;
   /** Stop early once this many zombies died (0 = run full duration). */
   stopAfterKills?: number;
-  /** Also cast skills 1..6 when off cooldown. */
+  /** Also cast skills 1..6 when off cooldown (skill-tree classes: the fight skills on the skill bar). */
   useSkills?: boolean;
   /** Called every decision tick; return false to stop. */
   onTick?: (s: E2eSnapshot) => boolean | void;
@@ -45,6 +46,7 @@ function nearestZombie(s: E2eSnapshot): E2eZombieView | null {
 /**
  * A simple "hunt the nearest zombie" player. Plays through real key presses:
  * walks toward the target, faces it, attacks, jumps when the target is above.
+ * Skill-tree classes tap attack instead of holding it (a held attack charges a hold skill).
  */
 export async function runBot(player: GamePlayer, options: BotOptions): Promise<BotReport> {
   const deadline: number = Date.now() + options.durationMs;
@@ -91,8 +93,18 @@ export async function runBot(player: GamePlayer, options: BotOptions): Promise<B
     const dy: number = target.y + target.height - (p.y + 48);
     const wantFacing: string = dx >= 0 ? 'right' : 'left';
 
+    const tree: boolean = hasSkillTree(state);
     if (Math.abs(dx) > ATTACK_REACH_X || Math.abs(dy) > SAME_LEVEL_Y) {
       await player.release(KEYS.attack);
+      if (tree && options.useSkills && Math.abs(dy) <= SAME_LEVEL_Y) {
+        await player.release(KEYS.left);
+        await player.release(KEYS.right);
+        if (await fightWithSkills(player, state, true)) {
+          skillCasts++;
+          await player.wait(DECISION_MS);
+          continue;
+        }
+      }
       await player.release(dx >= 0 ? KEYS.left : KEYS.right);
       await player.hold(dx >= 0 ? KEYS.right : KEYS.left);
       if (dy < -SAME_LEVEL_Y && p.isGrounded) {
@@ -103,6 +115,13 @@ export async function runBot(player: GamePlayer, options: BotOptions): Promise<B
       await player.release(KEYS.right);
       if (p.facing !== wantFacing) {
         await player.face(wantFacing === 'left' ? 'left' : 'right');
+      }
+      if (tree) {
+        if (options.useSkills && (await fightWithSkills(player, state, false))) skillCasts++;
+        else await player.attack();
+        attacks++;
+        await player.wait(DECISION_MS);
+        continue;
       }
       await player.hold(KEYS.attack);
       attacks++;

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { GameStateService } from './game-state.service';
-import { CharacterClass, CharacterState, SKILLS, SkillDefinition } from '@shared/index';
+import { CharacterClass, CharacterState, GAME_CONSTANTS, SKILLS, SkillDefinition, WARRIOR_SKILL_TREE } from '@shared/index';
 
 describe('GameStateService', () => {
   let service: GameStateService;
@@ -10,129 +10,139 @@ describe('GameStateService', () => {
     service = TestBed.inject(GameStateService);
   });
 
-  describe('allocateSkillPoint', () => {
-    it('should allow leveling a skill past 20 when its maxLevel is 30', () => {
-      const skillWith30MaxLevel: SkillDefinition | undefined = SKILLS.find(
-        (s: SkillDefinition) => s.maxLevel === 30 && s.classId === CharacterClass.Warrior,
-      );
-      expect(skillWith30MaxLevel).toBeDefined();
+  function patch(change: Partial<CharacterState>): void {
+    service.player.update((p: CharacterState | null): CharacterState | null => (p ? { ...p, ...change } : p));
+  }
 
-      service.createPlayer('Test', CharacterClass.Warrior);
+  describe('skill levels (classes without a tree)', () => {
+    const luckySeven: SkillDefinition = SKILLS.find((s: SkillDefinition): boolean => s.id === 'assassin-lucky-seven')!;
 
-      const targetSkillId: string = skillWith30MaxLevel!.id;
-      const targetLevel: number = 21;
+    it('levels a skill up to its maxLevel', () => {
+      service.createPlayer('Test', CharacterClass.Assassin);
+      patch({ level: 50, unallocatedSkillPoints: 10, skillLevels: { [luckySeven.id]: luckySeven.maxLevel - 1 } });
 
-      service.player.update((p: CharacterState | null): CharacterState | null => {
-        if (!p) return p;
-        const skillLevels: Record<string, number> = { ...p.skillLevels, [targetSkillId]: 20 };
-        if (skillWith30MaxLevel!.prerequisite) {
-          skillLevels[skillWith30MaxLevel!.prerequisite.skillId] = skillWith30MaxLevel!.prerequisite.level;
-        }
-        return {
-          ...p,
-          level: 50,
-          unallocatedSkillPoints: 10,
-          skillLevels,
-        };
-      });
+      service.allocateSkillPoint(luckySeven.id);
 
-      service.allocateSkillPoint(targetSkillId);
-
-      const player: CharacterState | null = service.player();
-      expect(player).not.toBeNull();
-      expect(player!.skillLevels[targetSkillId]).toBe(targetLevel);
-      expect(player!.unallocatedSkillPoints).toBe(9);
+      const player: CharacterState = service.player()!;
+      expect(player.skillLevels[luckySeven.id]).toBe(luckySeven.maxLevel);
+      expect(player.unallocatedSkillPoints).toBe(9);
     });
 
-    it('should block leveling at maxLevel 20 for skills with maxLevel 20', () => {
-      const skillWith20MaxLevel: SkillDefinition | undefined = SKILLS.find(
-        (s: SkillDefinition) => s.maxLevel === 20 && s.classId === CharacterClass.Warrior,
-      );
-      expect(skillWith20MaxLevel).toBeDefined();
+    it('stops at maxLevel', () => {
+      service.createPlayer('Test', CharacterClass.Assassin);
+      patch({ level: 50, unallocatedSkillPoints: 10, skillLevels: { [luckySeven.id]: luckySeven.maxLevel } });
 
-      service.createPlayer('Test', CharacterClass.Warrior);
+      service.allocateSkillPoint(luckySeven.id);
 
-      const targetSkillId: string = skillWith20MaxLevel!.id;
-
-      service.player.update((p: CharacterState | null): CharacterState | null => {
-        if (!p) return p;
-        return {
-          ...p,
-          level: 50,
-          unallocatedSkillPoints: 10,
-          skillLevels: { ...p.skillLevels, [targetSkillId]: 20 },
-        };
-      });
-
-      service.allocateSkillPoint(targetSkillId);
-
-      const player: CharacterState | null = service.player();
-      expect(player).not.toBeNull();
-      expect(player!.skillLevels[targetSkillId]).toBe(20);
-      expect(player!.unallocatedSkillPoints).toBe(10);
+      expect(service.player()!.skillLevels[luckySeven.id]).toBe(luckySeven.maxLevel);
+      expect(service.player()!.unallocatedSkillPoints).toBe(10);
     });
 
-    it('should allow leveling a skill from level 25 to 26 when maxLevel is 30', () => {
-      const skillWith30MaxLevel: SkillDefinition | undefined = SKILLS.find(
-        (s: SkillDefinition) => s.maxLevel === 30 && s.classId === CharacterClass.Warrior,
-      );
-      expect(skillWith30MaxLevel).toBeDefined();
+    it('gives 3 points per level and none at the start', () => {
+      service.createPlayer('Test', CharacterClass.Assassin);
+      expect(service.player()!.unallocatedSkillPoints).toBe(0);
+      service.addXp(service.player()!.xpToNext);
+      expect(service.player()!.unallocatedSkillPoints).toBe(GAME_CONSTANTS.SKILL_POINTS_PER_LEVEL);
+    });
+  });
 
+  describe('skill tree (warrior)', () => {
+    it('starts with one point and gets one per level', () => {
       service.createPlayer('Test', CharacterClass.Warrior);
-
-      const targetSkillId: string = skillWith30MaxLevel!.id;
-
-      service.player.update((p: CharacterState | null): CharacterState | null => {
-        if (!p) return p;
-        const skillLevels: Record<string, number> = { ...p.skillLevels, [targetSkillId]: 25 };
-        if (skillWith30MaxLevel!.prerequisite) {
-          skillLevels[skillWith30MaxLevel!.prerequisite.skillId] = skillWith30MaxLevel!.prerequisite.level;
-        }
-        return {
-          ...p,
-          level: 50,
-          unallocatedSkillPoints: 10,
-          skillLevels,
-        };
-      });
-
-      service.allocateSkillPoint(targetSkillId);
-
-      const player: CharacterState | null = service.player();
-      expect(player).not.toBeNull();
-      expect(player!.skillLevels[targetSkillId]).toBe(26);
+      expect(service.player()!.unallocatedSkillPoints).toBe(1);
+      service.addXp(service.player()!.xpToNext);
+      expect(service.player()!.level).toBe(2);
+      expect(service.player()!.unallocatedSkillPoints).toBe(2);
     });
 
-    it('should block leveling at maxLevel 30', () => {
-      const skillWith30MaxLevel: SkillDefinition | undefined = SKILLS.find(
-        (s: SkillDefinition) => s.maxLevel === 30 && s.classId === CharacterClass.Warrior,
-      );
-      expect(skillWith30MaxLevel).toBeDefined();
-
+    it('owns a skill with one point, once', () => {
       service.createPlayer('Test', CharacterClass.Warrior);
+      service.allocateSkillPoint('warrior-power-dash');
+      expect(service.player()!.skillLevels['warrior-power-dash']).toBe(1);
+      expect(service.player()!.unallocatedSkillPoints).toBe(0);
 
-      const targetSkillId: string = skillWith30MaxLevel!.id;
+      patch({ unallocatedSkillPoints: 3 });
+      service.allocateSkillPoint('warrior-power-dash');
+      expect(service.player()!.skillLevels['warrior-power-dash']).toBe(1);
+      expect(service.player()!.unallocatedSkillPoints).toBe(3);
+    });
 
-      service.player.update((p: CharacterState | null): CharacterState | null => {
-        if (!p) return p;
-        const skillLevels: Record<string, number> = { ...p.skillLevels, [targetSkillId]: 30 };
-        if (skillWith30MaxLevel!.prerequisite) {
-          skillLevels[skillWith30MaxLevel!.prerequisite.skillId] = skillWith30MaxLevel!.prerequisite.level;
-        }
-        return {
-          ...p,
-          level: 50,
-          unallocatedSkillPoints: 10,
-          skillLevels,
-        };
-      });
+    it('refuses a skill above the character level or without a parent', () => {
+      service.createPlayer('Test', CharacterClass.Warrior);
+      patch({ unallocatedSkillPoints: 5 });
+      service.allocateSkillPoint('warrior-slash-blast');
+      expect(service.player()!.skillLevels['warrior-slash-blast']).toBeUndefined();
 
-      service.allocateSkillPoint(targetSkillId);
+      patch({ level: 4 });
+      service.allocateSkillPoint('warrior-slash-blast');
+      expect(service.player()!.skillLevels['warrior-slash-blast']).toBeUndefined();
 
-      const player: CharacterState | null = service.player();
-      expect(player).not.toBeNull();
-      expect(player!.skillLevels[targetSkillId]).toBe(30);
-      expect(player!.unallocatedSkillPoints).toBe(10);
+      service.allocateSkillPoint('warrior-power-strike');
+      service.allocateSkillPoint('warrior-slash-blast');
+      expect(service.player()!.skillLevels['warrior-slash-blast']).toBe(1);
+      expect(service.player()!.unallocatedSkillPoints).toBe(3);
+    });
+
+    it('respecs for free once, then for gold, and gives every point back', () => {
+      service.createPlayer('Test', CharacterClass.Warrior);
+      patch({ level: 4, unallocatedSkillPoints: 4, inventory: { ...service.player()!.inventory, gold: 0 } });
+      service.allocateSkillPoint('warrior-power-strike');
+      service.allocateSkillPoint('warrior-uppercut');
+
+      expect(service.respecPrice(service.player()!)).toBe(0);
+      expect(service.respecSkills()).toBe(true);
+      expect(service.player()!.unallocatedSkillPoints).toBe(4);
+      expect(service.player()!.skillLevels['warrior-power-strike']).toBeUndefined();
+
+      service.allocateSkillPoint('warrior-power-strike');
+      const price: number = service.respecPrice(service.player()!);
+      expect(price).toBe(GAME_CONSTANTS.RESPEC_GOLD_PER_LEVEL * 4);
+      expect(service.respecSkills()).toBe(false);
+      patch({ inventory: { ...service.player()!.inventory, gold: price } });
+      expect(service.respecSkills()).toBe(true);
+      expect(service.player()!.inventory.gold).toBe(0);
+      expect(service.player()!.unallocatedSkillPoints).toBe(4);
+    });
+
+    it('max-out owns the whole tree and fills the skill bar', () => {
+      service.createPlayer('Test', CharacterClass.Warrior);
+      service.maxAllSkills();
+      for (const s of WARRIOR_SKILL_TREE.skills) {
+        expect(service.player()!.skillLevels[s.id], s.id).toBe(1);
+      }
+      expect(service.player()!.skillBar!.every((id: string | null): boolean => id !== null)).toBe(true);
+    });
+
+    it('slots a learned active on the first free key; attack combos and passives stay off the bar', () => {
+      service.createPlayer('Test', CharacterClass.Warrior);
+      expect(service.player()!.skillBar).toEqual([null, null, null, null, null, null]);
+      patch({ unallocatedSkillPoints: 3 });
+      service.allocateSkillPoint('warrior-iron-recovery');
+      service.allocateSkillPoint('warrior-power-dash');
+      service.allocateSkillPoint('warrior-power-strike');
+      expect(service.player()!.skillBar).toEqual(['warrior-power-strike', null, null, null, null, null]);
+    });
+
+    it('moves a skill between bar slots, empties a slot, and refuses combos and skills it does not own', () => {
+      service.createPlayer('Test', CharacterClass.Warrior);
+      patch({ level: GAME_CONSTANTS.SKILL_TIER_LEVELS[1], unallocatedSkillPoints: 3 });
+      service.allocateSkillPoint('warrior-power-strike');
+      service.allocateSkillPoint('warrior-power-dash');
+      service.allocateSkillPoint('warrior-uppercut');
+      service.setSkillBarSlot(4, 'warrior-uppercut');
+      expect(service.player()!.skillBar).toEqual(['warrior-power-strike', null, null, null, 'warrior-uppercut', null]);
+      service.setSkillBarSlot(0, null);
+      service.setSkillBarSlot(1, 'warrior-power-dash');
+      service.setSkillBarSlot(2, 'warrior-iron-recovery');
+      service.setSkillBarSlot(3, 'warrior-slash-blast');
+      expect(service.player()!.skillBar).toEqual([null, null, null, null, 'warrior-uppercut', null]);
+    });
+
+    it('a respec empties the skill bar', () => {
+      service.createPlayer('Test', CharacterClass.Warrior);
+      service.allocateSkillPoint('warrior-power-strike');
+      service.respecSkills();
+      expect(service.player()!.skillBar).toEqual([null, null, null, null, null, null]);
     });
   });
 });

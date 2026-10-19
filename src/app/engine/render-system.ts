@@ -362,6 +362,7 @@ export class RenderSystem {
     fillOutlinedText(ctx, p.name, p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 12, classColor);
     ctx.font = pixelFont(10);
     fillOutlinedText(ctx, `Lv.${p.level}`, p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 2, CANVAS_BONE);
+    this.drawSkillCharge(ctx, p);
 
     if (needsAlpha) {
       ctx.restore();
@@ -533,6 +534,7 @@ export class RenderSystem {
       fillOutlinedText(ctx, rp.name, rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 12, classColor);
       ctx.font = pixelFont(10);
       fillOutlinedText(ctx, `Lv.${rp.level}`, rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 2, CANVAS_BONE);
+      this.drawSkillCharge(ctx, rp);
       if (rp.isAfk) {
         ctx.font = pixelFont(12, 700);
         fillOutlinedText(ctx, 'Away', rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 30, CANVAS_BONE_DIM);
@@ -547,6 +549,22 @@ export class RenderSystem {
       ctx.fillStyle = hpPercent > 0.3 ? '#44cc44' : '#ff4444';
       ctx.fillRect(barX, barY, barWidth * hpPercent, 4);
     }
+  }
+
+  /** A held attack charging (Power Dash): a gold bar over the head; full = farthest. Synced in the player state. */
+  private drawSkillCharge(ctx: CanvasRenderingContext2D, p: CharacterState): void {
+    const charge: unknown = p.skillCharge;
+    if (typeof charge !== 'number' || !Number.isFinite(charge)) return;
+    const w: number = GAME_CONSTANTS.SKILL_CHARGE_BAR_WIDTH_PX;
+    const h: number = GAME_CONSTANTS.SKILL_CHARGE_BAR_HEIGHT_PX;
+    const x: number = Math.round(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2 - w / 2);
+    const y: number = Math.round(p.y - GAME_CONSTANTS.SKILL_CHARGE_BAR_RAISE_PX);
+    ctx.fillStyle = CANVAS_INK;
+    ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+    ctx.fillStyle = CANVAS_INK_2;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = CANVAS_GOLD;
+    ctx.fillRect(x, y, Math.round(w * Math.min(1, Math.max(0, charge))), h);
   }
 
   private renderDashOverlay(ctx: CanvasRenderingContext2D): void {
@@ -964,6 +982,7 @@ export class RenderSystem {
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 1;
       ctx.strokeRect(barX, barY, barWidth, isDragon ? 7 : 5);
+      if (z.stunTicks > 0) this.drawStunStars(ctx, z.x + z.instanceWidth / 2, barY - 8, z.stunTicks);
 
       if (isDragon) {
         ctx.font = pixelFont(12, 700);
@@ -2437,6 +2456,19 @@ export class RenderSystem {
     ctx.fillStyle = color;
     ctx.textAlign = 'left';
     ctx.fillText(text, x, y);
+  }
+
+  /** Two stars circling a stunned zombie's head (stepped from the synced stun ticks, so every screen agrees). */
+  private drawStunStars(ctx: CanvasRenderingContext2D, cx: number, y: number, stunTicks: number): void {
+    const offsets: Array<[number, number]> = [[-10, 0], [0, -4], [10, 0], [0, 4]];
+    const phase: number = Math.floor(stunTicks / 6) % offsets.length;
+    for (const k of [phase, (phase + 2) % offsets.length]) {
+      const [dx, dy]: [number, number] = offsets[k];
+      ctx.fillStyle = CANVAS_INK;
+      ctx.fillRect(Math.round(cx + dx) - 3, Math.round(y + dy) - 3, 6, 6);
+      ctx.fillStyle = GAME_CONSTANTS.SKILL_STUN_STAR_COLOR;
+      ctx.fillRect(Math.round(cx + dx) - 2, Math.round(y + dy) - 2, 4, 4);
+    }
   }
 
   updatePlayerAnimState(): void {

@@ -27,7 +27,47 @@
       </div>
       <span class="xp-value">{{ playerData().xp }}/{{ playerData().xpToNext }}</span>
     </div>
+
+    @if (treeBar().length > 0) {
+      <div class="cd-row" data-testid="hud-skill-bar">
+        @for (s of treeBar(); track s.slot) {
+          <div
+            class="cd px-panel--inset"
+            [class.cd--ready]="s.skill !== null && s.label === ''"
+            [class.cd--empty]="s.skill === null"
+            [title]="s.skill ? s.skill.name + ' · ' + s.key : 'Empty: place a skill in the skill tree'"
+            [attr.data-testid]="'hud-bar-slot-' + s.slot"
+            [attr.data-skill]="s.skill?.id ?? ''"
+          >
+            @if (s.skill) {
+              <app-pixel-icon [icon]="s.skill.icon" [size]="24" />
+              <span class="cd-shade" [style.height.%]="s.shadePercent"></span>
+              @if (s.label) {
+                <span class="cd-time">{{ s.label }}</span>
+              }
+            }
+            <span class="cd-key">{{ s.key }}</span>
+          </div>
+        }
+      </div>
+    }
   </div>
+
+  @if (newMove(); as move) {
+    <div class="new-move px-panel" data-testid="new-move-toast">
+      <span class="new-move-title">New move</span>
+      <div class="new-move-body">
+        <app-pixel-icon [icon]="move.skill.icon" [size]="24" />
+        <span class="new-move-name">{{ move.skill.name }}</span>
+        @if (move.key) {
+          <span class="new-move-note">press</span>
+          <kbd class="px-key" data-testid="new-move-key">{{ move.key }}</kbd>
+        } @else {
+          <span class="new-move-note" data-testid="new-move-note">{{ move.note }}</span>
+        }
+      </div>
+    </div>
+  }
 
   <div class="hud-center">
     <div class="wave-info px-panel">

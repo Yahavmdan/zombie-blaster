@@ -1,6 +1,7 @@
 import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer, KEYS } from '../../support/game-player';
 import { E2eSkillView, E2eSnapshot } from '../../support/probe';
+import { WARRIOR, castSkill, warriorArena } from '../../support/warrior';
 
 /**
  * Buffs that change derived stats (Hyper Body, Claw Mastery) and the special-drop Y/N prompt.
@@ -44,8 +45,10 @@ test.describe('buffs and special drops', { tag: '@solo' }, (): void => {
     solo: SoloFactory;
   }): Promise<void> => {
     const player: GamePlayer = await maxedPlayer(solo, 'warrior');
+    // The warrior's hyper body fires from its skill-bar key.
+    await warriorArena(player, [WARRIOR.hyperBody]);
     const before: E2eSnapshot = await player.probe.state();
-    await castById(player, 'warrior-hyper-body');
+    await castSkill(player, WARRIOR.hyperBody);
     await player.probe.waitFor(
       'max HP and MP raised by the buff',
       (s: E2eSnapshot): boolean =>

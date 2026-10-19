@@ -15,7 +15,7 @@ import {
   computed,
   isDevMode,
 } from '@angular/core';
-import { CharacterClass, CharacterState, SKILLS, SkillDefinition, SkillType, VfxEvent } from '@shared/index';
+import { CharacterClass, CharacterState, MagnetPullRequest, SKILLS, SkillDefinition, SkillType, VfxEvent, ZombieEffectRequest, getSkillTree } from '@shared/index';
 import { BoulderState, CagePuzzleState, DropType, LooseProp, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
 import { GameAction, KeyBindings } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
@@ -148,6 +148,12 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.syncProgression(player);
   }
 
+  /** Time left on a skill's cooldown in ms (0 = ready), for the HUD. */
+  skillCooldownMs(skillId: string): number {
+    if (!this.engine) return 0;
+    return (this.engine.skillCooldowns.get(skillId) ?? 0) * this.engine.fixedDt;
+  }
+
   syncLayoutSeed(seed: number): void {
     this.engine?.syncLayoutSeed(seed);
   }
@@ -182,6 +188,11 @@ export class GameCanvasComponent implements OnDestroy {
   triggerQuickSlotSkill(skillId: string): void {
     const p: CharacterState | null = this.gameState.player();
     if (!p) return;
+    // Skill-tree classes: a quick slot fires a learned active by id, like its skill-bar key.
+    if (getSkillTree(p.classId)) {
+      this.engine?.queueTreeSkill(skillId);
+      return;
+    }
     const usableSkills: SkillDefinition[] = SKILLS.filter(
       (s: SkillDefinition): boolean =>
         s.classId === p.classId &&
@@ -247,7 +258,7 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<{ playerX: number; playerY: number; pullRange: number; skillColor: string }>; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     return this.engine?.getStateSnapshot() ?? null;
   }
 
@@ -295,8 +306,12 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.applyRemoteDamage(events);
   }
 
-  applyRemotePull(evt: { playerX: number; playerY: number; pullRange: number; skillColor: string }): void {
+  applyRemotePull(evt: MagnetPullRequest): void {
     this.engine?.applyRemotePull(evt);
+  }
+
+  applyRemoteZombieEffects(effects: ZombieEffectRequest[]): void {
+    this.engine?.applyRemoteZombieEffects(effects);
   }
 
   applyIncomingZombieDamage(damage: number, knockbackDir: number, isPoisonAttack: boolean): void {
@@ -381,6 +396,7 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private resetAllKeys(): void {
+    this.engine?.cancelQueuedSkills();
     const actions: GameAction[] = Object.keys(this.keys) as GameAction[];
     for (const action of actions) {
       this.keys[action] = false;

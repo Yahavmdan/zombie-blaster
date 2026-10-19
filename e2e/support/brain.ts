@@ -10,6 +10,7 @@ import {
 } from './probe';
 import { WORLD } from './invariants';
 import { LevelPlatform, currentPlatform, platformUnder, stepToward } from './navigation';
+import { fightWithSkills, hasSkillTree, pullWithMagnet } from './warrior';
 
 /**
  * A player that tries to play well, through real key presses only.
@@ -99,6 +100,28 @@ const SKILL_PRIORITY: string[] = [
   'hp-recovery',
   'auto-potion',
 ];
+/**
+ * Skill-tree classes (one point per level, a skill is owned or not): learn order by mechanic. The
+ * skills the brain fights with come first (power strike, cleave, uppercut, dash; cleave and dash fire
+ * from attack combos, learning puts the others on the skill bar), auto-potion early, monster magnet (pull: piles bodies under the exit), then
+ * passives that need no input.
+ * Anything else comes last, in tree order.
+ */
+const TREE_PRIORITY: string[] = [
+  'strike',
+  'auto-potion',
+  'cleave',
+  'uppercut',
+  'dash',
+  'hp-recovery',
+  'shoulder-charge',
+  'pull',
+  'heavy-hands',
+  'executioner',
+  'second-wind',
+  'adrenaline',
+  'last-stand',
+];
 const PASSIVE_KEYWORDS: string[] = ['auto-potion', 'hp-recovery', 'mastery'];
 const DAMAGE_KEYWORDS: string[] = ['power-strike', 'lucky-seven', 'slash-blast', 'dragon-roar'];
 /** Highest foothold one jump reaches (single jump ~116 px). */
@@ -114,6 +137,13 @@ interface Foothold {
 const RANGED_CLASSES: Set<string> = new Set<string>(['assassin']);
 /** Building the exit pile: strike zombies this close, so the knocked-back body still lands under the exit. */
 const PILE_STRIKE_PX: number = 80;
+/** Lure (skill-tree warriors): the base counts as quiet with no zombie on its level closer than this. */
+const LURE_FROM_PX: number = 600;
+/** ...for this long; then walk out until the nearest one is this close (it notices), then go back. */
+const LURE_AFTER_QUIET_MS: number = 4_000;
+const LURE_TO_PX: number = 420;
+/** Never wander further than this from the exit while luring. */
+const LURE_MAX_TRIP_PX: number = 700;
 
 export function newBrainStats(): BrainStats {
   return {
@@ -160,6 +190,8 @@ export class Brain {
   private lastClimbLogAt: number = 0;
   private lastX: number = 0;
   private blockedTicks: number = 0;
+  private luring: boolean = false;
+  private quietSince: number = Date.now();
 
   constructor(
     private readonly me: GamePlayer,
@@ -288,7 +320,7 @@ export class Brain {
   private async closeStrayDialogs(): Promise<boolean> {
     const open: string | null = await this.me.page.evaluate((): string | null => {
       const el: Element | null = document.querySelector(
-        'app-shop, app-stat-allocation, app-skill-tree, app-inventory, .settings-overlay, .dev-dialog',
+        'app-shop, app-stat-allocation, app-skill-tree, app-tree-skill-window, app-inventory, .settings-overlay, .dev-dialog',
       );
       return el
         ? el.tagName.toLowerCase() + (el.className ? `.${String(el.className).split(' ')[0]}` : '')
@@ -310,7 +342,7 @@ export class Brain {
       (hpPct < DRINK_HP_BELOW || burstCouldKill) && (p.potions[HP_POTION_ID] ?? 0) > 0;
     const drinkMp: boolean =
       !drinkHp &&
-      s.usableSkills.length > 0 &&
+      hasSkills(s) &&
       p.mp / p.maxMp < 0.25 &&
       (p.potions[MP_POTION_ID] ?? 0) > 0;
     if (!drinkHp && !drinkMp) return false;
@@ -464,9 +496,7 @@ export class Brain {
         await this.setMove(0);
         const want: string = closeThreat.dx >= 0 ? 'right' : 'left';
         if (p.facing !== want) await this.me.face(want === 'left' ? 'left' : 'right');
-        await this.setAttack(true);
-        this.stats.attacks++;
-        await this.castSkills(s, threats, true);
+        await this.strike(s, threats, true);
         return true;
       }
     }
@@ -495,11 +525,20 @@ export class Brain {
       await this.setMove(0);
       const want: string = target.dx >= 0 ? 'right' : 'left';
       if (p.facing !== want) await this.me.face(want === 'left' ? 'left' : 'right');
-      await this.setAttack(true);
-      this.stats.attacks++;
+      await this.swing(s);
       return true;
     }
     await this.setAttack(false);
+    // Skill-tree warriors reel zombies in to their feet (monster magnet): they die under the exit.
+    if (inColumn && hasSkillTree(s)) {
+      await this.setMove(0);
+      if (await pullWithMagnet(this.me, s)) {
+        this.stats.skillCasts++;
+        this.log('pulled zombies to the exit with monster magnet');
+        return true;
+      }
+    }
+    if (hasSkillTree(s) && (await this.lure(s, sameLevel, pile.centerX))) return true;
     const dx: number = anchorX - cx;
     if (Math.abs(dx) > 10) {
       await this.setMove(dx > 0 ? 1 : -1);
@@ -508,6 +547,29 @@ export class Brain {
     await this.setMove(0);
     const facing: string = hordeFromLeft ? 'left' : 'right';
     if (p.facing !== facing) await this.me.face(facing === 'left' ? 'left' : 'right');
+    return true;
+  }
+
+  /**
+   * Zombies only chase players within ZOMBIE_DETECTION_RANGE, and nobody waits at the exit: when
+   * the base stays quiet, walk out toward the nearest zombie on the ground until it notices, then
+   * head back (it follows, and the magnet reels it in from there). Returns true while luring.
+   */
+  private async lure(s: E2eSnapshot, sameLevel: Threat[], baseX: number): Promise<boolean> {
+    const nearest: Threat | undefined = sameLevel[0];
+    const quiet: boolean = !nearest || Math.abs(nearest.dx) > LURE_FROM_PX;
+    if (!quiet || this.luring) this.quietSince = Date.now();
+    if (!this.luring && quiet && nearest && Date.now() - this.quietSince > LURE_AFTER_QUIET_MS) {
+      this.luring = true;
+      this.log(`base quiet: luring the zombie ${Math.round(Math.abs(nearest.dx))} px away`);
+    }
+    if (!this.luring) return false;
+    const farFromBase: boolean = Math.abs(this.centerX(s) - baseX) > LURE_MAX_TRIP_PX;
+    if (!nearest || Math.abs(nearest.dx) < LURE_TO_PX || farFromBase) {
+      this.luring = false;
+      return false;
+    }
+    await this.setMove(nearest.dx > 0 ? 1 : -1);
     return true;
   }
 
@@ -641,15 +703,49 @@ export class Brain {
 
     if (gap > reach) {
       await this.setAttack(false);
+      if (hasSkillTree(s) && gap < 300) {
+        // A crowd ahead: power dash into it (hold attack, release) instead of walking up.
+        await this.setMove(0);
+        if (await fightWithSkills(this.me, s, true)) {
+          this.stats.skillCasts++;
+          return;
+        }
+      }
       await this.setMove(target.dx > 0 ? 1 : -1);
       return;
     }
 
     await this.setMove(0);
     if (p.facing !== wantFacing) await this.me.face(wantFacing === 'left' ? 'left' : 'right');
-    await this.setAttack(true);
+    await this.strike(s, threats);
+  }
+
+  /** In reach: swing, plus a skill when one is worth it (skill keys, or the tree skill bar). */
+  private async strike(s: E2eSnapshot, threats: Threat[], holdPosition: boolean = false): Promise<void> {
+    if (hasSkillTree(s)) {
+      if (await fightWithSkills(this.me, s, !holdPosition)) {
+        this.stats.skillCasts++;
+        return;
+      }
+      await this.swing(s);
+      return;
+    }
+    await this.swing(s);
+    await this.castSkills(s, threats, holdPosition);
+  }
+
+  /**
+   * A basic attack. Skill-tree classes tap it: a held attack charges a hold skill (power dash)
+   * instead of swinging. Others keep it held (auto-swing).
+   */
+  private async swing(s: E2eSnapshot): Promise<void> {
     this.stats.attacks++;
-    await this.castSkills(s, threats);
+    if (hasSkillTree(s)) {
+      await this.setAttack(false);
+      await this.me.attack();
+      return;
+    }
+    await this.setAttack(true);
   }
 
   /** holdPosition: skip movement skills (dash) that would carry the fight away from the exit. */
@@ -733,7 +829,11 @@ export class Brain {
       this.stats.statSpends++;
       this.log(`spent stat points (level ${p.level})`);
     }
-    if (p.unallocatedSkillPoints > 0) {
+    if (p.unallocatedSkillPoints > 0 && hasSkillTree(s)) {
+      await this.withMenu(KEYS.openSkills, 'app-tree-skill-window', async (): Promise<void> => {
+        await this.learnTreeSkills(s, p.unallocatedSkillPoints);
+      });
+    } else if (p.unallocatedSkillPoints > 0) {
       const levels: Record<string, number> = { ...p.skillLevels };
       await this.withMenu(KEYS.openSkills, 'app-skill-tree', async (): Promise<void> => {
         for (let i: number = 0; i < p.unallocatedSkillPoints; i++) {
@@ -750,6 +850,46 @@ export class Brain {
       });
     }
     return true;
+  }
+
+  /**
+   * Skill tree window: select each unowned skill in TREE_PRIORITY order and learn it when its
+   * Learn button is enabled (tier level reached, a parent owned, a point left).
+   */
+  private async learnTreeSkills(s: E2eSnapshot, points: number): Promise<void> {
+    const rank: (mechanic: string) => number = (mechanic: string): number => {
+      const index: number = TREE_PRIORITY.indexOf(mechanic);
+      return index === -1 ? TREE_PRIORITY.length : index;
+    };
+    const candidates: string[] = s.treeSkills
+      .filter((t: E2eSnapshot['treeSkills'][number]): boolean => !t.owned)
+      .sort(
+        (a: E2eSnapshot['treeSkills'][number], b: E2eSnapshot['treeSkills'][number]): number =>
+          rank(a.mechanic) - rank(b.mechanic),
+      )
+      .map((t: E2eSnapshot['treeSkills'][number]): string => t.id);
+    const learn: Locator = this.me.page.getByTestId('tree-learn-button');
+    let left: number = points;
+    for (const id of candidates) {
+      if (left <= 0) break;
+      const picked: boolean = await this.me.page
+        .getByTestId(`tree-node-${id}`)
+        .click({ timeout: 1_500 })
+        .then(
+          (): boolean => true,
+          (): boolean => false,
+        );
+      if (!picked) continue;
+      const enabled: boolean = await learn
+        .waitFor({ state: 'visible', timeout: 500 })
+        .then((): Promise<boolean> => learn.isEnabled())
+        .catch((): boolean => false);
+      if (!enabled) continue;
+      await learn.click({ timeout: 1_500 }).catch((): void => undefined);
+      left--;
+      this.stats.skillSpends++;
+      this.log(`learned ${id}`);
+    }
   }
 
   /** Enabled invest button with the best priority (see SKILL_PRIORITY), or null. */
@@ -796,7 +936,7 @@ export class Brain {
       POTION_STOCK_TARGET - hpPotions,
     );
     const mpWanted: number =
-      emergency || s.usableSkills.length === 0
+      emergency || !hasSkills(s)
         ? 0
         : Math.min(
             Math.floor((p.gold - Math.max(0, affordable) * HP_POTION_PRICE) / MP_POTION_PRICE),
@@ -859,6 +999,11 @@ export class Brain {
     this.attacking = false;
     await this.me.releaseAll();
   }
+}
+
+/** The player has skills that cost MP (skill keys, or owned tree skills). */
+function hasSkills(s: E2eSnapshot): boolean {
+  return s.usableSkills.length > 0 || s.treeSkills.some((t: E2eSnapshot['treeSkills'][number]): boolean => t.owned);
 }
 
 /** Grounded corpses whose foothold lies under the exit: the pile players climb. */

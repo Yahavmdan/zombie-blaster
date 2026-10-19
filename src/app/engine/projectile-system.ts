@@ -375,6 +375,10 @@ export class ProjectileSystem {
 
   /** A lethal projectile or poison hit: downed for a revive online, game over solo (as melee). */
   private knockOutPlayer(p: CharacterState): void {
+    if (this.e.trySecondWind()) {
+      this.e.onPlayerUpdate?.(p);
+      return;
+    }
     p.hp = 0;
     this.e.poisonEffect = null;
     if (this.e.isMultiplayerHost || this.e.isMultiplayerClient) {

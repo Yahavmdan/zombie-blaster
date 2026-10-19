@@ -136,8 +136,19 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   `stepToward` routes to it). Resting there (`restingPlayerIds`): zombies don't target, hit or land
   on you (spitter/dragon shots too), and you can't attack or use Active skills (buffs work).
   Zombies wander when everyone rests. Climbing there is the "earned" part: the ladder is exposed.
-- Skills unlock with skill points (3 per level); warrior power-strike and assassin lucky-seven
-  are level-1 skills. Ranger/Mage/Priest still have no active skills.
+- **Warrior = skill tree** (1 point per level, 1 at start, owned or not; `.claude/rules/skills.md`):
+  three attacks fire from the attack button (Power Dash: hold 1 s and let go; Ground Slam: hold in the
+  air; Slash Blast: double tap), the other actives and buffs from the skill bar (keys 1-6, one key = one
+  skill), `state().usableSkills` is
+  empty for it. Read `state().treeSkills` (owned, barSlot, cooldownTicks), `player.skillBar`,
+  `state().buffs`, `zombies[].stunTicks`. Setup: `probe.setTreeSkills(ids)` (exactly these owned;
+  the actives and buffs among them fill the bar in that order), `probe.spawnZombieAt(x)`. Fire with
+  `castSkill(player, id)` (does the combo, or presses the key of its bar slot); helpers and ids in `e2e/support/warrior.ts`
+  (`warriorArena`, `zombieAt`, `TOUGH_FLOOR`: floor-1 walkers die to one swing). Specs:
+  `solo/warrior-skills.spec.ts`, `solo/skill-tree.spec.ts` (window),
+  `online/warrior-tree-coop.spec.ts`, `protocol/skill-tree.spec.ts`. Other classes keep skill points
+  (3 per level) and keys 1-6; assassin lucky-seven is a level-1 skill; Ranger/Mage/Priest have no
+  actives. Every player regains 1 MP per second.
 - Controls: attack is J or left mouse (Ctrl is unbound, all game keys preventDefault). Mouse buttons are
   bindings like keys (`mouseleft`/`mousemiddle`/`mouseright`/`mouseback`/`mouseforward`, presses count on the
   canvas only); quick slots 9-12 sit on RMB/MMB/M4/M5, empty. `solo/mouse-controls.spec.ts` drags a
@@ -241,7 +252,7 @@ Driving tips:
     variable jump height when parallel workers drop frames: passes alone, fails in the suite.
   - A ready pile beats `escapeSurround`: running from the crowd walked the bot onto a ladder.
   - Always validate exit/climb specs with `--workers=5` (plus fairness specs) to reproduce suite load.
-  - The brain restocks MP potions (5) for classes with skills; the game has no MP regen.
+  - The brain restocks MP potions (5) for classes with skills; MP regen is only 1 per second.
 - Special drops open a prompt with a timer; the brain presses Y. Its keys are the bindable `confirmDrop` / `declineDrop` actions (Y / N by default), answered with the stats/skills/shop/inventory open too; a key the player bound to another action keeps that action. A downed player neither picks up nor pulls drops, and an open prompt's drop goes back into the world when they go down. Setup: `probe.spawnDrop(type, x, y, specialType)` (on the player: the magnet pulls it in) and `probe.knockOut()` (lethal hit through the normal path: downed online). Specs: `solo/buffs-and-drops.spec.ts`, `online/downed-edge-cases.spec.ts`.
 - Buffs on derived stats (Hyper Body max HP/MP, Claw Mastery crit) apply at once: the engine recomputes `derived` when a buff starts or ends (`engine/derived-stats.ts`) and owns `activeBuffs`; `syncProgression` keeps them. `state().player.critRate`, `maxHp`, `maxMp` show it. A maxed-out assassin already sits at the crit cap (60): test crit buffs on a low-level one.
 - **Exploding barrels**: an attack on a lying barrel (beside it, facing it, within 24 px, level
@@ -313,8 +324,9 @@ When the user asks to "play the game", the goal is to find ways to improve it, n
   flag (config: list + html into `e2e/.report/data/*.png`). To eyeball small art (carried corpses), a throwaway spec can `page.screenshot({ path, clip })` around `state().player` and you upscale the crop (System.Drawing, NearestNeighbor); delete the spec after.
 - Physics gotcha: tiny velocities snap to 0 (`PLAYER_MIN_VELOCITY`); any per-tick acceleration
   smaller than that must skip the snap (air control was silently dead until fixed).
-- Skills live in slots 1..6 = usable Active/Buff skills sorted by required level
+- Legacy classes: skills live in slots 1..6 = usable Active/Buff skills sorted by required level
   (`state().usableSkills[].slot`). Ranger/Mage/Priest currently have only passives (tests skip them).
+  The warrior uses its own skill bar instead (see above).
 - Particles cap at 400: wait for effects to fade before measuring "effect appeared".
 - Probe setup helpers that inject entities (`dropCorpses`) must also register sprite instances
   (`setState`/`setFinalFrame`), or the entities are invisible in screenshots while physics still works.

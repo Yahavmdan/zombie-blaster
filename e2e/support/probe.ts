@@ -23,6 +23,7 @@ export type {
   E2eRemotePlayerView,
   E2eSpringView,
   E2eSkillView,
+  E2eTreeSkillView,
   E2eZombieView,
 } from '../../src/app/testing/e2e-api';
 
@@ -154,6 +155,16 @@ export class GameProbe {
 
   async levelUp(times: number = 1): Promise<void> {
     await this.page.evaluate((n: number): void => window.__zbE2e?.controls?.levelUp(n), times);
+  }
+
+  /** Setup only (tree classes): owns exactly these tree skills, ignoring points and tiers. */
+  async setTreeSkills(ids: string[]): Promise<void> {
+    await this.page.evaluate((list: string[]): void => window.__zbE2e?.controls?.setTreeSkills(list), ids);
+  }
+
+  /** Setup only (solo/host): a zombie climbs out of the ground at x. */
+  async spawnZombieAt(x: number): Promise<void> {
+    await this.page.evaluate((at: number): void => window.__zbE2e?.engine?.spawnZombieAt(at), x);
   }
 
   async maxAllSkills(): Promise<void> {

@@ -102,6 +102,7 @@ function makeZombie(overrides: Partial<ZombieState> = {}): ZombieState {
     eatingTargetId: null,
     eatingTimer: 0,
     magnetPull: null,
+    stunTicks: 0,
     ...overrides,
   };
 }
@@ -220,6 +221,9 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     pendingSpecialDropActivations: [],
     pendingVfxEvents: [],
     pendingPullEvents: [],
+    pendingZombieEffects: [],
+    skillMotion: null,
+    trySecondWind: (): boolean => false,
     remotePlayers: [],
     remotePlayerAnimators: new Map<string, SpriteAnimator>(),
     zombieInterpolation: new Map<string, EntityInterpolation>(),

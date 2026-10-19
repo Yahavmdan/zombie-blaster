@@ -17,9 +17,10 @@ const PANELS: PanelCase[] = [
     selector: 'app-stat-allocation',
   },
   {
+    // The warrior has a skill tree; classes without one keep app-skill-tree (checked below).
     name: 'skill tree',
     open: (p: Page): Promise<void> => p.keyboard.press(KEYS.openSkills),
-    selector: 'app-skill-tree',
+    selector: 'app-tree-skill-window',
   },
   {
     name: 'shop',
@@ -99,5 +100,24 @@ test.describe('pixel UI style', { tag: '@smoke' }, (): void => {
       await page.keyboard.press('Escape');
       await expect(root, `${panel.name} closes`).toBeHidden();
     }
+  });
+
+  test('a class without a skill tree keeps the legacy skill window', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const player: GamePlayer = await solo('assassin');
+    await player.probe.setGodMode(true);
+    const page: Page = player.page;
+
+    await page.keyboard.press(KEYS.openSkills);
+    const root: Locator = page.locator('app-skill-tree');
+    await expect(root).toBeVisible();
+    await expect(page.locator('app-tree-skill-window')).toHaveCount(0);
+    await expect(root.locator('img.pixel-icon').first()).toBeVisible();
+    expect(await pictographs(page)).toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(root).toBeHidden();
   });
 });

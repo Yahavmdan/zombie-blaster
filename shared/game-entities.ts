@@ -72,6 +72,8 @@ export interface ZombieState {
   eatingTimer: number;
   /** Monster-magnet drag in progress. Host-simulated and synced, so every screen draws the pull. */
   magnetPull: MagnetPull | null;
+  /** Ticks the zombie stays stunned (no AI, no attacks; it still falls). Set by warrior skills, host-simulated and synced. */
+  stunTicks: number;
 }
 
 /** A zombie being dragged by monster magnet from where it stood to the caster's spot. */

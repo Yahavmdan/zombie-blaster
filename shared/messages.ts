@@ -100,4 +100,7 @@ export interface GameMessage<T = unknown> {
 
 export type GameAction = keyof InputKeys;
 
+/** The skill keys: legacy classes' skills 1-6, a tree class's skill-bar slots (slot 0 first). */
+export const SKILL_KEY_ACTIONS: readonly GameAction[] = ['skill1', 'skill2', 'skill3', 'skill4', 'skill5', 'skill6'];
+
 export type KeyBindings = Record<GameAction, string[]>;

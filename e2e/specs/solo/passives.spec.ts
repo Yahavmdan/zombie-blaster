@@ -2,19 +2,24 @@ import { test, expect, SoloFactory } from '../../support/fixtures';
 import { ALL_CLASSES, GamePlayer, KEYS } from '../../support/game-player';
 import { E2eSnapshot, E2eVfxLogEntry } from '../../support/probe';
 import { vfxQueuedBy } from '../../support/vfx-gate';
+import { WARRIOR } from '../../support/warrior';
 
 /**
- * Passive skills (SKILLS with a passiveEffect in shared/game-constants.ts): every class has
- * Auto Potion (drinks below 50% HP / 30% MP, only once learned); the warrior also has Improved
- * HP Recovery (+HP every 10 s while standing still).
+ * Passive skills: every class has Auto Potion (drinks below 50% HP / 30% MP, only once learned;
+ * legacy SKILLS passiveEffect, or the warrior tree's warrior-auto-potion); the warrior also has Iron
+ * Recovery in its tree (a share of max HP every 3 s while standing still).
  */
 
 /** Mirrors the auto-potion passive's hpThresholdPercent / mpThresholdPercent. */
 const AUTO_HP_THRESHOLD: number = 0.5;
 const AUTO_MP_THRESHOLD: number = 0.3;
-/** Mirrors warrior-improved-hp-recovery: intervalMs and the max-level (16) heal. */
-const HP_RECOVERY_INTERVAL_MS: number = 10_000;
-const HP_RECOVERY_MAX_HEAL: number = 50;
+/** Mirrors SKILL_IRON_RECOVERY_STILL_TICKS + SKILL_IRON_RECOVERY_INTERVAL_TICKS (50 + 150 ticks). */
+const IRON_RECOVERY_FIRST_HEAL_MS: number = 4_000;
+/** Mirrors warrior-iron-recovery's healPercent curve (StatCurve on str) and the warrior's base str. */
+const IRON_RECOVERY_CURVE: { min: number; max: number; half: number } = { min: 2, max: 5, half: 60 };
+const WARRIOR_BASE_STR: number = 15;
+/** Every player regains 1 MP per second (PLAYER_MP_REGEN_INTERVAL_TICKS). */
+const MP_REGEN_PER_S: number = 1;
 const HEAL_NUMBER_COLOR: string = '#44ff44';
 
 function hpPotions(s: E2eSnapshot): number {
@@ -56,7 +61,9 @@ test.describe('passive skills', { tag: '@solo' }, (): void => {
       expect(hpPotions(untouched), 'no HP potion drunk without the passive').toBe(hpPotions(start));
       expect(mpPotions(untouched), 'no MP potion drunk without the passive').toBe(mpPotions(start));
       expect(untouched.player!.hp).toBe(lowHp);
-      expect(untouched.player!.mp).toBe(lowMp);
+      // Only the slow MP regen every player has (still well under the threshold).
+      expect(untouched.player!.mp).toBeGreaterThanOrEqual(lowMp);
+      expect(untouched.player!.mp).toBeLessThanOrEqual(lowMp + Math.ceil(2.5 * MP_REGEN_PER_S) + 1);
 
       // Learn it (max level: 90% per try) while healthy: above both thresholds it waits.
       await player.probe.setVitals(Math.ceil(maxHp * 0.8), Math.ceil(maxMp * 0.8));
@@ -100,15 +107,15 @@ test.describe('passive skills', { tag: '@solo' }, (): void => {
     });
   }
 
-  test('warrior: improved HP recovery heals every 10 s while standing still', async ({
+  test('warrior: iron recovery heals a share of max HP every 3 s while standing still', async ({
     solo,
   }: {
     solo: SoloFactory;
   }): Promise<void> => {
     const player: GamePlayer = await solo('warrior');
-    await player.probe.maxAllSkills();
+    await player.probe.setTreeSkills([WARRIOR.ironRecovery, WARRIOR.autoPotion]);
     const start: E2eSnapshot = await settle(player);
-    expect(start.player!.skillLevels['warrior-improved-hp-recovery']).toBeGreaterThan(0);
+    expect(start.player!.skillLevels[WARRIOR.ironRecovery]).toBe(1);
     // Hurt, but above the auto-potion threshold so only the recovery heals.
     const hurtHp: number = Math.ceil(start.player!.maxHp * 0.6);
     await player.probe.setVitals(hurtHp, start.player!.maxMp);
@@ -117,12 +124,17 @@ test.describe('passive skills', { tag: '@solo' }, (): void => {
       await player.probe.waitFor(
         'HP recovered while standing still',
         (s: E2eSnapshot): boolean => s.player!.hp > hurtHp,
-        { timeoutMs: HP_RECOVERY_INTERVAL_MS + 3_000, intervalMs: 250 },
+        { timeoutMs: IRON_RECOVERY_FIRST_HEAL_MS + 3_000, intervalMs: 250 },
       );
     });
     const after: E2eSnapshot = await player.probe.state();
-    expect(after.player!.hp, 'one recovery tick').toBe(
-      Math.min(after.player!.maxHp, hurtHp + HP_RECOVERY_MAX_HEAL),
+    // healPercent = min + (max - min) * str / (str + half), of max HP, at least 1.
+    const healPercent: number =
+      IRON_RECOVERY_CURVE.min +
+      (IRON_RECOVERY_CURVE.max - IRON_RECOVERY_CURVE.min) * (WARRIOR_BASE_STR / (WARRIOR_BASE_STR + IRON_RECOVERY_CURVE.half));
+    const heal: number = Math.max(1, Math.floor(after.player!.maxHp * healPercent / 100));
+    expect(after.player!.hp, `one recovery tick of ${heal} (${healPercent.toFixed(2)}% of max HP)`).toBe(
+      Math.min(after.player!.maxHp, hurtHp + heal),
     );
     expect(hpPotions(after), 'no potion was used').toBe(hpPotions(start));
     expect(
@@ -133,13 +145,13 @@ test.describe('passive skills', { tag: '@solo' }, (): void => {
     ).toBe(true);
   });
 
-  test('warrior: improved HP recovery does nothing while the player keeps moving', async ({
+  test('warrior: iron recovery does nothing while the player keeps moving', async ({
     solo,
   }: {
     solo: SoloFactory;
   }): Promise<void> => {
     const player: GamePlayer = await solo('warrior');
-    await player.probe.maxAllSkills();
+    await player.probe.setTreeSkills([WARRIOR.ironRecovery]);
     const start: E2eSnapshot = await settle(player);
     const hurtHp: number = Math.ceil(start.player!.maxHp * 0.6);
     await player.probe.setVitals(hurtHp, start.player!.maxMp);
@@ -148,7 +160,7 @@ test.describe('passive skills', { tag: '@solo' }, (): void => {
     await player.hold(KEYS.jump);
     let airborneSamples: number = 0;
     let samples: number = 0;
-    const end: number = Date.now() + HP_RECOVERY_INTERVAL_MS + 2_000;
+    const end: number = Date.now() + IRON_RECOVERY_FIRST_HEAL_MS + 2_000;
     while (Date.now() < end) {
       const s: E2eSnapshot = await player.probe.state();
       samples++;
@@ -163,7 +175,7 @@ test.describe('passive skills', { tag: '@solo' }, (): void => {
     await player.probe.waitFor(
       'HP recovered once the player stood still',
       (s: E2eSnapshot): boolean => s.player!.hp > hurtHp,
-      { timeoutMs: HP_RECOVERY_INTERVAL_MS + 3_000, intervalMs: 250 },
+      { timeoutMs: IRON_RECOVERY_FIRST_HEAL_MS + 3_000, intervalMs: 250 },
     );
   });
 });

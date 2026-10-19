@@ -1,4 +1,7 @@
 import { CharacterClass } from '../../shared/character.js';
+import { GAME_CONSTANTS, getSkillTree } from '../../shared/game-constants.js';
+import { normalizeSkillBar } from '../../shared/skill-tree.js';
+import type { ClassSkillTree, TreeSkill } from '../../shared/skill-tree.js';
 import type {
   CreateRoomPayload,
   JoinRoomPayload,
@@ -24,6 +27,8 @@ export const LIMITS: {
   id: number;
   damageEvents: number;
   damagePerHit: number;
+  zombieEffects: number;
+  effectForce: number;
 } = {
   roomName: 40,
   playerName: 24,
@@ -32,11 +37,16 @@ export const LIMITS: {
   damageEvents: 64,
   // A maxed character's biggest crit with every multiplier is a few tens of thousands.
   damagePerHit: 1_000_000,
+  zombieEffects: 64,
+  // The host clamps forces and stuns again (SKILL_MAX_REMOTE_*); this only rejects garbage.
+  effectForce: 100,
 };
+
+const ZOMBIE_EFFECT_KINDS: Set<string> = new Set<string>(['launch', 'knockdown', 'knockback', 'stun']);
 
 const CLASS_IDS: Set<string> = new Set<string>(Object.values(CharacterClass));
 
-type UnknownRecord = Record<string, unknown>;
+export type UnknownRecord = Record<string, unknown>;
 
 export function isObject(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -128,7 +138,56 @@ export function isSetAfkPayload(p: unknown): p is SetAfkPayload {
   return isObject(p) && typeof p['afk'] === 'boolean';
 }
 
-/** game-sync and player-state are relayed as-is; they only need to be objects carrying a player. */
+/** A guest's zombie pushes, launches and stuns for the host (absent is fine). */
+function isZombieEffectList(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!Array.isArray(value) || value.length > LIMITS.zombieEffects) return false;
+  return value.every(
+    (e: unknown): boolean =>
+      isObject(e) &&
+      isId(e['zombieId']) &&
+      typeof e['kind'] === 'string' &&
+      ZOMBIE_EFFECT_KINDS.has(e['kind']) &&
+      isFiniteNumber(e['dir']) &&
+      isFiniteNumber(e['force']) &&
+      e['force'] >= 0 &&
+      e['force'] <= LIMITS.effectForce &&
+      isFiniteNumber(e['stunMs']) &&
+      e['stunMs'] >= 0 &&
+      e['stunMs'] <= GAME_CONSTANTS.SKILL_MAX_REMOTE_STUN_MS,
+  );
+}
+
+/** game-sync and player-state are relayed as-is; they need to be objects carrying a player (and sane effects). */
 export function isStateSnapshotPayload(p: unknown): p is UnknownRecord {
-  return isObject(p) && isObject(p['player']);
+  return isObject(p) && isObject(p['player']) && isZombieEffectList(p['zombieEffects']);
+}
+
+/**
+ * Skill-tree classes: a relayed player owns only real skills of its class's tree, each unlocked by a
+ * parent it owns, and no more than its level allows; its skill bar holds only those. Anything else is
+ * dropped before the relay.
+ */
+export function sanitizeTreeSkills(player: UnknownRecord, classId: CharacterClass): void {
+  const tree: ClassSkillTree | null = getSkillTree(classId);
+  if (!tree) return;
+  const claimed: unknown = player['skillLevels'];
+  const levels: UnknownRecord = isObject(claimed) ? claimed : {};
+  const level: number = isFiniteNumber(player['level']) ? player['level'] : 1;
+  const points: number = GAME_CONSTANTS.TREE_STARTING_SKILL_POINTS + GAME_CONSTANTS.TREE_SKILL_POINTS_PER_LEVEL * (level - 1);
+  const owned: Record<string, number> = {};
+  let count: number = 0;
+  const byTier: TreeSkill[] = [...tree.skills].sort((a: TreeSkill, b: TreeSkill): number => a.tier - b.tier);
+  for (const skill of byTier) {
+    if (levels[skill.id] !== 1) continue;
+    if (count >= points) break;
+    if (level < GAME_CONSTANTS.SKILL_TIER_LEVELS[skill.tier - 1]) continue;
+    if (skill.parents.length > 0 && !skill.parents.some((id: string): boolean => owned[id] === 1)) continue;
+    owned[skill.id] = 1;
+    count++;
+  }
+  player['skillLevels'] = owned;
+  // The skill bar names only skills it can own, each once, in the right number of slots.
+  const bar: unknown = player['skillBar'];
+  player['skillBar'] = normalizeSkillBar(tree, owned, Array.isArray(bar) ? bar : null, GAME_CONSTANTS.TREE_SKILL_BAR_SLOTS);
 }

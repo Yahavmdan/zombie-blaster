@@ -55,7 +55,12 @@ test.describe('skills', { tag: '@solo' }, (): void => {
     }: { solo: SoloFactory }, testInfo: TestInfo): Promise<void> => {
       test.setTimeout(120_000);
       const player: GamePlayer = await prepareMaxedPlayer(solo, classId);
-      const skills: E2eSkillView[] = (await player.probe.state()).usableSkills;
+      const start: E2eSnapshot = await player.probe.state();
+      test.skip(
+        start.treeSkills.length > 0,
+        `${classId} has a skill tree: its skill bar is covered by warrior-skills.spec.ts`,
+      );
+      const skills: E2eSkillView[] = start.usableSkills;
       test.skip(skills.length === 0, `${classId} has no active or buff skills yet`);
       const results: SkillCastResult[] = [];
 
@@ -123,16 +128,18 @@ test.describe('skills', { tag: '@solo' }, (): void => {
     });
   }
 
+  // Skill keys: the assassin. The warrior's skill bar has its own key spam test in
+  // gameplay-edge-cases.spec.ts.
   test('skills respect their cooldown when the key is spammed', async ({
     solo,
   }: {
     solo: SoloFactory;
   }): Promise<void> => {
-    const player: GamePlayer = await prepareMaxedPlayer(solo, 'warrior');
+    const player: GamePlayer = await prepareMaxedPlayer(solo, 'assassin');
     const skill: E2eSkillView | undefined = (await player.probe.state()).usableSkills.find(
       (k: E2eSkillView): boolean => k.mechanic === 'damage',
     );
-    expect(skill, 'warrior has a damage skill').toBeDefined();
+    expect(skill, 'assassin has a damage skill').toBeDefined();
 
     await player.castSkill(skill!.slot);
     const afterFirst: E2eSnapshot = await player.probe.state();
@@ -176,7 +183,7 @@ test.describe('skills', { tag: '@solo' }, (): void => {
   }: {
     solo: SoloFactory;
   }): Promise<void> => {
-    const player: GamePlayer = await prepareMaxedPlayer(solo, 'warrior');
+    const player: GamePlayer = await prepareMaxedPlayer(solo, 'assassin');
     await player.probe.setGodMode(false);
     const skill: E2eSkillView = (await player.probe.state()).usableSkills.find(
       (k: E2eSkillView): boolean => k.mechanic === 'damage',

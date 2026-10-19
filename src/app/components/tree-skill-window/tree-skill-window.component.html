@@ -1,0 +1,196 @@
+<div class="px-overlay" (click)="onClose()" data-testid="tree-overlay-close"></div>
+<div class="window px-panel" data-testid="tree-window">
+  <div class="px-header">
+    <app-pixel-icon [icon]="classIcon()" [size]="24" />
+    <h2 class="title">
+      Skill tree <span class="title-class">· {{ className() }}</span>
+    </h2>
+    <span class="points px-chip" data-testid="tree-points"
+      >Points <b>{{ points() }}</b></span
+    >
+    <button
+      class="px-btn px-btn--sm px-btn--ghost"
+      [disabled]="!canRespec()"
+      (click)="onRespec()"
+      data-testid="tree-respec-button"
+      title="Forget every skill and get the points back"
+    >
+      {{ respecPrice() > 0 ? 'Respec · ' + respecPrice() + ' gold' : 'Respec' }}
+    </button>
+    <button
+      class="px-btn px-close"
+      (click)="onClose()"
+      data-testid="tree-close-button"
+      title="Close"
+    >
+      <app-pixel-icon [icon]="'close'" [size]="16" />
+    </button>
+  </div>
+
+  <div class="body">
+    <div class="branches px-panel--inset">
+      <div class="gutter" [style.height.px]="gridHeight">
+        @for (tier of tierLabels(); track tier.level) {
+          <span class="tier" [class.tier--reached]="tier.reached" [style.top.px]="tier.top"
+            >Lv {{ tier.level }}</span
+          >
+        }
+      </div>
+
+      @for (b of branches(); track b.branch.id) {
+        <section
+          class="branch"
+          [style.--bc]="b.branch.color"
+          [style.width.px]="gridWidth + 4"
+          [attr.data-testid]="'tree-branch-' + b.branch.id"
+        >
+          <div class="branch-head">
+            <app-pixel-icon [icon]="b.branch.icon" [size]="24" />
+            <span class="branch-name">{{ b.branch.name }}</span>
+            <span class="branch-count">{{ b.owned }} / {{ b.nodes.length }}</span>
+          </div>
+          <div class="grid" [style.width.px]="gridWidth" [style.height.px]="gridHeight">
+            <svg
+              class="links"
+              [attr.width]="gridWidth"
+              [attr.height]="gridHeight"
+              shape-rendering="crispEdges"
+            >
+              @for (link of b.links; track link.id) {
+                <path class="link-ink" [attr.d]="link.path" />
+              }
+              @for (link of b.links; track link.id) {
+                <path class="link" [attr.data-state]="link.state" [attr.d]="link.path" />
+              }
+            </svg>
+            @for (n of b.nodes; track n.skill.id) {
+              <button
+                type="button"
+                class="node"
+                [class.node--selected]="n.skill.id === selectedId()"
+                [style.left.px]="n.left"
+                [style.top.px]="n.top"
+                [title]="n.skill.name"
+                [attr.data-state]="n.state"
+                [attr.data-testid]="'tree-node-' + n.skill.id"
+                (click)="onSelect(n.skill.id)"
+              >
+                <app-pixel-icon class="node-icon" [icon]="n.skill.icon" [size]="32" />
+                @if (n.levelChip !== null) {
+                  <span class="badge badge--level">Lv {{ n.levelChip }}</span>
+                }
+                @if (n.skill.capstone) {
+                  <span class="badge badge--cap"
+                    ><app-pixel-icon [icon]="'star'" [size]="16"
+                  /></span>
+                }
+                @if (n.padlock) {
+                  <span class="badge badge--lock"
+                    ><app-pixel-icon [icon]="'lock'" [size]="16"
+                  /></span>
+                }
+                @if (n.barKey) {
+                  <span class="badge badge--key">{{ n.barKey }}</span>
+                }
+              </button>
+            }
+          </div>
+          <p class="branch-blurb">{{ b.branch.blurb }}</p>
+        </section>
+      }
+    </div>
+
+    @if (detail(); as d) {
+      <aside class="detail px-scroll" [style.--bc]="d.branch.color" data-testid="tree-detail">
+        <div class="detail-head">
+          <span class="detail-icon"><app-pixel-icon [icon]="d.skill.icon" [size]="48" /></span>
+          <div class="detail-title">
+            <h3 class="detail-name" data-testid="tree-detail-name">{{ d.skill.name }}</h3>
+            <div class="chips">
+              <span class="px-chip chip-branch">{{ d.branch.name }}</span>
+              <span class="px-chip">Tier {{ d.skill.tier }} · lv {{ d.tierLevel }}</span>
+              <span class="px-chip">{{ d.typeLabel }}</span>
+              @if (d.skill.capstone) {
+                <span class="px-chip chip-cap">Capstone</span>
+              }
+            </div>
+          </div>
+        </div>
+
+        <p class="use" data-testid="tree-detail-use">
+          @if (d.key) {
+            Press <kbd class="px-key">{{ d.key }}</kbd>
+          } @else {
+            {{ d.useText }}
+          }
+        </p>
+
+        <p class="desc">{{ d.skill.description }}</p>
+
+        @if (d.values.length > 0) {
+          <dl class="values px-panel--inset">
+            @for (row of d.values; track row.label) {
+              <dt>
+                {{ row.label }}
+                @if (row.source) {
+                  <small>{{ row.source }}</small>
+                }
+              </dt>
+              <dd>{{ row.value }}</dd>
+            }
+          </dl>
+        }
+
+        <p class="cost" data-testid="tree-detail-cost">{{ d.cost }}</p>
+
+        <div class="learn-row">
+          @if (d.owned) {
+            <span class="px-chip chip-owned" data-testid="tree-owned-chip">Owned</span>
+          } @else {
+            <button
+              class="px-btn px-btn--good"
+              [disabled]="d.lockText !== null"
+              (click)="onLearn(d.skill.id)"
+              data-testid="tree-learn-button"
+            >
+              Learn · 1 point
+            </button>
+            @if (d.lockText) {
+              <span class="lock-text" data-testid="tree-lock-reason">{{ d.lockText }}</span>
+            }
+          }
+        </div>
+      </aside>
+    }
+  </div>
+
+  <div class="bar" data-testid="tree-skill-bar">
+    <span class="bar-title">Skill bar</span>
+    <div class="bar-slots">
+      @for (s of barSlots(); track s.slot) {
+        <button
+          type="button"
+          class="bar-slot px-panel--inset"
+          [class.bar-slot--selected]="s.selected"
+          [class.bar-slot--target]="canPlaceSelected()"
+          [title]="s.skill ? s.skill.name : 'Empty'"
+          [attr.data-testid]="'tree-bar-slot-' + s.slot"
+          [attr.data-skill]="s.skill?.id ?? ''"
+          (click)="onBarSlot(s.slot)"
+        >
+          @if (s.skill) {
+            <app-pixel-icon [icon]="s.skill.icon" [size]="24" />
+          }
+          <span class="bar-key">{{ s.key }}</span>
+        </button>
+      }
+    </div>
+    <span class="bar-hint">
+      @if (canPlaceSelected()) {
+        Click a slot to put {{ detail()?.skill?.name }} on that key
+      } @else {
+        Learned actives and buffs go here: one key, one skill
+      }
+    </span>
+  </div>
+</div>

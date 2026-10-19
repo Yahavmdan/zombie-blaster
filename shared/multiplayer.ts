@@ -249,6 +249,32 @@ export interface HostMigratedPayload {
   previousHostId: string;
 }
 
+/** A guest's monster-magnet cast: the host pulls the zombies (zombies are the host's). */
+export interface MagnetPullRequest {
+  playerX: number;
+  playerY: number;
+  pullRange: number;
+  skillColor: string;
+  /** Pulled zombies stay stunned this long after they land. */
+  stunMs?: number;
+}
+
+export type ZombieEffectKind = 'launch' | 'knockdown' | 'knockback' | 'stun';
+
+/**
+ * A guest's skill pushed, launched or stunned a zombie. The host applies it to its simulation
+ * (clamped to SKILL_MAX_REMOTE_*), so guests never move zombies themselves.
+ */
+export interface ZombieEffectRequest {
+  zombieId: string;
+  kind: ZombieEffectKind;
+  /** -1 or 1: the push direction. */
+  dir: number;
+  /** Push speed (knockback, knockdown) or launch speed (launch), px per tick. */
+  force: number;
+  stunMs: number;
+}
+
 export enum VfxEventType {
   SkillAnimation = 'skill-animation',
   LevelUp = 'level-up',
@@ -282,6 +308,12 @@ export enum VfxEventType {
   BarrelRespawn = 'barrel-respawn',
   /** The host's sky struck: every screen draws the same bolt (x, `value` = bolt seed) and flash. */
   Lightning = 'lightning',
+  /**
+   * A tree skill buffed allies (`targetIds`): each targeted player applies the buff to itself.
+   * `animationKey` = the skill id, `value` = buff value, `frames` = duration in ms. For Rally,
+   * `value` is the HP percent the revived ally gets back.
+   */
+  AllyBuff = 'ally-buff',
 }
 
 export interface VfxEvent {
@@ -302,4 +334,5 @@ export interface VfxEvent {
   endX?: number;
   targetX?: number;
   targetY?: number;
+  targetIds?: string[];
 }

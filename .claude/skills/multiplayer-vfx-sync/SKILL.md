@@ -20,6 +20,11 @@ description: Ensure all visual effects (particles, skill animations, level-up, b
 | Receive + replay | same component calls `gameCanvas().replayRemoteVfxEvents()`, which forwards to `GameEngine.replayRemoteVfxEvents()` (`switch` on `evt.type`, skips own `playerId`) |
 | Emit examples | `combat-system.ts` (skill animation, buffs, shake/flash), `drop-system.ts` (potion buffs), `game-engine.ts` (level-up) |
 
+Skill-tree skills (`tree-skill-system.ts`) already broadcast through `animate()` (SkillAnimation, key = skill id);
+ally buffs/heals use `VfxEventType.AllyBuff` with `targetIds` (each target applies it to itself). Zombie
+pushes/stuns are gameplay, not VFX:
+`ZombieEffectRequest` (see `.claude/rules/skills.md`).
+
 Transport and replay plumbing already exist. A new effect needs only: enum value (if none fits) + optional fields on `VfxEvent` + emit + replay `case`.
 
 ## Emit pattern

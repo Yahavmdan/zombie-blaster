@@ -11,6 +11,7 @@ interface PoisonEngine {
   poisonEffect: PoisonEffect | null;
   godMode: boolean;
   floor: number;
+  trySecondWind: () => boolean;
   isMultiplayerHost: boolean;
   isMultiplayerClient: boolean;
   gameOverCalls: number;
@@ -35,6 +36,7 @@ function poisonedEngine(hp: number, isDown: boolean): PoisonEngine {
     poisonEffect: { remainingTicks: 100, tickInterval: 10, tickTimer: 1, damagePerTick: 5 },
     godMode: false,
     floor: 3,
+    trySecondWind: (): boolean => false,
     isMultiplayerHost: true,
     isMultiplayerClient: false,
     gameOverCalls: 0,

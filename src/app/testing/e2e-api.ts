@@ -45,6 +45,10 @@ export interface E2ePlayerView {
   carryingCorpseIds: string[];
   /** Status tints this client draws over the player's sprite (ticks left, 0 = off). */
   tint: E2eTintView;
+  /** Skill-tree classes: the skill on each bar slot (keys 1-6), null = empty; [] for other classes. */
+  skillBar: Array<string | null>;
+  /** A held attack charging its skill (Power Dash), 0..1; null when nothing charges. */
+  skillCharge: number | null;
 }
 
 export interface E2eTintView {
@@ -84,6 +88,13 @@ export interface E2eZombieView {
   mealId: string | null;
   /** Sprite animation this client renders for the zombie (`walk`, `eating`, ...). */
   animState: string | null;
+  /** Ticks the zombie stays stunned by a warrior skill (host-simulated, synced). */
+  stunTicks: number;
+  /** Ticks until the swing in progress lands (null when not swinging or it already landed). */
+  ticksToHit: number | null;
+  knockbackFrames: number;
+  isGrounded: boolean;
+  velocityY: number;
 }
 
 export interface E2eCorpseView {
@@ -132,6 +143,19 @@ export interface E2eDropView {
   x: number;
   y: number;
   value: number;
+}
+
+/** A skill of the local player's skill tree (classes in SKILL_TREES). */
+export interface E2eTreeSkillView {
+  id: string;
+  name: string;
+  owned: boolean;
+  /** Skill-bar slot (0..5, key `skill1`.. `skill6`) holding it, -1 when not on the bar. */
+  barSlot: number;
+  mechanic: string;
+  /** Attack-button combo that fires it (`hold`, `air-hold`, `double-tap`), null for bar skills and passives. */
+  combo: string | null;
+  cooldownTicks: number;
 }
 
 export interface E2eSkillView {
@@ -390,6 +414,10 @@ export interface E2eSnapshot {
   vfx: E2eVfxCounts;
   pending: E2ePendingQueues;
   usableSkills: E2eSkillView[];
+  /** The local player's skill tree, empty for classes without one. */
+  treeSkills: E2eTreeSkillView[];
+  /** The local player's active buffs (skill buffs, adrenaline stacks, ally buffs). */
+  buffs: Array<{ skillId: string; stat: string; value: number; remainingMs: number }>;
   activeSpecialEffects: string[];
   hasPendingSpecialDrop: boolean;
 }
@@ -401,6 +429,8 @@ export interface E2eControls {
   levelUp(times: number): void;
   maxAllSkills(): void;
   maxOutPlayer(): void;
+  /** Setup only (tree classes): owns exactly these tree skills, ignoring points and tiers. */
+  setTreeSkills(ids: string[]): void;
   selectClass(classId: string): void;
   activateSpecialDrop(type: string): void;
   isGameOver(): boolean;
@@ -440,6 +470,8 @@ export interface E2eEngineControls {
    * zombie types, at most one boss at a time), ignoring the spawn timer and the alive cap.
    */
   spawnRolledZombies(count: number): void;
+  /** Solo/host setup only: a walker (or a floor-rolled type) standing on the ground at x. */
+  spawnZombieAt(x: number): void;
 }
 
 export interface ZbE2eApi {

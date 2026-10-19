@@ -315,7 +315,10 @@ export class GamePlayer {
     await this.press(KEYS.attack, 80);
   }
 
-  /** Skill slot 1..6 (usable skills sorted by required level). */
+  /**
+   * Skill key 1..6: a legacy class's usable skills sorted by required level, a skill-tree class's
+   * skill-bar slot (see castSkill in warrior.ts to fire a tree skill by id).
+   */
   async castSkill(slot: number): Promise<void> {
     await this.press(String(slot), 80);
   }
