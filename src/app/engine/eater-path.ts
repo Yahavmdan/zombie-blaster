@@ -17,6 +17,11 @@ export interface EaterStep {
   jumpVx: number;
   /** Drop through the platform it stands on (the goal is below). */
   drop: boolean;
+  /**
+   * Walking off a prop or a pile toward a goal below: falling off, it keeps going the same way
+   * (steering at a goal right below would put it back on top).
+   */
+  stepOff: boolean;
 }
 
 /** How high (px) an Eater's jump lifts its feet onto a ledge, with a margin for landing. */
@@ -45,15 +50,31 @@ export function eaterStep(
     jump: false,
     jumpVx: 0,
     drop: false,
+    stepOff: false,
   });
+  const stepOff: (x: number) => EaterStep = (x: number): EaterStep => ({ ...walk(x), stepOff: true });
 
   if (rise < -tolerance) {
     const platform: Platform | null = surfaceUnder(feet, platforms);
-    if (platform && platform.y < GAME_CONSTANTS.GROUND_Y) return { ...walk(goal.x), drop: true };
-    // On a head or a pile there is nothing to drop through: step off it toward the goal.
-    const dir: number = goal.x >= feet.x ? 1 : -1;
+    if (platform && !platform.solid && platform.y < GAME_CONSTANTS.GROUND_Y) {
+      return { ...walk(goal.x), drop: true };
+    }
+    // A prop (a box stack) can't be dropped through: walk off its end on the goal's side.
+    const props: Span | null = propsUnder(feet, halfWidth, platforms);
+    if (props) {
+      const leftward: boolean = goal.x < (props.left + props.right) / 2;
+      const margin: number = GAME_CONSTANTS.ZOMBIE_EATER_STEP_OFF_MARGIN_PX;
+      return stepOff(
+        leftward
+          ? Math.min(goal.x, props.left - halfWidth - margin)
+          : Math.max(goal.x, props.right + halfWidth + margin),
+      );
+    }
+    // On a pile there is nothing to drop through: step off it to a spot beside the goal, on its
+    // own side (a fixed spot, so a goal right below never turns it back and forth over it).
     const clear: number = halfWidth * GAME_CONSTANTS.ZOMBIE_EATER_STEP_OFF_WIDTHS;
-    return walk(Math.abs(goal.x - feet.x) > clear ? goal.x : feet.x + dir * clear);
+    if (Math.abs(goal.x - feet.x) > clear) return stepOff(goal.x);
+    return stepOff(feet.x < goal.x ? goal.x - clear : goal.x + clear);
   }
   if (rise <= tolerance) return walk(goal.x);
 
@@ -93,6 +114,7 @@ export function eaterStep(
     jump: ready,
     jumpVx: ready && from.leap ? leapSpeed(feet, halfWidth, best, gravity) : 0,
     drop: false,
+    stepOff: false,
   };
 }
 
@@ -104,6 +126,39 @@ function surfaceUnder(feet: Feet, platforms: Platform[]): Platform | null {
         Math.abs(p.y - feet.y) <= 1 && feet.x >= p.x && feet.x <= p.x + p.width,
     ) ?? null
   );
+}
+
+interface Span {
+  left: number;
+  right: number;
+}
+
+/**
+ * The solid props the body stands on (any part of it, like physics: its center may hang past the
+ * end), joined with the props beside them at the same height into one span. Null when on none.
+ */
+function propsUnder(feet: Feet, halfWidth: number, platforms: Platform[]): Span | null {
+  const tops: Platform[] = platforms.filter(
+    (p: Platform): boolean => !!p.solid && Math.abs(p.y - feet.y) <= 1,
+  );
+  const under: Platform[] = tops.filter(
+    (p: Platform): boolean => p.x < feet.x + halfWidth && p.x + p.width > feet.x - halfWidth,
+  );
+  if (under.length === 0) return null;
+  let left: number = Math.min(...under.map((p: Platform): number => p.x));
+  let right: number = Math.max(...under.map((p: Platform): number => p.x + p.width));
+  let grew: boolean = true;
+  while (grew) {
+    grew = false;
+    for (const p of tops) {
+      const touches: boolean = p.x <= right && p.x + p.width >= left;
+      if (!touches || (p.x >= left && p.x + p.width <= right)) continue;
+      left = Math.min(left, p.x);
+      right = Math.max(right, p.x + p.width);
+      grew = true;
+    }
+  }
+  return { left, right };
 }
 
 interface Takeoff {

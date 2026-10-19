@@ -57,6 +57,10 @@ interface StuckSpell {
   ms: number;
   anim: string | null;
   shot: string;
+  /** The corpse it goes for (null: hungry, hunting prey) and the scene, to replay the spell in a unit test. */
+  mealId: string | null;
+  zombies: string[];
+  corpses: string[];
 }
 
 interface Track {
@@ -147,6 +151,17 @@ async function observe(p: GamePlayer, ms: number, label: string): Promise<Observ
             ms: now - prev!.since,
             anim: z.animState,
             shot,
+            mealId: z.mealId,
+            zombies: s.zombies
+              .filter((o: E2eZombieView): boolean => !o.isDead && o.spawnTimer <= 0)
+              .map(
+                (o: E2eZombieView): string =>
+                  `${o.type}:${o.id.slice(0, 6)}@${Math.round(o.x)},${Math.round(o.y)},${o.width}x${o.height}`,
+              ),
+            corpses: s.corpseViews.map(
+              (c: E2eCorpseView): string =>
+                `${c.id}@${Math.round(c.x)},${Math.round(c.y)} foot ${Math.round(c.footX)}+${Math.round(c.footWidth)},${Math.round(c.footY)}${c.isGrounded ? '' : ' air'}${c.carrierId ? ' carried' : ''}`,
+            ),
           });
         }
       }

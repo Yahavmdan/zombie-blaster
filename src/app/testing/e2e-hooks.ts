@@ -132,6 +132,7 @@ function toZombieView(z: ZombieState, engine: GameEngine): E2eZombieView {
     magnetPull: magnetPullProgress(z),
     attackCooldown: z.attackCooldown,
     eating: z.eatingTimer > 0,
+    mealId: z.eatingTargetId,
     animState: anim ? anim.state : null,
   };
 }

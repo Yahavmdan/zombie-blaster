@@ -649,7 +649,8 @@ export class ZombieSystem {
   /**
    * Runs (ZOMBIE_EATER_RUN_SPEED_MULT) to a goal's feet over the platforms: under a ledge above it
    * jumps (ZOMBIE_EATER_JUMP_FORCE) and comes down on top; a goal below it drops down to. On its
-   * own jumps it holds its course; otherwise (hopping a prop, falling) it steers in the air.
+   * own jumps and when it walks off a prop or a pile it holds its course; otherwise (hopping a
+   * prop, falling) it steers in the air.
    */
   private runEaterToward(z: ZombieState, goal: Feet): void {
     const halfWidth: number = z.instanceWidth / 2;
@@ -676,6 +677,9 @@ export class ZombieSystem {
       z.velocityY = GAME_CONSTANTS.ZOMBIE_EATER_JUMP_FORCE;
       z.isGrounded = false;
       z.jumpCooldown = GAME_CONSTANTS.ZOMBIE_EATER_JUMP_COOLDOWN_TICKS;
+      this.eatersOnCourse.add(z);
+    } else if (step.stepOff) {
+      // Walking off a box stack or a pile: once it falls off, it keeps going instead of steering back on top.
       this.eatersOnCourse.add(z);
     }
   }
