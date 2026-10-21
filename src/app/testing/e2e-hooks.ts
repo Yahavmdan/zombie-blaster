@@ -1,6 +1,6 @@
 import { ActiveBuff, CharacterState, ClassSkillTree, GAME_CONSTANTS, ZOMBIE_TYPES, SkillDefinition, TreeSkill, VfxEvent, getSkillTree, isZombieWindingUp, ownsTreeSkill } from '@shared/index';
 import { ActiveSpecialEffect, DropType, SpecialDropType, BoulderState, CagePuzzleState, CageState, LooseProp, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
-import { BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, PlayerTint, Rope, SpringPuzzleLayout } from '../engine/engine-types';
+import { AcidPuddle, BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, PlayerTint, Rope, SpringPuzzleLayout } from '../engine/engine-types';
 import { EXIT_CAGE, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
 import { doorBox, isDoorOpen, isHeld, plateBox } from '../engine/plate-puzzle';
 import { buttonBox, scaleBox } from '../engine/spring-puzzle';
@@ -417,6 +417,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
       spitter: engine.spitterProjectiles.length,
       dragon: engine.dragonProjectiles.length,
     },
+    acidPuddles: engine.acidPuddles.map((p: AcidPuddle): { x: number; y: number; width: number } => ({ x: p.x, y: p.y, width: p.width })),
     potionCooldownTicks: engine.potionCooldown,
     invincibilityFrames: engine.invincibilityFrames,
     vfx: {
@@ -503,10 +504,11 @@ const engineControls: E2eEngineControls = {
       engine.spawnRolledZombie();
     }
   },
-  spawnZombieAt(x: number): void {
+  spawnZombieAt(x: number, type?: string): void {
     const engine: GameEngine | null = currentEngine;
     if (!engine || engine.isMultiplayerClient) return;
-    engine.spawnZombieAt(x);
+    const kind: ZombieType | null = (Object.values(ZombieType) as string[]).includes(type ?? '') ? (type as ZombieType) : null;
+    engine.spawnZombieAt(x, kind);
   },
   clearZombies(): void {
     const engine: GameEngine | null = currentEngine;

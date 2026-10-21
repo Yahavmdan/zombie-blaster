@@ -102,6 +102,11 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   for rare types: `probe.spawnRolledZombies(n)` runs the real spawn roll n times now (no timer,
   no alive cap); `setFloor` clears them. `state().zombieProjectiles` {spitter, dragon} counts
   shots in flight. Spec: `solo/zombie-types.spec.ts`.
+  `probe.spawnZombieAt(x, 'spitter')` forces a type. Spitters lob a glob at the nearest player (arc
+  aimed to come down on them); it bursts on the first player or surface it reaches (`spit-splat`,
+  not on the ledge the spitter stands on) and a surface keeps an acid puddle for ~5 s
+  (`state().acidPuddles`, drawing only). The host's god mode skips every hit, so globs always land:
+  handy for puddle tests. Specs: `solo/spitter.spec.ts`, `online/spitter-coop.spec.ts`.
 - **Eaters** (crawl on all fours, art from `generate-eater-sprites.cjs`) never come with the regular
   spawns: from floor 1, while >= 3 lying unclaimed corpses exist, one rises every 10-20 s (max 2
   per player) near a corpse, smells corpses across the whole screen, runs to them (3.5x speed,

@@ -324,6 +324,13 @@ export enum VfxEventType {
    * `value` is the HP percent the revived ally gets back.
    */
   AllyBuff = 'ally-buff',
+  /** A spitter spat: bile sprays out of its mouth (x, y) toward `dir`. */
+  SpitSpray = 'spit-spray',
+  /**
+   * A spitter's glob burst at (x, y), flying toward `dir`: on a surface `targetY` (a puddle of
+   * `value` px lies there for a while), on a player without it.
+   */
+  SpitSplat = 'spit-splat',
 }
 
 export interface VfxEvent {

@@ -1085,8 +1085,8 @@ export class ZombieSystem {
   }
 
   /** Floor-4 cage: a zombie climbs out of it, centered on x, standing on `groundY`. */
-  spawnZombieAt(x: number, groundY: number): void {
-    this.spawnZombie({ x, groundY });
+  spawnZombieAt(x: number, groundY: number, kind: ZombieType | null = null): void {
+    this.spawnZombie({ x, groundY }, kind);
   }
 
   /** A regular spawn: the floor's type roll (bosses included) at a random spawn spot. */

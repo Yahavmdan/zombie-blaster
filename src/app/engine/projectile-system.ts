@@ -9,6 +9,18 @@ import { ZombieState } from '@shared/game-entities';
 import { DragonProjectile, IGameEngine, SpitterProjectile } from './engine-types';
 import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
+import { PIXEL } from './pixel-art';
+import {
+  Point,
+  SPIT_FRAME,
+  SpitSurface,
+  Velocity,
+  aimSpit,
+  puddleX,
+  spitSurfaceHit,
+  spitterMouth,
+} from './spitter-spit';
+import { ZombieAnimState } from './zombie-sprite-animator';
 
 interface ProjectileTarget {
   id: string;
@@ -117,39 +129,79 @@ export class ProjectileSystem {
     });
   }
 
+  /** A glob of bile out of the spitter's mouth, lobbed so it comes down on the nearest target. */
   spawnSpitterProjectile(z: ZombieState): void {
-    const startX: number = z.x + z.instanceWidth / 2;
-    const startY: number = z.y + z.instanceHeight * 0.3;
-    const target: ProjectileTarget | null = this.findNearestTarget(startX, startY);
+    const start: Point = spitterMouth(z, ZombieAnimState.Attack, SPIT_FRAME) ?? {
+      x: z.x + z.instanceWidth / 2,
+      y: z.y + z.instanceHeight * 0.3,
+    };
+    const target: ProjectileTarget | null = this.findNearestTarget(start.x, start.y);
     if (!target) return;
 
-    const targetX: number = target.x + target.width / 2;
-    const targetY: number = target.y + target.height / 2;
-    const dx: number = targetX - startX;
-    const dy: number = targetY - startY;
-    const dist: number = Math.sqrt(dx * dx + dy * dy);
-    const speed: number = GAME_CONSTANTS.SPITTER_PROJECTILE_SPEED;
-
+    const aim: Velocity = aimSpit(
+      start,
+      { x: target.x + target.width / 2, y: target.y + target.height / 2 },
+      GAME_CONSTANTS.SPITTER_PROJECTILE_SPEED,
+      GAME_CONSTANTS.SPITTER_PROJECTILE_GRAVITY,
+    );
     const baseHit: number = randomInt(z.instanceDamageMin, z.instanceDamageMax);
 
     this.e.spitterProjectiles.push({
-      x: startX,
-      y: startY,
-      velocityX: dist > 0 ? (dx / dist) * speed : speed * z.facing,
-      velocityY: dist > 0 ? (dy / dist) * speed : 0,
+      x: start.x,
+      y: start.y,
+      velocityX: aim.vx,
+      velocityY: aim.vy,
       damage: baseHit,
       lifetime: GAME_CONSTANTS.SPITTER_PROJECTILE_LIFETIME,
-      trail: [],
+      fromSurfaceY: z.isGrounded ? z.y + z.instanceHeight : null,
     });
 
-    this.vfx.spawnHitParticles(startX, startY, '#44ff44');
+    const dir: number = aim.vx >= 0 ? 1 : -1;
+    this.vfx.spawnSpitSpray(start.x, start.y, dir);
     this.e.pendingVfxEvents.push({
-      type: VfxEventType.HitParticles,
+      type: VfxEventType.SpitSpray,
       playerId: '',
-      x: startX,
-      y: startY,
-      color: '#44ff44',
+      x: start.x,
+      y: start.y,
+      dir,
     });
+  }
+
+  /**
+   * Moves a glob one tick (it sheds falling drops on the way) and returns the surface it splatted
+   * on, if any. Host and guests run the same flight; only the host decides hits.
+   */
+  private flySpit(proj: SpitterProjectile): SpitSurface | null {
+    const prevY: number = proj.y;
+    proj.x += proj.velocityX;
+    proj.y += proj.velocityY;
+    proj.velocityY += GAME_CONSTANTS.SPITTER_PROJECTILE_GRAVITY;
+    proj.lifetime--;
+    if (proj.lifetime % GAME_CONSTANTS.SPIT_DRIP_INTERVAL_TICKS === 0) {
+      this.vfx.spawnSpitDrip(proj.x, proj.y, proj.velocityX, proj.velocityY);
+    }
+    return spitSurfaceHit(proj.x, prevY, proj.y, this.e.platforms, proj.fromSurfaceY);
+  }
+
+  private isSpitInPlay(proj: SpitterProjectile): boolean {
+    return proj.lifetime > 0 &&
+      proj.x > -50 && proj.x < GAME_CONSTANTS.CANVAS_WIDTH + 50 &&
+      proj.y > -50 && proj.y < GAME_CONSTANTS.CANVAS_HEIGHT + 50;
+  }
+
+  /** The glob bursts: here and, through SpitSplat, on every other screen. */
+  private splatSpit(proj: SpitterProjectile, surface: SpitSurface | null): void {
+    const dir: number = proj.velocityX >= 0 ? 1 : -1;
+    proj.lifetime = 0;
+    if (surface) {
+      const width: number = randomInt(GAME_CONSTANTS.SPIT_PUDDLE_WIDTH_MIN_PX, GAME_CONSTANTS.SPIT_PUDDLE_WIDTH_MAX_PX);
+      const x: number = puddleX(proj.x, width, surface);
+      this.vfx.spawnSpitSplat(x, surface.y, dir, surface.y, width);
+      this.e.pendingVfxEvents.push({ type: VfxEventType.SpitSplat, playerId: '', x, y: surface.y, dir, targetY: surface.y, value: width });
+      return;
+    }
+    this.vfx.spawnSpitSplat(proj.x, proj.y, dir, null, 0);
+    this.e.pendingVfxEvents.push({ type: VfxEventType.SpitSplat, playerId: '', x: proj.x, y: proj.y, dir });
   }
 
   updateDragonProjectiles(): void {
@@ -239,107 +291,84 @@ export class ProjectileSystem {
 
   updateSpitterProjectiles(): void {
     for (const proj of this.e.spitterProjectiles) {
-      proj.trail.push({ x: proj.x, y: proj.y, life: 15 });
-      if (proj.trail.length > 8) proj.trail.shift();
-      for (const t of proj.trail) t.life--;
-      proj.trail = proj.trail.filter((t: { x: number; y: number; life: number }) => t.life > 0);
+      const surface: SpitSurface | null = this.flySpit(proj);
 
-      proj.x += proj.velocityX;
-      proj.y += proj.velocityY;
-      proj.velocityY += GAME_CONSTANTS.SPITTER_PROJECTILE_GRAVITY;
-      proj.lifetime--;
-
-      if (this.e.godMode) continue;
-
-      for (const target of this.getAllTargets()) {
-        if (!this.physics.rectsOverlap(
-          target.x, target.y, target.width, target.height,
-          proj.x - 10, proj.y - 10, 20, 20,
-        )) continue;
-
-        const rawDamage: number = Math.max(1, proj.damage - target.defense);
-        this.vfx.spawnHitParticles(proj.x, proj.y, '#44ff44');
-        this.vfx.spawnDamageNumber(proj.x, proj.y - 10, rawDamage, false, '#44ff44');
-        this.e.pendingVfxEvents.push({
-          type: VfxEventType.HitParticles,
-          playerId: '',
-          x: proj.x,
-          y: proj.y,
-          color: '#44ff44',
-        });
-        this.e.pendingVfxEvents.push({
-          type: VfxEventType.DamageNumber,
-          playerId: '',
-          x: proj.x,
-          y: proj.y - 10,
-          value: rawDamage,
-          isCrit: false,
-          color: '#44ff44',
-        });
-        const knockDir: number = proj.velocityX > 0 ? 1 : -1;
-
-        if (target.isLocal) {
-          if (this.isLocalPlayerDarkSighted()) {
-            proj.lifetime = 0;
-            break;
-          }
-          const p: CharacterState | null = this.e.player;
-          if (p && !p.isDown && !p.isDead && this.e.invincibilityFrames <= 0) {
-            p.hp -= rawDamage;
-            this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
-            this.vfx.flashPlayerHurt(p);
-            p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER * 0.5;
-            p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE * 0.5;
-            p.isGrounded = false;
-
-            this.applyPoisonToPlayer(p);
-            this.e.pendingVfxEvents.push({
-              type: VfxEventType.PoisonTrigger,
-              playerId: p.id,
-              x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
-              y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
-            });
-
-            if (p.hp <= 0) {
-              this.knockOutPlayer(p);
-            } else {
-              this.e.onPlayerUpdate?.(p);
-            }
-          }
-        } else {
-          this.e.pendingRemoteAttacks.push({ targetPlayerId: target.id, damage: rawDamage, knockbackDir: knockDir, isPoisonAttack: true });
-          this.e.onRemotePlayerDamaged?.(target.id, rawDamage, proj.x, proj.y, knockDir, true);
-        }
-
-        proj.lifetime = 0;
-        break;
-      }
+      if (!this.e.godMode) this.hitSpitTarget(proj);
+      if (proj.lifetime > 0 && surface) this.splatSpit(proj, surface);
     }
 
     this.e.spitterProjectiles = this.e.spitterProjectiles.filter(
-      (proj: { lifetime: number; x: number; y: number }) => proj.lifetime > 0 &&
-        proj.x > -50 && proj.x < GAME_CONSTANTS.CANVAS_WIDTH + 50 &&
-        proj.y > -50 && proj.y < GAME_CONSTANTS.CANVAS_HEIGHT + 50,
+      (proj: SpitterProjectile): boolean => this.isSpitInPlay(proj),
     );
   }
 
-  tickClientProjectileVisuals(): void {
-    for (const proj of this.e.spitterProjectiles as SpitterProjectile[]) {
-      proj.trail.push({ x: proj.x, y: proj.y, life: 15 });
-      if (proj.trail.length > 8) proj.trail.shift();
-      for (const t of proj.trail as Array<{ x: number; y: number; life: number }>) t.life--;
-      proj.trail = proj.trail.filter((t: { x: number; y: number; life: number }) => t.life > 0);
+  /** The first target the glob touches takes the hit and the poison; the glob bursts on them. */
+  private hitSpitTarget(proj: SpitterProjectile): void {
+    for (const target of this.getAllTargets()) {
+      if (!this.physics.rectsOverlap(
+        target.x, target.y, target.width, target.height,
+        proj.x - 10, proj.y - 10, 20, 20,
+      )) continue;
 
-      proj.x += proj.velocityX;
-      proj.y += proj.velocityY;
-      proj.velocityY += GAME_CONSTANTS.SPITTER_PROJECTILE_GRAVITY;
-      proj.lifetime--;
+      const knockDir: number = proj.velocityX > 0 ? 1 : -1;
+      if (target.isLocal && this.isLocalPlayerDarkSighted()) {
+        proj.lifetime = 0;
+        return;
+      }
+
+      const rawDamage: number = Math.max(1, proj.damage - target.defense);
+      this.splatSpit(proj, null);
+      this.vfx.spawnDamageNumber(proj.x, proj.y - 10, rawDamage, false, PIXEL['toxicHi']);
+      this.e.pendingVfxEvents.push({
+        type: VfxEventType.DamageNumber,
+        playerId: '',
+        x: proj.x,
+        y: proj.y - 10,
+        value: rawDamage,
+        isCrit: false,
+        color: PIXEL['toxicHi'],
+      });
+
+      if (target.isLocal) {
+        const p: CharacterState | null = this.e.player;
+        if (p && !p.isDown && !p.isDead && this.e.invincibilityFrames <= 0) {
+          p.hp -= rawDamage;
+          this.e.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
+          this.vfx.flashPlayerHurt(p);
+          p.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER * 0.5;
+          p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE * 0.5;
+          p.isGrounded = false;
+
+          this.applyPoisonToPlayer(p);
+          this.e.pendingVfxEvents.push({
+            type: VfxEventType.PoisonTrigger,
+            playerId: p.id,
+            x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+            y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+          });
+
+          if (p.hp <= 0) {
+            this.knockOutPlayer(p);
+          } else {
+            this.e.onPlayerUpdate?.(p);
+          }
+        }
+      } else {
+        this.e.pendingRemoteAttacks.push({ targetPlayerId: target.id, damage: rawDamage, knockbackDir: knockDir, isPoisonAttack: true });
+        this.e.onRemotePlayerDamaged?.(target.id, rawDamage, proj.x, proj.y, knockDir, true);
+      }
+      return;
+    }
+  }
+
+  tickClientProjectileVisuals(): void {
+    // The host's SpitSplat shows the burst; a glob that reached a surface here just stops.
+    for (const proj of this.e.spitterProjectiles) {
+      if (this.flySpit(proj)) proj.lifetime = 0;
     }
 
     this.e.spitterProjectiles = this.e.spitterProjectiles.filter(
-      (proj: SpitterProjectile) => proj.lifetime > 0 &&
-        proj.x > -50 && proj.x < GAME_CONSTANTS.CANVAS_WIDTH + 50 &&
-        proj.y > -50 && proj.y < GAME_CONSTANTS.CANVAS_HEIGHT + 50,
+      (proj: SpitterProjectile): boolean => this.isSpitInPlay(proj),
     );
 
     for (const proj of this.e.dragonProjectiles as DragonProjectile[]) {
@@ -371,6 +400,7 @@ export class ProjectileSystem {
       damagePerTick,
     };
     this.vfx.tintPlayerPoisoned(p.id);
+    this.vfx.spawnPoisonBurst(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2);
   }
 
   /** A lethal projectile or poison hit: downed for a revive online, game over solo (as melee). */
@@ -409,9 +439,8 @@ export class ProjectileSystem {
           p.y - 10,
           this.e.poisonEffect.damagePerTick,
           false,
-          '#00cc44',
+          PIXEL['toxic'],
         );
-        this.vfx.spawnPoisonBubbles();
 
         if (p.hp <= 0) {
           this.knockOutPlayer(p);

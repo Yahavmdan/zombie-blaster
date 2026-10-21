@@ -203,7 +203,19 @@ export interface SpitterProjectile {
   velocityY: number;
   damage: number;
   lifetime: number;
-  trail: { x: number; y: number; life: number }[];
+  /** Top of the surface the spitter stood on: the glob flies over it instead of splatting there. */
+  fromSurfaceY: number | null;
+}
+
+/** A splat of spit lying on a surface (drawing only): bubbles, fumes, then dries up. */
+export interface AcidPuddle {
+  x: number;
+  /** The surface's top. */
+  y: number;
+  width: number;
+  age: number;
+  /** The floor it lies on: it goes with the floor. */
+  floor: number;
 }
 
 /** Remaining ticks of each status tint on a player's sprite (0 = off). */
@@ -363,6 +375,7 @@ export interface IGameEngine {
   readonly dragonImpactImg: HTMLImageElement;
 
   spitterProjectiles: SpitterProjectile[];
+  acidPuddles: AcidPuddle[];
   poisonEffect: PoisonEffect | null;
   /** Status tints by player id (local and remote), drawn in the shape of the sprite. */
   playerTints: Map<string, PlayerTint>;
