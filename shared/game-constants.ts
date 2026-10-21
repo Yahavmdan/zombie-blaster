@@ -253,6 +253,9 @@ export const GAME_CONSTANTS = {
   ZOMBIE_EATER_ATTACK_CHANCE: 0.004, // Chance per tick an Eater bites a player in reach while corpses lie around (rare: ~once per 5 s beside it; never while eating)
   // With no corpse to smell, an Eater turns hungry: it runs at the nearest player or zombie and attacks like any zombie.
   ZOMBIE_EATER_BITE_COLOR: '#b02a22', // Hit particles and damage numbers of an Eater biting a zombie
+  ZOMBIE_EATER_BITE_KNOCKBACK_PX: 100, // How far (px) an Eater's bite throws a zombie: one short hop, it stops where it lands (2 bites stay within 200 px)
+  ZOMBIE_EATER_BITE_KNOCKBACK_UP: -4, // Upward speed of that hop (negative = up); its sideways speed is set so the hop covers ZOMBIE_EATER_BITE_KNOCKBACK_PX
+  ZOMBIE_EATER_SPRITE_PX: 118, // Drawn size (px, square) of an Eater's 128 px frame at its average height (other zombies: 140)
 
   // ─── Dragon Boss ─────────────────────────────
   DRAGON_HOVER_Y_OFFSET: 140, // How high above the ground the dragon hovers
@@ -830,8 +833,8 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     knockbackMin: 5, knockbackMax: 9,
     hesitationMin: 0, hesitationMax: 0, // no hesitation: its rare bites roll ZOMBIE_EATER_ATTACK_CHANCE
     xpRewardMin: 8, xpRewardMax: 15,
-    widthMin: 24, widthMax: 34,
-    heightMin: 36, heightMax: 44,
+    widthMin: 20, widthMax: 29, // scaled with ZOMBIE_EATER_SPRITE_PX, so the box fits the art
+    heightMin: 31, heightMax: 37,
     attackAnimTicks: 20,
     attackHitTick: 10,
     weightKg: 120, // kg, swollen from eating

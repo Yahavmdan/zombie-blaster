@@ -30,7 +30,7 @@ import {
 } from '@shared/game-constants';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
-import { ZombieAnimState, ZombieSpriteAnchor } from './zombie-sprite-animator';
+import { ZombieAnimState, ZombieSpriteAnchor, zombieSpriteSize } from './zombie-sprite-animator';
 import { LooseProp, MagnetPull, ZombieCorpse } from '@shared/game-entities';
 import { magnetPullProgress } from './magnet-pull';
 import { fuseSeconds } from './exploding-barrel';
@@ -935,11 +935,7 @@ export class RenderSystem {
 
       if (this.e.zombieSpriteAnimator.isLoaded()) {
         const spriteKey: string = this.e.zombieSpriteAnimator.getSpriteKey(z.type);
-        const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
-        const baseRenderSize: number = z.type === ZombieType.DragonBoss ? 260 : z.type === ZombieType.Boss ? 200 : 140;
-        const baseH: number = (zDef.heightMin + zDef.heightMax) / 2;
-        const scale: number = z.instanceHeight / baseH;
-        const renderW: number = Math.round(baseRenderSize * scale);
+        const renderW: number = zombieSpriteSize(z.type, z.instanceHeight);
         const renderH: number = renderW;
         const flipX: boolean = z.type === ZombieType.DragonBoss ? z.facing > 0 : z.facing < 0;
         const anchor: ZombieSpriteAnchor = this.e.zombieSpriteAnimator.getAnchor(spriteKey);

@@ -88,6 +88,8 @@ export interface E2eZombieView {
   mealId: string | null;
   /** Sprite animation this client renders for the zombie (`walk`, `eating`, ...). */
   animState: string | null;
+  /** Frame of that animation this client draws (an Eater's `jump` frame follows its vertical speed). */
+  animFrame: number | null;
   /** Ticks the zombie stays stunned by a warrior skill (host-simulated, synced). */
   stunTicks: number;
   /** Ticks until the swing in progress lands (null when not swinging or it already landed). */

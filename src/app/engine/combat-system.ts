@@ -1416,7 +1416,7 @@ export class CombatSystem {
    */
   applyEaterBiteToZombie(victim: ZombieState, eater: ZombieState, damage: number): void {
     victim.hp -= damage;
-    this.knockZombieAwayFrom(victim, eater.x);
+    this.knockZombieFromBite(victim, eater.x);
     const hitCx: number = victim.x + victim.instanceWidth / 2;
     const hitCy: number = victim.y + victim.instanceHeight / 2;
     const color: string = GAME_CONSTANTS.ZOMBIE_EATER_BITE_COLOR;
@@ -1433,6 +1433,21 @@ export class CombatSystem {
       for (const evt of events) this.e.pendingVfxEvents.push(evt);
     }
     if (victim.hp <= 0) this.handleZombieDeath(victim, false);
+  }
+
+  /**
+   * An Eater's bite throws the victim one short hop of ZOMBIE_EATER_BITE_KNOCKBACK_PX. The knockback
+   * lasts until it lands, and a knocked zombie stops where it lands (ZombieSystem), so it never slides on.
+   */
+  private knockZombieFromBite(z: ZombieState, fromX: number): void {
+    if (z.magnetPull) return;
+    const up: number = GAME_CONSTANTS.ZOMBIE_EATER_BITE_KNOCKBACK_UP;
+    const airTicks: number = Math.ceil((-2 * up) / this.drops.getEffectiveGravity());
+    z.velocityX = ((z.x > fromX ? 1 : -1) * GAME_CONSTANTS.ZOMBIE_EATER_BITE_KNOCKBACK_PX) / airTicks;
+    z.velocityY = up;
+    z.isGrounded = false;
+    // Longer than the hop: a fall off a ledge stays in knockback until it lands too.
+    z.knockbackFrames = airTicks * 2;
   }
 
   private knockZombieAwayFrom(z: ZombieState, fromX: number): void {

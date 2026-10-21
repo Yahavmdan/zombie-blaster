@@ -116,7 +116,7 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   left they turn hungry**: run at the nearest player or zombie (not Eaters, not the dragon) and
   attack like any zombie; bites on zombies knock back, show red hit effects (VFX log `color`
   `#b02a22`, replayed for guests) and a kill leaves a corpse (no XP/loot): the next meal. Probe:
-  `zombies[].type === 'eater'`, `eating`, `animState` (`eating`, `run`, ...). Lab:
+  `zombies[].type === 'eater'`, `eating`, `animState` (`eating`, `run`, ...), `animFrame` (an airborne Eater's `jump` frame follows its `velocityY`: `eaterJumpFrame`, launch 0, apex 4, touchdown 7). Lab:
   `npm run e2e:lab -- -g eater` (stuck spells, meals, puzzle side effects, host/guest). Rest players on the safe spot so a hungry Eater only has zombies to hunt.
   Specs: `solo/eater.spec.ts`, `online/eater-coop.spec.ts`.
 - Player: 90 ticks (1.8 s) invincible after a hit; move speed 3 (faster than most zombies).

@@ -171,6 +171,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
       getAnchor: vi.fn().mockReturnValue({ anchorX: 0.5, anchorY: 1.0 }),
       tick: vi.fn(),
       setState: vi.fn(),
+      showState: vi.fn(),
       setStateReversed: vi.fn(),
       setStateAtFrame: vi.fn(),
       setFinalFrame: vi.fn(),
@@ -303,7 +304,7 @@ describe('ZombieSystem — corpse falling physics', () => {
 
     const physics: PhysicsSystem = new PhysicsSystem(engine);
     const vfx: VfxSystem = new VfxSystem(engine);
-    const dropSystemStub = { rollDrops: vi.fn() } as never;
+    const dropSystemStub = { rollDrops: vi.fn(), getEffectiveGravity: (): number => GAME_CONSTANTS.GRAVITY } as never;
     const combat: CombatSystem = new CombatSystem(engine, physics, vfx, dropSystemStub);
     const projectileSystem: ProjectileSystem = new ProjectileSystem(engine, physics, vfx);
     const dropSystem: DropSystem = new DropSystem(engine, physics, vfx);
@@ -412,7 +413,7 @@ describe('ZombieSystem — hesitation attack timing', () => {
 
     const physics: PhysicsSystem = new PhysicsSystem(engine);
     const vfx: VfxSystem = new VfxSystem(engine);
-    const dropSystemStub = { rollDrops: vi.fn() } as never;
+    const dropSystemStub = { rollDrops: vi.fn(), getEffectiveGravity: (): number => GAME_CONSTANTS.GRAVITY } as never;
     const combat: CombatSystem = new CombatSystem(engine, physics, vfx, dropSystemStub);
     const projectileSystem: ProjectileSystem = new ProjectileSystem(engine, physics, vfx);
     const dropSystem: DropSystem = new DropSystem(engine, physics, vfx);
@@ -459,7 +460,7 @@ describe('ZombieSystem — safe spot', () => {
     engine.isInSafeSpot = (x: number, y: number): boolean => restsOnSafeSpot(engine.platforms, x, y);
     const physics: PhysicsSystem = new PhysicsSystem(engine);
     const vfx: VfxSystem = new VfxSystem(engine);
-    const combat: CombatSystem = new CombatSystem(engine, physics, vfx, { rollDrops: vi.fn() } as never);
+    const combat: CombatSystem = new CombatSystem(engine, physics, vfx, { rollDrops: vi.fn(), getEffectiveGravity: (): number => GAME_CONSTANTS.GRAVITY } as never);
     zombieSystem = new ZombieSystem(
       engine, physics, combat, new ProjectileSystem(engine, physics, vfx), new DropSystem(engine, physics, vfx),
     );
@@ -523,7 +524,7 @@ describe('CombatSystem — kills and XP', () => {
   beforeEach((): void => {
     engine = makeMockEngine(makePlayer(), []);
     const physics: PhysicsSystem = new PhysicsSystem(engine);
-    combat = new CombatSystem(engine, physics, new VfxSystem(engine), { rollDrops: vi.fn() } as never);
+    combat = new CombatSystem(engine, physics, new VfxSystem(engine), { rollDrops: vi.fn(), getEffectiveGravity: (): number => GAME_CONSTANTS.GRAVITY } as never);
   });
 
   it('kill XP grows with the floor', (): void => {
@@ -628,7 +629,7 @@ describe('Eater zombie', (): void => {
     engine.exitPlatform = { x: 0, y: 130, width: 60, height: 20 };
     const physics: PhysicsSystem = new PhysicsSystem(engine);
     const vfx: VfxSystem = new VfxSystem(engine);
-    const combat: CombatSystem = new CombatSystem(engine, physics, vfx, { rollDrops: vi.fn() } as never);
+    const combat: CombatSystem = new CombatSystem(engine, physics, vfx, { rollDrops: vi.fn(), getEffectiveGravity: (): number => GAME_CONSTANTS.GRAVITY } as never);
     zombieSystem = new ZombieSystem(
       engine, physics, combat, new ProjectileSystem(engine, physics, vfx), new DropSystem(engine, physics, vfx),
     );
@@ -903,6 +904,40 @@ describe('Eater zombie', (): void => {
         .map((evt: VfxEvent): string => evt.type);
       expect(bite).toEqual(expect.arrayContaining([VfxEventType.HitParticles, VfxEventType.DamageNumber]));
       expect(engine.pendingVfxEvents.some((evt: VfxEvent): boolean => evt.type === VfxEventType.HitMark)).toBe(true);
+    });
+
+    it('a bite throws a zombie one short hop (ZOMBIE_EATER_BITE_KNOCKBACK_PX) and it stops where it lands', (): void => {
+      const eater: ZombieState = makeEater({ x: 900, facing: 1 });
+      const walker: ZombieState = walkerNextTo(eater, 10_000);
+      engine.zombies = [eater, walker];
+      vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      for (let i: number = 0; i < 200 && walker.knockbackFrames === 0; i++) zombieSystem.updateZombies();
+      expect(walker.knockbackFrames, 'bitten').toBeGreaterThan(0);
+      const bittenAt: number = walker.x;
+      engine.zombies = [walker];
+      for (let i: number = 0; i < 200; i++) zombieSystem.updateZombies();
+      const thrown: number = walker.x - bittenAt;
+      expect(thrown).toBeGreaterThan(GAME_CONSTANTS.ZOMBIE_EATER_BITE_KNOCKBACK_PX * 0.8);
+      expect(thrown).toBeLessThanOrEqual(GAME_CONSTANTS.ZOMBIE_EATER_BITE_KNOCKBACK_PX + 10);
+      expect(walker.isGrounded).toBe(true);
+      expect(walker.velocityX, 'no slide after landing').toBe(0);
+    });
+
+    it('bite after bite, it never throws a zombie across the map', (): void => {
+      const eater: ZombieState = makeEater({ x: 600, facing: 1 });
+      const walker: ZombieState = walkerNextTo(eater, 10_000);
+      engine.zombies = [eater, walker];
+      const start: number = walker.x;
+      let bites: number = 0;
+      let wasKnocked: boolean = false;
+      for (let i: number = 0; i < 600 && bites < 2; i++) {
+        zombieSystem.updateZombies();
+        if (walker.knockbackFrames > 0 && !wasKnocked) bites++;
+        wasKnocked = walker.knockbackFrames > 0;
+      }
+      for (let i: number = 0; i < 60 && walker.knockbackFrames > 0; i++) zombieSystem.updateZombies();
+      expect(bites).toBe(2);
+      expect(walker.x - start, 'two bites stay within 200 px').toBeLessThanOrEqual(200 + 10);
     });
 
     it('a zombie it kills leaves a corpse: its next meal', (): void => {
