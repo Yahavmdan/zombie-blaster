@@ -25,6 +25,7 @@ import { ProjectileSystem } from './projectile-system';
 import { ZombieAnimState } from './zombie-sprite-animator';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
 import { drapeCorpses } from './corpse-drape';
+import { corpseAtRest, flyCorpse, landCorpse, slideCorpse } from './corpse-tumble';
 import { advanceMagnetPull } from './magnet-pull';
 import { pushOutOfSolids } from './solid-blocks';
 import { EaterStep, Feet, eaterStep } from './eater-path';
@@ -1308,76 +1309,13 @@ export class ZombieSystem {
 
     for (const corpse of this.e.zombieCorpses) {
       // A carried corpse rides on its carrier's head (corpse-carry), out of physics.
-      if (!corpse.isGrounded && corpse.carrierId === null) {
-        corpse.x += corpse.velocityX;
-        corpse.velocityX *= 0.92;
-        if (Math.abs(corpse.velocityX) < 0.1) corpse.velocityX = 0;
-
-        corpse.velocityY += this.drops.getEffectiveGravity();
-        if (corpse.velocityY > GAME_CONSTANTS.TERMINAL_VELOCITY) {
-          corpse.velocityY = GAME_CONSTANTS.TERMINAL_VELOCITY;
-        }
-        corpse.y += corpse.velocityY;
-
-        if (corpse.x < 0) { corpse.x = 0; corpse.velocityX = 0; }
-        const maxCX: number = GAME_CONSTANTS.CANVAS_WIDTH - corpse.width;
-        if (corpse.x > maxCX) { corpse.x = maxCX; corpse.velocityX = 0; }
-        // Never inside the standing puzzle wall, where nobody could reach it.
-        const outsideWallX: number = keepOutOfWall(corpse.x, corpse.width, this.e.puzzleWall());
-        if (outsideWallX !== corpse.x) {
-          corpse.x = outsideWallX;
-          corpse.velocityX = 0;
-        }
-
-        const fallBottom: number = corpse.y + corpse.height;
-        const fallPrevBottom: number = fallBottom - corpse.velocityY;
-
-        for (const plat of this.e.platforms) {
-          if (
-            corpse.x + corpse.width > plat.x &&
-            corpse.x < plat.x + plat.width &&
-            fallBottom >= plat.y &&
-            fallPrevBottom <= plat.y + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
-            corpse.velocityY >= 0
-          ) {
-            corpse.y = plat.y - corpse.height;
-            corpse.velocityY = 0;
-            corpse.velocityX = 0;
-            corpse.isGrounded = true;
-            this.e.zombieSpriteAnimator.setState(corpse.id, ZombieAnimState.Dead);
-          }
-        }
-
-        let bestCorpseSurface: number | null = null;
-        let bestCorpseOther: ZombieCorpse | null = null;
-        for (const other of this.e.zombieCorpses) {
-          if (other === corpse || !other.isGrounded) continue;
-          const otherSurface: CorpseSurface = corpseSurface(other);
-          const effectiveX: number = otherSurface.x;
-          const effectiveW: number = otherSurface.width;
-          const surfaceY: number = otherSurface.y;
-          if (
-            corpse.x + corpse.width > effectiveX &&
-            corpse.x < effectiveX + effectiveW &&
-            fallBottom >= surfaceY &&
-            fallPrevBottom <= surfaceY + GAME_CONSTANTS.ZOMBIE_CORPSE_SNAP_TOLERANCE &&
-            corpse.velocityY >= 0
-          ) {
-            if (bestCorpseSurface === null || surfaceY < bestCorpseSurface) {
-              bestCorpseSurface = surfaceY;
-              bestCorpseOther = other;
-            }
-          }
-        }
-        if (bestCorpseSurface !== null && bestCorpseOther !== null) {
-          corpse.y = bestCorpseSurface - corpse.height;
-          corpse.velocityY = 0;
-          corpse.isGrounded = true;
-          const corpseCx: number = corpse.x + corpse.width / 2;
-          const otherCx: number = bestCorpseOther.x + bestCorpseOther.width / 2;
-          const slideDir: number = corpseCx > otherCx ? 1 : -1;
-          corpse.x += slideDir * Math.random() * GAME_CONSTANTS.ZOMBIE_CORPSE_SLIDE_OFFSET;
-          this.e.zombieSpriteAnimator.setState(corpse.id, ZombieAnimState.Dead);
+      if (corpse.carrierId === null) {
+        if (!corpse.isGrounded) {
+          this.fallCorpse(corpse);
+        } else if (!corpseAtRest(corpse)) {
+          // Landed sliding or tilted: it slides on and flops flat (off an edge it falls next tick).
+          slideCorpse(corpse);
+          this.keepCorpseInBounds(corpse);
         }
       }
 
@@ -1390,6 +1328,72 @@ export class ZombieSystem {
         this.e.zombieSpriteAnimator.tick(corpse.id, corpse.spriteKey);
       }
     }
+  }
+
+  /**
+   * One tick of a flying corpse: it moves and tilts (corpse-tumble), then lands on the highest
+   * platform or lying corpse its box bottom passed, bouncing off a hard landing.
+   */
+  private fallCorpse(corpse: ZombieCorpse): void {
+    corpse.x += corpse.velocityX;
+    flyCorpse(corpse);
+    corpse.velocityY = Math.min(
+      corpse.velocityY + this.drops.getEffectiveGravity(),
+      GAME_CONSTANTS.TERMINAL_VELOCITY,
+    );
+    corpse.y += corpse.velocityY;
+    this.keepCorpseInBounds(corpse);
+    if (corpse.velocityY < 0) return;
+
+    const fallBottom: number = corpse.y + corpse.height;
+    const fallPrevBottom: number = fallBottom - corpse.velocityY;
+    let landingY: number | null = null;
+    let landedOn: ZombieCorpse | null = null;
+    for (const plat of this.e.platforms) {
+      if (
+        corpse.x + corpse.width > plat.x &&
+        corpse.x < plat.x + plat.width &&
+        fallBottom >= plat.y &&
+        fallPrevBottom <= plat.y + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
+        (landingY === null || plat.y < landingY)
+      ) {
+        landingY = plat.y;
+      }
+    }
+    for (const other of this.e.zombieCorpses) {
+      if (other === corpse || !other.isGrounded) continue;
+      const otherSurface: CorpseSurface = corpseSurface(other);
+      if (
+        corpse.x + corpse.width > otherSurface.x &&
+        corpse.x < otherSurface.x + otherSurface.width &&
+        fallBottom >= otherSurface.y &&
+        fallPrevBottom <= otherSurface.y + GAME_CONSTANTS.ZOMBIE_CORPSE_SNAP_TOLERANCE &&
+        (landingY === null || otherSurface.y <= landingY)
+      ) {
+        landingY = otherSurface.y;
+        landedOn = other;
+      }
+    }
+    if (landingY === null || !landCorpse(corpse, landingY)) return;
+    if (landedOn) {
+      // Bodies don't stack perfectly: it ends up a little to the side it fell on.
+      const slideDir: number = corpse.x + corpse.width / 2 > landedOn.x + landedOn.width / 2 ? 1 : -1;
+      corpse.x += slideDir * Math.random() * GAME_CONSTANTS.ZOMBIE_CORPSE_SLIDE_OFFSET;
+    }
+    this.e.zombieSpriteAnimator.setState(corpse.id, ZombieAnimState.Dead);
+  }
+
+  /** On screen and never inside the standing puzzle wall, where nobody could reach it. */
+  private keepCorpseInBounds(corpse: ZombieCorpse): void {
+    const maxX: number = GAME_CONSTANTS.CANVAS_WIDTH - corpse.width;
+    const x: number = keepOutOfWall(
+      Math.min(Math.max(corpse.x, 0), maxX),
+      corpse.width,
+      this.e.puzzleWall(),
+    );
+    if (x === corpse.x) return;
+    corpse.x = x;
+    corpse.velocityX = 0;
   }
 
   private tickClientCorpseVisuals(): void {

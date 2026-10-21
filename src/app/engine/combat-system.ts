@@ -39,6 +39,7 @@ import { PhysicsSystem } from './physics-system';
 import { VfxSystem } from './vfx-system';
 import { DropSystem } from './drop-system';
 import { ZombieAnimState } from './zombie-sprite-animator';
+import { deathSpin } from './corpse-tumble';
 
 /** What a skill tree changes in combat (warrior Heavy Hands, Executioner, Last Stand, Counter, ...). */
 export interface CombatHooks {
@@ -1569,6 +1570,9 @@ export class CombatSystem {
       maxFadeTimer: lingerTicks,
       showBlood: Math.random() < GAME_CONSTANTS.ZOMBIE_CORPSE_BLOOD_CHANCE,
       carrierId: null,
+      angle: 0,
+      // Killed flying (knocked back by the hit) it keeps tumbling the way it flew.
+      spin: grounded ? 0 : deathSpin(z.velocityX),
     };
     this.e.zombieCorpses.push(corpse);
 

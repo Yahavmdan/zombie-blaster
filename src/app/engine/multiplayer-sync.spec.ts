@@ -831,6 +831,8 @@ describe('Spring puzzle (floor 3)', (): void => {
       fadeTimer: 999,
       maxFadeTimer: 999,
       showBlood: false,
+      angle: 0,
+      spin: 0,
       carrierId: null,
     };
   }
@@ -1104,6 +1106,8 @@ describe('Cage puzzle (floor 4)', (): void => {
       fadeTimer: 999,
       maxFadeTimer: 999,
       showBlood: false,
+      angle: 0,
+      spin: 0,
       carrierId: null,
     };
   }
@@ -1374,6 +1378,8 @@ describe('Pressure plate puzzle (floor 5)', (): void => {
       fadeTimer: 999,
       maxFadeTimer: 999,
       showBlood: false,
+      angle: 0,
+      spin: 0,
       carrierId: null,
     };
   }
@@ -1834,6 +1840,8 @@ describe('Exploding barrels', (): void => {
       fadeTimer: 999,
       maxFadeTimer: 999,
       showBlood: false,
+      angle: 0,
+      spin: 0,
       carrierId: null,
     });
     const left: ZombieCorpse = corpse('left', 560);

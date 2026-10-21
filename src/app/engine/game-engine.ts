@@ -1680,7 +1680,11 @@ export class GameEngine implements IGameEngine {
       this.zombieSpriteAnimator.setState(c.id, ZombieAnimState.Dead);
     }
 
-    this.zombieCorpses = [...corpses, ...pendingLocalCorpses];
+    // The tilt is drawn only; anything malformed lies flat.
+    const synced: ZombieCorpse[] = corpses.map(
+      (c: ZombieCorpse): ZombieCorpse => ({ ...c, angle: Number.isFinite(c.angle) ? c.angle : 0 }),
+    );
+    this.zombieCorpses = [...synced, ...pendingLocalCorpses];
     this.corpseCarrySystem.holdCarried();
   }
 

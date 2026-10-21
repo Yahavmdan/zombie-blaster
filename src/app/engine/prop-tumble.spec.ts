@@ -6,6 +6,7 @@ import {
   centerX,
   centerY,
   isResting,
+  limitTilt,
   settleUpright,
   Span,
   startTip,
@@ -115,5 +116,29 @@ describe('prop tumbling', (): void => {
   it('tunables live in game constants', (): void => {
     expect(GAME_CONSTANTS.PROP_TIP_RELEASE_ANGLE).toBeGreaterThan(0);
     expect(GAME_CONSTANTS.PROP_ROLL_FRICTION).toBeGreaterThan(GAME_CONSTANTS.PROP_SLIDE_FRICTION);
+  });
+});
+
+describe('limitTilt (long things never cartwheel)', (): void => {
+  it('a thrown rail turns slowly and stops turning once tilted PROP_RAIL_MAX_TILT', (): void => {
+    const rail: LooseProp = { ...prop(0, 500, 150, 12), isGrounded: false, spin: GAME_CONSTANTS.PROP_THROW_SPIN };
+    let most: number = 0;
+    for (let t: number = 0; t < 120; t++) {
+      limitTilt(rail, GAME_CONSTANTS.PROP_RAIL_MAX_TILT, GAME_CONSTANTS.PROP_RAIL_MAX_SPIN);
+      expect(Math.abs(rail.spin)).toBeLessThanOrEqual(GAME_CONSTANTS.PROP_RAIL_MAX_SPIN);
+      rail.angle += rail.spin;
+      most = Math.max(most, Math.abs(rail.angle));
+    }
+    expect(most).toBeGreaterThan(0.2);
+    expect(most).toBeLessThan(GAME_CONSTANTS.PROP_RAIL_MAX_TILT + GAME_CONSTANTS.PROP_RAIL_MAX_SPIN);
+  });
+
+  it('one already tilted further (tipped off an edge) keeps its tilt but may turn back', (): void => {
+    const tipped: LooseProp = { ...prop(0, 500, 150, 12), angle: 1.2, spin: 0.1 };
+    limitTilt(tipped, 0.45, 0.04);
+    expect(tipped.spin).toBe(0);
+    const back: LooseProp = { ...prop(0, 500, 150, 12), angle: 1.2, spin: -0.1 };
+    limitTilt(back, 0.45, 0.04);
+    expect(back.spin).toBe(-0.04);
   });
 });

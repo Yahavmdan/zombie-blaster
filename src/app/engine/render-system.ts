@@ -48,6 +48,7 @@ import {
   BODY_SHIFT,
   CorpseDrape,
   DRAPE_STRIP_PX,
+  bodySpan,
   corpseFlipX,
   corpseRenderSize,
   dropAt,
@@ -1226,7 +1227,9 @@ export class RenderSystem {
       }
 
       const drape: CorpseDrape | undefined = this.isLyingFlat(corpse) ? this.e.corpseDrapes.get(corpse.id) : undefined;
-      if (drape && maxDrop(drape) >= MIN_DRAPE_PX) {
+      if (corpse.angle !== 0) {
+        this.drawTiltedCorpse(ctx, corpse, drawX, drawY, renderW, flipX, alpha);
+      } else if (drape && maxDrop(drape) >= MIN_DRAPE_PX) {
         ctx.save();
         ctx.globalAlpha = alpha;
         this.drawBentCorpse(ctx, corpse, drawX, drawY, renderW, flipX, (x: number): StripOffset => ({ dx: shiftAt(drape, x), dy: dropAt(drape, x) }));
@@ -1277,6 +1280,32 @@ export class RenderSystem {
       const reach: number = Math.min(BEND_MAX_REACH, Math.abs(x - pivotX) / halfSpan);
       return { dx: 0, dy: pose.sag * reach * reach };
     });
+    ctx.restore();
+  }
+
+  /**
+   * A tumbling corpse (flying, or flopping back flat): turned by its tilt about the body's middle,
+   * raised so its low end stays at the box bottom instead of sinking into what it lies on.
+   */
+  private drawTiltedCorpse(
+    ctx: CanvasRenderingContext2D,
+    corpse: ZombieCorpse,
+    drawX: number,
+    drawY: number,
+    size: number,
+    flipX: boolean,
+    alpha: number,
+  ): void {
+    const span: { left: number; right: number } = bodySpan(corpse);
+    const pivotX: number = (span.left + span.right) / 2;
+    const pivotY: number = corpse.y + corpse.height;
+    const lift: number = ((span.right - span.left) / 2) * Math.abs(Math.sin(corpse.angle));
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(pivotX, pivotY - lift);
+    ctx.rotate(corpse.angle);
+    ctx.translate(-pivotX, -pivotY);
+    this.e.zombieSpriteAnimator.draw(ctx, corpse.id, corpse.spriteKey, drawX, drawY, size, size, flipX);
     ctx.restore();
   }
 

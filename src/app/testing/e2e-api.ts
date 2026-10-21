@@ -112,6 +112,8 @@ export interface E2eCorpseView {
   footWidth: number;
   footY: number;
   facing: number;
+  /** Tilt in radians (clockwise, 0 = lying flat): tossed, blasted or killed flying it turns a little. */
+  angle: number;
   /** Sprite animation this client renders for the corpse (`dead` once it falls). */
   animState: string | null;
   frame: number | null;

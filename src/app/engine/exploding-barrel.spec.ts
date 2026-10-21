@@ -100,6 +100,8 @@ function corpseAt(cx: number, overrides: Partial<ZombieCorpse> = {}): ZombieCorp
     fadeTimer: 0,
     maxFadeTimer: 0,
     showBlood: false,
+    angle: 0,
+    spin: 0,
     carrierId: null,
     ...overrides,
   };

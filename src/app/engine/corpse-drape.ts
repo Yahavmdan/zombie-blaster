@@ -56,7 +56,7 @@ export function corpseFlipX(corpse: ZombieCorpse): boolean {
 }
 
 /** The lying body's horizontal span: it stretches behind the feet (the box center). */
-function bodySpan(corpse: ZombieCorpse): { left: number; right: number } {
+export function bodySpan(corpse: ZombieCorpse): { left: number; right: number } {
   const size: number = corpseRenderSize(corpse);
   const middle: number =
     corpse.x + corpse.width / 2 - (corpseFlipX(corpse) ? 1 : -1) * size * BODY_SHIFT;

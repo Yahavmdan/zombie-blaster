@@ -290,6 +290,8 @@ function makeCorpse(overrides: Partial<ZombieCorpse> = {}): ZombieCorpse {
     fadeTimer: 999_999,
     maxFadeTimer: 999_999,
     showBlood: false,
+    angle: 0,
+    spin: 0,
     carrierId: null,
     ...overrides,
   };

@@ -176,7 +176,11 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   (turning while thrown, blasted, rolling or tipping) and `resting` (grounded, upright, still: only
   then solid). Wait for `resting`, not `isGrounded` (a landed barrel still rolls). Setup:
   `probe.dropProp(id, x, y)` drops one upright from x, y; `overhangSetup(s)` finds a rail + ledge
-  to drop it hanging off. Specs: `solo/prop-tumble.spec.ts`, `online/prop-tumble-sync.spec.ts`.
+  to drop it hanging off. A thrown or blasted rail only tilts (<= `PROP_RAIL_MAX_TILT`, 0.45 rad).
+  Specs: `solo/prop-tumble.spec.ts`, `online/prop-tumble-sync.spec.ts`. Corpses tumble too:
+  `corpseViews[].angle` (tossed, blasted or killed flying: tilts up to `CORPSE_MAX_TILT`, bounces off
+  hard landings, slides, flops flat). Sample with `intervalMs: 10` (a toss flies ~25 ticks) and wait
+  for `isGrounded && angle === 0`. Specs: `solo/corpse-tumble.spec.ts`, `online/corpse-tumble-sync.spec.ts`.
 - **Visual == collision:** `probe.geometryReport()` measures the drawn level pixels against the
   collision data; `expectArtMatchesCollision` (support/level-geometry.ts) asserts it. Any art/layout
   change must keep `level-geometry.spec` and `level-sync.spec` green. Look at their floor screenshots.

@@ -126,11 +126,15 @@ export function blastCorpses(corpses: ZombieCorpse[], center: Point): ZombieCorp
   );
 }
 
-/** Throws a corpse up and away from the barrel; it falls and lands by normal corpse physics. */
+/**
+ * Throws a corpse up and away from the barrel, tilting that way; it falls and lands by normal
+ * corpse physics (corpse-tumble).
+ */
 export function flingCorpse(corpse: ZombieCorpse, center: Point): void {
-  corpse.velocityX =
-    blastPushDir(center, corpse.x + corpse.width / 2) * GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X;
+  const dir: number = blastPushDir(center, corpse.x + corpse.width / 2);
+  corpse.velocityX = dir * GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X;
   corpse.velocityY = GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_Y;
+  corpse.spin = dir * GAME_CONSTANTS.CORPSE_BLAST_SPIN;
   corpse.isGrounded = false;
 }
 

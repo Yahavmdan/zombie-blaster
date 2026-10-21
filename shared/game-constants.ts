@@ -355,11 +355,25 @@ export const GAME_CONSTANTS = {
   CORPSE_CARRY_LIFT: 12, // Carried corpse's box bottom sits this far above the carrier's head (its lying body rests on the head)
   CORPSE_THROW_SPEED_X: 4, // Sideways speed of a dropped corpse, in the carrier's facing direction
   CORPSE_THROW_SPEED_Y: -3, // Upward toss of a dropped corpse (negative = up)
+  // Corpse tumbling (tossed, blasted or killed flying): a limp body tilts in the air but never
+  // cartwheels, bounces a little off a hard landing, slides on and flops flat.
+  CORPSE_THROW_SPIN: 0.03, // A tossed corpse turns this fast (radians/tick) the way it flies
+  CORPSE_BLAST_SPIN: 0.08, // A corpse thrown by a barrel blast turns this fast
+  CORPSE_HIT_SPIN_PER_SPEED: 0.015, // A zombie killed flying turns this fast per px/tick of its sideways speed
+  CORPSE_MAX_TILT: 0.6, // A flying corpse turns no further than this (radians) from lying flat
+  CORPSE_AIR_DRAG: 0.92, // Sideways speed kept per tick by a flying corpse
+  CORPSE_BOUNCE: 0.15, // A corpse landing faster than CORPSE_BOUNCE_MIN_SPEED bounces back up with this share of its fall speed
+  CORPSE_BOUNCE_MIN_SPEED: 8, // Fall speed (px/tick) below which a landing corpse stays down
+  CORPSE_LAND_KEEP_SPEED: 0.6, // Share of its sideways speed a landing corpse keeps, sliding on
+  CORPSE_SLIDE_FRICTION: 0.82, // Sideways speed a sliding corpse keeps per tick
+  CORPSE_SETTLE_SPIN: 0.15, // A landed corpse flops back flat this fast (radians/tick)
   PROP_STEP_UP_PX: 26, // A prop this low (or lower) is stepped onto when walked into; taller stacks still block
   // Loose prop tumbling (barrels, boxes, rails): they turn in the air, roll or slide on landing,
   // tip off an edge their middle hangs over, and settle back upright (only upright ones are solid).
   PROP_THROW_SPIN: 0.22, // A thrown prop turns this fast (radians/tick) the way it flies
   PROP_BLAST_SPIN: 0.4, // A prop thrown by a barrel blast turns this fast
+  PROP_RAIL_MAX_SPIN: 0.04, // A rail is long: in the air it turns at most this fast...
+  PROP_RAIL_MAX_TILT: 0.45, // ...and tilts no further than this (radians) from level, so it never cartwheels
   PROP_BLAST_SPEED_X: 7, // A blast throws lying props in reach away this fast sideways...
   PROP_BLAST_SPEED_Y: -6, // ...and this fast upward (negative = up)
   PROP_AIR_DRAG: 0.98, // Sideways speed kept per tick by a flying prop
@@ -385,7 +399,7 @@ export const GAME_CONSTANTS = {
   BARREL_BLAST_PLAYER_DAMAGE_PERCENT: 40, // Players are caught too (center within the radius, whoever lit it): point blank the blast takes this share of their max HP, less further out
   BARREL_BLAST_PLAYER_KNOCKBACK: 10, // Sideways speed a caught player is thrown away from the barrel (a zombie hit throws 6)
   BARREL_BLAST_PLAYER_KNOCKBACK_UP: -7, // Upward speed of a caught player (negative = up)
-  BARREL_BLAST_CORPSE_SPEED_X: 8, // Lying corpses in the blast fly away from the barrel this fast sideways (~100 px: they slow by 8% a tick)...
+  BARREL_BLAST_CORPSE_SPEED_X: 8, // Lying corpses in the blast fly away from the barrel this fast sideways (~100 px: they slow by CORPSE_AIR_DRAG)...
   BARREL_BLAST_CORPSE_SPEED_Y: -7, // ...and this fast upward (negative = up)
   BARREL_CHAIN_FUSE_TICKS: 12, // A barrel caught in another's blast blows up this soon (a chain reaction)
   BARREL_RESPAWN_TICKS: 2250, // A blown-up barrel comes back on its spawn spot this long after the blast (45 s), once no player or prop is in the way

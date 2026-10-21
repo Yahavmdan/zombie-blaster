@@ -92,6 +92,8 @@ function corpse(cx: number, feetY: number, overrides: Partial<ZombieCorpse> = {}
     fadeTimer: 0,
     maxFadeTimer: 1,
     showBlood: false,
+    angle: 0,
+    spin: 0,
     carrierId: null,
     ...overrides,
   };

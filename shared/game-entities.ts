@@ -179,6 +179,13 @@ export interface ZombieCorpse {
   showBlood: boolean;
   /** Player carrying this corpse overhead (the host decides; null = lying in the world). */
   carrierId: string | null;
+  /**
+   * Tilt in radians around the lying body's middle (clockwise, 0 = flat). Tossed, blasted or
+   * killed flying it turns a little; landed it flops back flat.
+   */
+  angle: number;
+  /** Turning speed, radians per tick (the host simulates it). */
+  spin: number;
 }
 
 export interface ShopItemDefinition {

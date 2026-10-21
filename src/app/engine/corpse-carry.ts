@@ -195,11 +195,9 @@ export function holdOverhead(
   item.velocityX = 0;
   item.velocityY = 0;
   item.isGrounded = false;
-  if (!isCorpse(item)) {
-    // Overhead a prop rides upright.
-    item.angle = 0;
-    item.spin = 0;
-  }
+  // Overhead a prop rides upright, a corpse flat (its sway is drawn from the carry pose).
+  item.angle = 0;
+  item.spin = 0;
   return restY + stackStepOf(item);
 }
 
@@ -210,8 +208,9 @@ export function toss(item: Carriable, carrier: CarrierView, restY: number = 0): 
   item.velocityX = dir * GAME_CONSTANTS.CORPSE_THROW_SPEED_X + carrier.velocityX / 2;
   item.velocityY = GAME_CONSTANTS.CORPSE_THROW_SPEED_Y;
   item.carrierId = null;
-  // A thrown prop tumbles the way it flies.
-  if (!isCorpse(item)) item.spin = dir * GAME_CONSTANTS.PROP_THROW_SPIN;
+  // A thrown prop tumbles the way it flies; a limp body only tilts that way.
+  item.spin =
+    dir * (isCorpse(item) ? GAME_CONSTANTS.CORPSE_THROW_SPIN : GAME_CONSTANTS.PROP_THROW_SPIN);
   return next;
 }
 
