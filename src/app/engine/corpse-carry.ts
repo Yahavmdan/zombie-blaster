@@ -1,10 +1,17 @@
-import { CharacterState, Direction, GAME_CONSTANTS } from '@shared/index';
+import {
+  CharacterState,
+  Direction,
+  GAME_CONSTANTS,
+  TreeSkill,
+  findTreeSkill,
+  ownsTreeSkill,
+} from '@shared/index';
 import { LooseProp, ZombieCorpse } from '@shared/game-entities';
 
 /**
  * Carrying rules (pure), the same for corpses and loose props. A player asks for things through
  * their own state (`carryingCorpseIds`, so guests send it with player-state); the host grants each
- * with its `carrierId`. Up to `CORPSE_CARRY_MAX` carried things stack on their carrier's head in
+ * with its `carrierId`. Up to `carryCapacity` carried things stack on their carrier's head in
  * request order: no physics, not footholds, not food. Letting go tosses the whole stack forward
  * together, so it lands as a pile, and each one falls like any other corpse or prop.
  */
@@ -100,6 +107,23 @@ export function canCarry(player: Pick<CharacterState, 'isDead' | 'isDown'>): boo
   return !player.isDead && !player.isDown;
 }
 
+/**
+ * How many things this player can carry at once: `CORPSE_CARRY_BASE`, plus
+ * `CORPSE_CARRY_SKILL_EXTRA` for each owned carry skill (warrior Carry 1 / Carry 2), at most
+ * `CORPSE_CARRY_MAX`.
+ */
+export function carryCapacity(player: Pick<CharacterState, 'skillLevels'>): number {
+  const levels: Readonly<Record<string, number>> = player.skillLevels ?? {};
+  const carrySkills: number = Object.keys(levels).filter((id: string): boolean => {
+    const skill: TreeSkill | null = findTreeSkill(id);
+    return skill?.mechanic === 'carry' && ownsTreeSkill(levels, id);
+  }).length;
+  return Math.min(
+    GAME_CONSTANTS.CORPSE_CARRY_MAX,
+    GAME_CONSTANTS.CORPSE_CARRY_BASE + carrySkills * GAME_CONSTANTS.CORPSE_CARRY_SKILL_EXTRA,
+  );
+}
+
 /** Things this player asked to carry, bottom of the stack first. */
 export function carriedIds(player: Pick<CharacterState, 'carryingCorpseIds'>): string[] {
   return player.carryingCorpseIds ?? [];
@@ -180,7 +204,7 @@ export function toss(item: Carriable, carrier: CarrierView, restY: number = 0): 
  * Host: settles who carries what this tick. Things whose carrier let go or went down are tossed
  * together (bottom one first, so the stack keeps its order and lands as a pile); a carrier who left
  * the game just drops theirs. Then requests are granted, first come first served, for lying
- * corpses and props within reach, up to `CORPSE_CARRY_MAX` per player.
+ * corpses and props within reach, up to each player's `carryCapacity`.
  */
 export function assignCarriers(items: Carriable[], players: CharacterState[]): void {
   const byId: Map<string, CharacterState> = new Map<string, CharacterState>(
@@ -205,9 +229,10 @@ export function assignCarriers(items: Carriable[], players: CharacterState[]): v
   }
   for (const p of players) {
     if (!canCarry(p)) continue;
+    const capacity: number = carryCapacity(p);
     let held: number = items.filter((c: Carriable): boolean => c.carrierId === p.id).length;
     for (const id of carriedIds(p)) {
-      if (held >= GAME_CONSTANTS.CORPSE_CARRY_MAX) break;
+      if (held >= capacity) break;
       const item: Carriable | undefined = items.find((c: Carriable): boolean => c.id === id);
       if (!item || item.carrierId !== null || !item.isGrounded) continue;
       if (distanceTo(p, item) > GAME_CONSTANTS.CORPSE_CARRY_RANGE * HOST_RANGE_SLACK) continue;

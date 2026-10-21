@@ -29,6 +29,12 @@ input was dropped (see below).
      hold 1 s and let go, Ground Slam = hold in the air, Slash Blast = double tap); every other
      active and buff on the 1-6 bar; passives just work. The user will move more attacks onto the
      button later. Propose one combo per attack, never two similar inputs; ask before adding one.
+  4. 2026-10-21: Combat (was Brawn) holds only those three combo attacks (Power Dash is its root); the other
+     Combat skills are parked (commented out in `WARRIOR_SKILL_TREE`) for a rework. "Momentum" is now
+     **Agility**, with Carry 1 / Carry 2 (passive `carry` mechanic: carry capacity
+     `CORPSE_CARRY_BASE` 1, +`CORPSE_CARRY_SKILL_EXTRA` each, max `CORPSE_CARRY_MAX` 3, read with
+     `carryCapacity` in `corpse-carry.ts`; the host uses each guest's relayed `skillLevels`).
+     The user called it "attacks" and picked the name "Combat".
 
 ## Where things live
 
@@ -53,7 +59,7 @@ input was dropped (see below).
 1. **Identity**: 3 branches, one line each (offense / mobility-control / survival-co-op fits most),
    colours from `tokens.css`, a branch icon.
 2. **Nodes**: ~20-24; tiers 1-5; 1-2 roots per branch (one should be an attack active, so a fresh
-   character has a key to press); one capstone per branch at tier 5 with a tier-4 parent. Port old
+   character has a key to press); at most one capstone per branch, at tier 5 with a tier-4 parent. Port old
    skills into nodes, keep their ids. Mark each node Active / Buff (goes on the bar), Active with a
    `combo` (attack button; ask the user which) or Passive / Reactive (works by itself). Keep the bar
    actives a player wants at once to about six.

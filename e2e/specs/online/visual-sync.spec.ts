@@ -110,13 +110,13 @@ async function castAllAndObserve(
 
 /**
  * Warrior skills with an animation, fired from their skill-bar keys, in an order that keeps the
- * caster standing until the backstep.
+ * caster standing until the moves at the end (shoulder charge, backstep).
  */
 const WARRIOR_BAR_SKILLS: string[] = [
-  WARRIOR.uppercut,
   WARRIOR.slashBlast,
   WARRIOR.powerStance,
   WARRIOR.hyperBody,
+  WARRIOR.shoulderCharge,
   WARRIOR.backstep,
 ];
 

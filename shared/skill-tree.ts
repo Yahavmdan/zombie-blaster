@@ -52,6 +52,7 @@ export type TreeSkillMechanic =
   | 'leap-strike'
   | 'adrenaline'
   | 'rampage'
+  | 'carry'
   | 'hp-recovery'
   | 'auto-potion'
   | 'buff'

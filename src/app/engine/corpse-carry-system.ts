@@ -6,6 +6,7 @@ import {
   canCarry,
   Carriable,
   carriedIds,
+  carryCapacity,
   carrySway,
   CarryPose,
   easeCarryPose,
@@ -16,7 +17,7 @@ import {
 
 /**
  * Carrying corpses and loose props. The carry key picks up the nearest lying one (a request in the
- * local player's state) and stacks it on the ones already carried, up to `CORPSE_CARRY_MAX`; with
+ * local player's state) and stacks it on the ones already carried, up to `carryCapacity`; with
  * nothing more to pick up (or a full stack) it tosses the whole stack forward. The host (or solo)
  * grants and releases them for every player; every client puts carried things on their carrier's
  * head as it sees them. A guest holds its own pick-ups right away while the host's answer is on
@@ -49,7 +50,7 @@ export class CorpseCarrySystem {
     }
     if (!carryPressed) return ids.length > 0;
     const item: Carriable | null =
-      ids.length < GAME_CONSTANTS.CORPSE_CARRY_MAX ? nearestCarriable(p, this.items()) : null;
+      ids.length < carryCapacity(p) ? nearestCarriable(p, this.items()) : null;
     if (item) {
       p.carryingCorpseIds = [...ids, item.id];
       this.unconfirmedTicks.set(item.id, 0);
