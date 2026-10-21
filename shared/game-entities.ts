@@ -298,6 +298,13 @@ export interface LooseProp {
   fuseTicks: number;
   /** Blown up: gone for the rest of the floor. Only the host's sync carries these, so clients drop it too. */
   exploded: boolean;
+  /**
+   * Tilt in radians around the box's center (clockwise, 0 = upright as placed). Thrown, blasted,
+   * rolling or tipping off an edge it turns; at rest it is always 0, so the art is its box.
+   */
+  angle: number;
+  /** Turning speed, radians per tick (the host simulates it). */
+  spin: number;
 }
 
 /** What a map prop is made of: picks its weight (PROP_WEIGHT_KG). */

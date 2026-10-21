@@ -5,6 +5,8 @@ import { E2eCorpseView, E2ePlayerView, E2eSnapshot, E2eVfxLogEntry } from '../..
 import { drawnGeometry, expectArtMatchesCollision } from '../../support/level-geometry';
 import { layoutWhere } from '../../support/navigation';
 import {
+  barrelWithOpenSkyBeside,
+  CORPSE_DROP_DX,
   dropLyingCorpses,
   findProp,
   isBarrel,
@@ -21,6 +23,7 @@ const FUSE_TICKS: number = 150;
 const BLAST_PLAYER_PERCENT: number = 25;
 /** God mode goes off this many ticks before the blast (well under a zombie's ~1.8 s i-frames). */
 const MORTAL_TICKS: number = 25;
+
 
 test.describe('exploding barrels', { tag: '@solo' }, (): void => {
   test('a hit lights a barrel: its fuse counts down 3 s, then it blows up and is gone', async ({
@@ -111,12 +114,17 @@ test.describe('exploding barrels', { tag: '@solo' }, (): void => {
     await p.probe.setGodMode(true);
     const s0: E2eSnapshot = await layoutWhere(
       p,
-      'a lone barrel on open ground',
-      (s: E2eSnapshot): boolean => pickableOnGround(s, isBarrel) !== undefined,
+      'a lone barrel on open ground, open sky beside it',
+      (s: E2eSnapshot): boolean => barrelWithOpenSkyBeside(s) !== undefined,
     );
-    const barrel: LevelProp = pickableOnGround(s0, isBarrel)!;
+    const barrel: LevelProp = barrelWithOpenSkyBeside(s0)!;
     const id: string = barrel.id!;
-    const corpses: E2eCorpseView[] = await dropLyingCorpses(p, [], propCenterX(barrel) + 60, 2);
+    const corpses: E2eCorpseView[] = await dropLyingCorpses(
+      p,
+      [],
+      propCenterX(barrel) + CORPSE_DROP_DX,
+      2,
+    );
     await standLeftOf(p, barrel);
     await p.press(KEYS.attack, 70);
     await p.probe.waitFor(

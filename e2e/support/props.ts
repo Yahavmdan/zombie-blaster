@@ -1,6 +1,7 @@
 import { GamePlayer } from './game-player';
 import { E2eCorpseView, E2eSnapshot } from './probe';
 import { WORLD } from './invariants';
+import { GROUND, LevelPlatform, levelPlatforms } from './navigation';
 
 /** A map prop as the probe sees it (pickable ones where they are now). */
 export type LevelProp = E2eSnapshot['level']['props'][number];
@@ -40,6 +41,23 @@ export function isBarrel(q: LevelProp): boolean {
   return q.kind.startsWith('barrel');
 }
 
+/** A rail with middle pieces: wider than carry reach from its center, so it is grabbed from an end. */
+export function isLongRail(q: LevelProp): boolean {
+  return q.kind === 'rail' && q.width > 100;
+}
+
+/** A kind of pickable prop the carry specs run with. */
+export interface CarryCase {
+  name: string;
+  accept: (q: LevelProp) => boolean;
+}
+
+/** Barrels and boxes, and a long rail (grabbed from beside its end, far from its center). */
+export const CARRY_CASES: CarryCase[] = [
+  { name: 'a barrel or box', accept: (q: LevelProp): boolean => q.kind !== 'rail' },
+  { name: 'a long rail', accept: isLongRail },
+];
+
 /**
  * A lone pickable prop (of the accepted kinds) lying on open ground, with room to walk up from
  * the left and throw right.
@@ -52,13 +70,75 @@ export function pickableOnGround(
     (q: LevelProp): boolean =>
       accept(q) &&
       q.pickable &&
-      q.isGrounded &&
+      q.resting &&
       q.carrierId === null &&
       q.y + q.height === WORLD.groundY &&
       q.x > 150 &&
       q.x + q.width < WORLD.width - 250 &&
       clearAround(s, q, 110, 160),
   );
+}
+
+/** A rail to drop hanging off a ledge's right end (most of it past the edge), and where. */
+export interface Overhang {
+  rail: LevelProp;
+  ledge: { x: number; y: number; width: number };
+  dropX: number;
+  dropY: number;
+}
+
+/** Share of the rail dropped over the ledge: its middle hangs past the edge, so it tips off. */
+const OVERHANG_ON_LEDGE: number = 0.3;
+
+/**
+ * A resting rail and a ledge whose right end has nothing on it and room on screen past it, for a
+ * rail dropped hanging off the edge; undefined when the layout has none.
+ */
+export function overhangSetup(s: E2eSnapshot): Overhang | undefined {
+  const rail: LevelProp | undefined = s.level.props.find(
+    (q: LevelProp): boolean => q.kind === 'rail' && q.pickable && q.resting,
+  );
+  if (!rail) return undefined;
+  const onLedge: number = Math.round(rail.width * OVERHANG_ON_LEDGE);
+  const ledge: { x: number; y: number; width: number } | undefined = s.level.platforms.find(
+    (p: { x: number; y: number; width: number }): boolean => {
+      const edge: number = p.x + p.width;
+      return (
+        p.y < WORLD.groundY - 60 &&
+        p.y !== s.level.safeSpot?.y &&
+        p.width >= onLedge + 32 &&
+        edge + rail.width - onLedge < WORLD.width - 10 &&
+        !s.level.props.some(
+          (q: LevelProp): boolean =>
+            q !== rail && q.y + q.height === p.y && q.x + q.width > edge - onLedge - 10 && q.x < edge,
+        )
+      );
+    },
+  );
+  if (!ledge) return undefined;
+  return {
+    rail,
+    ledge,
+    dropX: ledge.x + ledge.width - onLedge,
+    dropY: ledge.y - rail.height - 10,
+  };
+}
+
+/** Corpses dropped this far right of a barrel's center land beside it, in its blast. */
+export const CORPSE_DROP_DX: number = 60;
+
+/**
+ * A lone barrel on open ground with no ledge over the spot CORPSE_DROP_DX right of it, so corpses
+ * dropped there land on the ground in its blast (not on a ledge above it).
+ */
+export function barrelWithOpenSkyBeside(s: E2eSnapshot): LevelProp | undefined {
+  const barrel: LevelProp | undefined = pickableOnGround(s, isBarrel);
+  if (!barrel) return undefined;
+  const dropX: number = propCenterX(barrel) + CORPSE_DROP_DX;
+  const covered: boolean = levelPlatforms(s).some(
+    (p: LevelPlatform): boolean => p !== GROUND && p.x < dropX + 40 && p.x + p.width > dropX - 40,
+  );
+  return covered ? undefined : barrel;
 }
 
 /** Setup: the player stands on the ground right beside the prop's left side (within carry reach). */
@@ -106,7 +186,7 @@ export function noPickableBetween(s: E2eSnapshot, from: number, to: number): boo
 }
 
 /**
- * Setup: the host takes every barrel and box between these x off the floor (every floor has
+ * Setup: the host takes every barrel, box and rail between these x off the floor (every floor has
  * 5-10 barrels, so no layout leaves a wide span empty), so the carry key there finds only
  * corpses, and waits until every observer sees them gone.
  */

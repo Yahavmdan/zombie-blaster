@@ -268,6 +268,8 @@ function barrel(id: string, cx: number, overrides: Partial<LooseProp> = {}): Loo
     weightKg: PROP_WEIGHT_KG.barrel,
     fuseTicks: 0,
     exploded: false,
+    angle: 0,
+    spin: 0,
     ...overrides,
   };
 }
@@ -278,6 +280,19 @@ describe('carrying props', (): void => {
     const far: ZombieCorpse = corpse('far', 140);
     expect(nearestCarriable(player('p', 100), [far, near])?.id).toBe('near');
     expect(nearestCarriable(player('p', 100), [barrel('flying', 110, { isGrounded: false })])).toBeNull();
+  });
+
+  it('a long rail is grabbed anywhere along it, up to half a player width past its ends', (): void => {
+    const width: number = 213;
+    const rail: (cx: number) => LooseProp = (cx: number): LooseProp =>
+      barrel('rail', cx, { x: cx - width / 2, y: GROUND - 16, width, height: 16 });
+    // The player stands right beside its left end, far from its center.
+    const leftEnd: number = 300;
+    const p: CharacterState = player('p', leftEnd - GAME_CONSTANTS.PLAYER_WIDTH / 2 - 1);
+    expect(nearestCarriable(p, [rail(leftEnd + width / 2)])?.id).toBe('rail');
+    expect(nearestCarriable(p, [rail(leftEnd + width / 2 + RANGE)])).toBeNull();
+    // A barrel still counts from its center.
+    expect(nearestCarriable(player('p', 100), [barrel('b', 100 + RANGE + 1)])).toBeNull();
   });
 
   it('the host grants a prop request, within reach, like a corpse', (): void => {

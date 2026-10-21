@@ -113,6 +113,8 @@ function box(cx: number, bottom: number, overrides: Partial<LooseProp> = {}): Lo
     weightKg: PROP_WEIGHT_KG.box,
     fuseTicks: 0,
     exploded: false,
+    angle: 0,
+    spin: 0,
     ...overrides,
   };
 }

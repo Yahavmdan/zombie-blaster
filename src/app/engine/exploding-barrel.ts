@@ -119,6 +119,24 @@ export function flingCorpse(corpse: ZombieCorpse, center: Point): void {
   corpse.isGrounded = false;
 }
 
+/** Lying or flying props (not carried) whose center is within the blast: it throws them. */
+export function blastProps(props: LooseProp[], center: Point): LooseProp[] {
+  return props.filter((p: LooseProp): boolean => {
+    const c: Point = blastCenter(p);
+    return p.carrierId === null && inBlast(center, c.x, c.y);
+  });
+}
+
+/** How the blast throws a prop: up and away from the barrel, tumbling that way. */
+export function propFling(prop: LooseProp, center: Point): { vx: number; vy: number; spin: number } {
+  const dir: number = blastPushDir(center, prop.x + prop.width / 2);
+  return {
+    vx: dir * GAME_CONSTANTS.PROP_BLAST_SPEED_X,
+    vy: GAME_CONSTANTS.PROP_BLAST_SPEED_Y,
+    spin: dir * GAME_CONSTANTS.PROP_BLAST_SPIN,
+  };
+}
+
 /** Other barrels whose center is within the blast: they go up next. */
 export function blastBarrels(barrels: LooseProp[], center: Point): LooseProp[] {
   return barrels.filter((b: LooseProp): boolean => {

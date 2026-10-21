@@ -367,7 +367,7 @@ export class GameEngine implements IGameEngine {
     this.repositionExitPlatform();
   }
 
-  /** The layout's props that never move (rails, lockers): part of the drawn geometry layer. */
+  /** The layout's props that never move (lockers): part of the drawn geometry layer. */
   private fixedProps(): Prop[] {
     return this.level.props.filter((p: Prop): boolean => !isPickable(p));
   }
@@ -1609,6 +1609,20 @@ export class GameEngine implements IGameEngine {
   clearLooseProps(ids: string[]): void {
     if (this.isMultiplayerClient) return;
     for (const id of ids) this.loosePropSystem.remove(id, false);
+  }
+
+  /**
+   * Host (or solo) test setup: puts a lying prop upright at x, y in the air; it falls (and tips,
+   * rolls, settles) by the normal prop physics.
+   */
+  dropLooseProp(id: string, x: number, y: number): void {
+    if (this.isMultiplayerClient) return;
+    const prop: LooseProp | undefined = this.looseProps.find((p: LooseProp): boolean => p.id === id);
+    if (!prop || prop.carrierId !== null) return;
+    prop.x = x;
+    prop.y = y;
+    prop.angle = 0;
+    this.loosePropSystem.launch(prop, 0, 0, 0);
   }
 
   /** Client: the host's moved props (the rest lie on their spawn spots); lying ones are solid. */

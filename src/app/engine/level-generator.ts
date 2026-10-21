@@ -217,13 +217,15 @@ export interface RailArt {
   right: PropArt;
 }
 
-/** A rail's pieces, laid edge to edge: left cap, 0..RAIL_MAX_MIDDLES middle pieces, right cap. */
+/**
+ * A rail's pieces, laid edge to edge: left cap, middle pieces, right cap. A rail is any width in
+ * RAIL_MIN_WIDTH_PX..RAIL_MAX_WIDTH_PX: the last middle piece is cut where the right cap starts.
+ */
 export const RAIL_ART: RailArt = {
   left: { src: 'tiles/objects/Fence1.png', left: 0, top: 16, right: 31, bottom: 31 },
   middle: { src: 'tiles/objects/Fence2.png', left: 0, top: 16, right: 31, bottom: 31 },
   right: { src: 'tiles/objects/Fence3.png', left: 0, top: 16, right: 20, bottom: 31 },
 };
-export const RAIL_MAX_MIDDLES: number = 5;
 
 export function propArtWidth(art: PropArt): number {
   return art.right - art.left + 1;
@@ -233,14 +235,6 @@ export function propArtHeight(art: PropArt): number {
   return art.bottom - art.top + 1;
 }
 
-/** A rail's width with `middles` middle pieces between its caps. */
-export function railWidth(middles: number): number {
-  return (
-    propArtWidth(RAIL_ART.left) +
-    middles * propArtWidth(RAIL_ART.middle) +
-    propArtWidth(RAIL_ART.right)
-  );
-}
 
 /** What each prop is made of: its weight is PROP_WEIGHT_KG[material] (shared/game-constants.ts). */
 export const PROP_MATERIAL: Record<PropKind, PropMaterial> = {
@@ -282,13 +276,13 @@ function propBox(kind: SinglePropKind, x: number, surfaceY: number): Prop {
   return { kind, x, y: surfaceY - height, width: propArtWidth(art), height };
 }
 
-function railBox(middles: number, x: number, surfaceY: number): Prop {
+function railBox(width: number, x: number, surfaceY: number): Prop {
   const height: number = propArtHeight(RAIL_ART.middle);
-  return { kind: 'rail', x, y: surfaceY - height, width: railWidth(middles), height };
+  return { kind: 'rail', x, y: surfaceY - height, width, height };
 }
 
-/** Props that look liftable (barrels, boxes): players pick them up and throw them. Rails and lockers stay put. */
-const PICKABLE_KINDS: PropKind[] = ['barrel1', 'barrel2', 'barrel3', 'box1', 'box2', 'box3'];
+/** Props that look liftable (barrels, boxes, rails): players pick them up and throw them. Lockers stay put. */
+const PICKABLE_KINDS: PropKind[] = ['barrel1', 'barrel2', 'barrel3', 'box1', 'box2', 'box3', 'rail'];
 
 export function isPickable(prop: Prop): boolean {
   return PICKABLE_KINDS.includes(prop.kind);
@@ -321,6 +315,8 @@ export function lyingProp(id: string, prop: Prop): LooseProp {
     weightKg: propWeightKg(prop.kind),
     fuseTicks: 0,
     exploded: false,
+    angle: 0,
+    spin: 0,
   };
 }
 
@@ -390,10 +386,10 @@ function propProblems(prop: Prop, layout: PropContext): string[] {
   if (groundLevel && spanGap(left, right, SPAWN_CLEAR[0], SPAWN_CLEAR[1]) === 0)
     out.push('blocks the spawn point');
 
-  // Standing on a prop needs full headroom: no platform tile just above it. A barrel may still
-  // sit under a ledge (only when a crowded floor has no open spot left for its minimum count):
-  // it is in the way like a thrown one, until someone carries it off or blows it up.
-  if (!isExplosive(prop.kind) && lacksHeadroom(prop, layout.platforms)) {
+  // Standing on a prop needs full headroom: no platform tile just above it. A barrel or rail may
+  // still sit under a ledge (only when a crowded floor has no open spot left for its minimum
+  // count): it is in the way like a thrown one, until someone carries it off (or blows it up).
+  if (!isPickable(prop) && lacksHeadroom(prop, layout.platforms)) {
     out.push('no headroom under a platform');
   }
 
@@ -456,24 +452,50 @@ function propProblems(prop: Prop, layout: PropContext): string[] {
 
 /**
  * Scatters props on the ground and platforms, each passing propProblems: first the floor's
- * BARREL_COUNT_MIN..MAX barrels (they blow up when hit), then other props (rails of random
- * length, boxes, some stacked, lockers).
+ * BARREL_COUNT_MIN..MAX barrels (they blow up when hit), BARREL_SPACING_PX apart, then
+ * RAIL_COUNT_MIN..MAX rails of random length, then other props (boxes, some stacked, lockers).
  */
 function placeProps(rand: Random, layout: Omit<PropContext, 'props'>): Prop[] {
   const props: Prop[] = [];
   const barrelKinds: PropKind[] = PROP_KINDS.filter((k: PropKind): boolean => isExplosive(k));
-  const otherKinds: PropKind[] = PROP_KINDS.filter((k: PropKind): boolean => !isExplosive(k));
+  const otherKinds: PropKind[] = PROP_KINDS.filter(
+    (k: PropKind): boolean => !isExplosive(k) && k !== 'rail',
+  );
+  const count: (kinds: PropKind[]) => number = (kinds: PropKind[]): number =>
+    props.filter((p: Prop): boolean => kinds.includes(p.kind)).length;
+
   const barrels: number = randomInt(
     rand,
     GAME_CONSTANTS.BARREL_COUNT_MIN,
     GAME_CONSTANTS.BARREL_COUNT_MAX,
   );
-  for (let i: number = 0; i < barrels; i++) placeProp(rand, barrelKinds, props, layout, 30, true);
-  // A crowded floor (cages, ledges low over the ground) may have no open spot left: the rest of
-  // the minimum goes under a ledge.
+  const spacing: number = GAME_CONSTANTS.BARREL_SPACING_PX;
+  // Once one finds no spot, the floor is full: the rest would only burn attempts.
+  for (let i: number = 0; i < barrels; i++) {
+    if (!placeProp(rand, barrelKinds, props, layout, 80, true, spacing)) break;
+  }
+  // A crowded floor (cages, ledges low over the ground) may have no spot left that far from the
+  // others: the rest of the minimum goes half as far, then anywhere open, then under a ledge.
+  for (let tries: number = 0; tries < 30; tries++) {
+    if (count(barrelKinds) >= GAME_CONSTANTS.BARREL_COUNT_MIN) break;
+    placeProp(rand, barrelKinds, props, layout, 30, tries < 20, tries < 10 ? spacing / 2 : 0);
+  }
+
+  const rails: number = randomInt(
+    rand,
+    GAME_CONSTANTS.RAIL_COUNT_MIN,
+    GAME_CONSTANTS.RAIL_COUNT_MAX,
+  );
+  // A long rail often spans the ground under some low ledge: one with no open spot goes under a
+  // ledge (carriable, like a barrel there).
+  for (let i: number = 0; i < rails; i++) {
+    if (!placeProp(rand, ['rail'], props, layout, 30, true)) {
+      placeProp(rand, ['rail'], props, layout, 30, false);
+    }
+  }
   for (let tries: number = 0; tries < 20; tries++) {
-    if (props.length >= GAME_CONSTANTS.BARREL_COUNT_MIN) break;
-    placeProp(rand, barrelKinds, props, layout, 30, false);
+    if (count(['rail']) >= GAME_CONSTANTS.RAIL_COUNT_MIN) break;
+    placeProp(rand, ['rail'], props, layout, 30, false);
   }
   const others: number = randomInt(
     rand,
@@ -485,8 +507,10 @@ function placeProps(rand: Random, layout: Omit<PropContext, 'props'>): Prop[] {
 }
 
 /**
- * Adds one prop of a random kind (of `kinds`) where it breaks no rule, if one fits in `attempts`.
+ * Adds one prop of a random kind (of `kinds`) where it breaks no rule, if one fits in `attempts`
+ * (returns whether one did).
  * `open`: only where a player could stand on it (no ledge low over it), even for a barrel.
+ * `spacing`: only this far (center to center) from every prop of the same kinds.
  */
 function placeProp(
   rand: Random,
@@ -495,17 +519,23 @@ function placeProp(
   layout: Omit<PropContext, 'props'>,
   attempts: number,
   open: boolean,
-): void {
+  spacing: number = 0,
+): boolean {
+  const bases: Prop[] = props.filter(
+    (q: Prop): boolean =>
+      q.kind !== 'rail' &&
+      STACKABLE.includes(q.kind) &&
+      !props.some((t: Prop): boolean => t.y + t.height === q.y),
+  );
+  const kin: Prop[] = props.filter((q: Prop): boolean => kinds.includes(q.kind));
   for (let attempt: number = 0; attempt < attempts; attempt++) {
     const kind: PropKind = kinds[randomInt(rand, 0, kinds.length - 1)];
-    const middles: number = randomInt(rand, 0, RAIL_MAX_MIDDLES);
-    const width: number = kind === 'rail' ? railWidth(middles) : propArtWidth(PROP_ART[kind]);
-    const bases: Prop[] = props.filter(
-      (q: Prop): boolean =>
-        q.kind !== 'rail' &&
-        STACKABLE.includes(q.kind) &&
-        !props.some((t: Prop): boolean => t.y + t.height === q.y),
+    const railWidth: number = randomInt(
+      rand,
+      GAME_CONSTANTS.RAIL_MIN_WIDTH_PX,
+      GAME_CONSTANTS.RAIL_MAX_WIDTH_PX,
     );
+    const width: number = kind === 'rail' ? railWidth : propArtWidth(PROP_ART[kind]);
     let candidate: Prop;
     if (kind !== 'rail' && STACKABLE.includes(kind) && bases.length > 0 && rand() < 0.35) {
       const base: Prop = bases[randomInt(rand, 0, bases.length - 1)];
@@ -525,14 +555,24 @@ function placeProp(
       );
       if (maxX < minX) continue;
       const x: number = randomInt(rand, minX, maxX);
-      candidate = kind === 'rail' ? railBox(middles, x, surface.y) : propBox(kind, x, surface.y);
+      candidate = kind === 'rail' ? railBox(width, x, surface.y) : propBox(kind, x, surface.y);
     }
+    if (kin.some((q: Prop): boolean => propDistance(candidate, q) < spacing)) continue;
     if (open && lacksHeadroom(candidate, layout.platforms)) continue;
     if (propProblems(candidate, { ...layout, props: [...props, candidate] }).length === 0) {
       props.push(candidate);
-      return;
+      return true;
     }
   }
+  return false;
+}
+
+/** Distance between two props' centers. */
+function propDistance(a: Prop, b: Prop): number {
+  return Math.hypot(
+    a.x + a.width / 2 - (b.x + b.width / 2),
+    a.y + a.height / 2 - (b.y + b.height / 2),
+  );
 }
 
 /**

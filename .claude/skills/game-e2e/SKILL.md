@@ -167,7 +167,11 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   their entry has the game-state `id`, current x/y, `isGrounded`, `carrierId`. Find a test layout
   with `layoutWhere(player, desc, pred)` (navigation.ts: loops `setLayoutSeed`); prop helpers in
   `support/props.ts` (`pickableOnGround`, `standLeftOf`). Specs: `solo/props.spec.ts`,
-  `online/props-coop.spec.ts`.
+  `online/props-coop.spec.ts`. Rails (100-200 px) are pickable too. Props tumble: `props[].angle`
+  (turning while thrown, blasted, rolling or tipping) and `resting` (grounded, upright, still: only
+  then solid). Wait for `resting`, not `isGrounded` (a landed barrel still rolls). Setup:
+  `probe.dropProp(id, x, y)` drops one upright from x, y; `overhangSetup(s)` finds a rail + ledge
+  to drop it hanging off. Specs: `solo/prop-tumble.spec.ts`, `online/prop-tumble-sync.spec.ts`.
 - **Visual == collision:** `probe.geometryReport()` measures the drawn level pixels against the
   collision data; `expectArtMatchesCollision` (support/level-geometry.ts) asserts it. Any art/layout
   change must keep `level-geometry.spec` and `level-sync.spec` green. Look at their floor screenshots.
