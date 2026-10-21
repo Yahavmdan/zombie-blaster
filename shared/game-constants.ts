@@ -335,7 +335,9 @@ export const GAME_CONSTANTS = {
   ZOMBIE_CORPSE_BLOOD_CHANCE: 0.3, // Chance a corpse shows a blood splatter
   CORPSE_CARRY_RANGE: 50, // Pixels from the player's center to a lying corpse's center to pick it up
   CORPSE_CARRY_SPEED_MULTIPLIER: 0.75, // Walking speed while carrying corpses overhead
-  CORPSE_CARRY_MAX: 3, // Corpses one player can carry, stacked overhead
+  CORPSE_CARRY_BASE: 1, // Corpses or props anyone can carry overhead at once
+  CORPSE_CARRY_SKILL_EXTRA: 1, // Each owned carry skill (warrior Carry 1 / Carry 2) adds this many
+  CORPSE_CARRY_MAX: 3, // Most one player can ever carry, stacked overhead
   CORPSE_CARRY_STACK_STEP: 5, // Each carried corpse above the bottom one rides this much higher (a body is ~6 px thick: they rest on each other)
   CORPSE_CARRY_CONFIRM_TICKS: 25, // A guest's pick-up the host hasn't granted by then is given up
   CORPSE_CARRY_LIFT: 12, // Carried corpse's box bottom sits this far above the carrier's head (its lying body rests on the head)
@@ -349,6 +351,11 @@ export const GAME_CONSTANTS = {
   BARREL_BLAST_BOSS_DAMAGE_PERCENT: 10, // ...and only this share of a boss's (a few barrels don't kill one)
   BARREL_BLAST_KNOCKBACK: 9, // Sideways speed (px/tick) the blast throws a caught zombie away from the barrel
   BARREL_BLAST_KNOCKBACK_UP: -6, // Upward speed of a caught zombie (negative = up)
+  BARREL_BLAST_PLAYER_DAMAGE_PERCENT: 25, // Players are caught too (center within the radius, whoever lit it): the blast takes this share of their max HP
+  BARREL_BLAST_PLAYER_KNOCKBACK: 10, // Sideways speed a caught player is thrown away from the barrel (a zombie hit throws 6)
+  BARREL_BLAST_PLAYER_KNOCKBACK_UP: -7, // Upward speed of a caught player (negative = up)
+  BARREL_BLAST_CORPSE_SPEED_X: 8, // Lying corpses in the blast fly away from the barrel this fast sideways (~100 px: they slow by 8% a tick)...
+  BARREL_BLAST_CORPSE_SPEED_Y: -7, // ...and this fast upward (negative = up)
   BARREL_CHAIN_FUSE_TICKS: 12, // A barrel caught in another's blast blows up this soon (a chain reaction)
   BARREL_RESPAWN_TICKS: 500, // A blown-up barrel comes back on its spawn spot this long after the blast (10 s), once no player or prop is in the way
   BARREL_COUNT_MIN: 5, // Barrels the level generator puts on every floor: at least this many...
@@ -1279,8 +1286,8 @@ export const SKILLS: SkillDefinition[] = [
 // Classes listed in SKILL_TREES use a skill tree instead of SKILLS levels: one point per level, one
 // point per skill, strength from stats (StatCurve), actives fired from a 6-slot skill bar (keys 1-6). The rest keep SKILLS.
 
-const BRAWN_COLOR: string = '#e0503f';
-const MOMENTUM_COLOR: string = '#f2c14e';
+const COMBAT_COLOR: string = '#e0503f';
+const AGILITY_COLOR: string = '#f2c14e';
 const GRIT_COLOR: string = '#8fbf3a';
 
 type TreeSkillSpec = Partial<TreeSkill> &
@@ -1315,96 +1322,110 @@ export const ATTACK_COMBO_HINTS: Readonly<Record<AttackCombo, string>> = {
 export const WARRIOR_SKILL_TREE: ClassSkillTree = {
   classId: CharacterClass.Warrior,
   branches: [
-    { id: 'brawn', name: 'Brawn', color: BRAWN_COLOR, icon: 'fist', blurb: 'Hit harder, hit more. Launch, slam, finish.' },
-    { id: 'momentum', name: 'Momentum', color: MOMENTUM_COLOR, icon: 'wind', blurb: 'Move fast, pull and push the crowd.' },
+    { id: 'combat', name: 'Combat', color: COMBAT_COLOR, icon: 'fist', blurb: 'The attack-button moves: dash, spin, slam.' },
+    { id: 'agility', name: 'Agility', color: AGILITY_COLOR, icon: 'wind', blurb: 'Move fast, carry more, pull and push the crowd.' },
     { id: 'grit', name: 'Grit', color: GRIT_COLOR, icon: 'shield', blurb: 'Survive, protect, get allies back up.' },
   ],
   skills: [
-    // ═══ Brawn ═══
+    // ═══ Combat ═══
     warriorSkill({
-      id: 'warrior-power-strike', name: 'Power Strike', branch: 'brawn', tier: 1, column: 1, parents: [],
-      type: SkillType.Active, mechanic: 'strike',
-      icon: 'sword', color: BRAWN_COLOR, animationKey: 'warrior-power-strike',
-      description: 'A heavy blow on the zombie in front of you that sends it flying.',
-      damageMult: 2.2, maxTargets: 1, mpCost: 4, cooldownMs: 600,
-      curves: { knockback: { stat: 'str', min: 8, max: 18, half: 60 } },
-    }),
-    warriorSkill({
-      id: 'warrior-slash-blast', name: 'Slash Blast', branch: 'brawn', tier: 2, column: 0, parents: ['warrior-power-strike'],
-      type: SkillType.Active, mechanic: 'cleave', combo: AttackCombo.DoubleTap,
-      icon: 'whirl', color: BRAWN_COLOR, animationKey: 'warrior-slash-blast',
-      description: 'A spinning cleave that hits zombies on both sides of you.',
-      damageMult: 1.3, maxTargets: 6, mpCost: 8, cooldownMs: 1200,
-      curves: { radius: { stat: 'str', min: 70, max: 140, half: 60 } },
-    }),
-    warriorSkill({
-      id: 'warrior-uppercut', name: 'Rising Uppercut', branch: 'brawn', tier: 2, column: 2, parents: ['warrior-power-strike'],
-      type: SkillType.Active, mechanic: 'uppercut',
-      icon: 'arrow-up', color: BRAWN_COLOR, animationKey: 'warrior-uppercut',
-      description: 'Launches a zombie into the air. It lands stunned; hit it on the way down.',
-      damageMult: 1.5, maxTargets: 1, mpCost: 6, cooldownMs: 3000,
-      curves: { launch: { stat: 'str', min: 50, max: 110, half: 50 }, cooldownCut: { stat: 'dex', min: 0, max: 0.4, half: 60 } },
-    }),
-    warriorSkill({
-      id: 'warrior-ground-slam', name: 'Ground Slam', branch: 'brawn', tier: 3, column: 0, parents: ['warrior-slash-blast'],
-      type: SkillType.Active, mechanic: 'ground-slam', combo: AttackCombo.AirHold,
-      icon: 'arrow-down', color: BRAWN_COLOR, animationKey: 'warrior-ground-slam',
-      description: 'Dive down from the air and send a shockwave around where you land: the higher the fall, the bigger the hit.',
-      damageMult: 1, maxTargets: 10, mpCost: 10, cooldownMs: 4000,
-      curves: { radius: { stat: 'str', min: 60, max: 140, half: 60 } },
-    }),
-    warriorSkill({
-      id: 'warrior-heavy-hands', name: 'Heavy Hands', branch: 'brawn', tier: 3, column: 2, parents: ['warrior-uppercut'],
-      type: SkillType.Passive, mechanic: 'heavy-hands',
-      icon: 'fist', color: BRAWN_COLOR,
-      description: 'Basic hits stagger zombies and hit staggered, stunned or airborne zombies harder.',
-      curves: { percent: { stat: 'str', min: 10, max: 35, half: 60 } },
-    }),
-    warriorSkill({
-      id: 'warrior-executioner', name: 'Executioner', branch: 'brawn', tier: 4, column: 1, parents: ['warrior-ground-slam', 'warrior-heavy-hands'],
-      type: SkillType.Reactive, mechanic: 'executioner',
-      icon: 'skull', color: BRAWN_COLOR, animationKey: 'warrior-executioner',
-      description: 'Hitting a stunned zombie that is low on HP finishes it outright. Bosses are immune.',
-      curves: { percent: { stat: 'str', min: 10, max: 25, half: 80 } },
-    }),
-    warriorSkill({
-      id: 'warrior-dragon-roar', name: 'Dragon Roar', branch: 'brawn', tier: 5, column: 1, parents: ['warrior-executioner'],
-      type: SkillType.Active, mechanic: 'roar',
-      icon: 'dragon', color: BRAWN_COLOR, animationKey: 'warrior-dragon-roar',
-      description: 'A huge roar that hits everything around you and stuns whatever survives it. Costs HP.',
-      damageMult: 2.4, maxTargets: 15, mpCost: 20, hpCostPercent: 30, minHpPercent: 50, cooldownMs: 20000, capstone: true,
-      curves: { range: { stat: 'str', min: 160, max: 400, half: 80 }, stunMs: { stat: 'str', min: 1000, max: 3000, half: 60 } },
-    }),
-
-    // ═══ Momentum ═══
-    warriorSkill({
-      id: 'warrior-power-dash', name: 'Power Dash', branch: 'momentum', tier: 1, column: 1, parents: [],
+      id: 'warrior-power-dash', name: 'Power Dash', branch: 'combat', tier: 1, column: 1, parents: [],
       type: SkillType.Active, mechanic: 'dash', combo: AttackCombo.Hold,
-      icon: 'wind', color: MOMENTUM_COLOR,
+      icon: 'wind', color: COMBAT_COLOR,
       description: 'Dash forward through every zombie in the way. The longer the charge, the farther it goes.',
       damageMult: 1.1, maxTargets: 10, mpCost: 12, cooldownMs: 1500,
       curves: { distance: { stat: 'dex', min: 160, max: 320, half: 40 }, cooldownCut: { stat: 'dex', min: 0, max: 0.35, half: 60 } },
     }),
     warriorSkill({
-      id: 'warrior-shoulder-charge', name: 'Shoulder Charge', branch: 'momentum', tier: 2, column: 0, parents: ['warrior-power-dash'],
+      id: 'warrior-slash-blast', name: 'Slash Blast', branch: 'combat', tier: 2, column: 1, parents: ['warrior-power-dash'],
+      type: SkillType.Active, mechanic: 'cleave', combo: AttackCombo.DoubleTap,
+      icon: 'whirl', color: COMBAT_COLOR, animationKey: 'warrior-slash-blast',
+      description: 'A spinning cleave that hits zombies on both sides of you.',
+      damageMult: 1.3, maxTargets: 6, mpCost: 8, cooldownMs: 1200,
+      curves: { radius: { stat: 'str', min: 70, max: 140, half: 60 } },
+    }),
+    warriorSkill({
+      id: 'warrior-ground-slam', name: 'Ground Slam', branch: 'combat', tier: 3, column: 1, parents: ['warrior-slash-blast'],
+      type: SkillType.Active, mechanic: 'ground-slam', combo: AttackCombo.AirHold,
+      icon: 'arrow-down', color: COMBAT_COLOR, animationKey: 'warrior-ground-slam',
+      description: 'Dive down from the air and send a shockwave around where you land: the higher the fall, the bigger the hit.',
+      damageMult: 1, maxTargets: 10, mpCost: 10, cooldownMs: 4000,
+      curves: { radius: { stat: 'str', min: 60, max: 140, half: 60 } },
+    }),
+    // Parked for a rework (the user will bring them back reworked): Power Strike, Rising Uppercut,
+    // Heavy Hands, Executioner, Dragon Roar. Their mechanics and animations are still in the engine.
+    // warriorSkill({
+    //   id: 'warrior-power-strike', name: 'Power Strike', branch: 'combat', tier: 1, column: 1, parents: [],
+    //   type: SkillType.Active, mechanic: 'strike',
+    //   icon: 'sword', color: COMBAT_COLOR, animationKey: 'warrior-power-strike',
+    //   description: 'A heavy blow on the zombie in front of you that sends it flying.',
+    //   damageMult: 2.2, maxTargets: 1, mpCost: 4, cooldownMs: 600,
+    //   curves: { knockback: { stat: 'str', min: 8, max: 18, half: 60 } },
+    // }),
+    // warriorSkill({
+    //   id: 'warrior-uppercut', name: 'Rising Uppercut', branch: 'combat', tier: 2, column: 2, parents: ['warrior-power-strike'],
+    //   type: SkillType.Active, mechanic: 'uppercut',
+    //   icon: 'arrow-up', color: COMBAT_COLOR, animationKey: 'warrior-uppercut',
+    //   description: 'Launches a zombie into the air. It lands stunned; hit it on the way down.',
+    //   damageMult: 1.5, maxTargets: 1, mpCost: 6, cooldownMs: 3000,
+    //   curves: { launch: { stat: 'str', min: 50, max: 110, half: 50 }, cooldownCut: { stat: 'dex', min: 0, max: 0.4, half: 60 } },
+    // }),
+    // warriorSkill({
+    //   id: 'warrior-heavy-hands', name: 'Heavy Hands', branch: 'combat', tier: 3, column: 2, parents: ['warrior-uppercut'],
+    //   type: SkillType.Passive, mechanic: 'heavy-hands',
+    //   icon: 'fist', color: COMBAT_COLOR,
+    //   description: 'Basic hits stagger zombies and hit staggered, stunned or airborne zombies harder.',
+    //   curves: { percent: { stat: 'str', min: 10, max: 35, half: 60 } },
+    // }),
+    // warriorSkill({
+    //   id: 'warrior-executioner', name: 'Executioner', branch: 'combat', tier: 4, column: 1, parents: ['warrior-ground-slam', 'warrior-heavy-hands'],
+    //   type: SkillType.Reactive, mechanic: 'executioner',
+    //   icon: 'skull', color: COMBAT_COLOR, animationKey: 'warrior-executioner',
+    //   description: 'Hitting a stunned zombie that is low on HP finishes it outright. Bosses are immune.',
+    //   curves: { percent: { stat: 'str', min: 10, max: 25, half: 80 } },
+    // }),
+    // warriorSkill({
+    //   id: 'warrior-dragon-roar', name: 'Dragon Roar', branch: 'combat', tier: 5, column: 1, parents: ['warrior-executioner'],
+    //   type: SkillType.Active, mechanic: 'roar',
+    //   icon: 'dragon', color: COMBAT_COLOR, animationKey: 'warrior-dragon-roar',
+    //   description: 'A huge roar that hits everything around you and stuns whatever survives it. Costs HP.',
+    //   damageMult: 2.4, maxTargets: 15, mpCost: 20, hpCostPercent: 30, minHpPercent: 50, cooldownMs: 20000, capstone: true,
+    //   curves: { range: { stat: 'str', min: 160, max: 400, half: 80 }, stunMs: { stat: 'str', min: 1000, max: 3000, half: 60 } },
+    // }),
+
+    // ═══ Agility ═══
+    warriorSkill({
+      id: 'warrior-shoulder-charge', name: 'Shoulder Charge', branch: 'agility', tier: 1, column: 0, parents: [],
       type: SkillType.Active, mechanic: 'shoulder-charge',
-      icon: 'boot', color: MOMENTUM_COLOR, animationKey: 'warrior-shoulder-charge',
+      icon: 'boot', color: AGILITY_COLOR, animationKey: 'warrior-shoulder-charge',
       description: 'Barrel forward through zombies and knock them down.',
       damageMult: 1.2, maxTargets: 6, mpCost: 6, cooldownMs: 2500,
       curves: { knockback: { stat: 'str', min: 6, max: 14, half: 60 } },
     }),
     warriorSkill({
-      id: 'warrior-backstep', name: 'Backstep', branch: 'momentum', tier: 2, column: 2, parents: ['warrior-power-dash'],
+      id: 'warrior-carry-1', name: 'Carry 1', branch: 'agility', tier: 1, column: 1, parents: [],
+      type: SkillType.Passive, mechanic: 'carry',
+      icon: 'bag', color: AGILITY_COLOR,
+      description: `Strong back: carry ${GAME_CONSTANTS.CORPSE_CARRY_BASE + GAME_CONSTANTS.CORPSE_CARRY_SKILL_EXTRA} corpses or props overhead at once instead of ${GAME_CONSTANTS.CORPSE_CARRY_BASE}.`,
+    }),
+    warriorSkill({
+      id: 'warrior-backstep', name: 'Backstep', branch: 'agility', tier: 1, column: 2, parents: [],
       type: SkillType.Active, mechanic: 'backstep',
-      icon: 'arrow-left', color: MOMENTUM_COLOR, animationKey: 'warrior-backstep',
+      icon: 'arrow-left', color: AGILITY_COLOR, animationKey: 'warrior-backstep',
       description: 'Hop back untouchable, still facing the enemy.',
       cooldownMs: 800,
       curves: { distance: { stat: 'dex', min: 50, max: 110, half: 40 }, iframesMs: { stat: 'dex', min: 150, max: 350, half: 60 } },
     }),
     warriorSkill({
-      id: 'warrior-monster-magnet', name: 'Monster Magnet', branch: 'momentum', tier: 3, column: 0, parents: ['warrior-shoulder-charge'],
+      id: 'warrior-carry-2', name: 'Carry 2', branch: 'agility', tier: 2, column: 1, parents: ['warrior-carry-1'],
+      type: SkillType.Passive, mechanic: 'carry',
+      icon: 'zombie', color: AGILITY_COLOR,
+      description: `Stack one more: carry ${GAME_CONSTANTS.CORPSE_CARRY_BASE + 2 * GAME_CONSTANTS.CORPSE_CARRY_SKILL_EXTRA} corpses or props overhead at once.`,
+    }),
+    warriorSkill({
+      id: 'warrior-monster-magnet', name: 'Monster Magnet', branch: 'agility', tier: 3, column: 0, parents: ['warrior-shoulder-charge'],
       type: SkillType.Active, mechanic: 'pull',
-      icon: 'magnet', color: MOMENTUM_COLOR, animationKey: 'warrior-monster-magnet',
+      icon: 'magnet', color: AGILITY_COLOR, animationKey: 'warrior-monster-magnet',
       description: 'Reels every zombie in range to your feet and stuns them. Bosses resist.',
       mpCost: 14, cooldownMs: 8000,
       curves: {
@@ -1414,24 +1435,24 @@ export const WARRIOR_SKILL_TREE: ClassSkillTree = {
       },
     }),
     warriorSkill({
-      id: 'warrior-leap-strike', name: 'Leap Strike', branch: 'momentum', tier: 3, column: 2, parents: ['warrior-backstep'],
+      id: 'warrior-leap-strike', name: 'Leap Strike', branch: 'agility', tier: 3, column: 2, parents: ['warrior-backstep'],
       type: SkillType.Active, mechanic: 'leap-strike',
-      icon: 'spring', color: MOMENTUM_COLOR, animationKey: 'warrior-leap-strike',
+      icon: 'spring', color: AGILITY_COLOR, animationKey: 'warrior-leap-strike',
       description: 'Leap forward and crash onto the zombies where you land.',
       damageMult: 1.8, maxTargets: 4, mpCost: 8, cooldownMs: 3000,
       curves: { distance: { stat: 'dex', min: 100, max: 200, half: 50 } },
     }),
     warriorSkill({
-      id: 'warrior-adrenaline', name: 'Adrenaline', branch: 'momentum', tier: 4, column: 1, parents: ['warrior-monster-magnet', 'warrior-leap-strike'],
+      id: 'warrior-adrenaline', name: 'Adrenaline', branch: 'agility', tier: 4, column: 1, parents: ['warrior-monster-magnet', 'warrior-leap-strike'],
       type: SkillType.Passive, mechanic: 'adrenaline',
-      icon: 'spark', color: MOMENTUM_COLOR,
+      icon: 'spark', color: AGILITY_COLOR,
       description: 'Kills in quick succession stack up attack speed and move speed.',
       curves: { percent: { stat: 'dex', min: 4, max: 12, half: 40 } },
     }),
     warriorSkill({
-      id: 'warrior-rampage', name: 'Rampage', branch: 'momentum', tier: 5, column: 1, parents: ['warrior-adrenaline'],
+      id: 'warrior-rampage', name: 'Rampage', branch: 'agility', tier: 5, column: 1, parents: ['warrior-adrenaline'],
       type: SkillType.Passive, mechanic: 'rampage',
-      icon: 'star', color: MOMENTUM_COLOR, animationKey: 'warrior-rampage',
+      icon: 'star', color: AGILITY_COLOR, animationKey: 'warrior-rampage',
       description: 'Tap attack as a dash ends to chain up to 2 more. A kill during a dash refunds its cooldown.',
       mpCost: 6, capstone: true,
       curves: { windowMs: { stat: 'dex', min: 300, max: 500, half: 40 } },

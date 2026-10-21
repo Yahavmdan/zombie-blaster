@@ -3,6 +3,7 @@ import { CharacterState, Direction, GAME_CONSTANTS, PROP_WEIGHT_KG } from '@shar
 import { LooseProp, ZombieCorpse, ZombieType } from '@shared/game-entities';
 import {
   assignCarriers,
+  carryCapacity,
   nearestCarriable,
   CarryPose,
   carrySway,
@@ -16,6 +17,9 @@ const PW: number = GAME_CONSTANTS.PLAYER_WIDTH;
 const PH: number = GAME_CONSTANTS.PLAYER_HEIGHT;
 const GROUND: number = GAME_CONSTANTS.GROUND_Y;
 const RANGE: number = GAME_CONSTANTS.CORPSE_CARRY_RANGE;
+/** A warrior who learned Carry 1 (and Carry 2). */
+const CARRY_1: Record<string, number> = { 'warrior-carry-1': 1 };
+const CARRY_2: Record<string, number> = { ...CARRY_1, 'warrior-carry-2': 1 };
 
 function corpse(id: string, cx: number, overrides: Partial<ZombieCorpse> = {}): ZombieCorpse {
   const width: number = 30;
@@ -54,6 +58,7 @@ function player(id: string, cx: number, overrides: Partial<CharacterState> = {})
     isDead: false,
     isDown: false,
     carryingCorpseIds: [],
+    skillLevels: {},
     ...overrides,
   } as CharacterState;
 }
@@ -166,11 +171,31 @@ describe('holdCarried (every client)', (): void => {
 describe('carrying a stack', (): void => {
   const STEP: number = GAME_CONSTANTS.CORPSE_CARRY_STACK_STEP;
 
-  it(`grants up to ${GAME_CONSTANTS.CORPSE_CARRY_MAX} corpses per player, in request order`, (): void => {
+  it('lets anyone carry one thing; Carry 1 and Carry 2 add one each, up to the max', (): void => {
+    expect(carryCapacity(player('p', 0))).toBe(GAME_CONSTANTS.CORPSE_CARRY_BASE);
+    expect(GAME_CONSTANTS.CORPSE_CARRY_BASE).toBe(1);
+    expect(carryCapacity(player('p', 0, { skillLevels: CARRY_1 }))).toBe(2);
+    expect(carryCapacity(player('p', 0, { skillLevels: CARRY_2 }))).toBe(
+      GAME_CONSTANTS.CORPSE_CARRY_MAX,
+    );
+    expect(carryCapacity(player('p', 0, { skillLevels: { 'warrior-carry-2': 0 } }))).toBe(1);
+  });
+
+  it('grants one corpse to a player without carry skills', (): void => {
+    const corpses: ZombieCorpse[] = ['a', 'b'].map(
+      (id: string, i: number): ZombieCorpse => corpse(id, 100 + i * 5),
+    );
+    assignCarriers(corpses, [player('p', 100, { carryingCorpseIds: ['a', 'b'] })]);
+    expect(corpses.map((c: ZombieCorpse): string | null => c.carrierId)).toEqual(['p', null]);
+  });
+
+  it(`grants up to ${GAME_CONSTANTS.CORPSE_CARRY_MAX} corpses to a Carry 2 warrior, in request order`, (): void => {
     const corpses: ZombieCorpse[] = ['a', 'b', 'c', 'd'].map(
       (id: string, i: number): ZombieCorpse => corpse(id, 100 + i * 5),
     );
-    assignCarriers(corpses, [player('p', 100, { carryingCorpseIds: ['a', 'b', 'c', 'd'] })]);
+    assignCarriers(corpses, [
+      player('p', 100, { carryingCorpseIds: ['a', 'b', 'c', 'd'], skillLevels: CARRY_2 }),
+    ]);
     expect(corpses.map((c: ZombieCorpse): string | null => c.carrierId)).toEqual([
       'p',
       'p',
@@ -182,7 +207,10 @@ describe('carrying a stack', (): void => {
   it('adds a pick-up on top of the corpses already carried', (): void => {
     const held: ZombieCorpse = corpse('held', 100, { carrierId: 'p', isGrounded: false });
     const next: ZombieCorpse = corpse('next', 110);
-    assignCarriers([held, next], [player('p', 100, { carryingCorpseIds: ['held', 'next'] })]);
+    assignCarriers(
+      [held, next],
+      [player('p', 100, { carryingCorpseIds: ['held', 'next'], skillLevels: CARRY_1 })],
+    );
     expect(held.carrierId).toBe('p');
     expect(next.carrierId).toBe('p');
   });

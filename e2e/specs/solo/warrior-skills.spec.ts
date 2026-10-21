@@ -36,12 +36,12 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
     solo: SoloFactory;
   }): Promise<void> => {
     const p: GamePlayer = await solo('warrior');
-    await warriorArena(p, [WARRIOR.powerStrike, WARRIOR.slashBlast, WARRIOR.uppercut]);
+    await warriorArena(p, [WARRIOR.shoulderCharge, WARRIOR.slashBlast, WARRIOR.backstep]);
     const s0: E2eSnapshot = await p.probe.state();
     // Slash blast is an attack combo (double tap): it takes no bar slot.
     expect(s0.player!.skillBar).toEqual([
-      WARRIOR.powerStrike,
-      WARRIOR.uppercut,
+      WARRIOR.shoulderCharge,
+      WARRIOR.backstep,
       null,
       null,
       null,
@@ -51,24 +51,24 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
     await p.attack();
     await p.wait(200);
     const swung: E2eSnapshot = await p.probe.state();
-    for (const id of [WARRIOR.powerStrike, WARRIOR.slashBlast, WARRIOR.uppercut]) {
+    for (const id of [WARRIOR.shoulderCharge, WARRIOR.slashBlast, WARRIOR.backstep]) {
       expect(cooldownOf(swung, id), `attack does not fire ${id}`).toBe(0);
     }
 
     await p.castSkill(2);
     const two: E2eSnapshot = await p.probe.waitFor(
-      'key 2 fired the uppercut',
-      (s: E2eSnapshot): boolean => cooldownOf(s, WARRIOR.uppercut) > 0,
+      'key 2 fired the backstep',
+      (s: E2eSnapshot): boolean => cooldownOf(s, WARRIOR.backstep) > 0,
       { timeoutMs: 2_000 },
     );
     expect(cooldownOf(two, WARRIOR.slashBlast), 'key 2 is not slash blast').toBe(0);
-    expect(cooldownOf(two, WARRIOR.powerStrike), 'key 2 is not power strike').toBe(0);
+    expect(cooldownOf(two, WARRIOR.shoulderCharge), 'key 2 is not shoulder charge').toBe(0);
 
     await p.wait(400);
     await p.castSkill(1);
     const one: E2eSnapshot = await p.probe.waitFor(
-      'key 1 fired power strike',
-      (s: E2eSnapshot): boolean => cooldownOf(s, WARRIOR.powerStrike) > 0,
+      'key 1 fired shoulder charge',
+      (s: E2eSnapshot): boolean => cooldownOf(s, WARRIOR.shoulderCharge) > 0,
       { timeoutMs: 2_000 },
     );
     expect(cooldownOf(one, WARRIOR.slashBlast), 'key 1 is not slash blast').toBe(0);
@@ -80,9 +80,9 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
     solo: SoloFactory;
   }): Promise<void> => {
     const p: GamePlayer = await solo('warrior');
-    await warriorArena(p, [WARRIOR.powerStrike, WARRIOR.ironRecovery, WARRIOR.autoPotion], false);
+    await warriorArena(p, [WARRIOR.shoulderCharge, WARRIOR.ironRecovery, WARRIOR.autoPotion], false);
     const s0: E2eSnapshot = await p.probe.state();
-    expect(s0.player!.skillBar).toEqual([WARRIOR.powerStrike, null, null, null, null, null]);
+    expect(s0.player!.skillBar).toEqual([WARRIOR.shoulderCharge, null, null, null, null, null]);
     await p.probe.setVitals(99_999, 99_999);
     const before: E2eSnapshot = await p.probe.state();
     const events: E2eVfxLogEntry[] = await vfxQueuedBy(p, async (): Promise<void> => {
@@ -91,31 +91,6 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
     expect(animationsIn(events), 'empty slots play nothing').toEqual([]);
     const after: E2eSnapshot = await p.probe.state();
     expect(after.player!.mp, 'empty slots spend no MP').toBeGreaterThanOrEqual(before.player!.mp);
-  });
-
-  test('power strike: its key hits the zombie in front and knocks it back', async ({
-    solo,
-  }: {
-    solo: SoloFactory;
-  }): Promise<void> => {
-    const p: GamePlayer = await solo('warrior');
-    const x: number = await warriorArena(p, [WARRIOR.powerStrike], true, TOUGH_FLOOR);
-    const z: string = await zombieAt(p, x + 60);
-    const events: E2eVfxLogEntry[] = await vfxQueuedBy(p, async (): Promise<void> => {
-      await castSkill(p, WARRIOR.powerStrike);
-      // The cooldown is short (600 ms): read it right after the key, not after the settle time.
-      await p.probe.waitFor(
-        'power strike on a short cooldown',
-        (st: E2eSnapshot): boolean => cooldownOf(st, WARRIOR.powerStrike) > 0,
-        { timeoutMs: 1_000, intervalMs: 20 },
-      );
-    });
-    await expectAnimation(events, 'warrior-power-strike');
-    await p.probe.waitFor(
-      'the zombie took the hit',
-      (st: E2eSnapshot): boolean => damageOf(st, z) > 0,
-      { timeoutMs: 2_000 },
-    );
   });
 
   test('power dash: hold attack 1 s, let go, and it dashes through the zombies ahead', async ({
@@ -215,7 +190,7 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
     solo: SoloFactory;
   }): Promise<void> => {
     const p: GamePlayer = await solo('warrior');
-    const x: number = await warriorArena(p, [WARRIOR.powerStrike], true, TOUGH_FLOOR);
+    const x: number = await warriorArena(p, [WARRIOR.shoulderCharge], true, TOUGH_FLOOR);
     const z: string = await zombieAt(p, x + 50);
     let lastHp: number = (zombieById(await p.probe.state(), z) ?? { hp: 0 }).hp;
     let hits: number = 0;
@@ -237,7 +212,7 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
     }
     await p.release(KEYS.attack);
     expect(hits, 'held attack hit more than once').toBeGreaterThanOrEqual(2);
-    expect(cooldownOf(await p.probe.state(), WARRIOR.powerStrike), 'no skill from attack').toBe(0);
+    expect(cooldownOf(await p.probe.state(), WARRIOR.shoulderCharge), 'no skill from attack').toBe(0);
   });
 
   test('slash blast: a double tap hits zombies on both sides; a single tap is only a swing', async ({
@@ -246,7 +221,7 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
     solo: SoloFactory;
   }): Promise<void> => {
     const p: GamePlayer = await solo('warrior');
-    const x: number = await warriorArena(p, [WARRIOR.powerStrike, WARRIOR.slashBlast]);
+    const x: number = await warriorArena(p, [WARRIOR.shoulderCharge, WARRIOR.slashBlast]);
     await p.attack();
     await p.wait(400);
     expect(cooldownOf(await p.probe.state(), WARRIOR.slashBlast), 'one tap: no slash blast').toBe(0);
@@ -270,33 +245,6 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
     expect(cooldownOf(s, WARRIOR.slashBlast)).toBeGreaterThan(0);
   });
 
-  test('rising uppercut: its key launches and stuns a zombie', async ({
-    solo,
-  }: {
-    solo: SoloFactory;
-  }): Promise<void> => {
-    const p: GamePlayer = await solo('warrior');
-    const x: number = await warriorArena(
-      p,
-      [WARRIOR.powerStrike, WARRIOR.uppercut],
-      true,
-      TOUGH_FLOOR,
-    );
-    const z: string = await zombieAt(p, x + 55);
-    const events: E2eVfxLogEntry[] = await vfxQueuedBy(p, async (): Promise<void> => {
-      await castSkill(p, WARRIOR.uppercut);
-      await p.probe.waitFor(
-        'the zombie flies up, stunned',
-        (s: E2eSnapshot): boolean => {
-          const zz: E2eZombieView | undefined = zombieById(s, z);
-          return !!zz && zz.stunTicks > 0 && !zz.isGrounded;
-        },
-        { timeoutMs: 1_500, intervalMs: 20 },
-      );
-    });
-    await expectAnimation(events, 'warrior-uppercut');
-  });
-
   test('ground slam: holding attack in the air dives and slams; holding on the ground does not', async ({
     solo,
   }: {
@@ -304,7 +252,7 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
   }): Promise<void> => {
     const p: GamePlayer = await solo('warrior');
     const x: number = await warriorArena(p, [
-      WARRIOR.powerStrike,
+      WARRIOR.shoulderCharge,
       WARRIOR.slashBlast,
       WARRIOR.groundSlam,
     ]);
@@ -338,26 +286,6 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
     const s: E2eSnapshot = await p.probe.state();
     expect(cooldownOf(s, WARRIOR.groundSlam), 'the slam went on cooldown').toBeGreaterThan(0);
     expect(damageOf(s, near), 'the landing hit the zombie').toBeGreaterThan(0);
-  });
-
-  test('dragon roar: its key costs HP and stuns what survives', async ({
-    solo,
-  }: {
-    solo: SoloFactory;
-  }): Promise<void> => {
-    const p: GamePlayer = await solo('warrior');
-    const x: number = await warriorArena(p, [WARRIOR.dragonRoar], false, TOUGH_FLOOR);
-    const z: string = await zombieAt(p, x + 120);
-    await p.probe.setVitals(99_999, 99_999);
-    const before: E2eSnapshot = await p.probe.state();
-    const events: E2eVfxLogEntry[] = await vfxQueuedBy(p, (): Promise<void> =>
-      castSkill(p, WARRIOR.dragonRoar),
-    );
-    await expectAnimation(events, 'warrior-dragon-roar');
-    const after: E2eSnapshot = await p.probe.state();
-    expect(after.player!.hp, 'the roar cost HP').toBeLessThan(before.player!.hp);
-    const zz: E2eZombieView | undefined = zombieById(after, z);
-    expect(!zz || zz.isDead || zz.stunTicks > 0, 'the zombie is stunned (or dead)').toBe(true);
   });
 
   test('shoulder charge: its key barrels forward and knocks a zombie down', async ({
@@ -569,7 +497,7 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
       s.level.ropes.some((r: { topY: number; bottomY: number }): boolean => r.bottomY - r.topY >= 90),
     );
     await p.probe.setGodMode(true);
-    await p.probe.setTreeSkills([WARRIOR.powerStrike, WARRIOR.slashBlast, WARRIOR.powerStance]);
+    await p.probe.setTreeSkills([WARRIOR.shoulderCharge, WARRIOR.slashBlast, WARRIOR.powerStance]);
     const rope: { x: number; topY: number; bottomY: number } = s0.level.ropes.find(
       (r: { topY: number; bottomY: number }): boolean => r.bottomY - r.topY >= 90,
     )!;
@@ -581,12 +509,12 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
     await p.release(KEYS.up);
 
     await castSkill(p, WARRIOR.slashBlast);
-    await castSkill(p, WARRIOR.powerStrike);
+    await castSkill(p, WARRIOR.shoulderCharge);
     await p.wait(300);
     const held: E2eSnapshot = await p.probe.state();
     expect(held.player!.isClimbing, 'still on the rope').toBe(true);
     expect(cooldownOf(held, WARRIOR.slashBlast), 'no slash blast on a rope').toBe(0);
-    expect(cooldownOf(held, WARRIOR.powerStrike), 'no power strike on a rope').toBe(0);
+    expect(cooldownOf(held, WARRIOR.shoulderCharge), 'no shoulder charge on a rope').toBe(0);
 
     await castSkill(p, WARRIOR.powerStance);
     await p.probe.waitFor(
@@ -597,24 +525,12 @@ test.describe('warrior skills', { tag: '@solo' }, (): void => {
     );
   });
 
-  test('passives: heavy hands staggers, second wind survives a killing blow once', async ({
+  test('second wind: survives a killing blow once per floor', async ({
     solo,
   }: {
     solo: SoloFactory;
   }): Promise<void> => {
     const p: GamePlayer = await solo('warrior');
-    const x: number = await warriorArena(p, [WARRIOR.heavyHands]);
-    const z: string = await zombieAt(p, x + 50);
-    await p.attack();
-    await p.probe.waitFor(
-      'a basic hit staggers the zombie',
-      (s: E2eSnapshot): boolean => {
-        const zz: E2eZombieView | undefined = zombieById(s, z);
-        return !zz || zz.isDead || zz.stunTicks > 0;
-      },
-      { timeoutMs: 2_000 },
-    );
-
     await warriorArena(p, [WARRIOR.secondWind], false);
     await p.probe.knockOut();
     const saved: E2eSnapshot = await p.probe.state();

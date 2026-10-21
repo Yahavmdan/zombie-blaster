@@ -232,6 +232,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     repositionExitPlatform: vi.fn(),
     applyLevel: vi.fn(),
     requestHitStop: vi.fn(),
+    applyBarrelBlast: vi.fn(),
     isInSafeSpot: vi.fn((): boolean => false),
     isOutOfReach(this: IGameEngine, p: CharacterState): boolean {
       const afk: boolean = p === this.player ? this.isLocalAfk : p.isAfk === true;

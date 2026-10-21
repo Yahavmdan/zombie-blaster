@@ -4,6 +4,7 @@ import { GamePlayer, KEYS } from '../../support/game-player';
 import { E2eCorpseView, E2eSnapshot } from '../../support/probe';
 import { WORLD } from '../../support/invariants';
 import { clearPickablesBetween } from '../../support/props';
+import { WARRIOR } from '../../support/warrior';
 
 /** The probe's foothold top sits this far above the corpse's feet (ZOMBIE_CORPSE_PLATFORM_HEIGHT). */
 const FOOTHOLD_DEPTH: number = 5;
@@ -22,7 +23,7 @@ function findCorpse(s: E2eSnapshot, id: string): E2eCorpseView | undefined {
 
 type CarryPose = NonNullable<E2eCorpseView['carryPose']>;
 
-/** Corpses one player can carry at once (CORPSE_CARRY_MAX). */
+/** Most corpses one player can carry at once (CORPSE_CARRY_MAX: Carry 1 and Carry 2 owned). */
 const MAX_CARRY: number = 3;
 
 /** Drops n corpses at x and waits for all of them to land; returns them. */
@@ -39,6 +40,59 @@ async function lyingCorpses(p: GamePlayer, x: number, n: number): Promise<E2eCor
     (s: E2eSnapshot): boolean => fresh(s).length === n,
   );
   return fresh(landed);
+}
+
+/** Gives the warrior exactly these tree skills (Carry 1 / Carry 2) and waits until it owns them. */
+async function ownSkills(p: GamePlayer, skills: string[]): Promise<void> {
+  await p.probe.setTreeSkills(skills);
+  await p.probe.waitFor('owns the carry skills', (s: E2eSnapshot): boolean =>
+    skills.every((id: string): boolean => s.player!.skillLevels[id] === 1),
+  );
+}
+
+/** Stands on each still-lying corpse of `stack` in turn and presses E, until carrying `n`. */
+async function pickUpStack(p: GamePlayer, stack: E2eCorpseView[], n: number): Promise<void> {
+  const id: string = (await p.probe.state()).player!.id;
+  for (let k: number = 1; k <= n; k++) {
+    await standOnLying(p, stack);
+    await p.press(KEYS.carry, 70);
+    await p.probe.waitFor(
+      `carrying ${k}`,
+      (st: E2eSnapshot): boolean =>
+        st.player!.carryingCorpseIds.length === k &&
+        st.corpseViews.filter((c: E2eCorpseView): boolean => c.carrierId === id).length === k,
+    );
+  }
+}
+
+/** Teleports onto a corpse of `stack` that still lies in the world; returns it. */
+async function standOnLying(p: GamePlayer, stack: E2eCorpseView[]): Promise<E2eCorpseView> {
+  const s: E2eSnapshot = await p.probe.state();
+  const next: E2eCorpseView = s.corpseViews.find(
+    (c: E2eCorpseView): boolean =>
+      c.isGrounded &&
+      c.carrierId === null &&
+      stack.some((k: E2eCorpseView): boolean => k.id === c.id),
+  )!;
+  await p.probe.teleport(
+    corpseCenterX(next) - WORLD.playerWidth / 2,
+    corpseFeet(next) - WORLD.playerHeight,
+  );
+  await p.wait(300);
+  return next;
+}
+
+/** Waits until nothing is carried and every corpse of `ids` lies in the world again. */
+async function allThrown(p: GamePlayer, ids: string[]): Promise<E2eSnapshot> {
+  return p.probe.waitFor(
+    'the thrown corpses land',
+    (s: E2eSnapshot): boolean =>
+      s.player!.carryingCorpseIds.length === 0 &&
+      ids.every((cid: string): boolean => {
+        const c: E2eCorpseView | undefined = findCorpse(s, cid);
+        return !!c && c.carrierId === null && c.isGrounded;
+      }),
+  );
 }
 
 /** Drops one corpse near the screen center and waits for it to land; returns it. */
@@ -152,7 +206,49 @@ test.describe('carrying corpses', { tag: '@solo' }, (): void => {
     await p.release(KEYS.attack);
   });
 
-  test('carries up to 3 corpses stacked overhead; the toss lands them piled on top of each other', async ({
+  test('without carry skills a player carries one corpse: E on a second throws the first', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    test.setTimeout(60_000);
+    const p: GamePlayer = await solo('warrior');
+    await p.probe.setGodMode(true);
+    await ownSkills(p, []);
+    await clearPickablesBetween(p, [], 300, 1000);
+
+    const pair: E2eCorpseView[] = await lyingCorpses(p, 500, 2);
+    await p.face('right');
+    await pickUpStack(p, pair, 1);
+    const held: string = (await p.probe.state()).player!.carryingCorpseIds[0];
+    const second: E2eCorpseView = await standOnLying(p, pair);
+    await p.press(KEYS.carry, 70);
+    const landed: E2eSnapshot = await allThrown(p, [held]);
+    expect(findCorpse(landed, second.id)!.carrierId, 'the second was never picked up').toBeNull();
+  });
+
+  test('Carry 1 lets a warrior hold two corpses; E on a third throws them', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    test.setTimeout(60_000);
+    const p: GamePlayer = await solo('warrior');
+    await p.probe.setGodMode(true);
+    await ownSkills(p, [WARRIOR.carry1]);
+    await clearPickablesBetween(p, [], 300, 1000);
+
+    const stack: E2eCorpseView[] = await lyingCorpses(p, 500, 3);
+    await p.face('right');
+    await pickUpStack(p, stack, 2);
+    const held: string[] = [...(await p.probe.state()).player!.carryingCorpseIds];
+    const third: E2eCorpseView = await standOnLying(p, stack);
+    await p.press(KEYS.carry, 70);
+    const landed: E2eSnapshot = await allThrown(p, held);
+    expect(findCorpse(landed, third.id)!.carrierId, 'the third was never picked up').toBeNull();
+  });
+
+  test('Carry 1 + Carry 2: up to 3 corpses stacked overhead; the toss lands them piled on top of each other', async ({
     solo,
   }: {
     solo: SoloFactory;
@@ -160,32 +256,12 @@ test.describe('carrying corpses', { tag: '@solo' }, (): void => {
     test.setTimeout(90_000);
     const p: GamePlayer = await solo('warrior');
     await p.probe.setGodMode(true);
+    await ownSkills(p, [WARRIOR.carry1, WARRIOR.carry2]);
     await clearPickablesBetween(p, [], 300, 1000);
-    const id: string = (await p.probe.state()).player!.id;
 
     const stack: E2eCorpseView[] = await lyingCorpses(p, 500, MAX_CARRY + 1);
     await p.face('right');
-    for (let n: number = 1; n <= MAX_CARRY; n++) {
-      const s: E2eSnapshot = await p.probe.state();
-      const next: E2eCorpseView = s.corpseViews.find(
-        (c: E2eCorpseView): boolean =>
-          c.isGrounded &&
-          c.carrierId === null &&
-          stack.some((k: E2eCorpseView): boolean => k.id === c.id),
-      )!;
-      await p.probe.teleport(
-        corpseCenterX(next) - WORLD.playerWidth / 2,
-        corpseFeet(next) - WORLD.playerHeight,
-      );
-      await p.wait(300);
-      await p.press(KEYS.carry, 70);
-      await p.probe.waitFor(
-        `carrying ${n}`,
-        (st: E2eSnapshot): boolean =>
-          st.player!.carryingCorpseIds.length === n &&
-          st.corpseViews.filter((c: E2eCorpseView): boolean => c.carrierId === id).length === n,
-      );
-    }
+    await pickUpStack(p, stack, MAX_CARRY);
 
     const full: E2eSnapshot = await p.probe.state();
     const carried: E2eCorpseView[] = full.player!.carryingCorpseIds.map(
@@ -210,15 +286,7 @@ test.describe('carrying corpses', { tag: '@solo' }, (): void => {
     const thrower: E2eSnapshot = await p.probe.state();
     await p.press(KEYS.carry, 70);
     const ids: string[] = carried.map((c: E2eCorpseView): string => c.id);
-    const landed: E2eSnapshot = await p.probe.waitFor(
-      'the thrown stack lands',
-      (s: E2eSnapshot): boolean =>
-        s.player!.carryingCorpseIds.length === 0 &&
-        ids.every((cid: string): boolean => {
-          const c: E2eCorpseView | undefined = findCorpse(s, cid);
-          return !!c && c.carrierId === null && c.isGrounded;
-        }),
-    );
+    const landed: E2eSnapshot = await allThrown(p, ids);
     const pile: E2eCorpseView[] = ids
       .map((cid: string): E2eCorpseView => findCorpse(landed, cid)!)
       .sort((a: E2eCorpseView, b: E2eCorpseView): number => b.footY - a.footY);
@@ -247,6 +315,8 @@ test.describe('carrying corpses', { tag: '@solo' }, (): void => {
     test.setTimeout(60_000);
     const p: GamePlayer = await solo('warrior');
     await p.probe.setGodMode(true);
+    // Carry 1: with room for a second corpse, E beside one would pick it up.
+    await ownSkills(p, [WARRIOR.carry1]);
     await clearPickablesBetween(p, [], 300, 1000);
 
     const pile: E2eCorpseView[] = await lyingCorpses(p, 500, 2);

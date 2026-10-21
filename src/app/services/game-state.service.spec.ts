@@ -77,7 +77,7 @@ describe('GameStateService', () => {
       service.allocateSkillPoint('warrior-slash-blast');
       expect(service.player()!.skillLevels['warrior-slash-blast']).toBeUndefined();
 
-      service.allocateSkillPoint('warrior-power-strike');
+      service.allocateSkillPoint('warrior-power-dash');
       service.allocateSkillPoint('warrior-slash-blast');
       expect(service.player()!.skillLevels['warrior-slash-blast']).toBe(1);
       expect(service.player()!.unallocatedSkillPoints).toBe(3);
@@ -86,15 +86,15 @@ describe('GameStateService', () => {
     it('respecs for free once, then for gold, and gives every point back', () => {
       service.createPlayer('Test', CharacterClass.Warrior);
       patch({ level: 4, unallocatedSkillPoints: 4, inventory: { ...service.player()!.inventory, gold: 0 } });
-      service.allocateSkillPoint('warrior-power-strike');
-      service.allocateSkillPoint('warrior-uppercut');
+      service.allocateSkillPoint('warrior-shoulder-charge');
+      service.allocateSkillPoint('warrior-backstep');
 
       expect(service.respecPrice(service.player()!)).toBe(0);
       expect(service.respecSkills()).toBe(true);
       expect(service.player()!.unallocatedSkillPoints).toBe(4);
-      expect(service.player()!.skillLevels['warrior-power-strike']).toBeUndefined();
+      expect(service.player()!.skillLevels['warrior-shoulder-charge']).toBeUndefined();
 
-      service.allocateSkillPoint('warrior-power-strike');
+      service.allocateSkillPoint('warrior-shoulder-charge');
       const price: number = service.respecPrice(service.player()!);
       expect(price).toBe(GAME_CONSTANTS.RESPEC_GOLD_PER_LEVEL * 4);
       expect(service.respecSkills()).toBe(false);
@@ -119,28 +119,28 @@ describe('GameStateService', () => {
       patch({ unallocatedSkillPoints: 3 });
       service.allocateSkillPoint('warrior-iron-recovery');
       service.allocateSkillPoint('warrior-power-dash');
-      service.allocateSkillPoint('warrior-power-strike');
-      expect(service.player()!.skillBar).toEqual(['warrior-power-strike', null, null, null, null, null]);
+      service.allocateSkillPoint('warrior-shoulder-charge');
+      expect(service.player()!.skillBar).toEqual(['warrior-shoulder-charge', null, null, null, null, null]);
     });
 
     it('moves a skill between bar slots, empties a slot, and refuses combos and skills it does not own', () => {
       service.createPlayer('Test', CharacterClass.Warrior);
       patch({ level: GAME_CONSTANTS.SKILL_TIER_LEVELS[1], unallocatedSkillPoints: 3 });
-      service.allocateSkillPoint('warrior-power-strike');
+      service.allocateSkillPoint('warrior-shoulder-charge');
       service.allocateSkillPoint('warrior-power-dash');
-      service.allocateSkillPoint('warrior-uppercut');
-      service.setSkillBarSlot(4, 'warrior-uppercut');
-      expect(service.player()!.skillBar).toEqual(['warrior-power-strike', null, null, null, 'warrior-uppercut', null]);
+      service.allocateSkillPoint('warrior-backstep');
+      service.setSkillBarSlot(4, 'warrior-backstep');
+      expect(service.player()!.skillBar).toEqual(['warrior-shoulder-charge', null, null, null, 'warrior-backstep', null]);
       service.setSkillBarSlot(0, null);
       service.setSkillBarSlot(1, 'warrior-power-dash');
       service.setSkillBarSlot(2, 'warrior-iron-recovery');
       service.setSkillBarSlot(3, 'warrior-slash-blast');
-      expect(service.player()!.skillBar).toEqual([null, null, null, null, 'warrior-uppercut', null]);
+      expect(service.player()!.skillBar).toEqual([null, null, null, null, 'warrior-backstep', null]);
     });
 
     it('a respec empties the skill bar', () => {
       service.createPlayer('Test', CharacterClass.Warrior);
-      service.allocateSkillPoint('warrior-power-strike');
+      service.allocateSkillPoint('warrior-shoulder-charge');
       service.respecSkills();
       expect(service.player()!.skillBar).toEqual([null, null, null, null, null, null]);
     });

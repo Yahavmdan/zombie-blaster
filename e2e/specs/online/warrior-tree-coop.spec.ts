@@ -15,11 +15,11 @@ import {
 
 /**
  * A guest warrior's tree skills in co-op, fired from its skill bar. Zombies are the host's, so a
- * guest's launch is a request the host simulates; its dash plays on the host's screen; Hyper Body
+ * guest's knockdown is a request the host simulates; its dash plays on the host's screen; Hyper Body
  * buffs the ally.
  */
 test.describe('warrior skill tree in co-op', { tag: '@online' }, (): void => {
-  test("a guest's uppercut launches the host's zombie, its dash shows, hyper body buffs the host", async ({
+  test("a guest's shoulder charge knocks the host's zombie down, its dash shows, hyper body buffs the host", async ({
     room,
   }: {
     room: RoomFactory;
@@ -39,8 +39,7 @@ test.describe('warrior skill tree in co-op', { tag: '@online' }, (): void => {
     await host.probe.setGodMode(true);
     await guest.probe.setGodMode(true);
     await guest.probe.setTreeSkills([
-      WARRIOR.powerStrike,
-      WARRIOR.uppercut,
+      WARRIOR.shoulderCharge,
       WARRIOR.powerDash,
       WARRIOR.autoPotion,
       WARRIOR.hyperBody,
@@ -62,7 +61,7 @@ test.describe('warrior skill tree in co-op', { tag: '@online' }, (): void => {
     );
     await guest.face('right');
 
-    // Uppercut: the guest asks, the host launches and stuns its own zombie, the guest sees it.
+    // Shoulder charge: the guest asks, the host knocks its own zombie down (stunned), the guest sees it.
     const before: Set<string> = new Set<string>(
       (await host.probe.state()).zombies.map((z: E2eZombieView): string => z.id),
     );
@@ -81,31 +80,30 @@ test.describe('warrior skill tree in co-op', { tag: '@online' }, (): void => {
       (s: E2eSnapshot): boolean => !!zombieById(s, zombie),
       { timeoutMs: 3_000 },
     );
-    // The floor is crowded: the uppercut takes the nearest zombie in front, whichever it is (only
-    // the uppercut stuns here), and the target may wander off first, so walk up and try again.
+    // The floor is crowded: the charge hits the zombies in its way, whichever they are (only the
+    // charge stuns here), and the target may wander off first, so walk up and try again.
     let launched: string | null = null;
     for (let attempt: number = 0; attempt < 4 && !launched; attempt++) {
       await walkUpTo(guest, zombie);
       await guest.probe.waitFor(
-        'uppercut ready',
-        (s: E2eSnapshot): boolean => cooldownOf(s, WARRIOR.uppercut) === 0,
+        'shoulder charge ready',
+        (s: E2eSnapshot): boolean => cooldownOf(s, WARRIOR.shoulderCharge) === 0,
         { timeoutMs: 5_000 },
       );
-      await castSkill(guest, WARRIOR.uppercut);
+      await castSkill(guest, WARRIOR.shoulderCharge);
       launched = await host.probe
         .waitFor(
-          'the host launched and stunned a zombie',
-          (s: E2eSnapshot): boolean =>
-            s.zombies.some((z: E2eZombieView): boolean => z.stunTicks > 0 && !z.isGrounded),
+          'the host knocked a zombie down',
+          (s: E2eSnapshot): boolean => s.zombies.some((z: E2eZombieView): boolean => z.stunTicks > 0),
           { timeoutMs: 2_500, intervalMs: 20 },
         )
         .then(
           (s: E2eSnapshot): string =>
-            s.zombies.find((z: E2eZombieView): boolean => z.stunTicks > 0 && !z.isGrounded)!.id,
+            s.zombies.find((z: E2eZombieView): boolean => z.stunTicks > 0)!.id,
           (): null => null,
         );
     }
-    expect(launched, "the host launched the guest's uppercut target").not.toBeNull();
+    expect(launched, "the host knocked the guest's charge target down").not.toBeNull();
     await guest.probe.waitFor(
       'the guest sees it stunned',
       (s: E2eSnapshot): boolean => (zombieById(s, launched!)?.stunTicks ?? 0) > 0,

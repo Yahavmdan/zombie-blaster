@@ -62,35 +62,36 @@ test.describe('skill tree on the server', { tag: ['@protocol', '@external-safe']
 
     expect(
       await relayedSkills(game, 4, {
-        'warrior-power-strike': 1,
-        'warrior-uppercut': 1,
+        'warrior-power-dash': 1,
+        'warrior-slash-blast': 1,
         'assassin-lucky-seven': 1,
+        'warrior-power-strike': 1,
         'made-up-skill': 1,
       }),
-      'foreign and unknown ids are dropped',
-    ).toEqual({ 'warrior-power-strike': 1, 'warrior-uppercut': 1 });
+      'foreign, parked and unknown ids are dropped',
+    ).toEqual({ 'warrior-power-dash': 1, 'warrior-slash-blast': 1 });
 
     expect(
-      await relayedSkills(game, 4, { 'warrior-uppercut': 1 }),
+      await relayedSkills(game, 4, { 'warrior-carry-2': 1 }),
       'a skill without its parent is dropped',
     ).toEqual({});
 
     expect(
-      await relayedSkills(game, 3, { 'warrior-power-strike': 1, 'warrior-uppercut': 1 }),
+      await relayedSkills(game, 3, { 'warrior-carry-1': 1, 'warrior-carry-2': 1 }),
       'a tier above the level is dropped',
-    ).toEqual({ 'warrior-power-strike': 1 });
+    ).toEqual({ 'warrior-carry-1': 1 });
 
     expect(
       await relayedSkills(game, 1, {
-        'warrior-power-strike': 1,
         'warrior-power-dash': 1,
+        'warrior-shoulder-charge': 1,
         'warrior-iron-recovery': 1,
       }),
       'no more skills than levels',
-    ).toEqual({ 'warrior-power-strike': 1 });
+    ).toEqual({ 'warrior-power-dash': 1 });
 
     expect(
-      await relayedSkills(game, 10, { 'warrior-power-strike': 7 }),
+      await relayedSkills(game, 10, { 'warrior-power-dash': 7 }),
       'a tree skill is owned (1) or not: no levels',
     ).toEqual({});
 
@@ -107,8 +108,8 @@ test.describe('skill tree on the server', { tag: ['@protocol', '@external-safe']
           classId: 'warrior',
           level: 4,
           skillLevels: {
-            'warrior-power-strike': 1,
-            'warrior-uppercut': 1,
+            'warrior-shoulder-charge': 1,
+            'warrior-backstep': 1,
             'warrior-iron-recovery': 1,
             'warrior-power-dash': 1,
           },
@@ -126,21 +127,21 @@ test.describe('skill tree on the server', { tag: ['@protocol', '@external-safe']
 
     expect(
       await barOf([
-        'warrior-uppercut',
+        'warrior-backstep',
         'assassin-lucky-seven',
-        'warrior-uppercut',
-        'warrior-dragon-roar',
-        'warrior-power-strike',
+        'warrior-backstep',
+        'warrior-monster-magnet',
+        'warrior-shoulder-charge',
         'warrior-iron-recovery',
-        'warrior-power-strike',
+        'warrior-shoulder-charge',
         42,
       ]),
       'foreign, unowned, passive and repeated ids become empty slots; the bar is cut to 6',
-    ).toEqual(['warrior-uppercut', null, null, null, 'warrior-power-strike', null]);
+    ).toEqual(['warrior-backstep', null, null, null, 'warrior-shoulder-charge', null]);
     expect(
-      await barOf(['warrior-power-dash', 'warrior-uppercut']),
+      await barOf(['warrior-power-dash', 'warrior-backstep']),
       'an owned attack-combo skill (power dash: hold attack) never takes a slot',
-    ).toEqual([null, 'warrior-uppercut', null, null, null, null]);
+    ).toEqual([null, 'warrior-backstep', null, null, null, null]);
     expect(await barOf('not-a-bar'), 'a bar that is no array is an empty bar').toEqual([
       null,
       null,

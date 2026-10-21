@@ -259,7 +259,12 @@ Driving tips:
   with it; any player, the host decides) lights its fuse: `level.props[].fuseTicks` counts 150
   ticks (3 s, "3-2-1" over it), then it blows up: `exploded: true`, gone from the world and
   collision (`pickable: false`), zombies whose center is within 110 px lose 60% max HP (bosses
-  10%) and fly away, barrels in reach go up 12 ticks later (chain). 500 ticks (10 s) after the
+  10%) and fly away, standing players in reach (whoever lit it) lose 25% max HP and are thrown
+  away harder than by a zombie (no parry; i-frames apply, so a chain hits once; a guest gets it as
+  a game-sync `attacks` entry with `isBlast`), lying corpses in reach fly up and away (~100 px),
+  barrels in reach go up 12 ticks later (chain). Testing the player hit: zombies swing at a
+  god-mode player too, and the first hit after god mode drops leaves i-frames that eat the blast:
+  `probe.clearZombies()` and drop god mode only in the fuse's last ~40 ticks. 500 ticks (10 s) after the
   blast it is back on its spawn spot, unlit (`exploded: false`); it waits while a player or prop
   stands there. A lit barrel can still be carried and thrown. Boxes never light. Every floor has
   5-10 barrels (generator places them first; on crowded floors, e.g. cages, the last ones may

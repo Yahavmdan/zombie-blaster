@@ -512,6 +512,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     repositionExitPlatform: vi.fn(),
     applyLevel: vi.fn(),
     requestHitStop: vi.fn(),
+    applyBarrelBlast: vi.fn(),
     isInSafeSpot: vi.fn((): boolean => false),
     isOutOfReach(this: IGameEngine, p: CharacterState): boolean {
       const afk: boolean = p === this.player ? this.isLocalAfk : p.isAfk === true;
@@ -1631,7 +1632,7 @@ describe('Exploding barrels', (): void => {
     engine.pendingVfxEvents = [];
   });
 
-  it('a hit lights the fuse; 3 s later the barrel blows up and hurts the zombies around it', (): void => {
+  it('a hit lights the fuse; 3 s later the barrel blows up and hurts the zombies around it and whoever lit it', (): void => {
     const [id]: string[] = hostWithBarrels(1);
     const b: LooseProp = propById(engine, id)!;
     placeOnGround(b, 600);
@@ -1669,12 +1670,83 @@ describe('Exploding barrels', (): void => {
     expect(near.velocityX, 'thrown away from the barrel').toBeGreaterThan(0);
     expect(near.isGrounded).toBe(false);
     expect(far.hp, 'out of the blast').toBe(100);
-    expect(queued(VfxEventType.DamageNumber).map((evt: VfxEvent): number => evt.value!)).toEqual([60]);
+    // The player who lit it stood right beside it: 25% of 200 max HP, thrown back left.
+    expect(engine.player.hp).toBe(150);
+    expect(engine.player.velocityX).toBe(-GAME_CONSTANTS.BARREL_BLAST_PLAYER_KNOCKBACK);
+    expect(engine.player.velocityY).toBe(GAME_CONSTANTS.BARREL_BLAST_PLAYER_KNOCKBACK_UP);
+    expect(engine.invincibilityFrames).toBe(GAME_CONSTANTS.INVINCIBILITY_FRAMES);
+    expect(queued(VfxEventType.DamageNumber).map((evt: VfxEvent): number => evt.value!)).toEqual([60, 50]);
     expect(engine.particles.length).toBeGreaterThan(0);
     expect(engine.screenShakeFrames).toBeGreaterThan(0);
     expect(props.moved().find((p: LooseProp): boolean => p.id === id)?.exploded, 'synced as gone').toBe(true);
     expect(blast[0].targetY, 'lay on the ground: a scorch mark there').toBe(GROUND);
     expect(engine.barrelBlasts).toEqual([{ x: blast[0].x, y: blast[0].y, groundY: GROUND, age: 0 }]);
+  });
+
+  it('the host sends the blast to each guest in it and throws the corpses lying there', (): void => {
+    const [id]: string[] = hostWithBarrels(1);
+    const b: LooseProp = propById(engine, id)!;
+    placeOnGround(b, 600);
+    engine.looseProps = [b];
+    engine.zombies = [];
+    engine.isMultiplayerHost = true;
+    engine.player = makePlayer({ x: 100, y: GROUND - GAME_CONSTANTS.PLAYER_HEIGHT });
+    const guestY: number = GROUND - GAME_CONSTANTS.PLAYER_HEIGHT;
+    engine.remotePlayers = [
+      makePlayer({ id: 'near-guest', x: 640, y: guestY, derived: { ...makePlayer().derived, maxHp: 400 } }),
+      makePlayer({ id: 'far-guest', x: 900, y: guestY }),
+      makePlayer({ id: 'down-guest', x: 600, y: guestY, isDown: true }),
+    ];
+    const corpse: (cid: string, cx: number) => ZombieCorpse = (cid: string, cx: number): ZombieCorpse => ({
+      id: cid,
+      type: ZombieType.Walker,
+      x: cx - 20,
+      y: GROUND - 6,
+      width: 40,
+      height: 6,
+      spriteKey: 'walker',
+      facing: 1,
+      velocityX: 0,
+      velocityY: 0,
+      isGrounded: true,
+      frozen: true,
+      landProcessed: true,
+      fadeTimer: 999,
+      maxFadeTimer: 999,
+      showBlood: false,
+      carrierId: null,
+    });
+    const left: ZombieCorpse = corpse('left', 560);
+    const right: ZombieCorpse = corpse('right', 660);
+    const far: ZombieCorpse = corpse('far', 950);
+    engine.zombieCorpses = [left, right, far];
+    b.fuseTicks = 1;
+
+    barrels.update();
+
+    expect(engine.pendingRemoteAttacks).toEqual([
+      { targetPlayerId: 'near-guest', damage: 100, knockbackDir: 1, isPoisonAttack: false, isBlast: true },
+    ]);
+    expect(engine.player.hp, 'the host stood far away').toBe(200);
+    expect(left.velocityX).toBe(-GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X);
+    expect(right.velocityX).toBe(GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X);
+    expect([left.isGrounded, right.isGrounded], 'in the air').toEqual([false, false]);
+    expect(left.velocityY).toBe(GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_Y);
+    expect(far.isGrounded, 'out of the blast').toBe(true);
+    expect(far.velocityX).toBe(0);
+  });
+
+  it('a guest applies a blast to itself: no parry, thrown harder than by a zombie, once per chain', (): void => {
+    engine.isMultiplayerClient = true;
+    engine.player = makePlayer({ x: 600, y: GROUND - GAME_CONSTANTS.PLAYER_HEIGHT });
+    engine.applyBarrelBlast(50, -1);
+    expect(engine.player.hp).toBe(150);
+    expect(engine.player.velocityX).toBe(-GAME_CONSTANTS.BARREL_BLAST_PLAYER_KNOCKBACK);
+    expect(GAME_CONSTANTS.BARREL_BLAST_PLAYER_KNOCKBACK).toBeGreaterThan(GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER);
+    expect(engine.player.isGrounded).toBe(false);
+    expect(engine.pendingVfxEvents.some((e: VfxEvent): boolean => e.type === VfxEventType.PlayerHurt)).toBe(true);
+    engine.applyBarrelBlast(50, -1);
+    expect(engine.player.hp, 'the next barrel of the chain lands in the invincibility window').toBe(150);
   });
 
   it('10 s after the blast the barrel is back on its spawn spot, once nobody stands there', (): void => {

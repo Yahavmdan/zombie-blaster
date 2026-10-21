@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, VfxEvent, GAME_CONSTANTS, MagnetPullRequest, ZombieEffectRequest } from '@shared/index';
 import { SpecialDropType, SpecialDropDefinition } from '@shared/game-entities';
-import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload, HostMigratedPayload, ReconnectResultPayload, RoomInfo, RoomPlayer, RoomUpdatedPayload, SetAfkPayload } from '@shared/multiplayer';
+import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, RemotePlayerAttack, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload, HostMigratedPayload, ReconnectResultPayload, RoomInfo, RoomPlayer, RoomUpdatedPayload, SetAfkPayload } from '@shared/multiplayer';
 import { ActiveSpecialEffect, BoulderState, CagePuzzleState, LooseProp, PlateState, SpringState, ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
@@ -224,8 +224,8 @@ export class GameComponent implements OnInit, OnDestroy {
     this.ws.onMessage(ServerMessageType.GameSync)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
-        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props?: LooseProp[]; floor: number; layoutSeed?: number; boulder?: BoulderState | null; spring?: SpringState | null; cages?: CagePuzzleState | null; plate?: PlateState | null; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] } =
-          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props?: LooseProp[]; floor: number; layoutSeed?: number; boulder?: BoulderState | null; spring?: SpringState | null; cages?: CagePuzzleState | null; plate?: PlateState | null; attacks?: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] };
+        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props?: LooseProp[]; floor: number; layoutSeed?: number; boulder?: BoulderState | null; spring?: SpringState | null; cages?: CagePuzzleState | null; plate?: PlateState | null; attacks?: RemotePlayerAttack[]; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] } =
+          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props?: LooseProp[]; floor: number; layoutSeed?: number; boulder?: BoulderState | null; spring?: SpringState | null; cages?: CagePuzzleState | null; plate?: PlateState | null; attacks?: RemotePlayerAttack[]; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] };
 
         this.remotePlayerStates.set(payload.player.id, payload.player);
 
@@ -247,7 +247,10 @@ export class GameComponent implements OnInit, OnDestroy {
           if (payload.attacks && payload.attacks.length > 0) {
             const myId: string = this.gameState.player()?.id ?? '';
             for (const atk of payload.attacks) {
-              if (atk.targetPlayerId === myId) {
+              if (atk.targetPlayerId !== myId) continue;
+              if (atk.isBlast) {
+                this.gameCanvas()?.applyBarrelBlast(atk.damage, atk.knockbackDir);
+              } else {
                 this.gameCanvas()?.applyIncomingZombieDamage(atk.damage, atk.knockbackDir, atk.isPoisonAttack);
               }
             }
@@ -380,7 +383,7 @@ export class GameComponent implements OnInit, OnDestroy {
         const canvas: GameCanvasComponent | undefined = this.gameCanvas();
         if (!canvas) return;
 
-        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null =
+        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: RemotePlayerAttack[]; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null =
           canvas.getStateSnapshot();
         if (!snapshot) return;
 

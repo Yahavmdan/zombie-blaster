@@ -167,6 +167,11 @@ export class GameProbe {
     await this.page.evaluate((at: number): void => window.__zbE2e?.engine?.spawnZombieAt(at), x);
   }
 
+  /** Setup only (solo/host): every zombie leaves the floor at once; new ones keep spawning. */
+  async clearZombies(): Promise<void> {
+    await this.page.evaluate((): void => window.__zbE2e?.engine?.clearZombies());
+  }
+
   async maxAllSkills(): Promise<void> {
     await this.page.evaluate((): void => window.__zbE2e?.controls?.maxAllSkills());
   }

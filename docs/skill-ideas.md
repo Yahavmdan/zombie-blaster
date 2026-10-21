@@ -8,11 +8,14 @@ Flow: the `class-skill-tree` skill.
 
 ## Classes
 
-- [x] **Warrior**: Brawn / Momentum / Grit, 22 skills (shipped 2026-10; moved to the skill bar
-  2026-10-11, three attack combos the same day).
-- [ ] **Warrior attacks, round 2**: the user wants the other attacks reworked onto the attack button
-  later (Power Strike, Uppercut, Shoulder Charge, Leap Strike, Roar...). One clear combo each, never
-  two skills on similar inputs.
+- [x] **Warrior**: Combat / Agility / Grit, 19 skills (shipped 2026-10; moved to the skill bar
+  2026-10-11, three attack combos the same day). 2026-10-21: Momentum renamed Agility, Brawn renamed Combat; Combat holds
+  only the three attack-button moves (Power Dash root, Slash Blast, Ground Slam); Agility got Carry 1
+  and Carry 2 (anyone carries 1 corpse or prop, each carry skill +1, max 3).
+- [ ] **Warrior attacks, round 2**: parked for a rework, commented out in `WARRIOR_SKILL_TREE`
+  (mechanics and animations still in the engine): Power Strike, Rising Uppercut, Heavy Hands,
+  Executioner, Dragon Roar (Combat's old capstone). The user will rework them, likely onto the attack
+  button, one clear combo each, never two skills on similar inputs.
 - [ ] **Assassin** (next): Shadow / Blades / Agility. Port Lucky Seven, Double Jump (passive air
   jump), Claw Mastery (passive), Magic Twin and Dark Sight (buffs). New actives: Shadow Step
   (teleport behind), Caltrops, Smoke Bomb, Rising Kunai, Chain Hook, Shadow Drop (dive when
@@ -28,4 +31,4 @@ Flow: the `class-skill-tree` skill.
 - [ ] Move list tab in the tree window with each skill's looping demo.
 - [ ] Drag a skill from the tree window onto a quick slot (today: click a bar slot in the window).
 - [ ] Gamepad mapping (skill bar on the face buttons + a shoulder modifier).
-- [ ] Balance pass with the playtest lab (Power Strike rarely matters on floor 1: one swing kills).
+- [ ] Balance pass with the playtest lab (floor-1 walkers die to one swing).

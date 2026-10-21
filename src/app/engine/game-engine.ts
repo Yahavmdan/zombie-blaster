@@ -2,6 +2,7 @@ import {
   CharacterState,
   GAME_CONSTANTS,
   MagnetPullRequest,
+  RemotePlayerAttack,
   SKILLS,
   ZombieEffectRequest,
   SPECIAL_DROP_DEFINITIONS,
@@ -247,7 +248,7 @@ export class GameEngine implements IGameEngine {
   isMultiplayerClient: boolean = false;
   isLocalAfk: boolean = false;
   pendingLocalKills: Set<string> = new Set<string>();
-  pendingRemoteAttacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [];
+  pendingRemoteAttacks: RemotePlayerAttack[] = [];
   pendingReviveTargetIds: string[] = [];
   pendingSpecialDropActivations: SpecialDropType[] = [];
   pendingVfxEvents: VfxEvent[] = [];
@@ -1014,9 +1015,9 @@ export class GameEngine implements IGameEngine {
     if (this.attackCooldown > 0) this.attackCooldown--;
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: RemotePlayerAttack[]; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     if (!this.player) return null;
-    const attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }> = [...this.pendingRemoteAttacks];
+    const attacks: RemotePlayerAttack[] = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
     const revives: string[] = [...this.pendingReviveTargetIds];
     this.pendingReviveTargetIds.length = 0;
@@ -1377,14 +1378,63 @@ export class GameEngine implements IGameEngine {
     if (this.isOutOfReach(p)) return;
     if (!isPoisonAttack && this.parryIncoming(p, knockbackDir)) return;
 
+    this.hurtLocalPlayer(
+      p,
+      damage,
+      knockbackDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER,
+      GAME_CONSTANTS.KNOCKBACK_UP_FORCE,
+    );
+
+    if (isPoisonAttack) {
+      const damagePerTick: number = GAME_CONSTANTS.SPITTER_POISON_DAMAGE_PER_TICK +
+        Math.floor(this.floor * GAME_CONSTANTS.SPITTER_POISON_DAMAGE_WAVE_SCALE);
+      this.poisonEffect = {
+        remainingTicks: GAME_CONSTANTS.SPITTER_POISON_DURATION_TICKS,
+        tickInterval: GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL,
+        tickTimer: GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL,
+        damagePerTick,
+      };
+      this.vfxSystem.tintPlayerPoisoned(p.id);
+      this.pendingVfxEvents.push({
+        type: VfxEventType.PoisonTrigger,
+        playerId: p.id,
+        x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+        y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+      });
+    }
+
+    this.settleLocalHit(p);
+  }
+
+  /**
+   * An exploding barrel's blast caught the local player (the host's own, or a guest's sent in
+   * game-sync): no parry or dodge, thrown harder than by a zombie. Blasts in a chain land once.
+   */
+  applyBarrelBlast(damage: number, knockbackDir: number): void {
+    const p: CharacterState | null = this.player;
+    if (!p || p.isDead || p.isDown) return;
+    if (this.godMode) return;
+    if (this.invincibilityFrames > 0) return;
+    if (this.isLocalAfk) return;
+    this.hurtLocalPlayer(
+      p,
+      damage,
+      knockbackDir * GAME_CONSTANTS.BARREL_BLAST_PLAYER_KNOCKBACK,
+      GAME_CONSTANTS.BARREL_BLAST_PLAYER_KNOCKBACK_UP,
+    );
+    this.settleLocalHit(p);
+  }
+
+  /** Takes the HP, throws the player, and shows the hit to everyone. */
+  private hurtLocalPlayer(p: CharacterState, damage: number, velocityX: number, velocityY: number): void {
     p.hp -= damage;
     this.invincibilityFrames = GAME_CONSTANTS.INVINCIBILITY_FRAMES;
     this.vfxSystem.flashPlayerHurt(p);
 
     this.combatSystem.interruptReviveChannel();
 
-    p.velocityX = knockbackDir * GAME_CONSTANTS.KNOCKBACK_FORCE_PLAYER;
-    p.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
+    p.velocityX = velocityX;
+    p.velocityY = velocityY;
     p.isGrounded = false;
     if (p.isClimbing) {
       p.isClimbing = false;
@@ -1419,25 +1469,10 @@ export class GameEngine implements IGameEngine {
       isCrit: false,
       color: '#ff4444',
     });
+  }
 
-    if (isPoisonAttack) {
-      const damagePerTick: number = GAME_CONSTANTS.SPITTER_POISON_DAMAGE_PER_TICK +
-        Math.floor(this.floor * GAME_CONSTANTS.SPITTER_POISON_DAMAGE_WAVE_SCALE);
-      this.poisonEffect = {
-        remainingTicks: GAME_CONSTANTS.SPITTER_POISON_DURATION_TICKS,
-        tickInterval: GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL,
-        tickTimer: GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL,
-        damagePerTick,
-      };
-      this.vfxSystem.tintPlayerPoisoned(p.id);
-      this.pendingVfxEvents.push({
-        type: VfxEventType.PoisonTrigger,
-        playerId: p.id,
-        x: p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
-        y: p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
-      });
-    }
-
+  /** After a hit: Second Wind, going down (online) or game over (solo), or just the new HP. */
+  private settleLocalHit(p: CharacterState): void {
     if (p.hp <= 0 && this.trySecondWind()) {
       this.onPlayerUpdate?.(p);
       return;

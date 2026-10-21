@@ -508,6 +508,12 @@ const engineControls: E2eEngineControls = {
     if (!engine || engine.isMultiplayerClient) return;
     engine.spawnZombieAt(x);
   },
+  clearZombies(): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine || engine.isMultiplayerClient) return;
+    for (const z of engine.zombies) z.isDead = true;
+    engine.zombies = [];
+  },
   dropCorpses(centerX: number, count: number): void {
     const engine: GameEngine | null = currentEngine;
     if (!engine || engine.isMultiplayerClient) return;

@@ -39,7 +39,7 @@ test.describe('gameplay edge cases', { tag: '@solo' }, (): void => {
     const player: GamePlayer = await solo('warrior');
     await player.probe.maxOutPlayer();
     // Slash blast (double tap) on open ground; a maxed warrior kills a floor-1 walker outright.
-    const x: number = await warriorArena(player, [WARRIOR.powerStrike, WARRIOR.slashBlast], false);
+    const x: number = await warriorArena(player, [WARRIOR.shoulderCharge, WARRIOR.slashBlast], false);
 
     const deadline: number = Date.now() + 60_000;
     let measured: { before: number; after: number } | null = null;
@@ -78,7 +78,7 @@ test.describe('gameplay edge cases', { tag: '@solo' }, (): void => {
     solo: SoloFactory;
   }): Promise<void> => {
     const player: GamePlayer = await solo('warrior');
-    await warriorArena(player, [WARRIOR.powerStrike, WARRIOR.slashBlast]);
+    await warriorArena(player, [WARRIOR.shoulderCharge, WARRIOR.slashBlast]);
     await castSkill(player, WARRIOR.slashBlast);
     const first: E2eSnapshot = await player.probe.waitFor(
       'the first slash blast starts its cooldown',

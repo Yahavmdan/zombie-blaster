@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { CharacterState, Direction, GAME_CONSTANTS, PROP_WEIGHT_KG } from '@shared/index';
-import { LooseProp, ZombieState, ZombieType } from '@shared/game-entities';
+import { LooseProp, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import {
   barrelHitBy,
   blastBarrels,
+  blastCorpses,
   blastDamage,
+  blastPlayerDamage,
+  blastPlayers,
   blastZombies,
   chainFuse,
+  flingCorpse,
   fuseSeconds,
   lightFuse,
   tickFuse,
@@ -21,6 +25,7 @@ const RADIUS: number = GAME_CONSTANTS.BARREL_BLAST_RADIUS_PX;
 
 type Attacker = Pick<CharacterState, 'x' | 'y' | 'facing' | 'isAttacking' | 'isDead' | 'isDown'>;
 type BlastZombie = Pick<ZombieState, 'x' | 'y' | 'instanceWidth' | 'instanceHeight' | 'isDead'>;
+type BlastPlayer = Pick<CharacterState, 'x' | 'y' | 'isDead' | 'isDown'>;
 
 /** A barrel lying on the ground with its left side at x. */
 function barrel(x: number, overrides: Partial<LooseProp> = {}): LooseProp {
@@ -64,6 +69,35 @@ function zombieAt(cx: number, overrides: Partial<BlastZombie> = {}): BlastZombie
     instanceWidth: 40,
     instanceHeight: 50,
     isDead: false,
+    ...overrides,
+  };
+}
+
+/** A player standing on the ground, centered at cx. */
+function playerAt(cx: number, overrides: Partial<BlastPlayer> = {}): BlastPlayer {
+  return { x: cx - PW / 2, y: GROUND - PH, isDead: false, isDown: false, ...overrides };
+}
+
+/** A 40x6 corpse lying on the ground, centered at cx. */
+function corpseAt(cx: number, overrides: Partial<ZombieCorpse> = {}): ZombieCorpse {
+  return {
+    id: `corpse-${cx}`,
+    type: ZombieType.Walker,
+    x: cx - 20,
+    y: GROUND - 6,
+    width: 40,
+    height: 6,
+    spriteKey: 'walker',
+    facing: 1,
+    velocityX: 0,
+    velocityY: 0,
+    isGrounded: true,
+    frozen: true,
+    landProcessed: true,
+    fadeTimer: 0,
+    maxFadeTimer: 0,
+    showBlood: false,
+    carrierId: null,
     ...overrides,
   };
 }
@@ -147,5 +181,41 @@ describe('exploding barrels', (): void => {
     expect(blastDamage({ type: ZombieType.Boss, maxHp: 1000 })).toBe(100);
     expect(blastDamage({ type: ZombieType.DragonBoss, maxHp: 5000 })).toBe(500);
     expect(blastDamage({ type: ZombieType.Walker, maxHp: 1 })).toBe(1);
+  });
+
+  it('the blast catches standing players in its radius, whoever lit it, and takes 25% of their max HP', (): void => {
+    const b: LooseProp = barrel(500);
+    const center: { x: number; y: number } = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    const dy: number = center.y - (GROUND - PH / 2);
+    const reach: number = Math.floor(Math.sqrt(RADIUS * RADIUS - dy * dy));
+    const beside: BlastPlayer = playerAt(center.x - 20);
+    const edge: BlastPlayer = playerAt(center.x + reach);
+    const far: BlastPlayer = playerAt(center.x + reach + 2);
+    const down: BlastPlayer = playerAt(center.x, { isDown: true });
+    const dead: BlastPlayer = playerAt(center.x, { isDead: true });
+    expect(blastPlayers([beside, edge, far, down, dead], center)).toEqual([beside, edge]);
+    expect(GAME_CONSTANTS.BARREL_BLAST_PLAYER_DAMAGE_PERCENT).toBe(25);
+    expect(blastPlayerDamage(400)).toBe(100);
+    expect(blastPlayerDamage(101)).toBe(26);
+    expect(blastPlayerDamage(1)).toBe(1);
+  });
+
+  it('the blast throws lying corpses up and away from the barrel, not carried ones', (): void => {
+    const b: LooseProp = barrel(500);
+    const center: { x: number; y: number } = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    const left: ZombieCorpse = corpseAt(center.x - 40);
+    const right: ZombieCorpse = corpseAt(center.x + 40);
+    const far: ZombieCorpse = corpseAt(center.x + RADIUS + 10);
+    const carried: ZombieCorpse = corpseAt(center.x, { carrierId: 'p1', isGrounded: false });
+    const caught: ZombieCorpse[] = blastCorpses([left, right, far, carried], center);
+    expect(caught).toEqual([left, right]);
+    for (const c of caught) flingCorpse(c, center);
+    expect(left.velocityX).toBe(-GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X);
+    expect(right.velocityX).toBe(GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X);
+    for (const c of caught) {
+      expect(c.velocityY).toBe(GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_Y);
+      expect(c.velocityY).toBeLessThan(0);
+      expect(c.isGrounded).toBe(false);
+    }
   });
 });
