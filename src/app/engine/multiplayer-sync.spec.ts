@@ -451,6 +451,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
       getAnchor: vi.fn().mockReturnValue({ anchorX: 0.5, anchorY: 1.0 }),
       tick: vi.fn(),
       setState: vi.fn(),
+      showState: vi.fn(),
       setStateReversed: vi.fn(),
       setStateAtFrame: vi.fn(),
       setFinalFrame: vi.fn(),

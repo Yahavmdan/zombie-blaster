@@ -23,20 +23,22 @@ const add = (a, b) => [a[0] + b[0], a[1] + b[1]];
 
 // Colors taken from the zombie_1-4 sheets: two flat tones per material, black ink.
 const PAL = {
-  skin: hex('#e3cfc0'),
-  skinS: hex('#c7a59a'),
-  skinD: hex('#926e6a'),
-  belly: hex('#e3cfc0'),
+  skin: hex('#d1b28a'),
+  skinS: hex('#ab8760'),
+  skinD: hex('#6b4f3a'),
+  belly: hex('#d1b28a'),
   pants: hex('#56312b'),
   pantsS: hex('#251914'),
   claw: hex('#0d0a17'),
   blood: hex('#421020'),
   bloodHi: hex('#672d35'),
+  wound: hex('#8a2a2a'),
   eye: hex('#fff3bf'),
   socket: hex('#2f1418'),
-  mouth: hex('#421020'),
+  mouth: hex('#2f1418'),
   tooth: hex('#fff3bf'),
-  hair: hex('#2f1418'),
+  hair: hex('#0d0a17'),
+  hairHi: hex('#2f1418'),
   ink: hex('#0d0a17'),
   outline: hex('#010000'),
 };
@@ -248,8 +250,9 @@ const NOCONTOUR = new Set([
   'legN|pants',
   'legF|pants',
 ]);
-const LEG = [16, 17],
-  ARM = [15, 17];
+// long, starved limbs
+const LEG = [17, 18],
+  ARM = [16, 18];
 
 // ---------------- body parts ----------------
 function drawLeg(c, hip, ankle, far, footAng = 0) {
@@ -258,14 +261,15 @@ function drawLeg(c, hip, ankle, far, footAng = 0) {
   const tag = far ? 'legF.' : 'legN.';
   ankle = reach(hip, ankle, LEG[0] + LEG[1]);
   const knee = ik(hip, ankle, LEG[0], LEG[1], -1); // knee points forward
-  c.capsule(knee, ankle, 3, 2.2, tag + 'shin', skin);
-  // foot: toes forward, flat when footAng = 0, pointing down when > 0
-  const toe = [ankle[0] + 6 * Math.cos(footAng), ankle[1] + 1 + 6 * Math.sin(footAng)];
-  c.capsule(ankle, toe, 2.4, 1.6, tag + 'foot', skin);
-  c.capsule(hip, knee, 4.2, 3, tag + 'thigh', skin);
-  // ragged shorts end mid-thigh
-  c.capsule(hip, lerp2(hip, knee, 0.55), 5, 4.2, tag + 'shorts', pants);
-  return { knee, ankle, toe };
+  c.capsule(knee, ankle, 2.6, 1.8, tag + 'shin', skin);
+  c.disc(knee[0], knee[1], 2.9, tag + 'shin', skin); // bony knee
+  // foot: long toes forward, flat when footAng = 0, pointing down when > 0
+  const toe = [ankle[0] + 7 * Math.cos(footAng), ankle[1] + 1 + 7 * Math.sin(footAng)];
+  c.capsule(ankle, toe, 2.2, 1.4, tag + 'foot', skin);
+  c.capsule(hip, knee, 3.8, 2.6, tag + 'thigh', skin);
+  // shorts torn off high on the thigh
+  c.capsule(hip, lerp2(hip, knee, 0.4), 5, 4.4, tag + 'shorts', pants);
+  return { knee, ankle, toe, hem: lerp2(hip, knee, 0.4), far };
 }
 
 function drawArm(c, sh, wrist, far, opts = {}) {
@@ -273,28 +277,29 @@ function drawArm(c, sh, wrist, far, opts = {}) {
     tag = far ? 'armF.' : 'armN.';
   wrist = reach(sh, wrist, ARM[0] + ARM[1]);
   const elbow = ik(sh, wrist, ARM[0], ARM[1], opts.bend ?? 1); // elbow juts back / up
-  c.capsule(sh, elbow, 3.4, 2.4, tag + 'uarm', skin);
-  c.capsule(elbow, wrist, 2.4, 2, tag + 'farm', skin);
-  // hand: palm + three long clawed fingers
+  c.capsule(sh, elbow, 3.2, 2.1, tag + 'uarm', skin);
+  c.disc(elbow[0], elbow[1], 2.5, tag + 'uarm', skin); // knobbly elbow
+  c.capsule(elbow, wrist, 2.1, 1.7, tag + 'farm', skin);
+  // hand: bony palm + three long hooked fingers
   const ang = opts.handAng ?? 0;
   const palm = [wrist[0] + 2 * Math.cos(ang), wrist[1] + 1 + 2 * Math.sin(ang)];
-  c.disc(palm[0], palm[1], 2.4, tag + 'hand', skin);
+  c.disc(palm[0], palm[1], 2.3, tag + 'hand', skin);
   const fingers = [];
   for (let i = 0; i < 3; i++) {
-    const fa = ang + (opts.curl ?? 0) + (i - 1) * 0.28;
-    const tip = [
-      palm[0] + 6 * Math.cos(fa),
-      palm[1] + 0.5 + 6 * Math.sin(fa) - (opts.flat === false ? 0 : 0),
-    ];
-    fingers.push([palm, tip]);
+    const fa = ang + (opts.curl ?? 0) + (i - 1) * (opts.spread ?? 0.3);
+    const knuckle = [palm[0] + 5 * Math.cos(fa), palm[1] + 0.5 + 5 * Math.sin(fa)];
+    // the claw hooks down at the end of each finger
+    const hook = fa + 0.7;
+    const tip = [knuckle[0] + 3 * Math.cos(hook), knuckle[1] + 3 * Math.sin(hook)];
+    fingers.push([palm, knuckle, tip]);
   }
   return { elbow, wrist, palm, fingers };
 }
 function drawFingers(c, hand, far) {
   const skin = far ? PAL.skinD : PAL.skinS;
-  for (const [a, b] of hand.fingers) {
-    c.line(a, b, skin);
-    c.dot(b, PAL.claw);
+  for (const [a, k, b] of hand.fingers) {
+    c.line(a, k, skin);
+    c.line(k, b, PAL.claw);
   }
 }
 
@@ -320,30 +325,84 @@ function drawTorso(c, p) {
     PAL.belly,
     Math.atan2(sh[1] - hip[1], sh[0] - hip[0]),
   );
-  // spine/back mass
+  // spine/back mass: a starved waist, a hunched, bony chest
   for (let i = 0; i <= 24; i++) {
     const t = i / 24,
       q = spinePoint(hip, sh, arch, t);
-    const r = t < 0.2 ? lerp(6.5, 6, t / 0.2) : t < 0.7 ? 6 : lerp(6, 7.5, (t - 0.7) / 0.3);
-    c.disc(q[0], q[1], r, 'body.t', PAL.skin);
+    c.disc(q[0], q[1], backRadius(t), 'body.t', PAL.skin);
   }
+  // vertebrae ridge breaking the line of the back, and a jutting shoulder blade
+  const up = backNormal(p);
+  for (let k = 0; k < 7; k++) {
+    const t = 0.12 + k * 0.11,
+      q = spinePoint(hip, sh, arch, t),
+      r = backRadius(t);
+    c.disc(q[0] + up[0] * r, q[1] + up[1] * r, 1.3, 'body.t', PAL.skin);
+  }
+  const blade = spinePoint(hip, sh, arch, 0.82);
+  c.ellipse(blade[0] - 1, blade[1] - 5, 5, 3, 'body.t', PAL.skin, backAngle(p) - 0.3);
   // pants waist over the pelvis
   c.ellipse(hip[0] + 1, hip[1] + 0.5, 6.5, 6, 'pants.p', PAL.pants);
+}
+function backRadius(t) {
+  return t < 0.2 ? lerp(6, 5, t / 0.2) : t < 0.6 ? 5 : lerp(5, 7.5, (t - 0.6) / 0.4);
+}
+function backAngle(p) {
+  return Math.atan2(p.sh[1] - p.hip[1], p.sh[0] - p.hip[0]);
+}
+function backNormal(p) {
+  const a = backAngle(p);
+  return [Math.sin(a), -Math.cos(a)];
 }
 
 function torsoDetails(c, p) {
   const { hip, sh, arch } = p;
-  // ribs on the chest side
-  for (let k = 0; k < 4; k++) {
-    const q = spinePoint(hip, sh, arch, 0.62 + k * 0.08);
-    c.line([q[0] - 1, q[1] - 1], [q[0] + 1, q[1] + 4], PAL.skinS);
+  // starved ribs on the chest side
+  for (let k = 0; k < 5; k++) {
+    const q = spinePoint(hip, sh, arch, 0.58 + k * 0.07);
+    c.line([q[0] - 1, q[1]], [q[0] + 1, q[1] + 5], PAL.skinS);
   }
-  // belly stretch veins + belt rag
+  // vertebrae dots along the back
+  const up = backNormal(p);
+  for (let k = 0; k < 7; k++) {
+    const t = 0.12 + k * 0.11,
+      q = spinePoint(hip, sh, arch, t),
+      r = backRadius(t) - 1;
+    c.dot([q[0] + up[0] * r, q[1] + up[1] * r], PAL.skinS);
+  }
+  // open wound on the flank, raw and wet
+  const w = spinePoint(hip, sh, arch, 0.35);
+  for (const [dx, dy, col] of [
+    [1, -1, PAL.blood],
+    [2, -1, PAL.blood],
+    [0, 0, PAL.blood],
+    [1, 0, PAL.wound],
+    [2, 0, PAL.wound],
+    [3, 0, PAL.blood],
+    [1, 1, PAL.bloodHi],
+    [2, 1, PAL.blood],
+  ])
+    c.dot([w[0] + dx, w[1] + dy], col);
+  // swollen gut: a dark stretch seam, smeared with old blood
   const bc = spinePoint(hip, sh, arch, 0.48);
-  c.line([bc[0] - 3, bc[1] + 6 + p.belly], [bc[0] + 3, bc[1] + 7 + p.belly], PAL.skinS);
+  c.line([bc[0] - 4, bc[1] + 7 + p.belly], [bc[0] + 3, bc[1] + 8 + p.belly], PAL.skinS);
   c.dot([bc[0] + 5, bc[1] + 11 + p.belly], PAL.blood);
   c.dot([bc[0] + 6, bc[1] + 10 + p.belly], PAL.blood);
+  c.dot([bc[0] + 7, bc[1] + 9 + p.belly], PAL.bloodHi);
+  // blood run down the chest from the mouth
+  const ch = spinePoint(hip, sh, arch, 0.95);
+  c.line([ch[0] + 3, ch[1] + 2], [ch[0] + 2, ch[1] + 7], PAL.blood);
+  c.dot([ch[0] + 4, ch[1] + 3], PAL.bloodHi);
   for (let x = -5; x <= 6; x += 4) c.dot([hip[0] + x, hip[1] - 5], PAL.pantsS);
+}
+
+// torn hem of the shorts: ragged threads hanging off the thigh
+function hemDetails(c, leg) {
+  const col = leg.far ? PAL.pantsS : PAL.pants;
+  const [hx, hy] = leg.hem;
+  c.dot([hx - 2, hy + 4], col);
+  c.dot([hx + 1, hy + 5], col);
+  c.dot([hx + 3, hy + 4], col);
 }
 
 function drawHead(c, p) {
@@ -356,51 +415,104 @@ function drawHead(c, p) {
   ];
   // neck
   c.capsule([sh[0] + 2, sh[1] - 1], R(-4, 1), 3.4, 3, 'neck.n', PAL.skin);
-  // skull: long, low brow
+  // skull: long and low, a heavy brow over a jutting snout
   c.ellipse(hc[0], hc[1], 7.5, 6, 'head.s', PAL.skin, ang);
-  c.ellipse(...R(4, -0.5), 4.5, 4.5, 'head.s', PAL.skin, ang);
-  // lower jaw hinged at the back, opens downward
+  c.ellipse(...R(5, 0), 5, 4.5, 'head.s', PAL.skin, ang);
+  c.ellipse(...R(3, -4), 4, 1.8, 'head.s', PAL.skin, ang - 0.15);
+  // lower jaw hinged far back, so the mouth splits open almost to the ear
   const j = p.jaw; // 0 closed .. 1 wide
-  const ja = ang + j * 0.75;
-  const hinge = R(-2, 2.5);
+  const ja = ang + j * 0.85;
+  const hinge = R(-4, 2.5);
   const J = (lx, ly) => [
     hinge[0] + lx * Math.cos(ja) - ly * Math.sin(ja),
     hinge[1] + lx * Math.sin(ja) + ly * Math.cos(ja),
   ];
   // mouth cavity
-  if (j > 0.05) c.poly([R(-1, 3), R(9.5, 2.5), J(10, 2), J(0, 3)], 'head.m', PAL.mouth);
-  c.poly([J(0, 1), J(10, 1.2), J(10.5, 4), J(0, 5)], 'jaw.j', PAL.skin);
+  if (j > 0.05) c.poly([R(-3, 3), R(11, 2.5), J(14, 2), J(0, 3)], 'head.m', PAL.mouth);
+  c.poly([J(0, 1), J(14, 1.2), J(13.5, 4), J(0, 5)], 'jaw.j', PAL.skin);
   return { R, J, j };
 }
 function headDetails(c, h, p) {
   const { R, J, j } = h;
-  // eye socket + glowing pupil
-  c.dot(R(4, -2.5), PAL.socket);
-  c.dot(R(5, -2.5), PAL.socket);
-  c.dot(R(4, -1.5), PAL.socket);
+  // deep socket with a small, bright eye staring out of it
+  for (const [x, y] of [
+    [3, -2.5],
+    [4, -2.5],
+    [5, -2.5],
+    [3, -1.5],
+    [4, -1.5],
+    [5, -0.5],
+  ])
+    c.dot(R(x, y), PAL.socket);
   c.dot(R(5, -1.5), PAL.eye);
-  // brow ridge
-  c.line(R(2, -4.5), R(7, -3.5), PAL.skinS);
-  // upper teeth row
-  for (let x = 4; x <= 10; x += 3) c.dot(R(x, 3), PAL.tooth);
-  // lower teeth
-  for (let x = 5; x <= 10; x += 3) c.dot(J(x, 1), PAL.tooth);
-  if (j < 0.05) c.line(R(1, 3.5), R(10, 3.2), PAL.mouth);
-  // blood around the mouth (more when fed)
-  c.dot(J(9, 4), PAL.blood);
-  c.dot(J(6, 5), PAL.blood);
-  if (p.gore) {
-    c.dot(J(8, 5), PAL.bloodHi);
-    c.dot(R(10, 1), PAL.blood);
-    c.dot(J(4, 5), PAL.blood);
-    c.dot(J(5, 6), PAL.blood);
+  // heavy brow ridge and a flat, rotted nose
+  c.line(R(1, -4.5), R(8, -3.5), PAL.skinS);
+  c.dot(R(10, -1), PAL.socket);
+  // jagged teeth: upper row hangs down, lower row stands up
+  for (let x = -1; x <= 11; x += 2) {
+    c.dot(R(x, 3), PAL.tooth);
+    if (j > 0.2 && x % 4 === 1) c.dot(R(x, 4), PAL.tooth);
   }
-  // ear + stringy hair
-  c.dot(R(-3, -1), PAL.skinS);
-  c.dot(R(-3, 0), PAL.skinS);
-  c.line(R(-2, -6), R(-7, -3), PAL.hair);
-  c.line(R(1, -6), R(-4, -7), PAL.hair);
-  c.line(R(-5, -5), R(-8, 0), PAL.hair);
+  for (let x = 1; x <= 13; x += 2) {
+    c.dot(J(x, 1), PAL.tooth);
+    if (j > 0.2 && x % 4 === 3) c.dot(J(x, 0), PAL.tooth);
+  }
+  if (j < 0.05) c.line(R(-2, 3.5), R(11, 3.2), PAL.mouth);
+  // blood around the mouth (more when fed)
+  c.dot(J(12, 4), PAL.blood);
+  c.dot(J(8, 5), PAL.blood);
+  c.dot(J(4, 5), PAL.bloodHi);
+  if (p.gore) {
+    c.dot(J(10, 5), PAL.bloodHi);
+    c.dot(R(11, 1), PAL.blood);
+    c.dot(J(6, 5), PAL.blood);
+    c.dot(J(7, 6), PAL.blood);
+  }
+  // bloody drool hanging off the chin, swinging with the body
+  const chin = J(12, 4.5),
+    drool = p.drool ?? 3;
+  if (drool > 0) {
+    const end = [chin[0] - (p.hairFlow ?? 0) * drool * 0.6, chin[1] + drool];
+    c.line(chin, end, PAL.blood);
+    c.dot(end, PAL.bloodHi);
+  }
+  // ear
+  c.dot(R(-4, -1), PAL.skinS);
+  c.dot(R(-4, 0), PAL.skinS);
+}
+
+// long, lank black hair: hangs off the scalp, streams back when it runs and lifts when it falls
+function drawHair(c, h, p) {
+  const { R } = h;
+  const flow = p.hairFlow ?? 0; // 0 hangs, 1 streams straight back
+  const lift = (p.hairLift ?? 0) * 0.6; // 0 hangs, 1 floats up (falling)
+  const roots = [
+    [5, -5.5, 6],
+    [3, -6.5, 13],
+    [0, -6.5, 15],
+    [-3, -6, 16],
+    [-6, -4, 14],
+    [-7, -1, 10],
+  ];
+  roots.forEach(([lx, ly, len], i) => {
+    const a = R(lx, ly);
+    // direction: down, blended toward straight back, then toward up
+    let dx = -flow * 1.1 - 0.15,
+      dy = 1 - flow * 0.85 - lift * 1.6;
+    const d = Math.hypot(dx, dy) || 1;
+    dx /= d;
+    dy /= d;
+    const wave = Math.sin(i * 1.7 + (p.hairPhase ?? 0)) * 1.2;
+    const mid = [a[0] + dx * len * 0.5 - dy * wave, a[1] + dy * len * 0.5 + dx * wave];
+    const end = [a[0] + dx * len, a[1] + dy * len];
+    const col = i % 2 ? PAL.hairHi : PAL.hair;
+    c.line(a, mid, col);
+    c.line(mid, end, col);
+    c.line([a[0] + 1, a[1]], [mid[0] + 1, mid[1]], PAL.hair);
+  });
+  // matted scalp
+  c.line(R(-6, -5), R(5, -6), PAL.hair);
+  c.line(R(-4, -6), R(3, -7), PAL.hair);
 }
 
 // ---------------- pose ----------------
@@ -408,7 +520,7 @@ function headDetails(c, h, p) {
 //       hN/hF (hind ankles), fN/fF (front wrists), footN/footF angles, handN/handF opts, extras(c)
 function base() {
   return {
-    hip: [47, 97],
+    hip: [47, 94],
     sh: [77, 98],
     arch: 6,
     head: [90, 99],
@@ -418,12 +530,16 @@ function base() {
     gore: false,
     hN: [50, GY - 2],
     hF: [44, GY - 2],
-    fN: [87, GY - 1],
-    fF: [81, GY - 1],
+    fN: [89, GY - 1],
+    fF: [83, GY - 1],
     footN: 0,
     footF: 0,
     handN: {},
     handF: {},
+    hairFlow: 0,
+    hairLift: 0,
+    hairPhase: 0,
+    drool: 3,
   };
 }
 function shift(p, dx, dy) {
@@ -435,10 +551,10 @@ function render(p) {
   const c = new Canvas();
   const off = [-3, -2]; // far side roots sit slightly back/up
   // far limbs
-  drawLeg(c, add(p.hip, off), p.hF, true, p.footF);
+  const lF = drawLeg(c, add(p.hip, off), p.hF, true, p.footF);
   const aF = drawArm(c, add(p.sh, off), p.fF, true, p.handF);
   drawTorso(c, p);
-  drawLeg(c, p.hip, p.hN, false, p.footN);
+  const lN = drawLeg(c, p.hip, p.hN, false, p.footN);
   const h = drawHead(c, p);
   const aN = drawArm(c, [p.sh[0] + 1, p.sh[1] + 1], p.fN, false, p.handN);
   if (p.extras) p.extras(c, 'pre');
@@ -446,8 +562,11 @@ function render(p) {
   c.contour();
   torsoDetails(c, p);
   headDetails(c, h, p);
+  hemDetails(c, lF);
+  hemDetails(c, lN);
   drawFingers(c, aF, true);
   drawFingers(c, aN, false);
+  drawHair(c, h, p);
   if (p.extras) p.extras(c, 'post');
   c.outline();
   return c;
@@ -503,133 +622,204 @@ const ANIMS = {
       return p;
     },
   ],
+  // bounding gallop, 8 keys: extended flight, front lands, front pulls, gathered flight,
+  // hind lands under the belly, hind drives, hind kicks off, front reaches
   Run: [
     8,
-    (f, n) => {
-      const p = base(),
-        t = f / n;
-      // rotary gallop: hind pair then front pair, body flexes and extends
-      const legs = { hN: 0, hF: 0.1, fN: 0.5, fF: 0.6 };
-      for (const k of Object.keys(legs)) {
-        const s = stride(t + legs[k], 0.42, 26, 9);
-        p[k] = add(p[k], [s.dx, s.dy]);
-        if (k[0] === 'h')
-          p[k === 'hN' ? 'footN' : 'footF'] = s.up ? 0.8 * Math.sin(Math.PI * s.q) : 0;
-        else
-          p[k === 'fN' ? 'handN' : 'handF'] = s.up
-            ? { handAng: 0.5 * Math.sin(Math.PI * s.q), curl: 0.6 }
-            : {};
-      }
-      const flex = Math.cos(TAU * t);
-      p.hip[0] += flex * 4 - 2;
-      p.sh[0] -= flex * 2;
-      p.arch += -flex * 3 + 1;
-      const lift = Math.sin(TAU * t);
-      p.hip[1] += -2 + lift * 2;
-      p.sh[1] += -3 - lift * 2;
-      p.head = [p.sh[0] + 14, p.sh[1] + 1];
-      p.headAng = 0.05 + lift * 0.08;
-      p.jaw = 0.5 + 0.3 * Math.sin(TAU * t * 2);
-      p.belly = lift * 1.2;
+    (f) => {
+      const p = base();
+      const k = [
+        // hip, sh, arch, hN, hF, footN/F, fN, fF, hand angle, jaw
+        [[45, 91], [80, 93], 1, [27, 116], [23, 113], 1.1, [104, 111], [100, 107], -0.3, 0.9],
+        [[45, 93], [80, 97], 3, [35, 117], [31, 114], 0.9, [99, GY - 1], [95, 119], 0.1, 0.8],
+        [[47, 95], [79, 100], 7, [47, 115], [43, 113], 0.6, [91, GY - 1], [88, GY - 1], 0.1, 0.6],
+        [[49, 92], [77, 98], 12, [60, 117], [56, 115], 0.4, [79, GY - 3], [75, 121], 0.6, 0.5],
+        [[50, 95], [78, 97], 9, [63, GY - 2], [58, 121], 0.2, [80, 114], [76, 112], 0.5, 0.6],
+        [[48, 95], [79, 95], 5, [55, GY - 2], [52, GY - 2], 0, [92, 112], [88, 110], 0, 0.8],
+        [[46, 93], [80, 93], 2, [42, GY - 3], [40, GY - 2], 0.9, [101, 109], [97, 106], -0.3, 1],
+        [[45, 91], [81, 92], 1, [33, 120], [29, 118], 1.1, [104, 113], [100, 110], -0.2, 0.9],
+      ][f];
+      [p.hip, p.sh, p.arch, p.hN, p.hF] = k;
+      p.footN = k[5];
+      p.footF = k[5] * 0.9;
+      p.fN = k[6];
+      p.fF = k[7];
+      p.handN = { handAng: k[8], curl: 0.3 };
+      p.handF = { handAng: k[8], curl: 0.3 };
+      p.jaw = k[9];
+      // head thrust forward and level, bobbing against the body
+      p.head = [p.sh[0] + 15, p.sh[1] + 1 + (f % 4 === 3 ? 1 : 0)];
+      p.headAng = 0.05 - (k[2] - 5) * 0.015;
+      p.belly = -(k[2] - 5) * 0.2;
+      p.hairFlow = 0.95;
+      p.hairPhase = f * 1.3;
+      p.drool = 4;
       return p;
     },
   ],
+  // pounce: picked by the zombie's vertical speed in the air (launch .. apex .. landing), not by time
   Jump: [
-    6,
+    8,
     (f) => {
-      let p = base();
-      const keys = [
-        // crouch
-        () => {
-          p = shift(p, -1, 5);
-          p.arch = 9;
-          p.hN = [53, GY - 2];
-          p.hF = [47, GY - 2];
-          p.fN = [84, GY - 1];
-          p.fF = [79, GY - 1];
-          p.head = [88, 105];
-          p.headAng = 0.3;
-          p.belly = 1.5;
+      const p = base();
+      const k = [
+        // launch: hind legs drive down and back, front claws tucked to the chest, head up
+        {
+          hip: [46, 98],
+          sh: [74, 88],
+          arch: 3,
+          hN: [28, GY - 1],
+          hF: [24, GY - 3],
+          foot: 1.2,
+          fN: [86, 97],
+          fF: [82, 99],
+          hand: { handAng: -0.6, curl: 0.8 },
+          head: [87, 82],
+          headAng: -0.4,
+          jaw: 0.7,
+          flow: 0.8,
+          lift: 0,
         },
-        // launch: hind legs push back, front lifts
-        () => {
-          p = shift(p, 2, -2);
-          p.sh[1] -= 8;
-          p.arch = 4;
-          p.hN = [28, GY - 4];
-          p.hF = [24, GY - 6];
-          p.footN = 1.1;
-          p.footF = 1.1;
-          p.fN = [98, p.sh[1] + 10];
-          p.fF = [94, p.sh[1] + 12];
-          p.handN = { handAng: -0.3 };
-          p.handF = { handAng: -0.3 };
-          p.head = [p.sh[0] + 14, p.sh[1] - 4];
-          p.headAng = -0.2;
-          p.jaw = 0.6;
+        // rising, stretched long
+        {
+          hip: [45, 95],
+          sh: [76, 89],
+          arch: 3,
+          hN: [28, 116],
+          hF: [24, 112],
+          foot: 1.2,
+          fN: [96, 92],
+          fF: [92, 95],
+          hand: { handAng: -0.4, curl: 0.4 },
+          head: [90, 85],
+          headAng: -0.3,
+          jaw: 0.85,
+          flow: 0.9,
+          lift: 0,
         },
-        // airborne tucked
-        () => {
-          p = shift(p, 0, -14);
-          p.arch = 8;
-          p.hN = [p.hip[0] + 6, p.hip[1] + 18];
-          p.hF = [p.hip[0] + 1, p.hip[1] + 17];
-          p.footN = 0.6;
-          p.footF = 0.6;
-          p.fN = [p.sh[0] + 13, p.sh[1] + 15];
-          p.fF = [p.sh[0] + 9, p.sh[1] + 16];
-          p.handN = { handAng: 0.4, curl: 0.6 };
-          p.handF = { handAng: 0.4, curl: 0.6 };
-          p.head = [p.sh[0] + 13, p.sh[1] - 1];
-          p.jaw = 0.4;
-          p.belly = -1;
+        // rising, knees tucked up
+        {
+          hip: [48, 93],
+          sh: [77, 91],
+          arch: 8,
+          hN: [55, 112],
+          hF: [50, 110],
+          foot: 0.6,
+          fN: [99, 96],
+          fF: [95, 99],
+          hand: { handAng: -0.2, curl: 0.4 },
+          head: [91, 88],
+          headAng: -0.2,
+          jaw: 0.9,
+          flow: 0.9,
+          lift: 0,
         },
-        // airborne stretched, claws forward
-        () => {
-          p = shift(p, 2, -12);
-          p.arch = 2;
-          p.hN = [p.hip[0] - 16, p.hip[1] + 18];
-          p.hF = [p.hip[0] - 20, p.hip[1] + 15];
-          p.footN = 1.2;
-          p.footF = 1.2;
-          p.fN = [p.sh[0] + 24, p.sh[1] + 6];
-          p.fF = [p.sh[0] + 21, p.sh[1] + 3];
-          p.handN = { handAng: 0.1 };
-          p.handF = { handAng: 0 };
-          p.head = [p.sh[0] + 13, p.sh[1] - 2];
-          p.headAng = -0.1;
-          p.jaw = 0.9;
+        // apex: spread wide, claws out, jaws wide open
+        {
+          hip: [47, 93],
+          sh: [78, 92],
+          arch: 4,
+          hN: [30, 108],
+          hF: [26, 104],
+          foot: 1.1,
+          fN: [108, 90],
+          fF: [104, 98],
+          hand: { handAng: -0.3, spread: 0.45 },
+          head: [92, 90],
+          headAng: -0.1,
+          jaw: 1,
+          flow: 0.7,
+          lift: 0.3,
         },
-        // falling: front reaching for ground
-        () => {
-          p = shift(p, 1, -6);
-          p.sh[1] += 3;
-          p.arch = 5;
-          p.hN = [p.hip[0] - 4, p.hip[1] + 22];
-          p.hF = [p.hip[0] - 9, p.hip[1] + 21];
-          p.footN = 0.7;
-          p.footF = 0.7;
-          p.fN = [p.sh[0] + 14, GY - 2];
-          p.fF = [p.sh[0] + 9, GY - 3];
-          p.head = [p.sh[0] + 13, p.sh[1] + 2];
-          p.headAng = 0.3;
-          p.jaw = 0.5;
+        // apex, tipping over: claws swing down
+        {
+          hip: [47, 93],
+          sh: [78, 94],
+          arch: 4,
+          hN: [31, 111],
+          hF: [27, 107],
+          foot: 1.1,
+          fN: [107, 102],
+          fF: [102, 105],
+          hand: { handAng: 0.2, spread: 0.45 },
+          head: [92, 93],
+          headAng: 0.05,
+          jaw: 1,
+          flow: 0.5,
+          lift: 0.6,
         },
-        // landing squash
-        () => {
-          p = shift(p, 0, 6);
-          p.arch = 10;
-          p.hN = [52, GY - 2];
-          p.hF = [46, GY - 2];
-          p.fN = [90, GY - 1];
-          p.fF = [85, GY - 1];
-          p.head = [90, 106];
-          p.headAng = 0.25;
-          p.belly = 2;
-          p.jaw = 0.3;
+        // falling, claws reaching down for the ground
+        {
+          hip: [47, 95],
+          sh: [78, 97],
+          arch: 3,
+          hN: [37, 116],
+          hF: [33, 114],
+          foot: 0.9,
+          fN: [102, 115],
+          fF: [97, 116],
+          hand: { handAng: 0.6, spread: 0.4 },
+          head: [92, 97],
+          headAng: 0.2,
+          jaw: 0.8,
+          flow: 0.3,
+          lift: 0.9,
         },
-      ];
-      keys[f]();
+        // falling late: front about to land, hind swinging under
+        {
+          hip: [47, 96],
+          sh: [78, 100],
+          arch: 6,
+          hN: [46, 118],
+          hF: [42, 117],
+          foot: 0.6,
+          fN: [98, GY - 3],
+          fF: [93, GY - 2],
+          hand: { handAng: 0.3 },
+          head: [91, 100],
+          headAng: 0.25,
+          jaw: 0.6,
+          flow: 0.2,
+          lift: 1,
+        },
+        // touchdown: all four down, body sinking to soak it up
+        {
+          hip: [47, 99],
+          sh: [78, 103],
+          arch: 10,
+          hN: [52, GY - 2],
+          hF: [47, GY - 2],
+          foot: 0,
+          fN: [95, GY - 1],
+          fF: [89, GY - 1],
+          hand: {},
+          head: [91, 104],
+          headAng: 0.3,
+          jaw: 0.5,
+          flow: 0.1,
+          lift: 0.8,
+        },
+      ][f];
+      Object.assign(p, {
+        hip: k.hip,
+        sh: k.sh,
+        arch: k.arch,
+        hN: k.hN,
+        hF: k.hF,
+        footN: k.foot,
+        footF: k.foot,
+        fN: k.fN,
+        fF: k.fF,
+        handN: k.hand,
+        handF: k.hand,
+        head: k.head,
+        headAng: k.headAng,
+        jaw: k.jaw,
+        hairFlow: k.flow,
+        hairLift: k.lift,
+        hairPhase: f,
+        drool: f < 3 ? 2 : 4,
+      });
       return p;
     },
   ],

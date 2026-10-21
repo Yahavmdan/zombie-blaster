@@ -29,7 +29,7 @@ import {
 import { InputKeys } from '@shared/messages';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { SpriteAnimator, PlayerAnimState, classToSpriteSet } from './sprite-animator';
-import { ZombieSpriteAnimator, ZombieAnimState, zombieAnimState } from './zombie-sprite-animator';
+import { ZombieSpriteAnimator, ZombieAnimState } from './zombie-sprite-animator';
 import { MapRenderer } from './map-renderer';
 import { SpriteEffectSystem } from './sprite-effect-system';
 import { LightningStrike, nextLightningDelayMs } from './storm';
@@ -1090,10 +1090,10 @@ export class GameEngine implements IGameEngine {
             z.id, ZombieAnimState.Dead, spriteKey, z.spawnTimer,
           );
         } else {
-          this.zombieSpriteAnimator.setState(z.id, zombieAnimState(z));
+          this.zombieSpriteAnimator.showState(z);
         }
       } else if (!z.isDead && z.spawnTimer <= 0) {
-        this.zombieSpriteAnimator.setState(z.id, zombieAnimState(z));
+        this.zombieSpriteAnimator.showState(z);
       }
 
       if (!z.isDead) {
