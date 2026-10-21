@@ -18,6 +18,7 @@ import {
   bottomOf,
   centerX,
   isResting,
+  limitTilt,
   restOn,
   settleUpright,
   Span,
@@ -48,7 +49,7 @@ function syncedFuseTicks(ticks: unknown): number {
 
 /**
  * Loose props (barrels, boxes, rails players pick up). The host (or solo) moves them: a thrown or
- * blasted prop flies spinning, falls, bounces and lands on the ground, a platform, another prop or
+ * blasted prop flies spinning (a long rail only tilts), falls, bounces and lands on the ground, a platform, another prop or
  * a corpse; there a barrel rolls on, a box or rail slides and turns back upright. One whose middle
  * hangs over an edge tips off it (`prop-tumble.ts`); a lying one falls when what held it up is
  * gone. Every client turns the resting ones (upright, still) into solid platforms each tick
@@ -310,6 +311,9 @@ export class LoosePropSystem {
       GAME_CONSTANTS.TERMINAL_VELOCITY,
     );
     prop.y += prop.velocityY;
+    if (this.kindOf(prop.id) === 'rail') {
+      limitTilt(prop, GAME_CONSTANTS.PROP_RAIL_MAX_TILT, GAME_CONSTANTS.PROP_RAIL_MAX_SPIN);
+    }
     prop.angle += prop.spin;
     prop.spin *= GAME_CONSTANTS.PROP_AIR_SPIN_DRAG;
 

@@ -146,6 +146,19 @@ export function tickTip(p: LooseProp, tip: Tip): boolean {
   return true;
 }
 
+/** Anything that turns as it flies: a loose prop or a corpse. */
+export type Turning = Pick<LooseProp, 'angle' | 'spin'>;
+
+/**
+ * Keeps a long thing (a rail, a corpse) from cartwheeling in the air: it turns at most `maxSpin`
+ * fast, and stops turning further once it is tilted `maxTilt` from level. One already tilted
+ * further (tipped off an edge) keeps its tilt.
+ */
+export function limitTilt(t: Turning, maxTilt: number, maxSpin: number = Infinity): void {
+  t.spin = Math.max(-maxSpin, Math.min(maxSpin, t.spin));
+  if (Math.abs(t.angle) >= maxTilt && Math.sign(t.spin) === Math.sign(t.angle)) t.spin = 0;
+}
+
 /** A prop lying on its side turns back upright, its lowest point kept on the surface. */
 export function settleUpright(p: LooseProp, round: boolean): void {
   const surfaceY: number = bottomOf(p, round);

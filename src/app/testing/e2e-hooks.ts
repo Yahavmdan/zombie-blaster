@@ -378,6 +378,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
         footWidth: foothold.width,
         footY: foothold.y,
         facing: c.facing,
+        angle: c.angle,
         animState: anim ? anim.state : null,
         frame: anim ? anim.frame : null,
         lastFrame: engine.zombieSpriteAnimator.getFrameCount(c.spriteKey, ZombieAnimState.Dead) - 1,
@@ -547,6 +548,8 @@ const engineControls: E2eEngineControls = {
         maxFadeTimer: GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS,
         showBlood: false,
         carrierId: null,
+        angle: 0,
+        spin: 0,
       });
       engine.zombieSpriteAnimator.setState(id, ZombieAnimState.Dead);
     }
