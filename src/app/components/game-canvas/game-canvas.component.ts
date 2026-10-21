@@ -15,7 +15,7 @@ import {
   computed,
   isDevMode,
 } from '@angular/core';
-import { CharacterClass, CharacterState, MagnetPullRequest, SKILLS, SkillDefinition, SkillType, VfxEvent, ZombieEffectRequest, getSkillTree } from '@shared/index';
+import { CharacterClass, CharacterState, MagnetPullRequest, RemotePlayerAttack, SKILLS, SkillDefinition, SkillType, VfxEvent, ZombieEffectRequest, getSkillTree } from '@shared/index';
 import { BoulderState, CagePuzzleState, DropType, LooseProp, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
 import { GameAction, KeyBindings } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
@@ -258,7 +258,7 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: RemotePlayerAttack[]; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     return this.engine?.getStateSnapshot() ?? null;
   }
 
@@ -316,6 +316,10 @@ export class GameCanvasComponent implements OnDestroy {
 
   applyIncomingZombieDamage(damage: number, knockbackDir: number, isPoisonAttack: boolean): void {
     this.engine?.applyIncomingZombieDamage(damage, knockbackDir, isPoisonAttack);
+  }
+
+  applyBarrelBlast(damage: number, knockbackDir: number): void {
+    this.engine?.applyBarrelBlast(damage, knockbackDir);
   }
 
   setRemotePlayers(players: CharacterState[]): void {

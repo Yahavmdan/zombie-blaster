@@ -1,11 +1,12 @@
 import { CharacterState, Direction, GAME_CONSTANTS } from '@shared/index';
-import { LooseProp, ZombieState, ZombieType } from '@shared/game-entities';
+import { LooseProp, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import { Point } from './boulder-puzzle';
 
 /**
  * Exploding barrel rules, free of engine state so the host system, the renderer and the tests use
  * the same math. An attack on a barrel lights its fuse; BARREL_FUSE_TICKS later it blows up,
- * hurting every zombie near it and setting off the barrels next to it (a chain reaction).
+ * hurting every zombie and player near it, throwing the corpses lying there and setting off the
+ * barrels next to it (a chain reaction).
  */
 
 /**
@@ -73,6 +74,49 @@ export function blastZombies<
     (z: T): boolean =>
       !z.isDead && inBlast(center, z.x + z.instanceWidth / 2, z.y + z.instanceHeight / 2),
   );
+}
+
+/** Standing (not down, not dead) players whose center is within the blast, whoever lit it. */
+export function blastPlayers<T extends Pick<CharacterState, 'x' | 'y' | 'isDead' | 'isDown'>>(
+  players: T[],
+  center: Point,
+): T[] {
+  return players.filter(
+    (p: T): boolean =>
+      !p.isDead &&
+      !p.isDown &&
+      inBlast(
+        center,
+        p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+        p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+      ),
+  );
+}
+
+/** What the blast takes off a player: a share of their max HP, at least 1. */
+export function blastPlayerDamage(maxHp: number): number {
+  return Math.max(1, Math.ceil((maxHp * GAME_CONSTANTS.BARREL_BLAST_PLAYER_DAMAGE_PERCENT) / 100));
+}
+
+/** The side (-1 or 1) the blast throws something whose center is at `x`: away from the barrel. */
+export function blastPushDir(center: Point, x: number): number {
+  return Math.sign(x - center.x) || 1;
+}
+
+/** Lying corpses (not carried) whose center is within the blast. */
+export function blastCorpses(corpses: ZombieCorpse[], center: Point): ZombieCorpse[] {
+  return corpses.filter(
+    (c: ZombieCorpse): boolean =>
+      c.carrierId === null && inBlast(center, c.x + c.width / 2, c.y + c.height / 2),
+  );
+}
+
+/** Throws a corpse up and away from the barrel; it falls and lands by normal corpse physics. */
+export function flingCorpse(corpse: ZombieCorpse, center: Point): void {
+  corpse.velocityX =
+    blastPushDir(center, corpse.x + corpse.width / 2) * GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X;
+  corpse.velocityY = GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_Y;
+  corpse.isGrounded = false;
 }
 
 /** Other barrels whose center is within the blast: they go up next. */

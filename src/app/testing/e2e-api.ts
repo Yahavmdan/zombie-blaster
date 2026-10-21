@@ -472,6 +472,8 @@ export interface E2eEngineControls {
   spawnRolledZombies(count: number): void;
   /** Solo/host setup only: a walker (or a floor-rolled type) standing on the ground at x. */
   spawnZombieAt(x: number): void;
+  /** Solo/host setup only: every zombie leaves the floor at once (no corpses, no loot); spawning goes on. */
+  clearZombies(): void;
 }
 
 export interface ZbE2eApi {

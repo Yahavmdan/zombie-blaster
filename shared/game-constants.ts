@@ -348,6 +348,11 @@ export const GAME_CONSTANTS = {
   BARREL_BLAST_BOSS_DAMAGE_PERCENT: 10, // ...and only this share of a boss's (a few barrels don't kill one)
   BARREL_BLAST_KNOCKBACK: 9, // Sideways speed (px/tick) the blast throws a caught zombie away from the barrel
   BARREL_BLAST_KNOCKBACK_UP: -6, // Upward speed of a caught zombie (negative = up)
+  BARREL_BLAST_PLAYER_DAMAGE_PERCENT: 25, // Players are caught too (center within the radius, whoever lit it): the blast takes this share of their max HP
+  BARREL_BLAST_PLAYER_KNOCKBACK: 10, // Sideways speed a caught player is thrown away from the barrel (a zombie hit throws 6)
+  BARREL_BLAST_PLAYER_KNOCKBACK_UP: -7, // Upward speed of a caught player (negative = up)
+  BARREL_BLAST_CORPSE_SPEED_X: 8, // Lying corpses in the blast fly away from the barrel this fast sideways (~100 px: they slow by 8% a tick)...
+  BARREL_BLAST_CORPSE_SPEED_Y: -7, // ...and this fast upward (negative = up)
   BARREL_CHAIN_FUSE_TICKS: 12, // A barrel caught in another's blast blows up this soon (a chain reaction)
   BARREL_RESPAWN_TICKS: 500, // A blown-up barrel comes back on its spawn spot this long after the blast (10 s), once no player or prop is in the way
   BARREL_COUNT_MIN: 5, // Barrels the level generator puts on every floor: at least this many...
