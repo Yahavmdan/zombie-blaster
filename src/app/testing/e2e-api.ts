@@ -235,7 +235,7 @@ export interface E2eLevelView {
   ropes: Array<{ x: number; topY: number; bottomY: number }>;
   /**
    * Solid props (stand on top, step over low ones, blocked by taller ones); their boxes are their
-   * visible art. Pickable ones (barrels, boxes) are where they are now, with their game-state id.
+   * visible art. Pickable ones (barrels, boxes, rails) are where they are now, with their game-state id.
    */
   props: Array<{
     id: string | null;
@@ -251,6 +251,10 @@ export interface E2eLevelView {
     fuseTicks: number;
     /** A barrel that blew up: gone from the world (and from collision) for the rest of the floor. */
     exploded: boolean;
+    /** Tilt in radians (clockwise): turning while thrown, rolling or tipping off an edge, 0 at rest. */
+    angle: number;
+    /** Lying upright and still on something: solid, stood on, its art exactly its box. */
+    resting: boolean;
   }>;
   /** The floor's safe spot (also listed in `platforms`); its ladder is in `ropes`. */
   safeSpot: { x: number; y: number; width: number } | null;
@@ -457,10 +461,12 @@ export interface E2eEngineControls {
   /** Solo/host setup only: drops N corpses from above x; they fall and pile up by the normal corpse physics. */
   dropCorpses(centerX: number, count: number): void;
   /**
-   * Solo/host setup only: takes every pickable prop (barrels, boxes) overlapping these x, at any
+   * Solo/host setup only: takes every pickable prop (barrels, boxes, rails) overlapping these x, at any
    * height, off the floor for good (synced to guests), so carrying there finds only corpses.
    */
   clearPickables(from: number, to: number): void;
+  /** Solo/host setup only: puts a pickable prop (by id) upright at x, y; it falls by the normal prop physics. */
+  dropProp(id: string, x: number, y: number): void;
   /** Solo/host only: the sky strikes on the next tick (the normal scheduler path, event included). */
   strikeLightningNow(): void;
   /** Puts a drop (`gold`, `hp-potion`, `mp-potion`, or `special` with a SpecialDropType) in the local world at x, y. */

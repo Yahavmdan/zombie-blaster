@@ -147,12 +147,20 @@ function stackStepOf(item: Carriable): number {
   return isCorpse(item) ? GAME_CONSTANTS.CORPSE_CARRY_STACK_STEP : item.height;
 }
 
+/**
+ * From the player's center to the item's: a long prop (a rail) is grabbed anywhere along it, so
+ * sideways the reach counts from half a player width inside its nearer end. Corpses and props
+ * narrower than a player count from their center.
+ */
 function distanceTo(player: Pick<CharacterState, 'x' | 'y'>, item: Carriable): number {
   const px: number = player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
   const py: number = player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
   const cx: number = item.x + item.width / 2;
   const cy: number = item.y + item.height / 2;
-  return Math.hypot(cx - px, cy - py);
+  const along: number = isCorpse(item)
+    ? 0
+    : Math.max(0, item.width / 2 - GAME_CONSTANTS.PLAYER_WIDTH / 2);
+  return Math.hypot(Math.max(0, Math.abs(cx - px) - along), cy - py);
 }
 
 /** The nearest lying corpse or prop within reach that nobody carries, or null. */
@@ -187,6 +195,11 @@ export function holdOverhead(
   item.velocityX = 0;
   item.velocityY = 0;
   item.isGrounded = false;
+  if (!isCorpse(item)) {
+    // Overhead a prop rides upright.
+    item.angle = 0;
+    item.spin = 0;
+  }
   return restY + stackStepOf(item);
 }
 
@@ -197,6 +210,8 @@ export function toss(item: Carriable, carrier: CarrierView, restY: number = 0): 
   item.velocityX = dir * GAME_CONSTANTS.CORPSE_THROW_SPEED_X + carrier.velocityX / 2;
   item.velocityY = GAME_CONSTANTS.CORPSE_THROW_SPEED_Y;
   item.carrierId = null;
+  // A thrown prop tumbles the way it flies.
+  if (!isCorpse(item)) item.spin = dir * GAME_CONSTANTS.PROP_THROW_SPIN;
   return next;
 }
 

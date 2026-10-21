@@ -134,11 +134,20 @@ export class GameProbe {
     );
   }
 
-  /** Setup only (solo/host): takes every barrel and box overlapping these x off the floor for good. */
+  /** Setup only (solo/host): takes every barrel, box and rail overlapping these x off the floor for good. */
   async clearPickables(from: number, to: number): Promise<void> {
     await this.page.evaluate(
       (args: [number, number]): void => window.__zbE2e?.engine?.clearPickables(args[0], args[1]),
       [from, to] as [number, number],
+    );
+  }
+
+  /** Setup only (solo/host): puts a pickable prop upright at x, y; it falls by the normal prop physics. */
+  async dropProp(id: string, x: number, y: number): Promise<void> {
+    await this.page.evaluate(
+      (args: [string, number, number]): void =>
+        window.__zbE2e?.engine?.dropProp(args[0], args[1], args[2]),
+      [id, x, y] as [string, number, number],
     );
   }
 

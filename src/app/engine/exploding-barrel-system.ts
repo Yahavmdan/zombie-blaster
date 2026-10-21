@@ -15,11 +15,13 @@ import {
   blastFalloff,
   blastPlayerDamage,
   blastPlayers,
+  blastProps,
   blastPushDir,
   blastZombies,
   chainFuse,
   flingCorpse,
   lightFuse,
+  propFling,
   tickFuse,
 } from './exploding-barrel';
 
@@ -118,6 +120,11 @@ export class ExplodingBarrelSystem {
     for (const z of blastZombies(this.e.zombies, center)) this.hurt(z, center, playerId);
     // After the zombies: the bodies of those the blast just killed fly off with the rest.
     for (const c of blastCorpses(this.e.zombieCorpses, center)) flingCorpse(c, center);
+    // Props in reach (barrels going up next included) fly off tumbling.
+    for (const p of blastProps(this.e.looseProps, center)) {
+      const fling: { vx: number; vy: number; spin: number } = propFling(p, center);
+      this.props.launch(p, fling.vx, fling.vy, fling.spin);
+    }
     this.hurtPlayers(center);
   }
 

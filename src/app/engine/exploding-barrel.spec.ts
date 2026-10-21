@@ -45,6 +45,8 @@ function barrel(x: number, overrides: Partial<LooseProp> = {}): LooseProp {
     weightKg: PROP_WEIGHT_KG.barrel,
     fuseTicks: 0,
     exploded: false,
+    angle: 0,
+    spin: 0,
     ...overrides,
   };
 }

@@ -12,6 +12,8 @@ import {
 import { WORLD } from '../../support/invariants';
 import { layoutWhere } from '../../support/navigation';
 import {
+  barrelWithOpenSkyBeside,
+  CORPSE_DROP_DX,
   dropLyingCorpses,
   findProp,
   isBarrel,
@@ -128,10 +130,10 @@ test.describe('exploding barrels in co-op', { tag: '@online' }, (): void => {
 
     const s0: E2eSnapshot = await layoutWhere(
       host,
-      'a lone barrel on open ground',
-      (s: E2eSnapshot): boolean => pickableOnGround(s, isBarrel) !== undefined,
+      'a lone barrel on open ground, open sky beside it',
+      (s: E2eSnapshot): boolean => barrelWithOpenSkyBeside(s) !== undefined,
     );
-    const barrel: LevelProp = pickableOnGround(s0, isBarrel)!;
+    const barrel: LevelProp = barrelWithOpenSkyBeside(s0)!;
     const id: string = barrel.id!;
     await guest.probe.waitFor(
       "the guest follows the host's layout",
@@ -145,7 +147,7 @@ test.describe('exploding barrels in co-op', { tag: '@online' }, (): void => {
     const corpses: E2eCorpseView[] = await dropLyingCorpses(
       host,
       [guest],
-      propCenterX(barrel) + 60,
+      propCenterX(barrel) + CORPSE_DROP_DX,
       2,
     );
 

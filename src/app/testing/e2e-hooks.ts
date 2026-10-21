@@ -7,6 +7,7 @@ import { buttonBox, scaleBox } from '../engine/spring-puzzle';
 import { measureLevelGeometry } from './geometry-report';
 import { BoulderPath, boulderBox, boulderPath, gateBox } from '../engine/boulder-puzzle';
 import { pickableProps, Prop } from '../engine/level-generator';
+import { isResting } from '../engine/prop-tumble';
 import { CorpseSurface, corpseSurface } from '../engine/corpse-surface';
 import { CorpseDrape, maxDrop } from '../engine/corpse-drape';
 import { magnetPullProgress } from '../engine/magnet-pull';
@@ -222,6 +223,8 @@ function propViews(engine: GameEngine): E2eLevelView['props'] {
       fuseTicks: loose?.fuseTicks ?? 0,
       // Every pickable prop stays in the game state for the floor unless it blew up.
       exploded: id !== undefined && loose === undefined,
+      angle: loose?.angle ?? 0,
+      resting: loose ? isResting(loose) : true,
     };
   });
 }
@@ -556,6 +559,9 @@ const engineControls: E2eEngineControls = {
         .filter((p: LooseProp): boolean => p.x < to && p.x + p.width > from)
         .map((p: LooseProp): string => p.id),
     );
+  },
+  dropProp(id: string, x: number, y: number): void {
+    currentEngine?.dropLooseProp(id, x, y);
   },
   setLayoutSeed(seed: number): void {
     const engine: GameEngine | null = currentEngine;

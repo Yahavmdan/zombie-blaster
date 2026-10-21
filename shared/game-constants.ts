@@ -356,6 +356,23 @@ export const GAME_CONSTANTS = {
   CORPSE_THROW_SPEED_X: 4, // Sideways speed of a dropped corpse, in the carrier's facing direction
   CORPSE_THROW_SPEED_Y: -3, // Upward toss of a dropped corpse (negative = up)
   PROP_STEP_UP_PX: 26, // A prop this low (or lower) is stepped onto when walked into; taller stacks still block
+  // Loose prop tumbling (barrels, boxes, rails): they turn in the air, roll or slide on landing,
+  // tip off an edge their middle hangs over, and settle back upright (only upright ones are solid).
+  PROP_THROW_SPIN: 0.22, // A thrown prop turns this fast (radians/tick) the way it flies
+  PROP_BLAST_SPIN: 0.4, // A prop thrown by a barrel blast turns this fast
+  PROP_BLAST_SPEED_X: 7, // A blast throws lying props in reach away this fast sideways...
+  PROP_BLAST_SPEED_Y: -6, // ...and this fast upward (negative = up)
+  PROP_AIR_DRAG: 0.98, // Sideways speed kept per tick by a flying prop
+  PROP_AIR_SPIN_DRAG: 0.995, // Turning speed kept per tick in the air
+  PROP_BOUNCE: 0.3, // A prop landing faster than PROP_BOUNCE_MIN_SPEED bounces back up with this share of its fall speed
+  PROP_BOUNCE_MIN_SPEED: 5, // Fall speed (px/tick) below which a landing prop stays down
+  PROP_LAND_KEEP_SPEED: 0.7, // Share of its sideways speed a landing prop keeps (barrels roll, others slide)
+  PROP_ROLL_FRICTION: 0.97, // Sideways speed a rolling barrel keeps per tick
+  PROP_SLIDE_FRICTION: 0.8, // Sideways speed a sliding box or rail keeps per tick
+  PROP_SETTLE_SPIN: 0.12, // A prop at rest on its side turns back upright this fast (radians/tick)
+  PROP_TIP_ACCEL: 0.012, // A prop whose middle hangs over an edge tips off it, turning faster by this much per tick
+  PROP_TIP_SLIDE: 0.6, // ...and slides off this far per tick (px) while it tips
+  PROP_TIP_RELEASE_ANGLE: 1.2, // Tipped this far (radians) it falls off the edge
   BARREL_FUSE_TICKS: 150, // A barrel hit by an attack burns its fuse this long (3 s), then blows up
   BARREL_HIT_REACH_PX: 24, // Max gap between an attacking player's box and a barrel for the swing to light it
   BARREL_BLAST_RADIUS_PX: 110, // Zombies (and other barrels) whose center is this close to the barrel's center are caught in the blast
@@ -374,7 +391,12 @@ export const GAME_CONSTANTS = {
   BARREL_RESPAWN_TICKS: 2250, // A blown-up barrel comes back on its spawn spot this long after the blast (45 s), once no player or prop is in the way
   BARREL_COUNT_MIN: 5, // Barrels the level generator puts on every floor: at least this many...
   BARREL_COUNT_MAX: 10, // ...and at most this many
-  BARREL_OTHER_PROPS_MIN: 4, // Other props (boxes, lockers, rails) per floor besides the barrels: at least this many...
+  BARREL_SPACING_PX: 64, // The generator keeps barrels this far apart (center to center) so they spread over the floor; only a crowded floor puts the last of its minimum closer
+  RAIL_COUNT_MIN: 1, // Rails (fences, carried and thrown like barrels and boxes) the level generator puts on every floor: at least this many...
+  RAIL_COUNT_MAX: 5, // ...and at most this many
+  RAIL_MIN_WIDTH_PX: 100, // A rail is a random width from this...
+  RAIL_MAX_WIDTH_PX: 200, // ...to this (its last middle piece is cut where the right cap starts)
+  BARREL_OTHER_PROPS_MIN: 4, // Other props (boxes, lockers) per floor besides the barrels and rails: at least this many...
   BARREL_OTHER_PROPS_MAX: 8, // ...and at most this many
   BARREL_BLAST_FX_TICKS: 45, // The blast's fireball, shockwave and glow play out over this long
   BARREL_SCORCH_TICKS: 400, // The scorch mark a blast leaves on the surface under it fades over this long (8 s)
@@ -860,7 +882,7 @@ export const PROP_WEIGHT_KG: Record<PropMaterial, number> = {
   barrel: 45, // a full steel drum
   box: 20, // a wooden crate
   locker: 90, // steel, too heavy to lift (lockers stay put)
-  rail: 35, // a fence (stays put)
+  rail: 35, // a fence section (players carry and throw it)
 };
 
 /** True while a zombie telegraphs a melee swing (before its attack animation starts). */

@@ -299,7 +299,7 @@ export interface IGameEngine {
   remotePlayers: CharacterState[];
   zombies: ZombieState[];
   zombieCorpses: ZombieCorpse[];
-  /** The floor's pickable props (barrels, boxes): lying ones are solid platforms (`Platform.propId`). */
+  /** The floor's pickable props (barrels, boxes, rails): lying ones are solid platforms (`Platform.propId`). */
   looseProps: LooseProp[];
   /** How each carried corpse sways on its carrier this tick (drawing only). */
   readonly carryPoses: Map<string, CarryPose>;

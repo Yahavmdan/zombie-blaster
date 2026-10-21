@@ -34,6 +34,7 @@ import { ZombieAnimState, ZombieSpriteAnchor, zombieSpriteSize } from './zombie-
 import { LooseProp, MagnetPull, ZombieCorpse } from '@shared/game-entities';
 import { magnetPullProgress } from './magnet-pull';
 import { fuseSeconds } from './exploding-barrel';
+import { turnAroundCenter } from './prop-tumble';
 import {
   Carriable,
   CarryPose,
@@ -1144,6 +1145,9 @@ export class RenderSystem {
     const blinkTicks: number = p.fuseTicks > 100 ? 12 : p.fuseTicks > 50 ? 7 : 3;
     const cx: number = p.x + p.width / 2;
     ctx.save();
+    // The flash and the spark turn with a tumbling barrel; the countdown stays upright.
+    ctx.save();
+    turnAroundCenter(ctx, p);
     if (Math.floor(p.fuseTicks / blinkTicks) % 2 === 0) {
       ctx.globalAlpha = 0.55;
       ctx.fillStyle = '#ffe9b0';
@@ -1159,6 +1163,7 @@ export class RenderSystem {
     ctx.beginPath();
     ctx.arc(cx, p.y - 2, 1.5 + flicker, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
     ctx.textAlign = 'center';
     ctx.font = pixelFont(18, 700);
     // Above the "[E] Carry" prompt, which sits right over the barrel.

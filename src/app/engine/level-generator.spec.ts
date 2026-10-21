@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { GAME_CONSTANTS } from '@shared/index';
 import {
   exitPlatformY,
@@ -15,13 +15,14 @@ import {
   propArtHeight,
   propArtWidth,
   RAIL_ART,
-  RAIL_MAX_MIDDLES,
-  railWidth,
 } from './level-generator';
 import { pushOutOfSolids, stepUpOnto } from './solid-blocks';
 import { chuteSpan } from './boulder-puzzle';
 import { BoulderPuzzleLayout, CagePuzzleLayout, HangingCage, Platform, PlatePuzzleLayout, Rope, SpringPuzzleLayout } from './engine-types';
 import { springSpan } from './spring-puzzle';
+
+// Most tests here sweep thousands of seeded layouts: more than the default 5 s on a busy machine.
+vi.setConfig({ testTimeout: 20_000 });
 
 describe('level generator', () => {
   it('every generated floor obeys the layout rules (tiles, exit clearance, reachability)', (): void => {
@@ -154,25 +155,24 @@ describe('map props', () => {
     }
   });
 
-  it('rails are a left cap, 0..max middle pieces and a right cap, in random lengths and places', (): void => {
-    const widths: Set<number> = new Set<number>();
+  it('rails are 100 to 200 px wide, in random widths and places', (): void => {
+    const widths: number[] = [];
     const xs: Set<number> = new Set<number>();
-    const allowed: number[] = Array.from(
-      { length: RAIL_MAX_MIDDLES + 1 },
-      (_: unknown, middles: number): number => railWidth(middles),
-    );
     for (let seed: number = 1; seed <= 200; seed++) {
       const rails: Prop[] = generateLevel(seed, 1).props.filter(
         (p: Prop): boolean => p.kind === 'rail',
       );
       for (const rail of rails) {
-        expect(allowed).toContain(rail.width);
+        expect(rail.width).toBeGreaterThanOrEqual(GAME_CONSTANTS.RAIL_MIN_WIDTH_PX);
+        expect(rail.width).toBeLessThanOrEqual(GAME_CONSTANTS.RAIL_MAX_WIDTH_PX);
         expect(rail.height).toBe(propArtHeight(RAIL_ART.middle));
-        widths.add(rail.width);
+        widths.push(rail.width);
         xs.add(rail.x);
       }
     }
-    expect(widths.size).toBeGreaterThanOrEqual(4);
+    expect(new Set<number>(widths).size).toBeGreaterThan(60);
+    expect(Math.min(...widths)).toBeLessThan(130);
+    expect(Math.max(...widths)).toBeGreaterThan(180);
     expect(xs.size).toBeGreaterThan(20);
   });
 
@@ -206,12 +206,69 @@ describe('map props', () => {
     expect(counts.size).toBeGreaterThanOrEqual(4);
   });
 
-  it('barrels and boxes can be picked up; rails and lockers stay put', (): void => {
-    const pickableKinds: Prop['kind'][] = ['barrel1', 'barrel2', 'barrel3', 'box1', 'box2', 'box3'];
+  it('every floor has 1 to 5 rails, and the count varies', (): void => {
+    const counts: Set<number> = new Set<number>();
+    const wrong: string[] = [];
+    for (let seed: number = 1; seed <= 200; seed++) {
+      for (let floor: number = 1; floor <= 10; floor++) {
+        const n: number = generateLevel(seed, floor).props.filter(
+          (p: Prop): boolean => p.kind === 'rail',
+        ).length;
+        counts.add(n);
+        if (n < GAME_CONSTANTS.RAIL_COUNT_MIN || n > GAME_CONSTANTS.RAIL_COUNT_MAX) {
+          wrong.push(`seed ${seed} floor ${floor}: ${n} rails`);
+        }
+      }
+    }
+    expect(wrong.slice(0, 10)).toEqual([]);
+    // Rails are long, so a floor seldom has room for all 5: at least 1 to 4 show up.
+    expect(counts.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it('barrels spread over the floor: most are BARREL_SPACING_PX apart, far more than they used to be', (): void => {
+    const nearest: number[] = [];
+    for (let seed: number = 1; seed <= 200; seed++) {
+      for (let floor: number = 1; floor <= 6; floor++) {
+        const barrels: Prop[] = generateLevel(seed, floor).props.filter((p: Prop): boolean =>
+          isExplosive(p.kind),
+        );
+        for (const b of barrels) {
+          const others: number[] = barrels
+            .filter((q: Prop): boolean => q !== b)
+            .map((q: Prop): number =>
+              Math.hypot(
+                q.x + q.width / 2 - (b.x + b.width / 2),
+                q.y + q.height / 2 - (b.y + b.height / 2),
+              ),
+            );
+          nearest.push(Math.min(...others));
+        }
+      }
+    }
+    const spaced: number = nearest.filter(
+      (d: number): boolean => d >= GAME_CONSTANTS.BARREL_SPACING_PX,
+    ).length;
+    // Only a crowded floor's last barrels of its minimum go closer.
+    expect(spaced / nearest.length).toBeGreaterThan(0.8);
+    // Placed at the first open spot they averaged ~89 px from the nearest one, and blasts chained in clumps.
+    const mean: number = nearest.reduce((a: number, d: number): number => a + d, 0) / nearest.length;
+    expect(mean).toBeGreaterThan(130);
+  });
+
+  it('barrels, boxes and rails can be picked up; lockers stay put', (): void => {
+    const pickableKinds: Prop['kind'][] = [
+      'barrel1',
+      'barrel2',
+      'barrel3',
+      'box1',
+      'box2',
+      'box3',
+      'rail',
+    ];
     for (const kind of pickableKinds) {
       expect(isPickable({ kind, x: 0, y: 0, width: 1, height: 1 }), kind).toBe(true);
     }
-    const fixedKinds: Prop['kind'][] = ['rail', 'locker1', 'locker2'];
+    const fixedKinds: Prop['kind'][] = ['locker1', 'locker2'];
     for (const kind of fixedKinds) {
       expect(isPickable({ kind, x: 0, y: 0, width: 1, height: 1 }), kind).toBe(false);
     }

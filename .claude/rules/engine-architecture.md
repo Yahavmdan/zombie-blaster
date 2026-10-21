@@ -44,7 +44,8 @@ The engine is split into focused files under `src/app/engine/`.
 | `corpse-surface.ts` | Walkable surface of a corpse (the same for every corpse, the exit pile included) |
 | `safe-spot.ts` | `restsOnSafeSpot`: who rests on the floor's safe spot (zombies can't target/hit/land; no attacking from it) |
 | `solid-blocks.ts` | Side collision with solid props (players and zombies); `stepUpOnto`: players step onto props up to `PROP_STEP_UP_PX` tall |
-| `loose-prop-system.ts` | Pickable props (barrels, boxes): host flies/drops/lands them, every client turns lying ones into solid platforms (`Platform.propId`); game-sync sends only props away from their spawn spot |
+| `loose-prop-system.ts` | Pickable props (barrels, boxes, rails): host flies/drops/lands/bounces them, rolls barrels and slides the rest on landing, tips ones whose middle hangs past an edge (`launch` for blasts); every client turns resting ones (`isResting`: grounded, upright, still) into solid platforms (`Platform.propId`); game-sync sends only props away from their spawn spot or not resting |
+| `prop-tumble.ts` | Prop tumbling rules (pure): `LooseProp.angle`/`spin` around the box center, turned extents (barrels round), support span + tip side, tipping around the edge (`startTip`/`tickTip`, host-only `Tip`), settling upright, `turnAroundCenter` for drawing. At rest the angle is 0, so art == box |
 | `worker-interval.ts` | `WorkerInterval`: a timer that keeps its pace in background tabs (online engine ticks while hidden, game-sync send loop) |
 | `sprite-effect-system.ts` | Sprite-sheet effects (`EFFECT_CONFIGS`), standalone |
 | `skill-animations.ts` | `SKILL_ANIMATIONS` particle definitions per skill |
@@ -59,12 +60,16 @@ The engine is split into focused files under `src/app/engine/`.
   Platforms are whole tiles (`LEVEL_TILE_PX`) wide and one tile tall, so art == collision box.
 - Props (barrels, boxes, lockers, rails) are placed by the generator and are solid (`Platform.solid`):
   stand on top; players walking into one up to `PROP_STEP_UP_PX` (26) tall step onto it, taller
-  stacks and puzzle solids block (`solid-blocks.ts`, zombies hop over). Barrels and boxes are
+  stacks and puzzle solids block (`solid-blocks.ts`, zombies hop over). Barrels, boxes and rails are
   pickable (`isPickable`): carried and thrown like corpses, state `LooseProp` (id
   `prop-<floor>-<index>`), drawn per frame (`MapRenderer.drawLooseProp`, not in the geometry layer)
-  and measured where they lie in the geometry report. Rails and lockers stay put. A prop's box is its
+  and measured where they lie in the geometry report. A prop wider than a player (a long rail) is
+  grabbed anywhere along it (`corpse-carry.ts` reach). Lockers stay put. Every floor gets
+  `BARREL_COUNT_MIN..MAX` barrels placed first, `BARREL_SPACING_PX` apart (a crowded floor puts the
+  rest of its minimum closer, then under a ledge), then `RAIL_COUNT_MIN..MAX` rails, then boxes and
+  lockers; barrels and rails may lie under a ledge (carriable), other props need headroom. A prop's box is its
   image's measured visible pixels (`PROP_ART`); the renderer offsets the image so the art lands on the
-  box. Rails are one prop of random length: left cap + 0..`RAIL_MAX_MIDDLES` middles + right cap
+  box. Rails are one prop of random width `RAIL_MIN_WIDTH_PX..RAIL_MAX_WIDTH_PX`: left cap + middles (the last cut short) + right cap
   (`RAIL_ART`, drawn piece by piece). New prop art: measure its opaque bounds and add it to `PROP_ART`.
 - Any change to level art, tiles, layouts or collision must pass `e2e/specs/solo/level-geometry.spec.ts`
   and `e2e/specs/online/level-sync.spec.ts`. They measure the drawn pixels against the collision

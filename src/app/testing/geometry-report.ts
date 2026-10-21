@@ -3,6 +3,7 @@ import { Platform, Rope } from '../engine/engine-types';
 import { GameEngine } from '../engine/game-engine';
 import { EXIT_CAGE } from '../engine/cage-puzzle';
 import { Prop } from '../engine/level-generator';
+import { isResting } from '../engine/prop-tumble';
 import { LooseProp } from '@shared/game-entities';
 import { E2eGeometryCheck, E2eGeometryReport } from './e2e-api';
 
@@ -62,7 +63,7 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
   // Pickable props are drawn per frame too (they get carried and thrown): the lying ones are
   // measured where their collision is.
   const lyingProps: LooseProp[] = engine.looseProps.filter(
-    (p: LooseProp): boolean => p.isGrounded && p.carrierId === null,
+    (p: LooseProp): boolean => isResting(p),
   );
   for (const p of lyingProps) renderer.drawLooseProp(frame, p);
   const inFrame: Alpha = alphaOf(frame, w, h);

@@ -5,6 +5,7 @@ import { Prop, PROP_ART, PropArt, propArtWidth, RAIL_ART } from './level-generat
 import { LightningStrike } from './storm';
 import { StormSky } from './storm-sky';
 import { drawCageArt, drawSpringBlock } from './puzzle-art';
+import { turnAroundCenter } from './prop-tumble';
 
 interface TileBlock {
   tl: number;
@@ -319,10 +320,18 @@ export class MapRenderer {
     this.looseArt = art;
   }
 
-  /** A pickable prop where it is now (an id from another floor draws nothing). */
+  /** A pickable prop where it is now, turned by its tilt (an id from another floor draws nothing). */
   drawLooseProp(ctx: CanvasRenderingContext2D, prop: LooseProp): void {
     const art: Prop | undefined = this.looseArt.get(prop.id);
-    if (art) this.drawProp(ctx, { ...art, x: prop.x, y: prop.y });
+    if (!art) return;
+    if (prop.angle === 0) {
+      this.drawProp(ctx, { ...art, x: prop.x, y: prop.y });
+      return;
+    }
+    ctx.save();
+    turnAroundCenter(ctx, prop);
+    this.drawProp(ctx, { ...art, x: prop.x, y: prop.y });
+    ctx.restore();
   }
 
   /** A prop image placed so its visible art covers exactly the prop's collision box. */
@@ -331,7 +340,8 @@ export class MapRenderer {
       this.drawPropPiece(ctx, PROP_ART[prop.kind], prop.x, prop.y);
       return;
     }
-    // Rail: left cap, middle pieces edge to edge, right cap flush with the box's right side.
+    // Rail: left cap, middle pieces edge to edge (the last one cut where the right cap starts),
+    // right cap flush with the box's right side.
     const rightCapX: number = prop.x + prop.width - propArtWidth(RAIL_ART.right);
     this.drawPropPiece(ctx, RAIL_ART.left, prop.x, prop.y);
     const middleWidth: number = propArtWidth(RAIL_ART.middle);
@@ -340,15 +350,26 @@ export class MapRenderer {
       x < rightCapX;
       x += middleWidth
     ) {
-      this.drawPropPiece(ctx, RAIL_ART.middle, x, prop.y);
+      this.drawPropPiece(ctx, RAIL_ART.middle, x, prop.y, Math.min(middleWidth, rightCapX - x));
     }
     this.drawPropPiece(ctx, RAIL_ART.right, rightCapX, prop.y);
   }
 
-  /** One prop image with its visible art's top-left at x, y. */
-  private drawPropPiece(ctx: CanvasRenderingContext2D, art: PropArt, x: number, y: number): void {
+  /** One prop image with its visible art's top-left at x, y; only its first `width` art columns when given. */
+  private drawPropPiece(
+    ctx: CanvasRenderingContext2D,
+    art: PropArt,
+    x: number,
+    y: number,
+    width?: number,
+  ): void {
     const img: HTMLImageElement | undefined = this.propImages.get(art.src);
-    if (img) ctx.drawImage(img, x - art.left, y - art.top);
+    if (!img) return;
+    if (width === undefined) {
+      ctx.drawImage(img, x - art.left, y - art.top);
+      return;
+    }
+    ctx.drawImage(img, art.left, 0, width, img.height, x, y - art.top, width, img.height);
   }
 
   private measureOpaqueColumns(img: HTMLImageElement): { left: number; right: number } {
