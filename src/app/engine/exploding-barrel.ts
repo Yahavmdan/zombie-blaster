@@ -66,6 +66,20 @@ function inBlast(center: Point, x: number, y: number): boolean {
   return Math.hypot(x - center.x, y - center.y) <= GAME_CONSTANTS.BARREL_BLAST_RADIUS_PX;
 }
 
+/**
+ * Share (0..1) of its full damage the blast does to something whose center is at (x, y): all of it
+ * within BARREL_BLAST_CORE_RADIUS_PX, falling off squared to BARREL_BLAST_EDGE_DAMAGE_SCALE at the
+ * edge of the radius, so right beside the barrel is far worse than a bit away from it.
+ */
+export function blastFalloff(center: Point, x: number, y: number): number {
+  const core: number = GAME_CONSTANTS.BARREL_BLAST_CORE_RADIUS_PX;
+  const span: number = GAME_CONSTANTS.BARREL_BLAST_RADIUS_PX - core;
+  const distance: number = Math.hypot(x - center.x, y - center.y);
+  const t: number = Math.min(1, Math.max(0, (distance - core) / span));
+  const edge: number = GAME_CONSTANTS.BARREL_BLAST_EDGE_DAMAGE_SCALE;
+  return edge + (1 - edge) * (1 - t) * (1 - t);
+}
+
 /** Living zombies whose center is within the blast. */
 export function blastZombies<
   T extends Pick<ZombieState, 'x' | 'y' | 'instanceWidth' | 'instanceHeight' | 'isDead'>,
@@ -93,9 +107,10 @@ export function blastPlayers<T extends Pick<CharacterState, 'x' | 'y' | 'isDead'
   );
 }
 
-/** What the blast takes off a player: a share of their max HP, at least 1. */
-export function blastPlayerDamage(maxHp: number): number {
-  return Math.max(1, Math.ceil((maxHp * GAME_CONSTANTS.BARREL_BLAST_PLAYER_DAMAGE_PERCENT) / 100));
+/** What the blast takes off a player: a share of their max HP scaled by `falloff` (blastFalloff), at least 1. */
+export function blastPlayerDamage(maxHp: number, falloff: number): number {
+  const percent: number = GAME_CONSTANTS.BARREL_BLAST_PLAYER_DAMAGE_PERCENT * falloff;
+  return Math.max(1, Math.ceil((maxHp * percent) / 100));
 }
 
 /** The side (-1 or 1) the blast throws something whose center is at `x`: away from the barrel. */
@@ -127,11 +142,14 @@ export function blastBarrels(barrels: LooseProp[], center: Point): LooseProp[] {
   });
 }
 
-/** What the blast takes off a zombie: a share of its max HP (a small one for bosses), at least 1. */
-export function blastDamage(zombie: Pick<ZombieState, 'type' | 'maxHp'>): number {
+/**
+ * What the blast takes off a zombie: a share of its max HP (a small one for bosses) scaled by
+ * `falloff` (blastFalloff), at least 1.
+ */
+export function blastDamage(zombie: Pick<ZombieState, 'type' | 'maxHp'>, falloff: number): number {
   const isBoss: boolean = zombie.type === ZombieType.Boss || zombie.type === ZombieType.DragonBoss;
   const percent: number = isBoss
     ? GAME_CONSTANTS.BARREL_BLAST_BOSS_DAMAGE_PERCENT
     : GAME_CONSTANTS.BARREL_BLAST_DAMAGE_PERCENT;
-  return Math.max(1, Math.ceil((zombie.maxHp * percent) / 100));
+  return Math.max(1, Math.ceil((zombie.maxHp * percent * falloff) / 100));
 }
