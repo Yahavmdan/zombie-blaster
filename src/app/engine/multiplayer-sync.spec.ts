@@ -1666,16 +1666,16 @@ describe('Exploding barrels', (): void => {
     expect(blast.length).toBe(1);
     expect(blast[0].x).toBe(b.x + b.width / 2);
     expect(blast[0].playerId).toBe(engine.player.id);
-    expect(near.hp, '60% of its max HP').toBe(40);
+    expect(near.hp, 'a bit away from the barrel: 72% of its max HP, not all of it').toBe(28);
     expect(near.velocityX, 'thrown away from the barrel').toBeGreaterThan(0);
     expect(near.isGrounded).toBe(false);
     expect(far.hp, 'out of the blast').toBe(100);
-    // The player who lit it stood right beside it: 25% of 200 max HP, thrown back left.
-    expect(engine.player.hp).toBe(150);
+    // The player who lit it stood right beside it: the full 40% of 200 max HP, thrown back left.
+    expect(engine.player.hp).toBe(120);
     expect(engine.player.velocityX).toBe(-GAME_CONSTANTS.BARREL_BLAST_PLAYER_KNOCKBACK);
     expect(engine.player.velocityY).toBe(GAME_CONSTANTS.BARREL_BLAST_PLAYER_KNOCKBACK_UP);
     expect(engine.invincibilityFrames).toBe(GAME_CONSTANTS.INVINCIBILITY_FRAMES);
-    expect(queued(VfxEventType.DamageNumber).map((evt: VfxEvent): number => evt.value!)).toEqual([60, 50]);
+    expect(queued(VfxEventType.DamageNumber).map((evt: VfxEvent): number => evt.value!)).toEqual([72, 80]);
     expect(engine.particles.length).toBeGreaterThan(0);
     expect(engine.screenShakeFrames).toBeGreaterThan(0);
     expect(props.moved().find((p: LooseProp): boolean => p.id === id)?.exploded, 'synced as gone').toBe(true);
@@ -1725,7 +1725,8 @@ describe('Exploding barrels', (): void => {
     barrels.update();
 
     expect(engine.pendingRemoteAttacks).toEqual([
-      { targetPlayerId: 'near-guest', damage: 100, knockbackDir: 1, isPoisonAttack: false, isBlast: true },
+      // A bit away from the barrel: about 32% of 400 max HP, not the full 40%.
+      { targetPlayerId: 'near-guest', damage: 129, knockbackDir: 1, isPoisonAttack: false, isBlast: true },
     ]);
     expect(engine.player.hp, 'the host stood far away').toBe(200);
     expect(left.velocityX).toBe(-GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X);

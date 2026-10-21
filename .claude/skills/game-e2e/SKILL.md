@@ -258,8 +258,11 @@ Driving tips:
 - **Exploding barrels**: an attack on a lying barrel (beside it, facing it, within 24 px, level
   with it; any player, the host decides) lights its fuse: `level.props[].fuseTicks` counts 150
   ticks (3 s, "3-2-1" over it), then it blows up: `exploded: true`, gone from the world and
-  collision (`pickable: false`), zombies whose center is within 110 px lose 60% max HP (bosses
-  10%) and fly away, standing players in reach (whoever lit it) lose 25% max HP and are thrown
+  collision (`pickable: false`), zombies whose center is within 110 px lose up to 100% max HP
+  (bosses 15%) and fly away, standing players in reach (whoever lit it) lose up to 40% max HP
+  (damage falls off with distance: full within `BARREL_BLAST_CORE_RADIUS_PX` 40, squared down to
+  15% at the edge; a player stood right beside the barrel takes the full hit; spawn zombies under
+  50 ticks before the blast to pin their distance, they don't move while climbing out) and are thrown
   away harder than by a zombie (no parry; i-frames apply, so a chain hits once; a guest gets it as
   a game-sync `attacks` entry with `isBlast`), lying corpses in reach fly up and away (~100 px),
   barrels in reach go up 12 ticks later (chain). Testing the player hit: zombies swing at a

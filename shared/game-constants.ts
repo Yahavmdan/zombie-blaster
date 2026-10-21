@@ -347,17 +347,19 @@ export const GAME_CONSTANTS = {
   BARREL_FUSE_TICKS: 150, // A barrel hit by an attack burns its fuse this long (3 s), then blows up
   BARREL_HIT_REACH_PX: 24, // Max gap between an attacking player's box and a barrel for the swing to light it
   BARREL_BLAST_RADIUS_PX: 110, // Zombies (and other barrels) whose center is this close to the barrel's center are caught in the blast
-  BARREL_BLAST_DAMAGE_PERCENT: 60, // The blast takes this share of a caught zombie's max HP
-  BARREL_BLAST_BOSS_DAMAGE_PERCENT: 10, // ...and only this share of a boss's (a few barrels don't kill one)
+  BARREL_BLAST_DAMAGE_PERCENT: 100, // Point blank (within BARREL_BLAST_CORE_RADIUS_PX) the blast takes this share of a caught zombie's max HP, less further out
+  BARREL_BLAST_BOSS_DAMAGE_PERCENT: 15, // ...and only this share of a boss's point blank (a few barrels don't kill one)
+  BARREL_BLAST_CORE_RADIUS_PX: 40, // Anything whose center is this close to the barrel's center takes the full blast damage (a player right beside it does)
+  BARREL_BLAST_EDGE_DAMAGE_SCALE: 0.15, // At the edge of the radius the blast does only this share of its full damage; in between it falls off squared, so close is far worse than a bit away
   BARREL_BLAST_KNOCKBACK: 9, // Sideways speed (px/tick) the blast throws a caught zombie away from the barrel
   BARREL_BLAST_KNOCKBACK_UP: -6, // Upward speed of a caught zombie (negative = up)
-  BARREL_BLAST_PLAYER_DAMAGE_PERCENT: 25, // Players are caught too (center within the radius, whoever lit it): the blast takes this share of their max HP
+  BARREL_BLAST_PLAYER_DAMAGE_PERCENT: 40, // Players are caught too (center within the radius, whoever lit it): point blank the blast takes this share of their max HP, less further out
   BARREL_BLAST_PLAYER_KNOCKBACK: 10, // Sideways speed a caught player is thrown away from the barrel (a zombie hit throws 6)
   BARREL_BLAST_PLAYER_KNOCKBACK_UP: -7, // Upward speed of a caught player (negative = up)
   BARREL_BLAST_CORPSE_SPEED_X: 8, // Lying corpses in the blast fly away from the barrel this fast sideways (~100 px: they slow by 8% a tick)...
   BARREL_BLAST_CORPSE_SPEED_Y: -7, // ...and this fast upward (negative = up)
   BARREL_CHAIN_FUSE_TICKS: 12, // A barrel caught in another's blast blows up this soon (a chain reaction)
-  BARREL_RESPAWN_TICKS: 500, // A blown-up barrel comes back on its spawn spot this long after the blast (10 s), once no player or prop is in the way
+  BARREL_RESPAWN_TICKS: 2250, // A blown-up barrel comes back on its spawn spot this long after the blast (45 s), once no player or prop is in the way
   BARREL_COUNT_MIN: 5, // Barrels the level generator puts on every floor: at least this many...
   BARREL_COUNT_MAX: 10, // ...and at most this many
   BARREL_OTHER_PROPS_MIN: 4, // Other props (boxes, lockers, rails) per floor besides the barrels: at least this many...

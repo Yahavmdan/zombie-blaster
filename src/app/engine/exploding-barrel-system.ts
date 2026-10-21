@@ -12,6 +12,7 @@ import {
   blastCenter,
   blastCorpses,
   blastDamage,
+  blastFalloff,
   blastPlayerDamage,
   blastPlayers,
   blastPushDir,
@@ -125,7 +126,7 @@ export class ExplodingBarrelSystem {
     for (const p of blastPlayers(this.e.remotePlayers, center)) {
       this.e.pendingRemoteAttacks.push({
         targetPlayerId: p.id,
-        damage: blastPlayerDamage(p.derived.maxHp),
+        damage: blastPlayerDamage(p.derived.maxHp, this.playerFalloff(center, p)),
         knockbackDir: blastPushDir(center, p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2),
         isPoisonAttack: false,
         isBlast: true,
@@ -134,15 +135,23 @@ export class ExplodingBarrelSystem {
     const local: CharacterState | null = this.e.player;
     if (!local || blastPlayers([local], center).length === 0) return;
     this.e.applyBarrelBlast(
-      blastPlayerDamage(local.derived.maxHp),
+      blastPlayerDamage(local.derived.maxHp, this.playerFalloff(center, local)),
       blastPushDir(center, local.x + GAME_CONSTANTS.PLAYER_WIDTH / 2),
     );
   }
 
+  private playerFalloff(center: Point, p: CharacterState): number {
+    return blastFalloff(
+      center,
+      p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2,
+      p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2,
+    );
+  }
+
   private hurt(z: ZombieState, center: Point, playerId: string): void {
-    const damage: number = blastDamage(z);
-    z.hp -= damage;
     const cx: number = z.x + z.instanceWidth / 2;
+    const damage: number = blastDamage(z, blastFalloff(center, cx, z.y + z.instanceHeight / 2));
+    z.hp -= damage;
     // A zombie in a monster-magnet drag keeps flying to the caster.
     if (!z.magnetPull) {
       z.velocityX = blastPushDir(center, cx) * GAME_CONSTANTS.BARREL_BLAST_KNOCKBACK;

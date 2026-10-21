@@ -1,7 +1,13 @@
 import { TestInfo } from '@playwright/test';
 import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer, KEYS } from '../../support/game-player';
-import { E2eCorpseView, E2ePlayerView, E2eSnapshot, E2eVfxLogEntry } from '../../support/probe';
+import {
+  E2eCorpseView,
+  E2ePlayerView,
+  E2eSnapshot,
+  E2eVfxLogEntry,
+  E2eZombieView,
+} from '../../support/probe';
 import { drawnGeometry, expectArtMatchesCollision } from '../../support/level-geometry';
 import { layoutWhere } from '../../support/navigation';
 import {
@@ -17,8 +23,10 @@ import { typesOf, vfxQueuedBy } from '../../support/vfx-gate';
 
 /** Mirrors BARREL_FUSE_TICKS in shared/game-constants.ts: 3 s at 50 ticks/s. */
 const FUSE_TICKS: number = 150;
-/** Mirrors BARREL_BLAST_PLAYER_DAMAGE_PERCENT in shared/game-constants.ts. */
-const BLAST_PLAYER_PERCENT: number = 25;
+/** Mirrors BARREL_BLAST_PLAYER_DAMAGE_PERCENT in shared/game-constants.ts (point blank). */
+const BLAST_PLAYER_PERCENT: number = 40;
+/** Zombies spawned this many ticks before the blast are still climbing out (ZOMBIE_SPAWN_ANIM_TICKS 50): they stay put. */
+const SPAWN_BEFORE_BLAST_TICKS: number = 35;
 /** God mode goes off this many ticks before the blast (well under a zombie's ~1.8 s i-frames). */
 const MORTAL_TICKS: number = 25;
 
@@ -28,7 +36,7 @@ test.describe('exploding barrels', { tag: '@solo' }, (): void => {
   }: {
     solo: SoloFactory;
   }, testInfo: TestInfo): Promise<void> => {
-    test.setTimeout(90_000);
+    test.setTimeout(130_000);
     const p: GamePlayer = await solo('warrior');
     await p.probe.setGodMode(true);
     const s0: E2eSnapshot = await layoutWhere(
@@ -79,13 +87,13 @@ test.describe('exploding barrels', { tag: '@solo' }, (): void => {
     // Gone from the world: what is drawn is still exactly what is solid.
     expectArtMatchesCollision(await drawnGeometry(p, 'after the blast'), 'after the blast');
 
-    // 10 s later it is back where the floor first put it, unlit.
+    // 45 s later (BARREL_RESPAWN_TICKS) it is back where the floor first put it, unlit.
     const back: E2eSnapshot = await p.probe.waitFor(
       'the barrel is back on its spawn spot',
       (s: E2eSnapshot): boolean => findProp(s, id)?.exploded === false,
-      { timeoutMs: 20_000 },
+      { timeoutMs: 60_000 },
     );
-    expect(Date.now() - blewAt, 'about 10 s after the blast').toBeGreaterThan(8_000);
+    expect(Date.now() - blewAt, 'about 45 s after the blast').toBeGreaterThan(43_000);
     expect(findProp(back, id)).toMatchObject({
       x: barrel.x,
       y: barrel.y,
@@ -163,6 +171,71 @@ test.describe('exploding barrels', { tag: '@solo' }, (): void => {
       { timeoutMs: 5_000 },
     );
     await p.attachCanvas(testInfo, 'corpses thrown by the blast');
+  });
+
+  test('the blast is far worse up close: a zombie beside the barrel dies, one near the edge is only singed', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }, testInfo: TestInfo): Promise<void> => {
+    test.setTimeout(90_000);
+    const p: GamePlayer = await solo('warrior');
+    await p.probe.setGodMode(true);
+    const s0: E2eSnapshot = await layoutWhere(
+      p,
+      'a lone barrel on open ground',
+      (s: E2eSnapshot): boolean => pickableOnGround(s, isBarrel) !== undefined,
+    );
+    const barrel: LevelProp = pickableOnGround(s0, isBarrel)!;
+    const id: string = barrel.id!;
+    await standLeftOf(p, barrel);
+    await p.press(KEYS.attack, 70);
+    await p.probe.waitFor(
+      'the hit lights the fuse',
+      (s: E2eSnapshot): boolean => (findProp(s, id)?.fuseTicks ?? 0) > 0,
+    );
+    await p.probe.clearZombies();
+    await p.probe.waitFor(
+      'the fuse is almost out',
+      (s: E2eSnapshot): boolean => (findProp(s, id)?.fuseTicks ?? 0) <= SPAWN_BEFORE_BLAST_TICKS,
+      { timeoutMs: 5_000 },
+    );
+    // One zombie right on the barrel, one near the edge of the blast (radius 110).
+    const cx: number = propCenterX(barrel);
+    await p.probe.spawnZombieAt(cx);
+    await p.probe.spawnZombieAt(cx + 90);
+    const spawned: E2eSnapshot = await p.probe.state();
+    const closest: (x: number) => E2eZombieView = (x: number): E2eZombieView =>
+      spawned.zombies.reduce(
+        (best: E2eZombieView, z: E2eZombieView): E2eZombieView =>
+          Math.abs(z.x + z.width / 2 - x) < Math.abs(best.x + best.width / 2 - x) ? z : best,
+      );
+    const near: E2eZombieView = closest(cx);
+    const far: E2eZombieView = closest(cx + 90);
+    expect(near.id).not.toBe(far.id);
+
+    await p.probe.waitFor(
+      'the barrel blows up',
+      (s: E2eSnapshot): boolean => findProp(s, id)?.exploded === true,
+      { timeoutMs: 5_000 },
+    );
+    const after: E2eSnapshot = await p.probe.state();
+    const nearAfter: E2eZombieView | undefined = after.zombies.find(
+      (z: E2eZombieView): boolean => z.id === near.id,
+    );
+    const farAfter: E2eZombieView | undefined = after.zombies.find(
+      (z: E2eZombieView): boolean => z.id === far.id,
+    );
+    expect(
+      nearAfter === undefined || nearAfter.isDead || nearAfter.hp <= 0,
+      'point blank: the whole of its HP',
+    ).toBe(true);
+    expect(farAfter, 'the edge zombie lives').toBeDefined();
+    expect(farAfter!.isDead).toBe(false);
+    const farLost: number = (far.hp - farAfter!.hp) / far.maxHp;
+    expect(farLost, 'near the edge: only a small share of its HP').toBeGreaterThan(0.1);
+    expect(farLost, 'near the edge: only a small share of its HP').toBeLessThan(0.4);
+    await p.attachCanvas(testInfo, 'near zombie killed, far one singed');
   });
 
   test('every floor has 5 to 10 barrels', async ({
