@@ -253,6 +253,9 @@ export const GAME_CONSTANTS = {
   ZOMBIE_EATER_ATTACK_CHANCE: 0.004, // Chance per tick an Eater bites a player in reach while corpses lie around (rare: ~once per 5 s beside it; never while eating)
   // With no corpse to smell, an Eater turns hungry: it runs at the nearest player or zombie and attacks like any zombie.
   ZOMBIE_EATER_BITE_COLOR: '#b02a22', // Hit particles and damage numbers of an Eater biting a zombie
+  ZOMBIE_EATER_BITE_KNOCKBACK_PX: 100, // How far (px) an Eater's bite throws a zombie: one short hop, it stops where it lands (2 bites stay within 200 px)
+  ZOMBIE_EATER_BITE_KNOCKBACK_UP: -4, // Upward speed of that hop (negative = up); its sideways speed is set so the hop covers ZOMBIE_EATER_BITE_KNOCKBACK_PX
+  ZOMBIE_EATER_SPRITE_PX: 118, // Drawn size (px, square) of an Eater's 128 px frame at its average height (other zombies: 140)
 
   // ─── Dragon Boss ─────────────────────────────
   DRAGON_HOVER_Y_OFFSET: 140, // How high above the ground the dragon hovers
@@ -272,6 +275,18 @@ export const GAME_CONSTANTS = {
   SPITTER_POISON_TICK_INTERVAL: 25, // Ticks between each poison damage tick
   SPITTER_POISON_DAMAGE_PER_TICK: 3, // Base damage dealt per poison tick
   SPITTER_POISON_DAMAGE_WAVE_SCALE: 0.5, // Extra poison damage scaling per wave
+  // Spit and poison looks (drawing only, no gameplay): bile out of the mouth, splats, puddles, bubbles.
+  SPITTER_DROOL_CHANCE: 0.025, // Chance per tick a living spitter drips a drop of bile from its mouth
+  SPIT_DRIP_INTERVAL_TICKS: 3, // A glob in flight sheds a falling drop every this many ticks
+  SPIT_SPRAY_DROPLETS: 7, // Droplets sprayed out of the mouth with each spit
+  SPIT_SPLASH_DROPLETS: 10, // Droplets thrown up when a glob splats on a surface or a player
+  SPIT_PUDDLE_TICKS: 260, // How long an acid puddle stays where a glob splatted (it dries up at the end)
+  SPIT_PUDDLE_WIDTH_MIN_PX: 16, // Narrowest acid puddle
+  SPIT_PUDDLE_WIDTH_MAX_PX: 28, // Widest acid puddle
+  SPIT_PUDDLE_MAX: 8, // Puddles on screen at once (the oldest dries up first)
+  SPIT_PUDDLE_FUME_CHANCE: 0.05, // Chance per tick a fresh puddle gives off a wisp of fumes
+  SPITTER_POISON_BUBBLE_INTERVAL_TICKS: 7, // A poisoned player gives off a bubble or a drip this often
+  SPITTER_POISON_TINT_BLINK_TICKS: 10, // The poisoned player's green tint steps between 2 shades this often
 
   // ─── Zombie AI ────────────────────────────────
   ZOMBIE_ORBIT_MIN: 25, // Closest distance a zombie tries to orbit around the player
@@ -361,17 +376,19 @@ export const GAME_CONSTANTS = {
   BARREL_FUSE_TICKS: 150, // A barrel hit by an attack burns its fuse this long (3 s), then blows up
   BARREL_HIT_REACH_PX: 24, // Max gap between an attacking player's box and a barrel for the swing to light it
   BARREL_BLAST_RADIUS_PX: 110, // Zombies (and other barrels) whose center is this close to the barrel's center are caught in the blast
-  BARREL_BLAST_DAMAGE_PERCENT: 60, // The blast takes this share of a caught zombie's max HP
-  BARREL_BLAST_BOSS_DAMAGE_PERCENT: 10, // ...and only this share of a boss's (a few barrels don't kill one)
+  BARREL_BLAST_DAMAGE_PERCENT: 100, // Point blank (within BARREL_BLAST_CORE_RADIUS_PX) the blast takes this share of a caught zombie's max HP, less further out
+  BARREL_BLAST_BOSS_DAMAGE_PERCENT: 15, // ...and only this share of a boss's point blank (a few barrels don't kill one)
+  BARREL_BLAST_CORE_RADIUS_PX: 40, // Anything whose center is this close to the barrel's center takes the full blast damage (a player right beside it does)
+  BARREL_BLAST_EDGE_DAMAGE_SCALE: 0.15, // At the edge of the radius the blast does only this share of its full damage; in between it falls off squared, so close is far worse than a bit away
   BARREL_BLAST_KNOCKBACK: 9, // Sideways speed (px/tick) the blast throws a caught zombie away from the barrel
   BARREL_BLAST_KNOCKBACK_UP: -6, // Upward speed of a caught zombie (negative = up)
-  BARREL_BLAST_PLAYER_DAMAGE_PERCENT: 25, // Players are caught too (center within the radius, whoever lit it): the blast takes this share of their max HP
+  BARREL_BLAST_PLAYER_DAMAGE_PERCENT: 40, // Players are caught too (center within the radius, whoever lit it): point blank the blast takes this share of their max HP, less further out
   BARREL_BLAST_PLAYER_KNOCKBACK: 10, // Sideways speed a caught player is thrown away from the barrel (a zombie hit throws 6)
   BARREL_BLAST_PLAYER_KNOCKBACK_UP: -7, // Upward speed of a caught player (negative = up)
   BARREL_BLAST_CORPSE_SPEED_X: 8, // Lying corpses in the blast fly away from the barrel this fast sideways (~100 px: they slow by 8% a tick)...
   BARREL_BLAST_CORPSE_SPEED_Y: -7, // ...and this fast upward (negative = up)
   BARREL_CHAIN_FUSE_TICKS: 12, // A barrel caught in another's blast blows up this soon (a chain reaction)
-  BARREL_RESPAWN_TICKS: 500, // A blown-up barrel comes back on its spawn spot this long after the blast (10 s), once no player or prop is in the way
+  BARREL_RESPAWN_TICKS: 2250, // A blown-up barrel comes back on its spawn spot this long after the blast (45 s), once no player or prop is in the way
   BARREL_COUNT_MIN: 5, // Barrels the level generator puts on every floor: at least this many...
   BARREL_COUNT_MAX: 10, // ...and at most this many
   BARREL_SPACING_PX: 64, // The generator keeps barrels this far apart (center to center) so they spread over the floor; only a crowded floor puts the last of its minimum closer
@@ -852,8 +869,8 @@ export const ZOMBIE_TYPES: Record<ZombieType, ZombieDefinition> = {
     knockbackMin: 5, knockbackMax: 9,
     hesitationMin: 0, hesitationMax: 0, // no hesitation: its rare bites roll ZOMBIE_EATER_ATTACK_CHANCE
     xpRewardMin: 8, xpRewardMax: 15,
-    widthMin: 24, widthMax: 34,
-    heightMin: 36, heightMax: 44,
+    widthMin: 20, widthMax: 29, // scaled with ZOMBIE_EATER_SPRITE_PX, so the box fits the art
+    heightMin: 31, heightMax: 37,
     attackAnimTicks: 20,
     attackHitTick: 10,
     weightKg: 120, // kg, swollen from eating

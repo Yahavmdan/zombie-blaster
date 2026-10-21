@@ -23,8 +23,8 @@ import {
   standLeftOf,
 } from '../../support/props';
 
-/** Mirrors BARREL_BLAST_PLAYER_DAMAGE_PERCENT in shared/game-constants.ts. */
-const BLAST_PLAYER_PERCENT: number = 25;
+/** Mirrors BARREL_BLAST_PLAYER_DAMAGE_PERCENT in shared/game-constants.ts (point blank: the guest stands right beside it). */
+const BLAST_PLAYER_PERCENT: number = 40;
 /** God mode goes off this many ticks before the blast (sync lag included; i-frames last 90). */
 const MORTAL_TICKS: number = 40;
 
@@ -34,7 +34,7 @@ test.describe('exploding barrels in co-op', { tag: '@online' }, (): void => {
   }: {
     room: RoomFactory;
   }, testInfo: TestInfo): Promise<void> => {
-    test.setTimeout(120_000);
+    test.setTimeout(160_000);
     const session: RoomSession = await room(
       [
         { name: 'Host', classId: 'warrior' },
@@ -95,11 +95,11 @@ test.describe('exploding barrels in co-op', { tag: '@online' }, (): void => {
     );
     await guest.attachCanvas(testInfo, 'guest sees the blast');
 
-    // 10 s later the host puts it back on its spawn spot, and so does the guest.
+    // 45 s later (BARREL_RESPAWN_TICKS) the host puts it back on its spawn spot, and so does the guest.
     await host.probe.waitFor(
       'the barrel is back on the host',
       (s: E2eSnapshot): boolean => findProp(s, id)?.exploded === false,
-      { timeoutMs: 20_000 },
+      { timeoutMs: 60_000 },
     );
     const back: E2eSnapshot = await guest.probe.waitFor(
       'the barrel is back on the guest',

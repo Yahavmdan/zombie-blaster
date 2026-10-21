@@ -14,6 +14,8 @@ const EATER_ARRIVES_MS: number = 25_000;
 const MEAL_MS: number = 2_000;
 /** Hit particles of an Eater biting a zombie (ZOMBIE_EATER_BITE_COLOR). */
 const BITE_COLOR: string = '#b02a22';
+/** Farthest a bite may throw a zombie (one hop of ZOMBIE_EATER_BITE_KNOCKBACK_PX, 100, stays well within). */
+const MAX_BITE_THROW_PX: number = 200;
 
 function eaters(s: E2eSnapshot): E2eZombieView[] {
   return s.zombies.filter((z: E2eZombieView): boolean => z.type === 'eater' && !z.isDead);
@@ -117,6 +119,29 @@ test.describe('eater zombie', { tag: '@solo' }, (): void => {
       'its bite queued for every player',
     ).toBeGreaterThan(0);
     await p.attachCanvas(testInfo, 'hungry eater bites a zombie');
+
+    // A bite throws a zombie one short hop (ZOMBIE_EATER_BITE_KNOCKBACK_PX) and it stops where it lands.
+    const thrownFrom: Map<string, number> = new Map<string, number>();
+    const throws: number[] = [];
+    await p.probe.waitFor(
+      'a bitten zombie lands',
+      (s: E2eSnapshot): boolean => {
+        for (const z of s.zombies) {
+          if (z.type === 'eater' || z.isDead) continue;
+          const from: number | undefined = thrownFrom.get(z.id);
+          if (z.knockbackFrames > 0 && from === undefined) thrownFrom.set(z.id, z.x);
+          if (z.knockbackFrames === 0 && z.isGrounded && from !== undefined) {
+            throws.push(Math.abs(z.x - from));
+            thrownFrom.delete(z.id);
+          }
+        }
+        return throws.length > 0;
+      },
+      { timeoutMs: 30_000, intervalMs: 30 },
+    );
+    expect(Math.max(...throws), 'a bite throws a zombie 200 px at most').toBeLessThanOrEqual(
+      MAX_BITE_THROW_PX,
+    );
   });
 
   test('it climbs onto a ledge to eat the corpses lying up there', async ({

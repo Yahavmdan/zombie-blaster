@@ -1,5 +1,5 @@
-import { ZombieState, ZombieType } from '@shared/game-entities';
-import { isZombieWindingUp } from '@shared/game-constants';
+import { ZombieDefinition, ZombieState, ZombieType } from '@shared/game-entities';
+import { GAME_CONSTANTS, ZOMBIE_TYPES, isZombieWindingUp } from '@shared/game-constants';
 
 export enum ZombieAnimState {
   Idle = 'idle',
@@ -44,7 +44,10 @@ type ZombieAnimConfigs = Record<ZombieAnimState, ZombieSpriteConfig | undefined>
   [ZombieAnimState.Hurt]: ZombieSpriteConfig;
 };
 
-const ZOMBIE_FRAME_SIZE: number = 128;
+export const ZOMBIE_FRAME_SIZE: number = 128;
+const EATER_JUMP_FRAMES: number = 8;
+/** Spitter attack frame length: its spit frame (the spray) starts on the attack's hit tick. */
+export const SPITTER_ATTACK_FRAME_TICKS: number = 5;
 
 export interface ZombieSpriteAnchor {
   anchorX: number;
@@ -57,6 +60,7 @@ const ZOMBIE_SPRITE_ANCHORS: Record<string, ZombieSpriteAnchor> = {
   zombie_1: { anchorX: 0.49, anchorY: 0.992 },
   zombie_2: { anchorX: 0.45, anchorY: 0.992 },
   zombie_3: { anchorX: 0.47, anchorY: 0.992 },
+  spitter: { anchorX: 0.47, anchorY: 0.992 },
   zombie_4: { anchorX: 0.49, anchorY: 0.992 },
   dragon_boss: { anchorX: 0.50, anchorY: 0.994 },
   eater: { anchorX: 0.54, anchorY: 0.992 },
@@ -65,7 +69,7 @@ const ZOMBIE_SPRITE_ANCHORS: Record<string, ZombieSpriteAnchor> = {
 const ZOMBIE_SPRITE_KEY_MAP: Record<ZombieType, string> = {
   [ZombieType.Walker]: 'zombie_1',
   [ZombieType.Runner]: 'zombie_2',
-  [ZombieType.Spitter]: 'zombie_3',
+  [ZombieType.Spitter]: 'spitter',
   [ZombieType.Tank]: 'zombie_4',
   [ZombieType.Boss]: 'zombie_3',
   [ZombieType.DragonBoss]: 'dragon_boss',
@@ -106,6 +110,18 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.AttackAlt1]: undefined,
     [ZombieAnimState.Eating]: undefined,
   },
+  // zombie_3 recoloured, with a throat sac and bile (art: tools/spitter-sprites/build.mjs).
+  spitter: {
+    [ZombieAnimState.Idle]: { src: 'sprites/zombies/spitter/Idle.png', frameCount: 6, frameDurationTicks: 10, loop: true },
+    [ZombieAnimState.Walk]: { src: 'sprites/zombies/spitter/Walk.png', frameCount: 10, frameDurationTicks: 6, loop: true },
+    [ZombieAnimState.Attack]: { src: 'sprites/zombies/spitter/Attack.png', frameCount: 4, frameDurationTicks: SPITTER_ATTACK_FRAME_TICKS, loop: false },
+    [ZombieAnimState.Dead]: { src: 'sprites/zombies/spitter/Dead.png', frameCount: 5, frameDurationTicks: 8, loop: false },
+    [ZombieAnimState.Hurt]: { src: 'sprites/zombies/spitter/Hurt.png', frameCount: 4, frameDurationTicks: 6, loop: false },
+    [ZombieAnimState.Run]: undefined,
+    [ZombieAnimState.Jump]: undefined,
+    [ZombieAnimState.AttackAlt1]: undefined,
+    [ZombieAnimState.Eating]: undefined,
+  },
   zombie_4: {
     [ZombieAnimState.Idle]: { src: 'sprites/zombies/zombie_4/Idle.png', frameCount: 7, frameDurationTicks: 9, loop: true },
     [ZombieAnimState.Walk]: { src: 'sprites/zombies/zombie_4/Walk.png', frameCount: 12, frameDurationTicks: 5, loop: true },
@@ -133,7 +149,8 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Idle]: { src: 'sprites/zombies/eater/Idle.png', frameCount: 8, frameDurationTicks: 9, loop: true },
     [ZombieAnimState.Walk]: { src: 'sprites/zombies/eater/Walk.png', frameCount: 10, frameDurationTicks: 6, loop: true },
     [ZombieAnimState.Run]: { src: 'sprites/zombies/eater/Run.png', frameCount: 8, frameDurationTicks: 2, loop: true },
-    [ZombieAnimState.Jump]: { src: 'sprites/zombies/eater/Jump.png', frameCount: 6, frameDurationTicks: 6, loop: false },
+    // The pounce frame follows the vertical speed (eaterJumpFrame), not time.
+    [ZombieAnimState.Jump]: { src: 'sprites/zombies/eater/Jump.png', frameCount: EATER_JUMP_FRAMES, frameDurationTicks: 6, loop: false },
     [ZombieAnimState.Attack]: { src: 'sprites/zombies/eater/Attack_1.png', frameCount: 6, frameDurationTicks: 3, loop: false },
     [ZombieAnimState.AttackAlt1]: { src: 'sprites/zombies/eater/Attack_2.png', frameCount: 6, frameDurationTicks: 3, loop: false },
     [ZombieAnimState.Dead]: { src: 'sprites/zombies/eater/Dead.png', frameCount: 6, frameDurationTicks: 8, loop: false },
@@ -141,6 +158,32 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Eating]: { src: 'sprites/zombies/eater/Eating.png', frameCount: 10, frameDurationTicks: 5, loop: true },
   },
 };
+
+/** Drawn size (square) of a zombie's sprite frame for a body this tall (its average height draws the type's base size). */
+export function zombieSpriteSize(type: ZombieType, height: number): number {
+  const def: ZombieDefinition = ZOMBIE_TYPES[type];
+  const base: number =
+    type === ZombieType.DragonBoss ? 260
+      : type === ZombieType.Boss ? 200
+        : type === ZombieType.Eater ? GAME_CONSTANTS.ZOMBIE_EATER_SPRITE_PX
+          : 140;
+  return Math.round(base * (height / ((def.heightMin + def.heightMax) / 2)));
+}
+
+/** Where a sprite sheet's feet sit in its frame (fractions of the frame). */
+export function zombieSpriteAnchor(spriteKey: string): ZombieSpriteAnchor {
+  return ZOMBIE_SPRITE_ANCHORS[spriteKey] ?? DEFAULT_ANCHOR;
+}
+
+/**
+ * The Eater's pounce frame for its vertical speed: launch at ZOMBIE_EATER_JUMP_FORCE, apex at 0,
+ * touchdown at the same speed coming down (a drop off a ledge starts at the apex).
+ */
+export function eaterJumpFrame(velocityY: number): number {
+  const force: number = -GAME_CONSTANTS.ZOMBIE_EATER_JUMP_FORCE;
+  const progress: number = (velocityY + force) / (2 * force);
+  return Math.min(EATER_JUMP_FRAMES - 1, Math.max(0, Math.floor(progress * EATER_JUMP_FRAMES)));
+}
 
 /** An Eater bites (Attack) or rakes with its claws (AttackAlt1): fixed per zombie, so host and guests agree. */
 function eaterClaws(z: ZombieState): boolean {
@@ -225,7 +268,17 @@ export class ZombieSpriteAnimator {
   }
 
   getAnchor(spriteKey: string): ZombieSpriteAnchor {
-    return ZOMBIE_SPRITE_ANCHORS[spriteKey] ?? DEFAULT_ANCHOR;
+    return zombieSpriteAnchor(spriteKey);
+  }
+
+  /** Shows the animation the zombie's state calls for; an Eater in the air shows the pounce frame for its speed. */
+  showState(z: ZombieState): void {
+    const state: ZombieAnimState = zombieAnimState(z);
+    if (z.type === ZombieType.Eater && state === ZombieAnimState.Jump) {
+      this.setStateAtFrame(z.id, state, eaterJumpFrame(z.velocityY));
+    } else {
+      this.setState(z.id, state);
+    }
   }
 
   setState(zombieId: string, state: ZombieAnimState): void {

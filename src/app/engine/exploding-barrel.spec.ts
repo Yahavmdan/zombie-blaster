@@ -6,6 +6,7 @@ import {
   blastBarrels,
   blastCorpses,
   blastDamage,
+  blastFalloff,
   blastPlayerDamage,
   blastPlayers,
   blastZombies,
@@ -177,15 +178,35 @@ describe('exploding barrels', (): void => {
     expect(blastBarrels([close, away], { x: cx, y: cy })).toEqual([close]);
   });
 
-  it('the blast takes 60% of a zombie, only 10% of a boss', (): void => {
-    expect(blastDamage({ type: ZombieType.Walker, maxHp: 100 })).toBe(60);
-    expect(blastDamage({ type: ZombieType.Tank, maxHp: 333 })).toBe(200);
-    expect(blastDamage({ type: ZombieType.Boss, maxHp: 1000 })).toBe(100);
-    expect(blastDamage({ type: ZombieType.DragonBoss, maxHp: 5000 })).toBe(500);
-    expect(blastDamage({ type: ZombieType.Walker, maxHp: 1 })).toBe(1);
+  it('the blast does full damage beside the barrel and falls off fast to 15% at the edge', (): void => {
+    const center: { x: number; y: number } = { x: 500, y: 300 };
+    const core: number = GAME_CONSTANTS.BARREL_BLAST_CORE_RADIUS_PX;
+    expect(blastFalloff(center, 500, 300)).toBe(1);
+    expect(blastFalloff(center, 500 - core, 300)).toBe(1);
+    expect(blastFalloff(center, 500, 300 + core)).toBe(1);
+    // Halfway between the core and the edge: (1 - 0.5)^2 of the way from 15% to 100%.
+    expect(blastFalloff(center, 500 + (core + RADIUS) / 2, 300)).toBeCloseTo(0.3625);
+    expect(blastFalloff(center, 500 + RADIUS, 300)).toBeCloseTo(0.15);
+    // Closer is always worse.
+    let last: number = 1;
+    for (let d: number = core; d <= RADIUS; d += 5) {
+      const now: number = blastFalloff(center, 500 + d, 300);
+      expect(now).toBeLessThanOrEqual(last);
+      last = now;
+    }
   });
 
-  it('the blast catches standing players in its radius, whoever lit it, and takes 25% of their max HP', (): void => {
+  it('point blank the blast takes 100% of a zombie, only 15% of a boss; scaled down further out', (): void => {
+    expect(blastDamage({ type: ZombieType.Walker, maxHp: 100 }, 1)).toBe(100);
+    expect(blastDamage({ type: ZombieType.Tank, maxHp: 333 }, 1)).toBe(333);
+    expect(blastDamage({ type: ZombieType.Boss, maxHp: 1000 }, 1)).toBe(150);
+    expect(blastDamage({ type: ZombieType.DragonBoss, maxHp: 5000 }, 1)).toBe(750);
+    expect(blastDamage({ type: ZombieType.Walker, maxHp: 100 }, 0.15)).toBe(15);
+    expect(blastDamage({ type: ZombieType.Boss, maxHp: 1000 }, 0.15)).toBe(23);
+    expect(blastDamage({ type: ZombieType.Walker, maxHp: 1 }, 0.15)).toBe(1);
+  });
+
+  it('the blast catches standing players in its radius, whoever lit it, and takes up to 40% of their max HP', (): void => {
     const b: LooseProp = barrel(500);
     const center: { x: number; y: number } = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
     const dy: number = center.y - (GROUND - PH / 2);
@@ -196,10 +217,16 @@ describe('exploding barrels', (): void => {
     const down: BlastPlayer = playerAt(center.x, { isDown: true });
     const dead: BlastPlayer = playerAt(center.x, { isDead: true });
     expect(blastPlayers([beside, edge, far, down, dead], center)).toEqual([beside, edge]);
-    expect(GAME_CONSTANTS.BARREL_BLAST_PLAYER_DAMAGE_PERCENT).toBe(25);
-    expect(blastPlayerDamage(400)).toBe(100);
-    expect(blastPlayerDamage(101)).toBe(26);
-    expect(blastPlayerDamage(1)).toBe(1);
+    expect(GAME_CONSTANTS.BARREL_BLAST_PLAYER_DAMAGE_PERCENT).toBe(40);
+    expect(blastPlayerDamage(400, 1)).toBe(160);
+    expect(blastPlayerDamage(101, 1)).toBe(41);
+    expect(blastPlayerDamage(400, 0.15)).toBe(24);
+    expect(blastPlayerDamage(1, 0.15)).toBe(1);
+    // The player right beside the barrel takes the full hit, the one at the edge a small one.
+    const near: number = blastPlayerDamage(400, blastFalloff(center, beside.x + PW / 2, beside.y + PH / 2));
+    const atEdge: number = blastPlayerDamage(400, blastFalloff(center, edge.x + PW / 2, edge.y + PH / 2));
+    expect(near).toBe(160);
+    expect(atEdge).toBeLessThan(near / 4);
   });
 
   it('the blast throws lying corpses up and away from the barrel, not carried ones', (): void => {

@@ -42,6 +42,7 @@ import { DropSystem } from './drop-system';
 import { ProjectileSystem } from './projectile-system';
 import { SpriteAnimator } from './sprite-animator';
 import { ZombieAnimState } from './zombie-sprite-animator';
+import { Particle, ParticleShape } from './particle-types';
 import { GameEngine } from './game-engine';
 
 function makePlayer(overrides: Partial<CharacterState> = {}): CharacterState {
@@ -451,6 +452,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
       getAnchor: vi.fn().mockReturnValue({ anchorX: 0.5, anchorY: 1.0 }),
       tick: vi.fn(),
       setState: vi.fn(),
+      showState: vi.fn(),
       setStateReversed: vi.fn(),
       setStateAtFrame: vi.fn(),
       setFinalFrame: vi.fn(),
@@ -466,6 +468,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     dragonProjectiles: [],
     dragonImpacts: [],
     barrelBlasts: [],
+    acidPuddles: [],
     dragonProjectileImg: new Image(),
     dragonImpactImg: new Image(),
     spitterProjectiles: [],
@@ -1571,6 +1574,124 @@ describe('Player status tints (hurt red, poison green) synced via VfxEvents', ()
     vfx.updatePlayerTints();
     expect(engine.playerTints.has('remote-player')).toBe(false);
   });
+
+  it('a poisoned remote player bubbles and drips bile (pixel drops) while the poison lasts', (): void => {
+    engine.remotePlayers = [makePlayer({ id: 'remote-player', x: 700 })];
+    engine.replayRemoteVfxEvents([{ type: VfxEventType.PoisonTrigger, playerId: 'remote-player', x: 720, y: 560 }]);
+    const vfx: VfxSystem = new VfxSystem(engine);
+    engine.particles = [];
+    for (let t: number = 0; t < GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL; t++) vfx.updatePlayerTints();
+
+    expect(engine.particles.length).toBeGreaterThan(0);
+    expect(engine.particles.every((p: Particle): boolean => p.shape === ParticleShape.Pixel)).toBe(true);
+    expect(engine.particles.some((p: Particle): boolean => (p.gravityScale ?? 1) < 0), 'bubbles rise').toBe(true);
+    expect(engine.particles.some((p: Particle): boolean => (p.gravityScale ?? 1) > 0), 'drops fall').toBe(true);
+  });
+});
+
+describe('Spitter spit: lobbed globs, splats and acid puddles', (): void => {
+  let engine: GameEngine;
+  let projectiles: ProjectileSystem;
+
+  function spitter(x: number): ZombieState {
+    return makeZombie({
+      id: 'spitter-1',
+      type: ZombieType.Spitter,
+      x,
+      y: GAME_CONSTANTS.GROUND_Y - 40,
+      instanceWidth: 30,
+      instanceHeight: 40,
+      facing: 1,
+    });
+  }
+
+  function flyAll(): void {
+    for (let t: number = 0; t < GAME_CONSTANTS.SPITTER_PROJECTILE_LIFETIME && engine.spitterProjectiles.length > 0; t++) {
+      projectiles.updateSpitterProjectiles();
+    }
+  }
+
+  function queued(type: VfxEventType): VfxEvent[] {
+    return engine.pendingVfxEvents.filter((e: VfxEvent): boolean => e.type === type);
+  }
+
+  beforeEach((): void => {
+    engine = new GameEngine(createMockCanvas());
+    engine.isMultiplayerHost = true;
+    engine.player = makePlayer({ x: 400 });
+    engine.platforms = [];
+    projectiles = (engine as unknown as { projectileSystem: ProjectileSystem }).projectileSystem;
+  });
+
+  it('the glob leaves the mouth with a spray every screen sees and comes down on the target', (): void => {
+    projectiles.spawnSpitterProjectile(spitter(200));
+
+    const spray: VfxEvent[] = queued(VfxEventType.SpitSpray);
+    expect(spray.length).toBe(1);
+    expect(spray[0].dir).toBe(1);
+    expect(spray[0].x, 'from the mouth, in front of the body centre').toBeGreaterThan(215);
+    expect(spray[0].y, 'from the head, not the chest').toBeLessThan(GAME_CONSTANTS.GROUND_Y - 30);
+    expect(engine.spitterProjectiles[0].velocityY, 'lobbed: it rises first').toBeLessThan(0);
+    expect(engine.spitterProjectiles[0].fromSurfaceY).toBe(GAME_CONSTANTS.GROUND_Y);
+
+    const hp: number = engine.player!.hp;
+    flyAll();
+
+    expect(engine.player!.hp, 'the arc came down on the player').toBeLessThan(hp);
+    expect(engine.poisonEffect).not.toBeNull();
+    const splat: VfxEvent[] = queued(VfxEventType.SpitSplat);
+    expect(splat.length).toBe(1);
+    expect(splat[0].targetY, 'burst on the player: no puddle').toBeUndefined();
+    expect(engine.acidPuddles).toEqual([]);
+  });
+
+  it('a miss splats on the ground and leaves a puddle there, also on other screens', (): void => {
+    projectiles.spawnSpitterProjectile(spitter(200));
+    engine.player!.x = 1100;
+    flyAll();
+
+    const splat: VfxEvent[] = queued(VfxEventType.SpitSplat);
+    expect(splat.length).toBe(1);
+    expect(splat[0].targetY).toBe(GAME_CONSTANTS.GROUND_Y);
+    expect(splat[0].value).toBeGreaterThanOrEqual(GAME_CONSTANTS.SPIT_PUDDLE_WIDTH_MIN_PX);
+    expect(engine.acidPuddles).toEqual([
+      { x: splat[0].x, y: GAME_CONSTANTS.GROUND_Y, width: splat[0].value, age: 0, floor: engine.floor },
+    ]);
+
+    const guest: GameEngine = new GameEngine(createMockCanvas());
+    guest.isMultiplayerClient = true;
+    guest.player = makePlayer({ id: 'guest' });
+    guest.replayRemoteVfxEvents([...queued(VfxEventType.SpitSpray), ...splat]);
+    expect(guest.acidPuddles).toEqual(engine.acidPuddles);
+    expect(guest.particles.some((p: Particle): boolean => p.shape === ParticleShape.Pixel)).toBe(true);
+  });
+
+  it('a glob flies over the ledge its spitter stands on and splats on the next surface down', (): void => {
+    const ledgeY: number = GAME_CONSTANTS.GROUND_Y - 100;
+    engine.platforms = [{ x: 100, y: ledgeY, width: 400, height: 16 }];
+    const z: ZombieState = spitter(150);
+    z.y = ledgeY - z.instanceHeight;
+    engine.player!.x = 520;
+    projectiles.spawnSpitterProjectile(z);
+    engine.player!.x = 1100;
+    flyAll();
+
+    expect(queued(VfxEventType.SpitSplat)[0]?.targetY).toBe(GAME_CONSTANTS.GROUND_Y);
+  });
+
+  it('puddles dry up after a while and go with the floor', (): void => {
+    const vfx: VfxSystem = new VfxSystem(engine);
+    vfx.spawnSpitSplat(300, GAME_CONSTANTS.GROUND_Y, 1, GAME_CONSTANTS.GROUND_Y, 20);
+    for (let t: number = 0; t < GAME_CONSTANTS.SPIT_PUDDLE_TICKS - 1; t++) vfx.updateAcidPuddles();
+    expect(engine.acidPuddles.length).toBe(1);
+    vfx.updateAcidPuddles();
+    expect(engine.acidPuddles).toEqual([]);
+
+    vfx.spawnSpitSplat(300, GAME_CONSTANTS.GROUND_Y, 1, GAME_CONSTANTS.GROUND_Y, 20);
+    engine.floor++;
+    vfx.updateAcidPuddles();
+    expect(engine.acidPuddles).toEqual([]);
+  });
 });
 
 describe('Exploding barrels', (): void => {
@@ -1665,16 +1786,16 @@ describe('Exploding barrels', (): void => {
     expect(blast.length).toBe(1);
     expect(blast[0].x).toBe(b.x + b.width / 2);
     expect(blast[0].playerId).toBe(engine.player.id);
-    expect(near.hp, '60% of its max HP').toBe(40);
+    expect(near.hp, 'a bit away from the barrel: 72% of its max HP, not all of it').toBe(28);
     expect(near.velocityX, 'thrown away from the barrel').toBeGreaterThan(0);
     expect(near.isGrounded).toBe(false);
     expect(far.hp, 'out of the blast').toBe(100);
-    // The player who lit it stood right beside it: 25% of 200 max HP, thrown back left.
-    expect(engine.player.hp).toBe(150);
+    // The player who lit it stood right beside it: the full 40% of 200 max HP, thrown back left.
+    expect(engine.player.hp).toBe(120);
     expect(engine.player.velocityX).toBe(-GAME_CONSTANTS.BARREL_BLAST_PLAYER_KNOCKBACK);
     expect(engine.player.velocityY).toBe(GAME_CONSTANTS.BARREL_BLAST_PLAYER_KNOCKBACK_UP);
     expect(engine.invincibilityFrames).toBe(GAME_CONSTANTS.INVINCIBILITY_FRAMES);
-    expect(queued(VfxEventType.DamageNumber).map((evt: VfxEvent): number => evt.value!)).toEqual([60, 50]);
+    expect(queued(VfxEventType.DamageNumber).map((evt: VfxEvent): number => evt.value!)).toEqual([72, 80]);
     expect(engine.particles.length).toBeGreaterThan(0);
     expect(engine.screenShakeFrames).toBeGreaterThan(0);
     expect(props.moved().find((p: LooseProp): boolean => p.id === id)?.exploded, 'synced as gone').toBe(true);
@@ -1724,7 +1845,8 @@ describe('Exploding barrels', (): void => {
     barrels.update();
 
     expect(engine.pendingRemoteAttacks).toEqual([
-      { targetPlayerId: 'near-guest', damage: 100, knockbackDir: 1, isPoisonAttack: false, isBlast: true },
+      // A bit away from the barrel: about 32% of 400 max HP, not the full 40%.
+      { targetPlayerId: 'near-guest', damage: 129, knockbackDir: 1, isPoisonAttack: false, isBlast: true },
     ]);
     expect(engine.player.hp, 'the host stood far away').toBe(200);
     expect(left.velocityX).toBe(-GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X);

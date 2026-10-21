@@ -78,7 +78,12 @@ test.describe('tumbling props', { tag: '@solo' }, (): void => {
       'the barrel is picked up',
       (s: E2eSnapshot): boolean => findProp(s, id)?.carrierId === s.player!.id,
     );
-    await p.press(KEYS.carry, 70);
+    // Under suite load a press can fall between ticks: press until it leaves the hands.
+    for (let attempt: number = 0; attempt < 3; attempt++) {
+      await p.press(KEYS.carry, 70);
+      await p.wait(150);
+      if (findProp(await p.probe.state(), id)?.carrierId === null) break;
+    }
 
     let landedX: number | null = null;
     let rollTurn: number = 0;

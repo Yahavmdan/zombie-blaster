@@ -22,7 +22,7 @@ import { PhysicsSystem } from './physics-system';
 import { CombatSystem } from './combat-system';
 import { DropSystem } from './drop-system';
 import { ProjectileSystem } from './projectile-system';
-import { ZombieAnimState, zombieAnimState } from './zombie-sprite-animator';
+import { ZombieAnimState } from './zombie-sprite-animator';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
 import { drapeCorpses } from './corpse-drape';
 import { advanceMagnetPull } from './magnet-pull';
@@ -170,6 +170,11 @@ export class ZombieSystem {
         else if (z.isGrounded) z.velocityX *= GAME_CONSTANTS.PLAYER_FRICTION;
       } else if (z.knockbackFrames > 0) {
         z.knockbackFrames--;
+        // A knocked zombie stops where it lands instead of sliding on.
+        if (z.isGrounded) {
+          z.velocityX = 0;
+          z.knockbackFrames = 0;
+        }
         if (z.eatingTimer > 0) {
           z.eatingTimer = 0;
           z.eatingTargetId = null;
@@ -851,7 +856,7 @@ export class ZombieSystem {
   }
 
   private updateZombieAnimState(z: ZombieState): void {
-    this.e.zombieSpriteAnimator.setState(z.id, zombieAnimState(z));
+    this.e.zombieSpriteAnimator.showState(z);
   }
 
   private zombieJump(z: ZombieState): void {
@@ -1080,8 +1085,8 @@ export class ZombieSystem {
   }
 
   /** Floor-4 cage: a zombie climbs out of it, centered on x, standing on `groundY`. */
-  spawnZombieAt(x: number, groundY: number): void {
-    this.spawnZombie({ x, groundY });
+  spawnZombieAt(x: number, groundY: number, kind: ZombieType | null = null): void {
+    this.spawnZombie({ x, groundY }, kind);
   }
 
   /** A regular spawn: the floor's type roll (bosses included) at a random spawn spot. */

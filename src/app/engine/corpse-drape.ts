@@ -1,6 +1,7 @@
-import { GAME_CONSTANTS, ZOMBIE_TYPES } from '@shared/index';
-import { ZombieCorpse, ZombieDefinition, ZombieType } from '@shared/game-entities';
+import { GAME_CONSTANTS } from '@shared/index';
+import { ZombieCorpse, ZombieType } from '@shared/game-entities';
 import { CorpseSurface, corpseSurface } from './corpse-surface';
+import { zombieSpriteSize } from './zombie-sprite-animator';
 
 /**
  * Limp bodies on piles (drawing only). Physics holds a lying corpse up by a narrow foothold at its
@@ -46,11 +47,7 @@ export interface CorpseDrape {
 
 /** Drawn size (square) of a corpse's sprite. */
 export function corpseRenderSize(corpse: ZombieCorpse): number {
-  const def: ZombieDefinition = ZOMBIE_TYPES[corpse.type];
-  const base: number =
-    corpse.type === ZombieType.DragonBoss ? 260 : corpse.type === ZombieType.Boss ? 200 : 140;
-  const scale: number = corpse.height / ((def.heightMin + def.heightMax) / 2);
-  return Math.round(base * scale);
+  return zombieSpriteSize(corpse.type, corpse.height);
 }
 
 /** The sprite is mirrored for this corpse (the dragon's art faces the other way). */

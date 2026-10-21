@@ -102,6 +102,11 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   for rare types: `probe.spawnRolledZombies(n)` runs the real spawn roll n times now (no timer,
   no alive cap); `setFloor` clears them. `state().zombieProjectiles` {spitter, dragon} counts
   shots in flight. Spec: `solo/zombie-types.spec.ts`.
+  `probe.spawnZombieAt(x, 'spitter')` forces a type. Spitters lob a glob at the nearest player (arc
+  aimed to come down on them); it bursts on the first player or surface it reaches (`spit-splat`,
+  not on the ledge the spitter stands on) and a surface keeps an acid puddle for ~5 s
+  (`state().acidPuddles`, drawing only). The host's god mode skips every hit, so globs always land:
+  handy for puddle tests. Specs: `solo/spitter.spec.ts`, `online/spitter-coop.spec.ts`.
 - **Eaters** (crawl on all fours, art from `generate-eater-sprites.cjs`) never come with the regular
   spawns: from floor 1, while >= 3 lying unclaimed corpses exist, one rises every 10-20 s (max 2
   per player) near a corpse, smells corpses across the whole screen, runs to them (3.5x speed,
@@ -116,7 +121,7 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   left they turn hungry**: run at the nearest player or zombie (not Eaters, not the dragon) and
   attack like any zombie; bites on zombies knock back, show red hit effects (VFX log `color`
   `#b02a22`, replayed for guests) and a kill leaves a corpse (no XP/loot): the next meal. Probe:
-  `zombies[].type === 'eater'`, `eating`, `animState` (`eating`, `run`, ...). Lab:
+  `zombies[].type === 'eater'`, `eating`, `animState` (`eating`, `run`, ...), `animFrame` (an airborne Eater's `jump` frame follows its `velocityY`: `eaterJumpFrame`, launch 0, apex 4, touchdown 7). Lab:
   `npm run e2e:lab -- -g eater` (stuck spells, meals, puzzle side effects, host/guest). Rest players on the safe spot so a hungry Eater only has zombies to hunt.
   Specs: `solo/eater.spec.ts`, `online/eater-coop.spec.ts`.
 - Player: 90 ticks (1.8 s) invincible after a hit; move speed 3 (faster than most zombies).
@@ -262,8 +267,11 @@ Driving tips:
 - **Exploding barrels**: an attack on a lying barrel (beside it, facing it, within 24 px, level
   with it; any player, the host decides) lights its fuse: `level.props[].fuseTicks` counts 150
   ticks (3 s, "3-2-1" over it), then it blows up: `exploded: true`, gone from the world and
-  collision (`pickable: false`), zombies whose center is within 110 px lose 60% max HP (bosses
-  10%) and fly away, standing players in reach (whoever lit it) lose 25% max HP and are thrown
+  collision (`pickable: false`), zombies whose center is within 110 px lose up to 100% max HP
+  (bosses 15%) and fly away, standing players in reach (whoever lit it) lose up to 40% max HP
+  (damage falls off with distance: full within `BARREL_BLAST_CORE_RADIUS_PX` 40, squared down to
+  15% at the edge; a player stood right beside the barrel takes the full hit; spawn zombies under
+  50 ticks before the blast to pin their distance, they don't move while climbing out) and are thrown
   away harder than by a zombie (no parry; i-frames apply, so a chain hits once; a guest gets it as
   a game-sync `attacks` entry with `isBlast`), lying corpses in reach fly up and away (~100 px),
   barrels in reach go up 12 ticks later (chain). Testing the player hit: zombies swing at a

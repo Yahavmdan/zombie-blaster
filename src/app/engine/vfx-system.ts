@@ -4,12 +4,16 @@ import {
   GAME_CONSTANTS,
   VfxEventType,
 } from '@shared/index';
-import { DropType } from '@shared/game-entities';
+import { DropType, ZombieType } from '@shared/game-entities';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { SKILL_ANIMATIONS, SkillAnimation } from './skill-animations';
-import { BarrelBlastFx, DamageNumber, DropNotification, IGameEngine, PlayerTint } from './engine-types';
+import { AcidPuddle, BarrelBlastFx, DamageNumber, DropNotification, IGameEngine, PlayerTint } from './engine-types';
 import { PixelIconId } from '@shared/pixel-icon';
 import { lightningStrikeX, nextLightningDelayMs } from './storm';
+import { ART_PX, PIXEL } from './pixel-art';
+import { BILE_COLORS } from './spit-art';
+import { Point, spitterMouth } from './spitter-spit';
+import { ZombieAnimState } from './zombie-sprite-animator';
 
 export class VfxSystem {
   constructor(private readonly e: IGameEngine) {}
@@ -50,17 +54,50 @@ export class VfxSystem {
     this.tintFor(playerId).hurtTicks = GAME_CONSTANTS.PLAYER_HURT_TINT_TICKS;
   }
 
-  /** Pulsing green sprite while the spitter poison lasts (its trigger is synced as PoisonTrigger). */
+  /** Sickly green sprite while the spitter poison lasts (its trigger is synced as PoisonTrigger). */
   tintPlayerPoisoned(playerId: string): void {
     this.tintFor(playerId).poisonTicks = GAME_CONSTANTS.SPITTER_POISON_DURATION_TICKS;
   }
 
+  /** Every client, every tick: tints run out; a poisoned player (any) bubbles and drips bile. */
   updatePlayerTints(): void {
     for (const [id, tint] of this.e.playerTints) {
       if (tint.hurtTicks > 0) tint.hurtTicks--;
-      if (tint.poisonTicks > 0) tint.poisonTicks--;
+      if (tint.poisonTicks > 0) {
+        tint.poisonTicks--;
+        this.tickPoisonedPlayer(id, tint.poisonTicks);
+      }
       if (tint.hurtTicks === 0 && tint.poisonTicks === 0) this.e.playerTints.delete(id);
     }
+  }
+
+  /**
+   * Bile bubbling out of a poisoned player: a bubble rising off the head or a drop running off the
+   * body every few ticks, a burst on every poison damage tick (both run on the same clock).
+   */
+  private tickPoisonedPlayer(playerId: string, poisonTicks: number): void {
+    const p: CharacterState | undefined = this.findPlayer(playerId);
+    if (!p || p.isDead) return;
+    const cx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+    const elapsed: number = GAME_CONSTANTS.SPITTER_POISON_DURATION_TICKS - poisonTicks;
+    if (elapsed > 0 && elapsed % GAME_CONSTANTS.SPITTER_POISON_TICK_INTERVAL === 0) {
+      this.spawnPoisonBurst(cx, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2);
+      return;
+    }
+    const interval: number = GAME_CONSTANTS.SPITTER_POISON_BUBBLE_INTERVAL_TICKS;
+    if (poisonTicks % interval !== 0) return;
+    const spread: number = (Math.random() - 0.5) * GAME_CONSTANTS.PLAYER_WIDTH;
+    if ((poisonTicks / interval) % 2 === 0) {
+      this.spawnPoisonBubble(cx + spread, p.y + 6);
+    } else {
+      const y: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT * (0.4 + Math.random() * 0.4);
+      this.spawnBileDrop(cx + spread, y, 0, 0.4, 24, ART_PX, PIXEL['toxicDark']);
+    }
+  }
+
+  private findPlayer(playerId: string): CharacterState | undefined {
+    if (this.e.player?.id === playerId) return this.e.player;
+    return this.e.remotePlayers.find((r: CharacterState): boolean => r.id === playerId);
   }
 
   private tintFor(playerId: string): PlayerTint {
@@ -307,47 +344,141 @@ export class VfxSystem {
     }
   }
 
-  spawnPoisonBubbles(): void {
-    const p: CharacterState | null = this.e.player;
-    if (!p) return;
-    const cx: number = p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
-    const cy: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
-    for (let i: number = 0; i < 3; i++) {
-      this.e.particles.push({
-        x: cx + (Math.random() - 0.5) * GAME_CONSTANTS.PLAYER_WIDTH,
-        y: cy + (Math.random() - 0.5) * GAME_CONSTANTS.PLAYER_HEIGHT,
-        vx: (Math.random() - 0.5) * 1.5,
-        vy: -Math.random() * 2 - 1,
-        life: 20 + Math.floor(Math.random() * 10),
-        maxLife: 30,
-        color: Math.random() > 0.5 ? '#44ff44' : '#00cc44',
-        size: 3 + Math.random() * 3,
-        shape: ParticleShape.Circle,
-        rotation: 0,
-        rotationSpeed: 0,
-        fadeMode: FadeMode.Quick,
-        scaleOverLife: true,
-      });
+  /** One drop of bile: a pixel that falls (or rises, `gravityScale` < 0, for bubbles and fumes). */
+  private spawnBileDrop(
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    life: number,
+    size: number,
+    color: string,
+    gravityScale: number = 1,
+  ): void {
+    this.addParticle({
+      x, y, vx, vy,
+      life,
+      maxLife: life,
+      color,
+      size,
+      shape: ParticleShape.Pixel,
+      rotation: 0,
+      rotationSpeed: 0,
+      fadeMode: FadeMode.Late,
+      scaleOverLife: false,
+      gravityScale,
+    });
+  }
+
+  /** A random bile tone, mostly the mid ones (the shine is rare). */
+  private bileColor(): string {
+    return BILE_COLORS[Math.random() < 0.15 ? 0 : 1 + Math.floor(Math.random() * (BILE_COLORS.length - 1))];
+  }
+
+  private dropSize(): number {
+    return Math.random() < 0.35 ? ART_PX * 2 : ART_PX;
+  }
+
+  /** The spit leaving the mouth: a spray of droplets toward `dir` and a string of drool falling. */
+  spawnSpitSpray(x: number, y: number, dir: number): void {
+    for (let i: number = 0; i < GAME_CONSTANTS.SPIT_SPRAY_DROPLETS; i++) {
+      this.spawnBileDrop(
+        x, y,
+        dir * (1.5 + Math.random() * 3),
+        -1.2 + Math.random() * 2,
+        16 + Math.floor(Math.random() * 12),
+        this.dropSize(),
+        this.bileColor(),
+      );
+    }
+    for (let i: number = 0; i < 2; i++) {
+      this.spawnBileDrop(x, y + i * ART_PX, dir * 0.4, 0.3, 30, ART_PX, PIXEL['toxicDark']);
     }
   }
 
-  spawnPoisonBubblesAt(cx: number, cy: number): void {
-    for (let i: number = 0; i < 3; i++) {
-      this.e.particles.push({
-        x: cx + (Math.random() - 0.5) * GAME_CONSTANTS.PLAYER_WIDTH,
-        y: cy + (Math.random() - 0.5) * GAME_CONSTANTS.PLAYER_HEIGHT,
-        vx: (Math.random() - 0.5) * 1.5,
-        vy: -Math.random() * 2 - 1,
-        life: 20 + Math.floor(Math.random() * 10),
-        maxLife: 30,
-        color: Math.random() > 0.5 ? '#44ff44' : '#00cc44',
-        size: 3 + Math.random() * 3,
-        shape: ParticleShape.Circle,
-        rotation: 0,
-        rotationSpeed: 0,
-        fadeMode: FadeMode.Quick,
-        scaleOverLife: true,
-      });
+  /** A drop shed by a glob in flight: it keeps a little of the glob's speed and falls away. */
+  spawnSpitDrip(x: number, y: number, vx: number, vy: number): void {
+    this.spawnBileDrop(x, y, vx * 0.15, Math.max(0, vy * 0.2), 20, ART_PX, Math.random() < 0.5 ? PIXEL['toxic'] : PIXEL['toxicDark']);
+  }
+
+  /**
+   * A glob bursting. On a surface (`surfaceY`): a crown of droplets thrown up and a puddle of
+   * `width` px left there. On a player (null): bile splattering back off the body and running down.
+   */
+  spawnSpitSplat(x: number, y: number, dir: number, surfaceY: number | null, width: number): void {
+    const count: number = GAME_CONSTANTS.SPIT_SPLASH_DROPLETS;
+    if (surfaceY !== null) {
+      for (let i: number = 0; i < count; i++) {
+        this.spawnBileDrop(
+          x + (Math.random() - 0.5) * 8,
+          surfaceY - ART_PX * 2,
+          (Math.random() - 0.5) * 3 + dir * 1.2,
+          -(1.5 + Math.random() * 2.5),
+          18 + Math.floor(Math.random() * 12),
+          this.dropSize(),
+          this.bileColor(),
+        );
+      }
+      this.e.acidPuddles.push({ x, y: surfaceY, width, age: 0, floor: this.e.floor });
+      if (this.e.acidPuddles.length > GAME_CONSTANTS.SPIT_PUDDLE_MAX) this.e.acidPuddles.shift();
+      return;
+    }
+    for (let i: number = 0; i < count; i++) {
+      this.spawnBileDrop(
+        x, y,
+        -dir * (0.5 + Math.random() * 2) + (Math.random() - 0.5),
+        -(0.5 + Math.random() * 2),
+        16 + Math.floor(Math.random() * 12),
+        this.dropSize(),
+        this.bileColor(),
+      );
+    }
+    for (let i: number = 0; i < 4; i++) {
+      this.spawnBileDrop(x + (Math.random() - 0.5) * 12, y + (Math.random() - 0.5) * 12, 0, 0.5, 28, ART_PX, PIXEL['toxicDark']);
+    }
+  }
+
+  /** Every client, every tick: puddles age, give off fumes while fresh and dry up. */
+  updateAcidPuddles(): void {
+    for (const p of this.e.acidPuddles) {
+      p.age++;
+      const fresh: boolean = p.age < GAME_CONSTANTS.SPIT_PUDDLE_TICKS * 0.7;
+      if (fresh && Math.random() < GAME_CONSTANTS.SPIT_PUDDLE_FUME_CHANCE) {
+        const fume: number = 30 + Math.floor(Math.random() * 15);
+        this.spawnBileDrop(p.x + (Math.random() - 0.5) * p.width, p.y - ART_PX * 3, (Math.random() - 0.5) * 0.3, -0.4, fume, ART_PX, PIXEL['toxicHi'], -0.08);
+      }
+    }
+    this.e.acidPuddles = this.e.acidPuddles.filter((p: AcidPuddle): boolean => p.age < GAME_CONSTANTS.SPIT_PUDDLE_TICKS && p.floor === this.e.floor);
+  }
+
+  /** Every client, every tick (ambient, not synced): living spitters drool bile from the mouth. */
+  updateSpitterDrool(): void {
+    for (const z of this.e.zombies) {
+      if (z.type !== ZombieType.Spitter || z.isDead || z.spawnTimer > 0) continue;
+      if (Math.random() >= GAME_CONSTANTS.SPITTER_DROOL_CHANCE) continue;
+      const anim: { state: ZombieAnimState; frame: number } | null = this.e.zombieSpriteAnimator.getInstanceFrame(z.id);
+      if (!anim) continue;
+      const mouth: Point | null = spitterMouth(z, anim.state, anim.frame);
+      if (mouth) this.spawnBileDrop(mouth.x, mouth.y + ART_PX, z.velocityX * 0.5, 0.2, 30, ART_PX, PIXEL['toxic']);
+    }
+  }
+
+  /** A bubble of bile rising off a poisoned player and popping. */
+  private spawnPoisonBubble(x: number, y: number): void {
+    const life: number = 26 + Math.floor(Math.random() * 10);
+    this.spawnBileDrop(x, y, (Math.random() - 0.5) * 0.4, -0.5, life, this.dropSize(), Math.random() < 0.5 ? PIXEL['toxicHi'] : PIXEL['bileHi'], -0.12);
+  }
+
+  /** Poison taking hold or biting (a damage tick): bubbles boil off the body, bile runs down it. */
+  spawnPoisonBurst(cx: number, cy: number): void {
+    for (let i: number = 0; i < 5; i++) {
+      this.spawnPoisonBubble(
+        cx + (Math.random() - 0.5) * GAME_CONSTANTS.PLAYER_WIDTH,
+        cy + (Math.random() - 0.5) * GAME_CONSTANTS.PLAYER_HEIGHT * 0.6,
+      );
+    }
+    for (let i: number = 0; i < 2; i++) {
+      this.spawnBileDrop(cx + (Math.random() - 0.5) * GAME_CONSTANTS.PLAYER_WIDTH, cy, 0, 0.5, 24, ART_PX, PIXEL['toxicDark']);
     }
   }
 

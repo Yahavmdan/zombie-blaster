@@ -30,7 +30,7 @@ import {
 } from '@shared/game-constants';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
-import { ZombieAnimState, ZombieSpriteAnchor } from './zombie-sprite-animator';
+import { ZombieAnimState, ZombieSpriteAnchor, zombieSpriteSize } from './zombie-sprite-animator';
 import { LooseProp, MagnetPull, ZombieCorpse } from '@shared/game-entities';
 import { magnetPullProgress } from './magnet-pull';
 import { fuseSeconds } from './exploding-barrel';
@@ -118,6 +118,8 @@ import {
   drawScalePan,
   drawScalePost,
 } from './puzzle-art';
+import { ART_PX, PIXEL } from './pixel-art';
+import { drawAcidPuddle, drawSpitGlob } from './spit-art';
 import {
   CANVAS_BLOOD_HI,
   CANVAS_BONE,
@@ -150,9 +152,10 @@ interface StripOffset {
 /** Matches the warrior-monster-magnet skill color. */
 const MAGNET_STREAK_COLOR: string = '#cc44ff';
 const HURT_TINT_COLOR: string = '#ff2020';
-const POISON_TINT_COLOR: string = '#30ff50';
-/** Ticks over which the poison tint fades out at the end. */
+/** Ticks over which the poison tint fades out at the end (in 4 steps). */
 const POISON_TINT_FADE_TICKS: number = 20;
+/** The poisoned sprite's 2 green shades (tint opacity), stepped like a 2-frame blink. */
+const POISON_TINT_ALPHAS: readonly number[] = [0.32, 0.5];
 
 export class RenderSystem {
   private bendSprite: HTMLCanvasElement | null = null;
@@ -204,6 +207,7 @@ export class RenderSystem {
     this.renderCages(ctx);
     this.renderPlate(ctx);
     this.renderScorchMarks(ctx);
+    this.renderAcidPuddles(ctx);
     this.renderLyingProps(ctx);
     this.renderZombies(ctx);
     this.renderHitMarks(ctx);
@@ -936,11 +940,7 @@ export class RenderSystem {
 
       if (this.e.zombieSpriteAnimator.isLoaded()) {
         const spriteKey: string = this.e.zombieSpriteAnimator.getSpriteKey(z.type);
-        const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
-        const baseRenderSize: number = z.type === ZombieType.DragonBoss ? 260 : z.type === ZombieType.Boss ? 200 : 140;
-        const baseH: number = (zDef.heightMin + zDef.heightMax) / 2;
-        const scale: number = z.instanceHeight / baseH;
-        const renderW: number = Math.round(baseRenderSize * scale);
+        const renderW: number = zombieSpriteSize(z.type, z.instanceHeight);
         const renderH: number = renderW;
         const flipX: boolean = z.type === ZombieType.DragonBoss ? z.facing > 0 : z.facing < 0;
         const anchor: ZombieSpriteAnchor = this.e.zombieSpriteAnimator.getAnchor(spriteKey);
@@ -1577,29 +1577,13 @@ export class RenderSystem {
 
   private renderSpitterProjectiles(ctx: CanvasRenderingContext2D): void {
     for (const proj of this.e.spitterProjectiles) {
-      for (const t of proj.trail) {
-        const alpha: number = t.life / 15;
-        ctx.save();
-        ctx.globalAlpha = alpha * 0.4;
-        ctx.fillStyle = '#44ff44';
-        ctx.beginPath();
-        ctx.arc(t.x, t.y, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      ctx.save();
-      ctx.fillStyle = '#88ff44';
-      ctx.beginPath();
-      ctx.arc(proj.x, proj.y, 7, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#ccffcc';
-      ctx.beginPath();
-      ctx.arc(proj.x, proj.y, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      drawSpitGlob(ctx, proj.x, proj.y, proj.velocityX, proj.velocityY, proj.lifetime);
     }
+  }
+
+  /** Acid where spit splatted: on the surface, under everyone standing in it. */
+  private renderAcidPuddles(ctx: CanvasRenderingContext2D): void {
+    for (const p of this.e.acidPuddles) drawAcidPuddle(ctx, p);
   }
 
   /** Pulsing green while poisoned, red flash on a hit (on top), both in the sprite's own shape. */
@@ -1615,9 +1599,10 @@ export class RenderSystem {
     const tint: PlayerTint | undefined = this.e.playerTints.get(playerId);
     if (!tint) return;
     if (tint.poisonTicks > 0) {
-      const pulse: number = 0.45 + Math.sin(tint.poisonTicks * 0.15) * 0.15;
-      const fade: number = Math.min(1, tint.poisonTicks / POISON_TINT_FADE_TICKS);
-      animator.drawTint(ctx, drawX, drawY, spriteSize, spriteSize, flipX, POISON_TINT_COLOR, pulse * fade);
+      const shade: number =
+        POISON_TINT_ALPHAS[Math.floor(tint.poisonTicks / GAME_CONSTANTS.SPITTER_POISON_TINT_BLINK_TICKS) % 2];
+      const fade: number = Math.ceil(Math.min(1, tint.poisonTicks / POISON_TINT_FADE_TICKS) * 4) / 4;
+      animator.drawTint(ctx, drawX, drawY, spriteSize, spriteSize, flipX, PIXEL['toxic'], shade * fade);
     }
     if (tint.hurtTicks > 0) {
       const alpha: number = 0.75 * (tint.hurtTicks / GAME_CONSTANTS.PLAYER_HURT_TINT_TICKS);
@@ -1649,6 +1634,11 @@ export class RenderSystem {
     const alpha: number = this.getParticleAlpha(p);
     const scale: number = p.scaleOverLife ? p.life / p.maxLife : 1;
     const size: number = p.size * scale;
+
+    if (p.shape === ParticleShape.Pixel) {
+      this.renderPixelParticle(ctx, p, alpha, size);
+      return;
+    }
 
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -1685,6 +1675,20 @@ export class RenderSystem {
     }
 
     ctx.restore();
+  }
+
+  /** A pixel on the art grid: whole art pixels, no rotation, opacity in 4 steps. */
+  private renderPixelParticle(ctx: CanvasRenderingContext2D, p: Particle, alpha: number, size: number): void {
+    const px: number = Math.max(ART_PX, Math.round(size / ART_PX) * ART_PX);
+    ctx.globalAlpha = Math.ceil(alpha * 4) / 4;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(
+      Math.round((p.x - px / 2) / ART_PX) * ART_PX,
+      Math.round((p.y - px / 2) / ART_PX) * ART_PX,
+      px,
+      px,
+    );
+    ctx.globalAlpha = 1;
   }
 
   private drawStar(ctx: CanvasRenderingContext2D, size: number): void {

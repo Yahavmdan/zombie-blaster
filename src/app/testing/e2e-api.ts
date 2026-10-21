@@ -88,6 +88,8 @@ export interface E2eZombieView {
   mealId: string | null;
   /** Sprite animation this client renders for the zombie (`walk`, `eating`, ...). */
   animState: string | null;
+  /** Frame of that animation this client draws (an Eater's `jump` frame follows its vertical speed). */
+  animFrame: number | null;
   /** Ticks the zombie stays stunned by a warrior skill (host-simulated, synced). */
   stunTicks: number;
   /** Ticks until the swing in progress lands (null when not swinging or it already landed). */
@@ -411,6 +413,8 @@ export interface E2eSnapshot {
   drops: E2eDropView[];
   /** Hostile shots in flight: spitter acid and dragon fireballs. */
   zombieProjectiles: { spitter: number; dragon: number };
+  /** Acid puddles where spit splatted (drawing only): centre x, surface y, width. */
+  acidPuddles: { x: number; y: number; width: number }[];
   /** Ticks until the potion keys work again. */
   potionCooldownTicks: number;
   /** Ticks of post-hit invincibility left for the local player. */
@@ -476,8 +480,8 @@ export interface E2eEngineControls {
    * zombie types, at most one boss at a time), ignoring the spawn timer and the alive cap.
    */
   spawnRolledZombies(count: number): void;
-  /** Solo/host setup only: a walker (or a floor-rolled type) standing on the ground at x. */
-  spawnZombieAt(x: number): void;
+  /** Solo/host setup only: a zombie of the floor-rolled type (or `type`, e.g. 'spitter') standing on the ground at x. */
+  spawnZombieAt(x: number, type?: string): void;
   /** Solo/host setup only: every zombie leaves the floor at once (no corpses, no loot); spawning goes on. */
   clearZombies(): void;
 }
