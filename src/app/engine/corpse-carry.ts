@@ -5,6 +5,7 @@ import {
   TreeSkill,
   findTreeSkill,
   ownsTreeSkill,
+  vary,
 } from '@shared/index';
 import { LooseProp, ZombieCorpse } from '@shared/game-entities';
 
@@ -208,9 +209,12 @@ export function toss(item: Carriable, carrier: CarrierView, restY: number = 0): 
   item.velocityX = dir * GAME_CONSTANTS.CORPSE_THROW_SPEED_X + carrier.velocityX / 2;
   item.velocityY = GAME_CONSTANTS.CORPSE_THROW_SPEED_Y;
   item.carrierId = null;
-  // A thrown prop tumbles the way it flies; a limp body only tilts that way.
+  // A thrown prop tumbles the way it flies; a limp body only tilts that way, each a bit differently.
   item.spin =
-    dir * (isCorpse(item) ? GAME_CONSTANTS.CORPSE_THROW_SPIN : GAME_CONSTANTS.PROP_THROW_SPIN);
+    dir *
+    (isCorpse(item)
+      ? vary(GAME_CONSTANTS.CORPSE_THROW_SPIN, GAME_CONSTANTS.CORPSE_SPIN_SPREAD)
+      : GAME_CONSTANTS.PROP_THROW_SPIN);
   return next;
 }
 

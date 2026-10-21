@@ -819,6 +819,16 @@ export class RenderSystem {
     ctx.restore();
   }
 
+  /** Saves the context and turns it by the zombie's knock tilt around its middle (restore after drawing). */
+  private tiltAboutMiddle(ctx: CanvasRenderingContext2D, z: ZombieState): void {
+    const cx: number = z.x + z.instanceWidth / 2;
+    const cy: number = z.y + z.instanceHeight / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(z.angle);
+    ctx.translate(-cx, -cy);
+  }
+
   /** Brief white flash on a zombie that was just hit (knockback is synced, so everyone sees it). */
   /**
    * Monster-magnet drag, drawn from the synced pull state so every screen shows the same thing.
@@ -955,6 +965,9 @@ export class RenderSystem {
         }
 
         const pullProgress: number | null = magnetPullProgress(z);
+        // Knocked through the air it tilts (synced), a little differently every time.
+        const tilted: boolean = z.angle !== 0 && pullProgress === null;
+        if (tilted) this.tiltAboutMiddle(ctx, z);
         if (pullProgress !== null) {
           this.renderMagnetDrag(ctx, z, pullProgress, (): void => {
             this.e.zombieSpriteAnimator.draw(ctx, z.id, spriteKey, drawX, drawY, renderW, renderH, flipX);
@@ -963,6 +976,7 @@ export class RenderSystem {
           this.e.zombieSpriteAnimator.draw(ctx, z.id, spriteKey, drawX, drawY, renderW, renderH, flipX);
         }
         if (z.knockbackFrames >= GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES - 2) this.renderHitFlash(ctx, z);
+        if (tilted) ctx.restore();
         if (isZombieWindingUp(z)) this.renderAttackTelegraph(ctx, z);
 
         if (shocked && !isSpawning) {

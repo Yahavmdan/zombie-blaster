@@ -1,4 +1,4 @@
-import { CharacterState, Direction, GAME_CONSTANTS } from '@shared/index';
+import { CharacterState, Direction, GAME_CONSTANTS, vary } from '@shared/index';
 import { LooseProp, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import { Point } from './boulder-puzzle';
 
@@ -132,9 +132,10 @@ export function blastCorpses(corpses: ZombieCorpse[], center: Point): ZombieCorp
  */
 export function flingCorpse(corpse: ZombieCorpse, center: Point): void {
   const dir: number = blastPushDir(center, corpse.x + corpse.width / 2);
-  corpse.velocityX = dir * GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X;
-  corpse.velocityY = GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_Y;
-  corpse.spin = dir * GAME_CONSTANTS.CORPSE_BLAST_SPIN;
+  // No two bodies fly alike: a varied throw and turn.
+  corpse.velocityX = dir * vary(GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X, GAME_CONSTANTS.CORPSE_BLAST_SPREAD);
+  corpse.velocityY = vary(GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_Y, GAME_CONSTANTS.CORPSE_BLAST_SPREAD);
+  corpse.spin = dir * vary(GAME_CONSTANTS.CORPSE_BLAST_SPIN, GAME_CONSTANTS.CORPSE_SPIN_SPREAD);
   corpse.isGrounded = false;
 }
 

@@ -85,6 +85,16 @@ export const GAME_CONSTANTS = {
   KNOCKBACK_FORCE_ZOMBIE: 8, // How far a zombie is pushed back when hit by the player
   KNOCKBACK_UP_FORCE: -5, // Upward pop applied during any knockback (negative = up)
   KNOCKBACK_ZOMBIE_FRAMES: 10, // How many ticks a zombie stays in knockback before regaining control
+  // Every knock throws a zombie a little differently (host-simulated, synced): a varied push and pop,
+  // and a tilt while it flies (drawn only), more or less each time, never a cartwheel.
+  ZOMBIE_KNOCK_PUSH_SPREAD: 0.25, // Sideways push is scaled by a random 0.75-1.25 each knock
+  ZOMBIE_KNOCK_UP_SPREAD: 0.35, // Upward pop is scaled by a random 0.65-1.35 each knock
+  ZOMBIE_KNOCK_SPIN_MIN: 0.02, // A knocked zombie starts tilting at least this fast (radians/tick)...
+  ZOMBIE_KNOCK_SPIN_MAX: 0.09, // ...and at most this fast
+  ZOMBIE_KNOCK_SPIN_DRAG: 0.9, // Share of its tilting speed a flying knocked zombie keeps per tick (peak tilt ~10x its start speed)
+  ZOMBIE_KNOCK_SWEPT_CHANCE: 0.3, // Chance a knock sweeps it off its feet (head drops back toward the hitter) instead of leaning with the push
+  ZOMBIE_KNOCK_MAX_TILT: 0.7, // A knocked zombie tilts no further than this (radians) from upright
+  ZOMBIE_KNOCK_SETTLE_SPIN: 0.1, // Once landed it stands back up this fast (radians/tick)
 
   // ─── Player Derived Stat Formulas ───────────────
   PLAYER_BASE_HP: 50, // Starting HP at level 1 before any stat bonuses
@@ -357,9 +367,12 @@ export const GAME_CONSTANTS = {
   CORPSE_THROW_SPEED_Y: -3, // Upward toss of a dropped corpse (negative = up)
   // Corpse tumbling (tossed, blasted or killed flying): a limp body tilts in the air but never
   // cartwheels, bounces a little off a hard landing, slides on and flops flat.
-  CORPSE_THROW_SPIN: 0.03, // A tossed corpse turns this fast (radians/tick) the way it flies
-  CORPSE_BLAST_SPIN: 0.08, // A corpse thrown by a barrel blast turns this fast
-  CORPSE_HIT_SPIN_PER_SPEED: 0.015, // A zombie killed flying turns this fast per px/tick of its sideways speed
+  CORPSE_THROW_SPIN: 0.03, // A tossed corpse starts turning about this fast (radians/tick) the way it flies
+  CORPSE_BLAST_SPIN: 0.05, // A corpse thrown by a barrel blast starts turning about this fast
+  CORPSE_HIT_SPIN_PER_SPEED: 0.006, // A zombie killed flying starts turning about this fast per px/tick of its sideways speed
+  CORPSE_SPIN_SPREAD: 0.5, // Each body turns a random 0.5-1.5x of that, so no two fly alike
+  CORPSE_SPIN_DRAG: 0.92, // Share of its turning speed a flying corpse keeps per tick (peak tilt ~12x its start speed)
+  CORPSE_BLAST_SPREAD: 0.25, // A blasted corpse flies a random 0.75-1.25x of BARREL_BLAST_CORPSE_SPEED_X/Y
   CORPSE_MAX_TILT: 0.6, // A flying corpse turns no further than this (radians) from lying flat
   CORPSE_AIR_DRAG: 0.92, // Sideways speed kept per tick by a flying corpse
   CORPSE_BOUNCE: 0.15, // A corpse landing faster than CORPSE_BOUNCE_MIN_SPEED bounces back up with this share of its fall speed

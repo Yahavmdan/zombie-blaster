@@ -103,6 +103,8 @@ function makeZombie(overrides: Partial<ZombieState> = {}): ZombieState {
     eatingTimer: 0,
     magnetPull: null,
     stunTicks: 0,
+    angle: 0,
+    spin: 0,
     ...overrides,
   };
 }

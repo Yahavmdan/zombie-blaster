@@ -1,4 +1,4 @@
-import { GAME_CONSTANTS } from '@shared/index';
+import { GAME_CONSTANTS, vary } from '@shared/index';
 import { ZombieCorpse } from '@shared/game-entities';
 import { limitTilt } from './prop-tumble';
 
@@ -9,10 +9,11 @@ import { limitTilt } from './prop-tumble';
  * on along what it landed on and flops back flat. Its box stays upright: the tilt is drawn only.
  */
 
-/** One tick in the air: sideways drag and the tilt. Gravity and the move are the caller's. */
+/** One tick in the air: sideways drag and the tilt (turning slower and slower). Gravity and the move are the caller's. */
 export function flyCorpse(c: ZombieCorpse): void {
   c.velocityX *= GAME_CONSTANTS.CORPSE_AIR_DRAG;
   if (Math.abs(c.velocityX) < 0.1) c.velocityX = 0;
+  c.spin *= GAME_CONSTANTS.CORPSE_SPIN_DRAG;
   limitTilt(c, GAME_CONSTANTS.CORPSE_MAX_TILT);
   c.angle += c.spin;
 }
@@ -52,7 +53,7 @@ export function corpseAtRest(c: ZombieCorpse): boolean {
   return c.velocityX === 0 && c.angle === 0;
 }
 
-/** How fast a zombie killed flying at this sideways speed turns (it keeps tumbling that way). */
+/** How fast a zombie killed flying at this sideways speed turns (it keeps tumbling that way, each body a bit differently). */
 export function deathSpin(velocityX: number): number {
-  return velocityX * GAME_CONSTANTS.CORPSE_HIT_SPIN_PER_SPEED;
+  return vary(velocityX * GAME_CONSTANTS.CORPSE_HIT_SPIN_PER_SPEED, GAME_CONSTANTS.CORPSE_SPIN_SPREAD);
 }

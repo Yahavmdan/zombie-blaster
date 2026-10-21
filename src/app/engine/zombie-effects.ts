@@ -1,4 +1,5 @@
 import { GAME_CONSTANTS, ZombieEffectRequest, ZombieState, ZombieType } from '@shared/index';
+import { knockZombie, startKnockTilt } from './zombie-knock';
 
 /** Bosses shrug off launches and knockdowns (they still take the stun of a parry or a roar). */
 function isHeavy(z: ZombieState): boolean {
@@ -27,13 +28,17 @@ export function applyZombieEffect(z: ZombieState, req: ZombieEffectRequest, fixe
     z.velocityX = dir * GAME_CONSTANTS.SKILL_LAUNCH_DRIFT_SPEED;
     z.isGrounded = false;
     z.knockbackFrames = 0;
+    startKnockTilt(z, dir);
     return;
   }
   const push: number = Math.max(0, Math.min(req.force, GAME_CONSTANTS.SKILL_MAX_REMOTE_PUSH_FORCE));
-  z.velocityX = dir * push;
-  z.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
-  z.isGrounded = false;
-  z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES;
+  knockZombie(
+    z,
+    dir,
+    push,
+    GAME_CONSTANTS.KNOCKBACK_UP_FORCE,
+    GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES,
+  );
 }
 
 /** Launch speed (px per tick, upward) that throws a body this many px high under normal gravity. */

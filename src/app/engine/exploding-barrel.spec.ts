@@ -241,10 +241,14 @@ describe('exploding barrels', (): void => {
     const caught: ZombieCorpse[] = blastCorpses([left, right, far, carried], center);
     expect(caught).toEqual([left, right]);
     for (const c of caught) flingCorpse(c, center);
-    expect(left.velocityX).toBe(-GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X);
-    expect(right.velocityX).toBe(GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X);
+    // Away from the barrel, each body at its own speed (CORPSE_BLAST_SPREAD).
+    const spread: number = GAME_CONSTANTS.CORPSE_BLAST_SPREAD;
+    const speedX: number = GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X;
+    for (const vx of [-left.velocityX, right.velocityX]) {
+      expect(vx).toBeGreaterThanOrEqual(speedX * (1 - spread));
+      expect(vx).toBeLessThanOrEqual(speedX * (1 + spread));
+    }
     for (const c of caught) {
-      expect(c.velocityY).toBe(GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_Y);
       expect(c.velocityY).toBeLessThan(0);
       expect(c.isGrounded).toBe(false);
     }

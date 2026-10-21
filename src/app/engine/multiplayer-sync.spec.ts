@@ -124,6 +124,8 @@ function makeZombie(overrides: Partial<ZombieState> = {}): ZombieState {
     eatingTimer: 0,
     magnetPull: null,
     stunTicks: 0,
+    angle: 0,
+    spin: 0,
     ...overrides,
   };
 }
@@ -1857,10 +1859,10 @@ describe('Exploding barrels', (): void => {
       { targetPlayerId: 'near-guest', damage: 129, knockbackDir: 1, isPoisonAttack: false, isBlast: true },
     ]);
     expect(engine.player.hp, 'the host stood far away').toBe(200);
-    expect(left.velocityX).toBe(-GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X);
-    expect(right.velocityX).toBe(GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_X);
+    expect(left.velocityX, 'thrown left, away from the barrel').toBeLessThan(0);
+    expect(right.velocityX, 'thrown right').toBeGreaterThan(0);
     expect([left.isGrounded, right.isGrounded], 'in the air').toEqual([false, false]);
-    expect(left.velocityY).toBe(GAME_CONSTANTS.BARREL_BLAST_CORPSE_SPEED_Y);
+    expect(left.velocityY, 'thrown up').toBeLessThan(0);
     expect(far.isGrounded, 'out of the blast').toBe(true);
     expect(far.velocityX).toBe(0);
   });

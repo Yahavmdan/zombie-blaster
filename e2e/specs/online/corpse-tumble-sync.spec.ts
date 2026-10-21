@@ -62,7 +62,7 @@ test.describe('tumbling corpses in co-op', { tag: '@online' }, (): void => {
       },
       { timeoutMs: 8_000, intervalMs: 10 },
     );
-    expect(most, 'the guest drew it tilted in flight').toBeGreaterThan(0.1);
+    expect(most, 'the guest drew it tilted in flight').toBeGreaterThan(0.05);
     await guest.attachCanvas(testInfo, 'guest: tossed corpse lying flat');
 
     const onGuest: E2eCorpseView = findCorpse(seen, corpse.id)!;

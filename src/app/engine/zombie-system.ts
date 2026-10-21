@@ -14,6 +14,7 @@ import {
   ZombieCorpse,
 } from '@shared/game-entities';
 import { BoulderPuzzleLayout, IGameEngine, Platform } from './engine-types';
+import { tickKnockTilt } from './zombie-knock';
 import { Box, keepOutOfWall, leavesThroughOpening } from './boulder-puzzle';
 import { EXIT_CAGE, exitCageGroundBox } from './cage-puzzle';
 import { isDoorOpen } from './plate-puzzle';
@@ -320,8 +321,7 @@ export class ZombieSystem {
         z.x = maxX;
         z.velocityX = 0;
       }
-
-    
+      tickKnockTilt(z);
     }
 
     this.resolveZombieCollisions();
@@ -1185,6 +1185,8 @@ export class ZombieSystem {
       eatingTimer: 0,
       magnetPull: null,
       stunTicks: 0,
+      angle: 0,
+      spin: 0,
     };
 
     const spriteKey: string = this.e.zombieSpriteAnimator.getSpriteKey(type);

@@ -95,6 +95,8 @@ export interface E2eZombieView {
   /** Ticks until the swing in progress lands (null when not swinging or it already landed). */
   ticksToHit: number | null;
   knockbackFrames: number;
+  /** Knock tilt this client draws, radians clockwise (0 = upright; host-simulated, synced). */
+  angle: number;
   isGrounded: boolean;
   velocityY: number;
 }

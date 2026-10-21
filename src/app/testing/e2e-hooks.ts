@@ -142,6 +142,7 @@ function toZombieView(z: ZombieState, engine: GameEngine): E2eZombieView {
     stunTicks: z.stunTicks,
     ticksToHit: z.attackAnimTimer > 0 && !z.attackHasHit ? z.attackAnimTimer - ZOMBIE_TYPES[z.type].attackHitTick : null,
     knockbackFrames: z.knockbackFrames,
+    angle: z.angle,
     isGrounded: z.isGrounded,
     velocityY: z.velocityY,
   };

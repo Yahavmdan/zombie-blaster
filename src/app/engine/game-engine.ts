@@ -30,6 +30,7 @@ import {
 } from '@shared/game-entities';
 import { InputKeys } from '@shared/messages';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
+import { tickKnockTilt } from './zombie-knock';
 import { SpriteAnimator, PlayerAnimState, classToSpriteSet } from './sprite-animator';
 import { ZombieSpriteAnimator, ZombieAnimState } from './zombie-sprite-animator';
 import { MapRenderer } from './map-renderer';
@@ -1705,6 +1706,12 @@ export class GameEngine implements IGameEngine {
           z.x = interp.targetX + interp.targetVelocityX * extraTicks;
           z.y = interp.targetY + interp.targetVelocityY * extraTicks;
         }
+        // The knock tilt turns on between snapshots too; anything malformed stands upright.
+        if (!Number.isFinite(z.angle) || !Number.isFinite(z.spin)) {
+          z.angle = 0;
+          z.spin = 0;
+        }
+        tickKnockTilt(z);
       }
     }
 

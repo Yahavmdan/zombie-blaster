@@ -1,6 +1,7 @@
 import { CharacterState, GAME_CONSTANTS, VfxEventType } from '@shared/index';
 import { BoulderState, ZombieState } from '@shared/game-entities';
 import { BoulderPuzzleLayout, IGameEngine } from './engine-types';
+import { knockZombie } from './zombie-knock';
 import { CombatSystem } from './combat-system';
 import { VfxSystem } from './vfx-system';
 import {
@@ -113,10 +114,13 @@ export class BoulderPuzzleSystem {
       z.hp -= damage;
       // A zombie in a monster-magnet drag keeps flying to the caster.
       if (!z.magnetPull) {
-        z.velocityX = dir * GAME_CONSTANTS.KNOCKBACK_FORCE_ZOMBIE;
-        z.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
-        z.isGrounded = false;
-        z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES;
+        knockZombie(
+          z,
+          dir,
+          GAME_CONSTANTS.KNOCKBACK_FORCE_ZOMBIE,
+          GAME_CONSTANTS.KNOCKBACK_UP_FORCE,
+          GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES,
+        );
       }
       const cx: number = z.x + z.instanceWidth / 2;
       const cy: number = z.y + z.instanceHeight / 2;

@@ -1,6 +1,7 @@
 import { CharacterState, GAME_CONSTANTS, VfxEventType } from '@shared/index';
 import { LooseProp, ZombieState } from '@shared/game-entities';
 import { IGameEngine } from './engine-types';
+import { knockZombie } from './zombie-knock';
 import { CombatSystem } from './combat-system';
 import { LoosePropSystem } from './loose-prop-system';
 import { VfxSystem } from './vfx-system';
@@ -161,10 +162,13 @@ export class ExplodingBarrelSystem {
     z.hp -= damage;
     // A zombie in a monster-magnet drag keeps flying to the caster.
     if (!z.magnetPull) {
-      z.velocityX = blastPushDir(center, cx) * GAME_CONSTANTS.BARREL_BLAST_KNOCKBACK;
-      z.velocityY = GAME_CONSTANTS.BARREL_BLAST_KNOCKBACK_UP;
-      z.isGrounded = false;
-      z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES;
+      knockZombie(
+        z,
+        blastPushDir(center, cx),
+        GAME_CONSTANTS.BARREL_BLAST_KNOCKBACK,
+        GAME_CONSTANTS.BARREL_BLAST_KNOCKBACK_UP,
+        GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES,
+      );
     }
     this.vfx.spawnDamageNumber(cx, z.y - 10, damage, false, BLAST_DAMAGE_COLOR);
     this.e.pendingVfxEvents.push({

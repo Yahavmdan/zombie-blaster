@@ -28,6 +28,8 @@ export function startMagnetPull(z: ZombieState, targetX: number, targetFeetY: nu
   z.velocityX = 0;
   z.velocityY = 0;
   z.knockbackFrames = 0;
+  z.angle = 0;
+  z.spin = 0;
   // Torn out of whatever it was doing.
   z.attackAnimTimer = 0;
   z.attackHasHit = false;

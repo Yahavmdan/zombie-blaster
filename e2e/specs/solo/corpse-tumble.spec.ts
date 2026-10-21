@@ -130,7 +130,8 @@ test.describe('tumbling corpses', { tag: '@solo' }, (): void => {
       corpse.id,
       'the blasted corpse flies tilting and comes to lie flat',
     );
-    expect(most, 'the blast turned it').toBeGreaterThan(0.3);
+    // Each body turns a random 0.5-1.5x of CORPSE_BLAST_SPIN: some only a little.
+    expect(most, 'the blast turned it').toBeGreaterThan(0.15);
     expect(most, 'it never cartwheels').toBeLessThan(CORPSE_MAX_TILT + TILT_SLACK);
     expect(findCorpse(rested, corpse.id)!.x, 'thrown away from the barrel').toBeGreaterThan(
       corpse.x + 30,

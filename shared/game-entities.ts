@@ -74,6 +74,10 @@ export interface ZombieState {
   magnetPull: MagnetPull | null;
   /** Ticks the zombie stays stunned (no AI, no attacks; it still falls). Set by warrior skills, host-simulated and synced. */
   stunTicks: number;
+  /** Tilt while knocked through the air, radians clockwise around its middle (0 = upright). Drawn only: its box stays upright. Host-simulated and synced. */
+  angle: number;
+  /** How fast that tilt turns (radians/tick). */
+  spin: number;
 }
 
 /** A zombie being dragged by monster magnet from where it stood to the caster's spot. */

@@ -33,6 +33,7 @@ import {
 import { ZombieState, ZombieType } from '@shared/game-entities';
 import { ZombieCorpse } from '@shared/game-entities';
 import { DashPhaseState, IGameEngine, PlayerProjectile } from './engine-types';
+import { knockZombie, startKnockTilt } from './zombie-knock';
 import { refreshDerivedStats } from './derived-stats';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
 import { PhysicsSystem } from './physics-system';
@@ -1101,10 +1102,13 @@ export class CombatSystem {
 
       z.hp -= damage;
       this.collectDamageEvent(z.id, damage, z.hp <= 0);
-      z.velocityX = dash.dir * z.instanceKnockbackForce * 1.5;
-      z.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
-      z.isGrounded = false;
-      z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES * 2;
+      knockZombie(
+        z,
+        dash.dir,
+        z.instanceKnockbackForce * 1.5,
+        GAME_CONSTANTS.KNOCKBACK_UP_FORCE,
+        GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES * 2,
+      );
 
       const hitCx: number = z.x + z.instanceWidth / 2;
       const hitCy: number = z.y + z.instanceHeight / 2;
@@ -1444,9 +1448,11 @@ export class CombatSystem {
     if (z.magnetPull) return;
     const up: number = GAME_CONSTANTS.ZOMBIE_EATER_BITE_KNOCKBACK_UP;
     const airTicks: number = Math.ceil((-2 * up) / this.drops.getEffectiveGravity());
-    z.velocityX = ((z.x > fromX ? 1 : -1) * GAME_CONSTANTS.ZOMBIE_EATER_BITE_KNOCKBACK_PX) / airTicks;
+    const dir: number = z.x > fromX ? 1 : -1;
+    z.velocityX = (dir * GAME_CONSTANTS.ZOMBIE_EATER_BITE_KNOCKBACK_PX) / airTicks;
     z.velocityY = up;
     z.isGrounded = false;
+    startKnockTilt(z, dir);
     // Longer than the hop: a fall off a ledge stays in knockback until it lands too.
     z.knockbackFrames = airTicks * 2;
   }
@@ -1454,11 +1460,13 @@ export class CombatSystem {
   private knockZombieAwayFrom(z: ZombieState, fromX: number): void {
     // A zombie in a monster-magnet drag keeps flying to the caster: hits never knock it off course.
     if (z.magnetPull) return;
-    const knockDir: number = z.x > fromX ? 1 : -1;
-    z.velocityX = knockDir * GAME_CONSTANTS.KNOCKBACK_FORCE_ZOMBIE;
-    z.velocityY = GAME_CONSTANTS.KNOCKBACK_UP_FORCE;
-    z.isGrounded = false;
-    z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES;
+    knockZombie(
+      z,
+      z.x > fromX ? 1 : -1,
+      GAME_CONSTANTS.KNOCKBACK_FORCE_ZOMBIE,
+      GAME_CONSTANTS.KNOCKBACK_UP_FORCE,
+      GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES,
+    );
   }
 
   applyZombieDamageToPlayer(damage: number, z: ZombieState): void {

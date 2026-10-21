@@ -181,6 +181,10 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   `corpseViews[].angle` (tossed, blasted or killed flying: tilts up to `CORPSE_MAX_TILT`, bounces off
   hard landings, slides, flops flat). Sample with `intervalMs: 10` (a toss flies ~25 ticks) and wait
   for `isGrounded && angle === 0`. Specs: `solo/corpse-tumble.spec.ts`, `online/corpse-tumble-sync.spec.ts`.
+  Knocked zombies vary every time: `zombies[].angle` (tilt while flying, up to `ZOMBIE_KNOCK_MAX_TILT`, 0 once
+  back on its feet), push and pop scaled by random spreads: never assert exact knock speeds or distances.
+  Helpers `knockIt`/`peakTilt` in `support/zombie-knock.ts`. Specs: `solo/zombie-knock.spec.ts`,
+  `online/zombie-knock-sync.spec.ts`.
 - **Visual == collision:** `probe.geometryReport()` measures the drawn level pixels against the
   collision data; `expectArtMatchesCollision` (support/level-geometry.ts) asserts it. Any art/layout
   change must keep `level-geometry.spec` and `level-sync.spec` green. Look at their floor screenshots.
