@@ -275,6 +275,18 @@ export const GAME_CONSTANTS = {
   SPITTER_POISON_TICK_INTERVAL: 25, // Ticks between each poison damage tick
   SPITTER_POISON_DAMAGE_PER_TICK: 3, // Base damage dealt per poison tick
   SPITTER_POISON_DAMAGE_WAVE_SCALE: 0.5, // Extra poison damage scaling per wave
+  // Spit and poison looks (drawing only, no gameplay): bile out of the mouth, splats, puddles, bubbles.
+  SPITTER_DROOL_CHANCE: 0.025, // Chance per tick a living spitter drips a drop of bile from its mouth
+  SPIT_DRIP_INTERVAL_TICKS: 3, // A glob in flight sheds a falling drop every this many ticks
+  SPIT_SPRAY_DROPLETS: 7, // Droplets sprayed out of the mouth with each spit
+  SPIT_SPLASH_DROPLETS: 10, // Droplets thrown up when a glob splats on a surface or a player
+  SPIT_PUDDLE_TICKS: 260, // How long an acid puddle stays where a glob splatted (it dries up at the end)
+  SPIT_PUDDLE_WIDTH_MIN_PX: 16, // Narrowest acid puddle
+  SPIT_PUDDLE_WIDTH_MAX_PX: 28, // Widest acid puddle
+  SPIT_PUDDLE_MAX: 8, // Puddles on screen at once (the oldest dries up first)
+  SPIT_PUDDLE_FUME_CHANCE: 0.05, // Chance per tick a fresh puddle gives off a wisp of fumes
+  SPITTER_POISON_BUBBLE_INTERVAL_TICKS: 7, // A poisoned player gives off a bubble or a drip this often
+  SPITTER_POISON_TINT_BLINK_TICKS: 10, // The poisoned player's green tint steps between 2 shades this often
 
   // ─── Zombie AI ────────────────────────────────
   ZOMBIE_ORBIT_MIN: 25, // Closest distance a zombie tries to orbit around the player

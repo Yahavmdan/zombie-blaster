@@ -96,6 +96,11 @@ Never draw a rect/circle over the hitbox for a player status. `VfxSystem.flashPl
 `PlayerHurt`) and `tintPlayerPoisoned(id)` (green, synced through `PoisonTrigger`) set `engine.playerTints`;
 `RenderSystem.renderStatusTint` draws them with `SpriteAnimator.drawTint`, a silhouette of the current frame.
 Every new local player-damage path calls `flashPlayerHurt`. Probe: `player.tint` / `remotePlayers[].tint`.
+Ongoing looks of a status (poison bubbles and drips) come from the tint itself in
+`VfxSystem.updatePlayerTints` on every client, so they need no event of their own.
+
+Spitters: `SpitSpray` (mouth) and `SpitSplat` (`targetY` + `value` = puddle width on a surface).
+Their drool and the drops a glob sheds in flight are ambient (each client, unsynced).
 
 ## Payload size
 

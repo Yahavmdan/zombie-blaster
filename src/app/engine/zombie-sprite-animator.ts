@@ -44,8 +44,10 @@ type ZombieAnimConfigs = Record<ZombieAnimState, ZombieSpriteConfig | undefined>
   [ZombieAnimState.Hurt]: ZombieSpriteConfig;
 };
 
-const ZOMBIE_FRAME_SIZE: number = 128;
+export const ZOMBIE_FRAME_SIZE: number = 128;
 const EATER_JUMP_FRAMES: number = 8;
+/** Spitter attack frame length: its spit frame (the spray) starts on the attack's hit tick. */
+export const SPITTER_ATTACK_FRAME_TICKS: number = 5;
 
 export interface ZombieSpriteAnchor {
   anchorX: number;
@@ -58,6 +60,7 @@ const ZOMBIE_SPRITE_ANCHORS: Record<string, ZombieSpriteAnchor> = {
   zombie_1: { anchorX: 0.49, anchorY: 0.992 },
   zombie_2: { anchorX: 0.45, anchorY: 0.992 },
   zombie_3: { anchorX: 0.47, anchorY: 0.992 },
+  spitter: { anchorX: 0.47, anchorY: 0.992 },
   zombie_4: { anchorX: 0.49, anchorY: 0.992 },
   dragon_boss: { anchorX: 0.50, anchorY: 0.994 },
   eater: { anchorX: 0.54, anchorY: 0.992 },
@@ -66,7 +69,7 @@ const ZOMBIE_SPRITE_ANCHORS: Record<string, ZombieSpriteAnchor> = {
 const ZOMBIE_SPRITE_KEY_MAP: Record<ZombieType, string> = {
   [ZombieType.Walker]: 'zombie_1',
   [ZombieType.Runner]: 'zombie_2',
-  [ZombieType.Spitter]: 'zombie_3',
+  [ZombieType.Spitter]: 'spitter',
   [ZombieType.Tank]: 'zombie_4',
   [ZombieType.Boss]: 'zombie_3',
   [ZombieType.DragonBoss]: 'dragon_boss',
@@ -102,6 +105,18 @@ const ZOMBIE_ANIM_CONFIGS: Record<string, ZombieAnimConfigs> = {
     [ZombieAnimState.Attack]: { src: 'sprites/zombies/zombie_3/Attack.png', frameCount: 4, frameDurationTicks: 5, loop: false },
     [ZombieAnimState.Dead]: { src: 'sprites/zombies/zombie_3/Dead.png', frameCount: 5, frameDurationTicks: 8, loop: false },
     [ZombieAnimState.Hurt]: { src: 'sprites/zombies/zombie_3/Hurt.png', frameCount: 4, frameDurationTicks: 6, loop: false },
+    [ZombieAnimState.Run]: undefined,
+    [ZombieAnimState.Jump]: undefined,
+    [ZombieAnimState.AttackAlt1]: undefined,
+    [ZombieAnimState.Eating]: undefined,
+  },
+  // zombie_3 recoloured, with a throat sac and bile (art: tools/spitter-sprites/build.mjs).
+  spitter: {
+    [ZombieAnimState.Idle]: { src: 'sprites/zombies/spitter/Idle.png', frameCount: 6, frameDurationTicks: 10, loop: true },
+    [ZombieAnimState.Walk]: { src: 'sprites/zombies/spitter/Walk.png', frameCount: 10, frameDurationTicks: 6, loop: true },
+    [ZombieAnimState.Attack]: { src: 'sprites/zombies/spitter/Attack.png', frameCount: 4, frameDurationTicks: SPITTER_ATTACK_FRAME_TICKS, loop: false },
+    [ZombieAnimState.Dead]: { src: 'sprites/zombies/spitter/Dead.png', frameCount: 5, frameDurationTicks: 8, loop: false },
+    [ZombieAnimState.Hurt]: { src: 'sprites/zombies/spitter/Hurt.png', frameCount: 4, frameDurationTicks: 6, loop: false },
     [ZombieAnimState.Run]: undefined,
     [ZombieAnimState.Jump]: undefined,
     [ZombieAnimState.AttackAlt1]: undefined,
@@ -153,6 +168,11 @@ export function zombieSpriteSize(type: ZombieType, height: number): number {
         : type === ZombieType.Eater ? GAME_CONSTANTS.ZOMBIE_EATER_SPRITE_PX
           : 140;
   return Math.round(base * (height / ((def.heightMin + def.heightMax) / 2)));
+}
+
+/** Where a sprite sheet's feet sit in its frame (fractions of the frame). */
+export function zombieSpriteAnchor(spriteKey: string): ZombieSpriteAnchor {
+  return ZOMBIE_SPRITE_ANCHORS[spriteKey] ?? DEFAULT_ANCHOR;
 }
 
 /**
@@ -248,7 +268,7 @@ export class ZombieSpriteAnimator {
   }
 
   getAnchor(spriteKey: string): ZombieSpriteAnchor {
-    return ZOMBIE_SPRITE_ANCHORS[spriteKey] ?? DEFAULT_ANCHOR;
+    return zombieSpriteAnchor(spriteKey);
   }
 
   /** Shows the animation the zombie's state calls for; an Eater in the air shows the pounce frame for its speed. */

@@ -133,6 +133,23 @@ same art rules, in `src/app/engine/puzzle-art.ts` with the helpers in `pixel-art
   on a guide rod, not stacked ellipses; a tarp draped from a knot, not even stripes; cables in
   straight runs over pulleys hung from the roof, not a smooth arc).
 
+## Effects and zombie sheet variants (the spitter is the reference)
+
+- Liquids and specks are pixels, not soft circles: `ParticleShape.Pixel` snaps to the art grid and
+  steps opacity in 4 levels. Drops fall with gravity, bubbles and fumes rise (`gravityScale` < 0).
+- Projectiles drawn in code are pixel art too (`spit-art.ts`): overlapping `pxDisc`s for a teardrop
+  that stretches along the velocity, ink first, then dark, mid shifted up-left, a shine pixel; a
+  2-frame wobble. Spacing the tail discs apart reads as a caterpillar: overlap them.
+- Decals on a surface (acid puddle, scorch) sit on the surface top, dry up in whole-pixel steps
+  and go with the floor.
+- Status tints step between 2 shades (`steps(2)` feel), never a sine pulse.
+- A zombie variant is a generated sheet, not a hand edit: `tools/spitter-sprites/build.mjs` recolours
+  zombie_3 by palette map, finds the face by its eye/mouth colours, draws the throat sac and drool
+  per frame, and writes the mouth position per frame (`spitter-mouth.ts`) so effects leave the mouth.
+  `npm run sprites:spitter -- --zoom` writes `tools/spitter-sprites/contact.png` to judge it.
+- Users asked for "realistic" spit: a lobbed arc, drool, a splat with a crown of drops and a puddle
+  that fizzes read as real; a neon circle with a fading trail did not.
+
 ## Pitfalls already hit
 
 - `innerText` applies `text-transform`: e2e reading labels sees what the user sees (the menu spec expects `New game`).

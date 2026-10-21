@@ -163,8 +163,11 @@ export class GameProbe {
   }
 
   /** Setup only (solo/host): a zombie climbs out of the ground at x. */
-  async spawnZombieAt(x: number): Promise<void> {
-    await this.page.evaluate((at: number): void => window.__zbE2e?.engine?.spawnZombieAt(at), x);
+  async spawnZombieAt(x: number, type?: string): Promise<void> {
+    await this.page.evaluate(
+      ([at, kind]: [number, string | undefined]): void => window.__zbE2e?.engine?.spawnZombieAt(at, kind),
+      [x, type] as [number, string | undefined],
+    );
   }
 
   /** Setup only (solo/host): every zombie leaves the floor at once; new ones keep spawning. */

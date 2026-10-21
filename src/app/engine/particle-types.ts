@@ -4,6 +4,8 @@ export enum ParticleShape {
   Star = 'star',
   Line = 'line',
   Ring = 'ring',
+  /** A square on the 2 px art grid, opacity in 4 steps: drops of bile, bubbles, fumes. */
+  Pixel = 'pixel',
 }
 
 export enum FadeMode {

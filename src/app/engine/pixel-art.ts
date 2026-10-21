@@ -28,6 +28,9 @@ export const PIXEL: Readonly<Record<string, string>> = {
   toxicHi: '#b5e05a',
   toxic: '#8fbf3a',
   toxicDark: '#557a22',
+  /** Spitter bile: wet shine and the deep shade under it (with the toxic tones). */
+  bileHi: '#e6f78e',
+  bileDeep: '#2f4a14',
   steelLight: '#a9bac6',
   steelHi: '#6f8190',
   steel: '#4f5d68',

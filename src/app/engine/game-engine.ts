@@ -26,6 +26,7 @@ import {
   LooseProp,
   ZombieCorpse,
   ZombieState,
+  ZombieType,
 } from '@shared/game-entities';
 import { InputKeys } from '@shared/messages';
 import { Particle, ParticleShape, FadeMode } from './particle-types';
@@ -42,6 +43,7 @@ import {
   SpringPuzzleLayout,
   DamageNumber,
   DragonImpact,
+  AcidPuddle,
   BarrelBlastFx,
   DragonProjectile,
   DropNotification,
@@ -193,6 +195,7 @@ export class GameEngine implements IGameEngine {
   dragonProjectiles: DragonProjectile[] = [];
   dragonImpacts: DragonImpact[] = [];
   barrelBlasts: BarrelBlastFx[] = [];
+  acidPuddles: AcidPuddle[] = [];
   readonly dragonProjectileImg: HTMLImageElement = new Image();
   readonly dragonImpactImg: HTMLImageElement = new Image();
 
@@ -482,6 +485,7 @@ export class GameEngine implements IGameEngine {
     this.dragonProjectiles = [];
     this.dragonImpacts = [];
     this.barrelBlasts = [];
+    this.acidPuddles = [];
     this.spitterProjectiles = [];
     this.poisonEffect = null;
     this.playerTints.clear();
@@ -557,9 +561,9 @@ export class GameEngine implements IGameEngine {
     this.zombieSystem.startFloor();
   }
 
-  /** A zombie climbing out of the ground at x (cage-release rules: never a boss); e2e probe setup. */
-  spawnZombieAt(x: number): void {
-    this.zombieSystem.spawnZombieAt(x, GAME_CONSTANTS.GROUND_Y);
+  /** A zombie climbing out of the ground at x (cage-release rules: never a boss; `kind` forces the type); e2e probe setup. */
+  spawnZombieAt(x: number, kind: ZombieType | null = null): void {
+    this.zombieSystem.spawnZombieAt(x, GAME_CONSTANTS.GROUND_Y, kind);
   }
 
   /** One regular spawn now (the floor's type roll, at most one boss at a time); e2e probe setup. */
@@ -721,6 +725,8 @@ export class GameEngine implements IGameEngine {
 
     this.vfxSystem.updateDragonImpacts();
     this.vfxSystem.updateBarrelBlasts();
+    this.vfxSystem.updateAcidPuddles();
+    this.vfxSystem.updateSpitterDrool();
     this.vfxSystem.updateHitMarks();
     this.vfxSystem.updatePlayerTints();
     // The host's sky decides when lightning strikes; guests see it through the Lightning event.
@@ -1054,7 +1060,7 @@ export class GameEngine implements IGameEngine {
       pullEvents,
       zombieEffects,
       spitterProjectiles: this.spitterProjectiles.map(
-        (p: SpitterProjectile): SpitterProjectile => ({ ...p, trail: p.trail.map((t: { x: number; y: number; life: number }) => ({ ...t })) }),
+        (p: SpitterProjectile): SpitterProjectile => ({ ...p }),
       ),
       dragonProjectiles: this.dragonProjectiles.map(
         (p: DragonProjectile): DragonProjectile => ({ ...p }),
@@ -1312,8 +1318,14 @@ export class GameEngine implements IGameEngine {
           this.dragonImpacts.push({ x: evt.x, y: evt.y, frame: 0, tickCounter: 0 });
           break;
         case VfxEventType.PoisonTrigger:
-          this.vfxSystem.spawnPoisonBubblesAt(evt.x, evt.y);
+          this.vfxSystem.spawnPoisonBurst(evt.x, evt.y);
           this.vfxSystem.tintPlayerPoisoned(evt.playerId);
+          break;
+        case VfxEventType.SpitSpray:
+          this.vfxSystem.spawnSpitSpray(evt.x, evt.y, evt.dir!);
+          break;
+        case VfxEventType.SpitSplat:
+          this.vfxSystem.spawnSpitSplat(evt.x, evt.y, evt.dir!, evt.targetY ?? null, evt.value ?? 0);
           break;
         case VfxEventType.PlayerHurt:
           this.vfxSystem.tintPlayerHurt(evt.playerId);
@@ -1395,6 +1407,7 @@ export class GameEngine implements IGameEngine {
         damagePerTick,
       };
       this.vfxSystem.tintPlayerPoisoned(p.id);
+      this.vfxSystem.spawnPoisonBurst(p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2);
       this.pendingVfxEvents.push({
         type: VfxEventType.PoisonTrigger,
         playerId: p.id,
