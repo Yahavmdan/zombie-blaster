@@ -1,14 +1,26 @@
 import { TestInfo } from '@playwright/test';
 import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer, KEYS } from '../../support/game-player';
-import { E2eSnapshot, E2eVfxLogEntry } from '../../support/probe';
+import { E2eCorpseView, E2ePlayerView, E2eSnapshot, E2eVfxLogEntry } from '../../support/probe';
 import { drawnGeometry, expectArtMatchesCollision } from '../../support/level-geometry';
 import { layoutWhere } from '../../support/navigation';
-import { findProp, isBarrel, LevelProp, pickableOnGround, standLeftOf } from '../../support/props';
+import {
+  dropLyingCorpses,
+  findProp,
+  isBarrel,
+  LevelProp,
+  pickableOnGround,
+  propCenterX,
+  standLeftOf,
+} from '../../support/props';
 import { typesOf, vfxQueuedBy } from '../../support/vfx-gate';
 
 /** Mirrors BARREL_FUSE_TICKS in shared/game-constants.ts: 3 s at 50 ticks/s. */
 const FUSE_TICKS: number = 150;
+/** Mirrors BARREL_BLAST_PLAYER_DAMAGE_PERCENT in shared/game-constants.ts. */
+const BLAST_PLAYER_PERCENT: number = 25;
+/** God mode goes off this many ticks before the blast (well under a zombie's ~1.8 s i-frames). */
+const MORTAL_TICKS: number = 25;
 
 test.describe('exploding barrels', { tag: '@solo' }, (): void => {
   test('a hit lights a barrel: its fuse counts down 3 s, then it blows up and is gone', async ({
@@ -87,6 +99,70 @@ test.describe('exploding barrels', { tag: '@solo' }, (): void => {
     ).toBe(true);
     await p.attachCanvas(testInfo, 'barrel back');
     expectArtMatchesCollision(await drawnGeometry(p, 'barrel back'), 'barrel back');
+  });
+
+  test('the blast hurts and throws the player who lit it and flings the corpses lying beside it', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }, testInfo: TestInfo): Promise<void> => {
+    test.setTimeout(90_000);
+    const p: GamePlayer = await solo('warrior');
+    await p.probe.setGodMode(true);
+    const s0: E2eSnapshot = await layoutWhere(
+      p,
+      'a lone barrel on open ground',
+      (s: E2eSnapshot): boolean => pickableOnGround(s, isBarrel) !== undefined,
+    );
+    const barrel: LevelProp = pickableOnGround(s0, isBarrel)!;
+    const id: string = barrel.id!;
+    const corpses: E2eCorpseView[] = await dropLyingCorpses(p, [], propCenterX(barrel) + 60, 2);
+    await standLeftOf(p, barrel);
+    await p.press(KEYS.attack, 70);
+    await p.probe.waitFor(
+      'the hit lights the fuse',
+      (s: E2eSnapshot): boolean => (findProp(s, id)?.fuseTicks ?? 0) > 0,
+    );
+    // Mortal only for the fuse's last moment: a zombie hit before it would leave the player
+    // invincible through the blast.
+    await p.probe.waitFor(
+      'the fuse is almost out',
+      (s: E2eSnapshot): boolean => (findProp(s, id)?.fuseTicks ?? 0) <= MORTAL_TICKS,
+      { timeoutMs: 5_000 },
+    );
+    await p.probe.clearZombies();
+    await p.probe.setGodMode(false);
+    const before: E2ePlayerView = (await p.probe.state()).player!;
+    await p.probe.setVitals(before.maxHp, before.mp);
+
+    await p.probe.waitFor(
+      'the barrel blows up',
+      (s: E2eSnapshot): boolean => findProp(s, id)?.exploded === true,
+      { timeoutMs: 10_000 },
+    );
+    const thrown: E2eSnapshot = await p.probe.waitFor(
+      'the blast throws the player back, away from the barrel',
+      (s: E2eSnapshot): boolean => s.player!.x < before.x - 30,
+      { timeoutMs: 3_000 },
+    );
+    expect(thrown.player!.hp, `${BLAST_PLAYER_PERCENT}% of max HP (a zombie could only take more)`).toBeLessThanOrEqual(
+      before.maxHp - Math.ceil((before.maxHp * BLAST_PLAYER_PERCENT) / 100),
+    );
+    expect(thrown.player!.tint.hurtTicks, 'flashes hurt').toBeGreaterThan(0);
+    await p.attachCanvas(testInfo, 'player thrown by the blast');
+
+    await p.probe.waitFor(
+      'the corpses fly off away from the barrel and land again',
+      (s: E2eSnapshot): boolean =>
+        corpses.every((c: E2eCorpseView): boolean => {
+          const now: E2eCorpseView | undefined = s.corpseViews.find(
+            (v: E2eCorpseView): boolean => v.id === c.id,
+          );
+          return now !== undefined && now.isGrounded && now.x > c.x + 30;
+        }),
+      { timeoutMs: 5_000 },
+    );
+    await p.attachCanvas(testInfo, 'corpses thrown by the blast');
   });
 
   test('every floor has 5 to 10 barrels', async ({

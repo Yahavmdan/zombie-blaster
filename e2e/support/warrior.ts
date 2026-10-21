@@ -10,16 +10,13 @@ const TOUGH_ARENA_SPAN: number = 300;
 
 /** The warrior tree's skill ids (shared/game-constants.ts WARRIOR_SKILL_TREE). */
 export const WARRIOR = {
-  powerStrike: 'warrior-power-strike',
-  slashBlast: 'warrior-slash-blast',
-  uppercut: 'warrior-uppercut',
-  groundSlam: 'warrior-ground-slam',
-  heavyHands: 'warrior-heavy-hands',
-  executioner: 'warrior-executioner',
-  dragonRoar: 'warrior-dragon-roar',
   powerDash: 'warrior-power-dash',
+  slashBlast: 'warrior-slash-blast',
+  groundSlam: 'warrior-ground-slam',
   shoulderCharge: 'warrior-shoulder-charge',
+  carry1: 'warrior-carry-1',
   backstep: 'warrior-backstep',
+  carry2: 'warrior-carry-2',
   monsterMagnet: 'warrior-monster-magnet',
   leapStrike: 'warrior-leap-strike',
   adrenaline: 'warrior-adrenaline',
@@ -261,8 +258,8 @@ export function hasSkillTree(s: E2eSnapshot): boolean {
 
 /**
  * One fight decision with the tree skills, played with real keys: slash blast (double tap) when
- * surrounded or crowded, uppercut (bar) on a single adjacent zombie, power dash (hold and let go)
- * into a crowd ahead when `allowDash`.
+ * surrounded or crowded; when `allowDash`, shoulder charge (bar) into a single adjacent zombie and
+ * power dash (hold and let go) into a crowd ahead.
  * Returns the skill used, or null when no skill fits (then the caller just swings).
  */
 export async function fightWithSkills(
@@ -294,10 +291,10 @@ export async function fightWithSkills(
       await castSkill(p, WARRIOR.slashBlast, s);
       return WARRIOR.slashBlast;
     }
-    if (treeSkillReady(s, WARRIOR.uppercut) && adjacent.length === 1) {
+    if (allowDash && treeSkillReady(s, WARRIOR.shoulderCharge) && adjacent.length === 1) {
       await p.face(adjacent[0] >= 0 ? 'right' : 'left');
-      await castSkill(p, WARRIOR.uppercut, s);
-      return WARRIOR.uppercut;
+      await castSkill(p, WARRIOR.shoulderCharge, s);
+      return WARRIOR.shoulderCharge;
     }
   }
   if (allowDash && treeSkillReady(s, WARRIOR.powerDash)) {

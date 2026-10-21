@@ -138,7 +138,7 @@ test.describe('safe spot', { tag: '@solo' }, (): void => {
     const p: GamePlayer = await solo('warrior');
     await p.probe.setGodMode(true);
     // An attack skill on the skill bar: slash blast.
-    await p.probe.setTreeSkills([WARRIOR.powerStrike, WARRIOR.slashBlast]);
+    await p.probe.setTreeSkills([WARRIOR.shoulderCharge, WARRIOR.slashBlast]);
     const s0: E2eSnapshot = await p.probe.waitFor('slash blast owned', (s: E2eSnapshot): boolean =>
       s.treeSkills.some((t: E2eSnapshot['treeSkills'][number]): boolean => t.id === WARRIOR.slashBlast && t.owned),
     );

@@ -2,6 +2,7 @@ import {
   CharacterState,
   Direction,
   MagnetPullRequest,
+  RemotePlayerAttack,
   SkillDefinition,
   VfxEvent,
   ZombieEffectRequest,
@@ -399,7 +400,7 @@ export interface IGameEngine {
   /** The local player is away from the keyboard (online): frozen, sent as `player.isAfk`. */
   isLocalAfk: boolean;
   pendingLocalKills: Set<string>;
-  pendingRemoteAttacks: Array<{ targetPlayerId: string; damage: number; knockbackDir: number; isPoisonAttack: boolean }>;
+  pendingRemoteAttacks: RemotePlayerAttack[];
   pendingReviveTargetIds: string[];
   pendingSpecialDropActivations: SpecialDropType[];
   pendingVfxEvents: VfxEvent[];
@@ -419,6 +420,8 @@ export interface IGameEngine {
   trySecondWind(): boolean;
   /** Brief freeze-frame when the local player's hit lands (solo only). */
   requestHitStop(ticks: number): void;
+  /** An exploding barrel's blast caught the local player: hurt and thrown that way (-1 or 1). */
+  applyBarrelBlast(damage: number, knockbackDir: number): void;
   /** A player whose top-left corner is at (x, y) rests on the floor's safe spot (out of every attack's reach). */
   isInSafeSpot(x: number, y: number): boolean;
   /** Out of every attack's reach: resting on the safe spot, or away from the keyboard. */

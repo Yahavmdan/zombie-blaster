@@ -10,9 +10,14 @@ import {
   barrelHitBy,
   blastBarrels,
   blastCenter,
+  blastCorpses,
   blastDamage,
+  blastPlayerDamage,
+  blastPlayers,
+  blastPushDir,
   blastZombies,
   chainFuse,
+  flingCorpse,
   lightFuse,
   tickFuse,
 } from './exploding-barrel';
@@ -22,8 +27,9 @@ const BLAST_DAMAGE_COLOR: string = '#ff8a3d';
 
 /**
  * Exploding barrels. The host (or solo) watches every player's attacks on the barrels: a hit
- * lights the fuse, and when it runs out the barrel blows up, hurting the zombies around it and
- * setting off the barrels next to it. The fuse and the blown-up barrels travel with the synced
+ * lights the fuse, and when it runs out the barrel blows up, hurting the zombies and players around
+ * it, throwing the corpses lying there and setting off the barrels next to it. A guest caught in it
+ * gets the hit in game-sync `attacks` (`isBlast`) and applies it to itself. The fuse and the blown-up barrels travel with the synced
  * props (LoosePropSystem.moved), so clients only draw them; the blast itself is a VFX event.
  */
 export class ExplodingBarrelSystem {
@@ -109,6 +115,28 @@ export class ExplodingBarrelSystem {
     this.e.requestHitStop(GAME_CONSTANTS.BARREL_BLAST_HITSTOP_TICKS);
     for (const other of blastBarrels(this.barrels(), center)) chainFuse(other);
     for (const z of blastZombies(this.e.zombies, center)) this.hurt(z, center, playerId);
+    // After the zombies: the bodies of those the blast just killed fly off with the rest.
+    for (const c of blastCorpses(this.e.zombieCorpses, center)) flingCorpse(c, center);
+    this.hurtPlayers(center);
+  }
+
+  /** The host hurts and throws its own player; every guest in the blast gets the hit to apply. */
+  private hurtPlayers(center: Point): void {
+    for (const p of blastPlayers(this.e.remotePlayers, center)) {
+      this.e.pendingRemoteAttacks.push({
+        targetPlayerId: p.id,
+        damage: blastPlayerDamage(p.derived.maxHp),
+        knockbackDir: blastPushDir(center, p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2),
+        isPoisonAttack: false,
+        isBlast: true,
+      });
+    }
+    const local: CharacterState | null = this.e.player;
+    if (!local || blastPlayers([local], center).length === 0) return;
+    this.e.applyBarrelBlast(
+      blastPlayerDamage(local.derived.maxHp),
+      blastPushDir(center, local.x + GAME_CONSTANTS.PLAYER_WIDTH / 2),
+    );
   }
 
   private hurt(z: ZombieState, center: Point, playerId: string): void {
@@ -117,7 +145,7 @@ export class ExplodingBarrelSystem {
     const cx: number = z.x + z.instanceWidth / 2;
     // A zombie in a monster-magnet drag keeps flying to the caster.
     if (!z.magnetPull) {
-      z.velocityX = (Math.sign(cx - center.x) || 1) * GAME_CONSTANTS.BARREL_BLAST_KNOCKBACK;
+      z.velocityX = blastPushDir(center, cx) * GAME_CONSTANTS.BARREL_BLAST_KNOCKBACK;
       z.velocityY = GAME_CONSTANTS.BARREL_BLAST_KNOCKBACK_UP;
       z.isGrounded = false;
       z.knockbackFrames = GAME_CONSTANTS.KNOCKBACK_ZOMBIE_FRAMES;

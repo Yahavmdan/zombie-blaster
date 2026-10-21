@@ -1,5 +1,5 @@
 import { GamePlayer } from './game-player';
-import { E2eSnapshot } from './probe';
+import { E2eCorpseView, E2eSnapshot } from './probe';
 import { WORLD } from './invariants';
 
 /** A map prop as the probe sees it (pickable ones where they are now). */
@@ -71,6 +71,33 @@ export async function standLeftOf(p: GamePlayer, q: LevelProp): Promise<void> {
       s.player!.isGrounded && s.player!.y + WORLD.playerHeight === WORLD.groundY,
   );
   await p.wait(200);
+}
+
+/**
+ * Setup: the host drops `count` corpses from above x; returns them (as the host sees them) once
+ * the host and every observer see them all lying still.
+ */
+export async function dropLyingCorpses(
+  host: GamePlayer,
+  observers: GamePlayer[],
+  x: number,
+  count: number,
+): Promise<E2eCorpseView[]> {
+  const known: Set<string> = new Set<string>(
+    (await host.probe.state()).corpseViews.map((c: E2eCorpseView): string => c.id),
+  );
+  await host.probe.dropCorpses(x, count);
+  const fresh: (s: E2eSnapshot) => E2eCorpseView[] = (s: E2eSnapshot): E2eCorpseView[] =>
+    s.corpseViews.filter((c: E2eCorpseView): boolean => !known.has(c.id));
+  const lying: (s: E2eSnapshot) => boolean = (s: E2eSnapshot): boolean =>
+    fresh(s).length === count && fresh(s).every((c: E2eCorpseView): boolean => c.isGrounded);
+  const dropped: E2eSnapshot = await host.probe.waitFor(`${count} dropped corpses lie still`, lying, {
+    timeoutMs: 10_000,
+  });
+  for (const p of observers) {
+    await p.probe.waitFor(`${count} dropped corpses lie still (observer)`, lying, { timeoutMs: 10_000 });
+  }
+  return fresh(dropped);
 }
 
 /** No pickable prop lies between these x, at any height (so E there only ever picks up corpses). */

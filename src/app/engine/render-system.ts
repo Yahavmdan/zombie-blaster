@@ -34,7 +34,14 @@ import { ZombieAnimState, ZombieSpriteAnchor } from './zombie-sprite-animator';
 import { LooseProp, MagnetPull, ZombieCorpse } from '@shared/game-entities';
 import { magnetPullProgress } from './magnet-pull';
 import { fuseSeconds } from './exploding-barrel';
-import { Carriable, CarryPose, carriedIds, isCorpse, nearestCarriable } from './corpse-carry';
+import {
+  Carriable,
+  CarryPose,
+  carriedIds,
+  carryCapacity,
+  isCorpse,
+  nearestCarriable,
+} from './corpse-carry';
 import {
   BODY_HALF_SPAN,
   BODY_SHIFT,
@@ -1168,14 +1175,14 @@ export class RenderSystem {
     if (!p || p.isDead || p.isDown) return;
     const ids: string[] = carriedIds(p);
     const items: Carriable[] = [...this.e.zombieCorpses, ...this.e.looseProps];
-    const next: Carriable | null =
-      ids.length < GAME_CONSTANTS.CORPSE_CARRY_MAX ? nearestCarriable(p, items) : null;
+    const capacity: number = carryCapacity(p);
+    const next: Carriable | null = ids.length < capacity ? nearestCarriable(p, items) : null;
     const stackTop: Carriable | undefined = items.find(
       (c: Carriable): boolean => c.id === ids[ids.length - 1],
     );
     const anchor: Carriable | undefined = next ?? stackTop;
     if (!anchor) return;
-    const count: string = ids.length > 0 ? ` (${ids.length}/${GAME_CONSTANTS.CORPSE_CARRY_MAX})` : '';
+    const count: string = ids.length > 0 ? ` (${ids.length}/${capacity})` : '';
     const label: string = `[${this.e.carryKeyLabel}] ${next ? `Carry${count}` : 'Throw'}`;
     const cx: number = anchor.x + anchor.width / 2;
     // A corpse's body lies low in its tall box; a prop's art fills its box.

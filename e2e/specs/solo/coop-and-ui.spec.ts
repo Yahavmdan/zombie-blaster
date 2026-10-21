@@ -48,13 +48,13 @@ test.describe('controls, onboarding and menus', { tag: '@solo' }, (): void => {
     );
     // The warrior learns from the skill tree window (solo/skill-tree.spec.ts covers it in depth).
     await p.page.keyboard.press(KEYS.openSkills);
-    await p.page.getByTestId('tree-node-warrior-power-strike').click();
+    await p.page.getByTestId('tree-node-warrior-shoulder-charge').click();
     await expect(p.page.getByTestId('tree-learn-button')).toBeEnabled();
     await p.page.getByTestId('tree-learn-button').click();
     await p.page.keyboard.press('Escape');
     const s: E2eSnapshot = await p.probe.waitFor(
-      'power strike learned',
-      (st: E2eSnapshot): boolean => st.player!.skillLevels['warrior-power-strike'] === 1,
+      'shoulder charge learned',
+      (st: E2eSnapshot): boolean => st.player!.skillLevels['warrior-shoulder-charge'] === 1,
     );
     expect(s.player!.level).toBe(2);
   });

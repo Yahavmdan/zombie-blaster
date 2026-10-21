@@ -5,6 +5,7 @@ import { GamePlayer, KEYS } from '../../support/game-player';
 import { E2eCorpseView, E2eRemotePlayerView, E2eSnapshot } from '../../support/probe';
 import { WORLD } from '../../support/invariants';
 import { clearPickablesBetween } from '../../support/props';
+import { WARRIOR } from '../../support/warrior';
 
 /** The probe's foothold top sits this far above the corpse's feet (ZOMBIE_CORPSE_PLATFORM_HEIGHT). */
 const FOOTHOLD_DEPTH: number = 5;
@@ -200,7 +201,7 @@ test.describe('carrying corpses in co-op', { tag: '@online' }, (): void => {
     expect(findCorpse(after, corpse.id)!.carrierId, 'still on the host').toBe(hostId);
   });
 
-  test('a guest carries a stack of corpses: the host sees them stacked on the guest, and both see the thrown pile', async ({
+  test('a guest warrior with Carry 1 carries two corpses: the host grants both, sees them stacked on the guest, and both see the thrown pile', async ({
     room,
   }: {
     room: RoomFactory;
@@ -217,6 +218,12 @@ test.describe('carrying corpses in co-op', { tag: '@online' }, (): void => {
     const guest: GamePlayer = session.guests[0];
     await host.probe.setGodMode(true);
     await guest.probe.setGodMode(true);
+    // Anyone carries one thing; Carry 1 makes room for a second. The host reads it from the
+    // guest's relayed skills.
+    await guest.probe.setTreeSkills([WARRIOR.carry1]);
+    await guest.probe.waitFor('the guest owns Carry 1', (s: E2eSnapshot): boolean =>
+      s.player!.skillLevels[WARRIOR.carry1] === 1,
+    );
     await clearPickablesBetween(host, [guest], 300, 1000);
     const guestId: string = (await guest.probe.state()).player!.id;
 

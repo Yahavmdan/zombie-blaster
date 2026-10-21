@@ -74,28 +74,28 @@ describe('skill points', () => {
 });
 
 describe('learning tree skills', () => {
-  const strike: TreeSkill = findTreeSkill('warrior-power-strike')!;
+  const dash: TreeSkill = findTreeSkill('warrior-power-dash')!;
   const blast: TreeSkill = findTreeSkill('warrior-slash-blast')!;
-  const executioner: TreeSkill = findTreeSkill('warrior-executioner')!;
+  const adrenaline: TreeSkill = findTreeSkill('warrior-adrenaline')!;
 
   it('lets a level 1 warrior learn a root skill with its starting point', () => {
-    expect(treeSkillLockReason(strike, {}, 1, 1, TIERS)).toBeNull();
+    expect(treeSkillLockReason(dash, {}, 1, 1, TIERS)).toBeNull();
   });
 
   it('needs the tier level, then a parent, then a point', () => {
     expect(treeSkillLockReason(blast, {}, 1, 5, TIERS)).toBe('level');
     expect(treeSkillLockReason(blast, {}, 4, 5, TIERS)).toBe('parent');
-    expect(treeSkillLockReason(blast, { [strike.id]: 1 }, 4, 0, TIERS)).toBe('points');
-    expect(treeSkillLockReason(blast, { [strike.id]: 1 }, 4, 1, TIERS)).toBeNull();
-    expect(treeSkillLockReason(blast, { [strike.id]: 1, [blast.id]: 1 }, 4, 1, TIERS)).toBe(
+    expect(treeSkillLockReason(blast, { [dash.id]: 1 }, 4, 0, TIERS)).toBe('points');
+    expect(treeSkillLockReason(blast, { [dash.id]: 1 }, 4, 1, TIERS)).toBeNull();
+    expect(treeSkillLockReason(blast, { [dash.id]: 1, [blast.id]: 1 }, 4, 1, TIERS)).toBe(
       'owned',
     );
   });
 
   it('unlocks a node from any one of its parents', () => {
-    expect(executioner.parents.length).toBe(2);
+    expect(adrenaline.parents.length).toBe(2);
     expect(
-      treeSkillLockReason(executioner, { [executioner.parents[1]]: 1 }, 12, 1, TIERS),
+      treeSkillLockReason(adrenaline, { [adrenaline.parents[1]]: 1 }, 12, 1, TIERS),
     ).toBeNull();
   });
 });
@@ -103,14 +103,14 @@ describe('learning tree skills', () => {
 describe('skill bar', () => {
   const SLOTS: number = GAME_CONSTANTS.TREE_SKILL_BAR_SLOTS;
   const owned: Record<string, number> = {
-    'warrior-power-strike': 1,
-    'warrior-uppercut': 1,
+    'warrior-shoulder-charge': 1,
+    'warrior-backstep': 1,
     'warrior-power-dash': 1,
     'warrior-iron-recovery': 1,
   };
 
   it('puts actives and buffs on the bar, never attack combos, passives or reactives', () => {
-    expect(isSlottable(findTreeSkill('warrior-power-strike')!)).toBe(true);
+    expect(isSlottable(findTreeSkill('warrior-shoulder-charge')!)).toBe(true);
     expect(isSlottable(findTreeSkill('warrior-power-dash')!)).toBe(false);
     expect(isSlottable(findTreeSkill('warrior-slash-blast')!)).toBe(false);
     expect(isSlottable(findTreeSkill('warrior-ground-slam')!)).toBe(false);
@@ -125,19 +125,19 @@ describe('skill bar', () => {
       WARRIOR_SKILL_TREE,
       owned,
       [
-        'warrior-uppercut',
-        'warrior-uppercut',
+        'warrior-backstep',
+        'warrior-backstep',
         'warrior-power-dash',
         'warrior-slash-blast',
         'warrior-iron-recovery',
         7,
         'x',
-        'warrior-power-strike',
+        'warrior-shoulder-charge',
         'extra',
       ],
       SLOTS,
     );
-    expect(bar).toEqual(['warrior-uppercut', null, null, null, null, null]);
+    expect(bar).toEqual(['warrior-backstep', null, null, null, null, null]);
     expect(normalizeSkillBar(WARRIOR_SKILL_TREE, owned, undefined, SLOTS)).toEqual(
       new Array(SLOTS).fill(null),
     );
@@ -217,13 +217,13 @@ describe('skill tree data', () => {
         }
       });
 
-      it('gives every branch exactly one capstone, at the top tier', () => {
+      it('gives every branch at most one capstone, at the top tier', () => {
         for (const b of tree.branches) {
           const caps: TreeSkill[] = tree.skills.filter(
             (s: TreeSkill): boolean => s.branch === b.id && s.capstone,
           );
-          expect(caps.length, b.id).toBe(1);
-          expect(caps[0].tier).toBe(TIERS.length);
+          expect(caps.length, b.id).toBeLessThanOrEqual(1);
+          for (const cap of caps) expect(cap.tier, cap.id).toBe(TIERS.length);
         }
       });
 
@@ -248,20 +248,53 @@ describe('skill tree data', () => {
     });
   }
 
-  it('the warrior tree has 22 skills, all 9 old warrior skills among them', () => {
-    expect(WARRIOR_SKILL_TREE.skills.length).toBe(22);
+  it('the warrior tree has 19 skills, the old warrior skills not parked for rework among them', () => {
+    expect(WARRIOR_SKILL_TREE.skills.length).toBe(19);
     for (const id of [
-      'warrior-power-strike',
       'warrior-slash-blast',
       'warrior-power-dash',
       'warrior-iron-recovery',
       'warrior-power-stance',
       'warrior-hyper-body',
       'warrior-monster-magnet',
-      'warrior-dragon-roar',
       'warrior-auto-potion',
     ]) {
       expect(findTreeSkill(id), id).not.toBeNull();
     }
+    for (const id of [
+      'warrior-power-strike',
+      'warrior-uppercut',
+      'warrior-heavy-hands',
+      'warrior-executioner',
+      'warrior-dragon-roar',
+    ]) {
+      expect(findTreeSkill(id), `${id} is parked`).toBeNull();
+    }
+  });
+
+  it('keeps only the three attack-button moves in Combat, and Carry 1 / Carry 2 in Agility', () => {
+    const inBranch: (branch: string) => string[] = (branch: string): string[] =>
+      WARRIOR_SKILL_TREE.skills
+        .filter((s: TreeSkill): boolean => s.branch === branch)
+        .map((s: TreeSkill): string => s.id);
+    expect(inBranch('combat')).toEqual([
+      'warrior-power-dash',
+      'warrior-slash-blast',
+      'warrior-ground-slam',
+    ]);
+    for (const id of inBranch('combat')) expect(findTreeSkill(id)!.combo, id).not.toBeNull();
+    expect(WARRIOR_SKILL_TREE.branches.map((b: SkillTreeBranch): string => b.name)).toEqual([
+      'Combat',
+      'Agility',
+      'Grit',
+    ]);
+    const carry1: TreeSkill = findTreeSkill('warrior-carry-1')!;
+    const carry2: TreeSkill = findTreeSkill('warrior-carry-2')!;
+    for (const carry of [carry1, carry2]) {
+      expect(carry.branch).toBe('agility');
+      expect(carry.type).toBe(SkillType.Passive);
+      expect(carry.mechanic).toBe('carry');
+    }
+    expect(carry2.parents).toEqual([carry1.id]);
   });
 });

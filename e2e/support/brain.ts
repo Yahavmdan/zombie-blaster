@@ -85,10 +85,8 @@ const POTION_STOCK_TARGET: number = 10;
 const MP_POTION_STOCK_TARGET: number = 5;
 /** Skill-point order by id keyword: auto-potion first (drinks for you), then damage, then buffs. */
 const SKILL_PRIORITY: string[] = [
-  'power-strike',
   'lucky-seven',
   'slash-blast',
-  'dragon-roar',
   'monster-magnet',
   'hyper-body',
   'power-stance',
@@ -102,28 +100,24 @@ const SKILL_PRIORITY: string[] = [
 ];
 /**
  * Skill-tree classes (one point per level, a skill is owned or not): learn order by mechanic. The
- * skills the brain fights with come first (power strike, cleave, uppercut, dash; cleave and dash fire
- * from attack combos, learning puts the others on the skill bar), auto-potion early, monster magnet (pull: piles bodies under the exit), then
- * passives that need no input.
- * Anything else comes last, in tree order.
+ * skills the brain fights with come first (dash, cleave, shoulder charge; dash and cleave fire from
+ * attack combos, learning puts shoulder charge on the skill bar), auto-potion early, monster magnet
+ * (pull: piles bodies under the exit), then passives that need no input.
+ * Anything else comes last, in tree order (the bots never carry, so Carry 1 / Carry 2 are left last).
  */
 const TREE_PRIORITY: string[] = [
-  'strike',
+  'dash',
   'auto-potion',
   'cleave',
-  'uppercut',
-  'dash',
-  'hp-recovery',
   'shoulder-charge',
+  'hp-recovery',
   'pull',
-  'heavy-hands',
-  'executioner',
   'second-wind',
   'adrenaline',
   'last-stand',
 ];
 const PASSIVE_KEYWORDS: string[] = ['auto-potion', 'hp-recovery', 'mastery'];
-const DAMAGE_KEYWORDS: string[] = ['power-strike', 'lucky-seven', 'slash-blast', 'dragon-roar'];
+const DAMAGE_KEYWORDS: string[] = ['lucky-seven', 'slash-blast'];
 /** Highest foothold one jump reaches (single jump ~116 px). */
 const CLIMB_REACH_PX: number = 105;
 

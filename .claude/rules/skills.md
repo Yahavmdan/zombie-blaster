@@ -17,7 +17,11 @@ use `SKILLS` with levels and keys 1-6 until they are ported; don't add new skill
   A tree skill costs 1 point and has no levels: owned is `skillLevels[id] === 1`. Never add ranks,
   levels or `levelData` tables to a tree skill.
 - Unlocking: the tier's level (`SKILL_TIER_LEVELS`) and any one owned parent (`treeSkillLockReason`).
-  Each branch has one capstone at tier 5. `skill-tree.spec.ts` checks the data.
+  Each branch has at most one capstone, at tier 5 (warrior Combat has none while its attacks are
+  parked for a rework). `skill-tree.spec.ts` checks the data.
+- Commented-out skill specs in a tree are parked on the user's request (warrior: Power Strike,
+  Uppercut, Heavy Hands, Executioner, Dragon Roar). Keep their mechanics; bring them back only when
+  the user asks.
 - Strength comes from stats only: `damageMult × attack`, plus `StatCurve`s read with `treeSkillValue`
   (`min + (max - min) × s / (s + half)`). Every curve, multiplier, timing and cost lives in
   `shared/game-constants.ts` (`WARRIOR_SKILL_TREE`, `TREE_SKILL_BAR_SLOTS`, `SKILL_*`).

@@ -206,6 +206,16 @@ export interface ZombieAttackPlayerPayload {
   isPoisonAttack: boolean;
 }
 
+/** A hit the host decided on a guest, sent in game-sync `attacks`; only its target applies it. */
+export interface RemotePlayerAttack {
+  targetPlayerId: string;
+  damage: number;
+  knockbackDir: number;
+  isPoisonAttack: boolean;
+  /** An exploding barrel's blast, not a zombie: no parry, thrown harder (BARREL_BLAST_PLAYER_*). */
+  isBlast?: boolean;
+}
+
 export interface RevivePlayerPayload {
   roomId: string;
   targetPlayerId: string;
