@@ -142,6 +142,257 @@ export function drawBoulder(ctx: CanvasRenderingContext2D, box: Box, angle: numb
   ctx.restore();
 }
 
+// ─── Cracked wall ────────────────────────────────────────
+
+/** Wall shades by index, darkest first: ink, then the stone ramp up to its highlight. */
+const WALL_SHADES: string[] = [
+  K,
+  PIXEL['stoneDeep'],
+  PIXEL['stoneDark'],
+  PIXEL['stoneMid'],
+  PIXEL['stone'],
+  PIXEL['stoneHi'],
+];
+const WALL_INK: number = 0;
+const WALL_MORTAR: number = 1;
+const WALL_SHADOW: number = 2;
+const WALL_HI: number = 5;
+/** Where the boulder hits, in art cells up from the wall's foot (its centre rolls 24 px up). */
+const WALL_IMPACT_ROWS: number = 12;
+/** Cracks fanning out of the impact: heading (degrees; 180 is into the wall, -90 up), length, width. */
+const WALL_CRACKS: readonly [number, number, number][] = [
+  [-100, 160, 3],
+  [-140, 70, 2],
+  [175, 34, 1],
+  [140, 14, 1],
+];
+const wallCanvases: Map<string, HTMLCanvasElement> = new Map<string, HTMLCanvasElement>();
+
+/**
+ * One dressed stone; it owns its bottom and right mortar joints (marked in `joints`: 1 the bed
+ * joint under it, 2 the joint on its right) and is bevelled toward the light.
+ */
+function paintWallStone(
+  cells: number[],
+  joints: number[],
+  cols: number,
+  rows: number,
+  stone: Box,
+  rand: Random,
+): void {
+  const tone: number = rand() < 0.5 ? 3 : 2;
+  const right: number = stone.x + stone.width - 1;
+  const bottom: number = stone.y + stone.height - 1;
+  const chipLeft: boolean = rand() < 0.4;
+  const chipRight: boolean = rand() < 0.4;
+  for (let y: number = Math.max(0, stone.y); y < Math.min(rows, bottom + 1); y++) {
+    for (let x: number = Math.max(0, stone.x); x < Math.min(cols, right + 1); x++) {
+      let shade: number;
+      if (y === bottom || x === right) {
+        shade = WALL_MORTAR;
+        joints[y * cols + x] = y === bottom ? 1 : 2;
+      } else if (y === stone.y && ((chipLeft && x === stone.x) || (chipRight && x === right - 1))) {
+        shade = WALL_MORTAR;
+      } else if (y === stone.y || x === stone.x) shade = tone + 1;
+      else if (y === bottom - 1 || x === right - 1) shade = tone - 1;
+      else {
+        const r: number = rand();
+        shade = r < 0.07 ? tone - 1 : r < 0.1 ? tone + 1 : tone;
+        // Weathered patches: a slow pattern over the whole wall darkens part of each face.
+        if (Math.sin(x * 0.45 + y * 0.13) * Math.sin(y * 0.21 - x * 0.3) > 0.5) {
+          shade = Math.max(WALL_MORTAR, shade - 1);
+        }
+      }
+      cells[y * cols + x] = shade;
+    }
+  }
+}
+
+/**
+ * The wall's shade per art cell: stones in running bond, damp grime at the foot and streaks down
+ * the face, a crushed dent where the boulder will hit (at the open face, near the ground), cracks
+ * fanning out of it with branches, and hairline cracks higher up. Lit from the top-left whichever
+ * side the face is on.
+ */
+function wallCells(cols: number, rows: number, faceRight: boolean): number[] {
+  const rand: Random = seededRandom(0x3a11);
+  const cells: number[] = new Array<number>(cols * rows).fill(3);
+  const joints: number[] = new Array<number>(cols * rows).fill(0);
+  /** Screen column of a column counted with the open face on the right (local column cols - 1). */
+  const screenX: (lx: number) => number = (lx: number): number => (faceRight ? lx : cols - 1 - lx);
+  const inside: (x: number, y: number) => boolean = (x: number, y: number): boolean =>
+    x >= 0 && y >= 0 && x < cols && y < rows;
+
+  for (let y: number = 0, course: number = 0; y < rows; course++) {
+    const height: number = 11 + Math.floor(rand() * 6);
+    let x: number = -(course % 2 === 0 ? 4 : 14) - Math.floor(rand() * 6);
+    while (x < cols) {
+      const width: number = 14 + Math.floor(rand() * 12);
+      const stone: Box = { x: faceRight ? x : cols - x - width, y, width, height };
+      paintWallStone(cells, joints, cols, rows, stone, rand);
+      x += width;
+    }
+    y += height;
+  }
+
+  const darken: (x: number, y: number) => void = (x: number, y: number): void => {
+    const i: number = y * cols + x;
+    if (cells[i] > WALL_SHADOW) cells[i]--;
+  };
+  for (let y: number = 0; y < rows; y++) {
+    const damp: number = Math.max(0, (y / rows - 0.75) / 0.25) * 0.45;
+    for (let x: number = 0; x < cols; x++) if (rand() < damp) darken(x, y);
+  }
+  for (let s: number = 0; s < 6; s++) {
+    const x: number = Math.floor(rand() * cols);
+    const top: number = Math.floor(rand() * rows * 0.8);
+    const end: number = Math.min(rows, top + 20 + Math.floor(rand() * 50));
+    for (let y: number = top; y < end; y++) if (rand() < 0.75) darken(x, y);
+  }
+
+  // The dent: spalled stone, dark on its upper-left slope, freshly broken (light) on its
+  // lower-right one, rubble inside.
+  const ox: number = cols - 1;
+  const oy: number = rows - WALL_IMPACT_ROWS;
+  for (let y: number = oy - 12; y <= oy + 12; y++) {
+    for (let lx: number = ox - 12; lx <= ox; lx++) {
+      const x: number = screenX(lx);
+      if (!inside(x, y)) continue;
+      const dx: number = lx - ox;
+      const dy: number = y - oy;
+      const turn: number = Math.atan2(dy, dx);
+      const reach: number = 9 + 1.5 * Math.sin(turn * 3 + 1) + Math.sin(turn * 7) * 1.2;
+      const d: number = Math.hypot(dx, dy * 0.85);
+      if (d >= reach) continue;
+      const screenDx: number = faceRight ? dx : -dx;
+      const r: number = rand();
+      if (d < reach - 2) cells[y * cols + x] = r < 0.25 ? WALL_SHADOW : r < 0.32 ? 3 : WALL_MORTAR;
+      else if (screenDx + dy > 0) cells[y * cols + x] = d < reach - 1 ? 4 : WALL_HI;
+      else cells[y * cols + x] = d < reach - 1 ? WALL_MORTAR : WALL_INK;
+    }
+  }
+
+  const crack: boolean[] = new Array<boolean>(cols * rows).fill(false);
+  const hairline: boolean[] = new Array<boolean>(cols * rows).fill(false);
+  const run: (
+    lx: number,
+    ly: number,
+    heading: number,
+    length: number,
+    width: number,
+    depth: number,
+    mask: boolean[],
+  ) => void = (
+    lx: number,
+    ly: number,
+    heading: number,
+    length: number,
+    width: number,
+    depth: number,
+    mask: boolean[],
+  ): void => {
+    const base: number = (heading * Math.PI) / 180;
+    let fx: number = lx;
+    let fy: number = ly;
+    let step: number = 0;
+    while (step < length) {
+      // Straight runs with sharp turns; in a mortar joint the crack often follows it a while
+      // (the stair-step of cracked masonry), elsewhere it cuts across the stone.
+      const joint: number = joints[Math.round(fy) * cols + screenX(Math.round(fx))] ?? 0;
+      const along: boolean = joint > 0 && rand() < 0.65;
+      let angle: number = base + (rand() - 0.5) * 1.6;
+      // Near the wall's back edge, bend back toward the face.
+      if (fx < 6) angle = base + (Math.sin(base) < 0 ? 0.6 : -0.6);
+      if (along && joint === 1) angle = fx < 6 ? 0 : fx > cols / 2 || rand() < 0.5 ? Math.PI : 0;
+      else if (along) angle = Math.sin(base) < 0 ? -Math.PI / 2 : Math.PI / 2;
+      const segment: number = 3 + Math.floor(rand() * (along ? 7 : 5));
+      for (let s: number = 0; s < segment && step < length; s++, step++) {
+        // Across the wall's sides it runs along them; it ends at the top or the foot.
+        fx = Math.min(cols - 2, Math.max(1, fx + Math.cos(angle)));
+        fy += Math.sin(angle);
+        const cx: number = Math.round(fx);
+        const cy: number = Math.round(fy);
+        if (cy < 1 || cy >= rows - 1) return;
+        const thick: number = Math.max(1, Math.ceil(width * (1 - step / length)));
+        for (let t: number = 0; t < thick; t++) {
+          const x: number = screenX(cx - t);
+          if (inside(x, cy)) mask[cy * cols + x] = true;
+        }
+        if (depth < 1 && rand() < 0.025) {
+          const turn: number = (rand() < 0.5 ? -1 : 1) * (30 + rand() * 30);
+          run(cx, cy, heading + turn, Math.min(24, (length - step) * 0.4), 1, depth + 1, mask);
+        }
+      }
+    }
+  };
+  for (const [heading, length, width] of WALL_CRACKS)
+    run(ox - 2, oy, heading, length, width, 0, crack);
+  for (let h: number = 0; h < 4; h++) {
+    const lx: number = 4 + Math.floor(rand() * (cols - 8));
+    const ly: number = 20 + Math.floor(rand() * rows * 0.5);
+    run(lx, ly, rand() < 0.5 ? -60 : -120, 10 + Math.floor(rand() * 14), 1, 1, hairline);
+  }
+  for (let i: number = 0; i < cells.length; i++) if (hairline[i]) cells[i] = WALL_MORTAR;
+  // Cracks: an ink gap with a lit lip under it.
+  for (let y: number = 0; y < rows; y++) {
+    for (let x: number = 0; x < cols; x++) {
+      if (!crack[y * cols + x]) continue;
+      cells[y * cols + x] = WALL_INK;
+      if (inside(x, y + 1) && !crack[(y + 1) * cols + x]) cells[(y + 1) * cols + x] = 4;
+    }
+  }
+  // Ink along the open face, the wall's silhouette.
+  for (let y: number = 0; y < rows; y++) cells[y * cols + screenX(cols - 1)] = WALL_INK;
+  return cells;
+}
+
+/** The wall's art at one canvas pixel per art cell, rendered once per size and side. */
+function wallCanvas(cols: number, rows: number, faceRight: boolean): HTMLCanvasElement {
+  const key: string = `${cols}x${rows}${faceRight ? 'r' : 'l'}`;
+  const cached: HTMLCanvasElement | undefined = wallCanvases.get(key);
+  if (cached) return cached;
+  const canvas: HTMLCanvasElement = document.createElement('canvas');
+  canvas.width = cols;
+  canvas.height = rows;
+  const ctx: CanvasRenderingContext2D = canvas.getContext('2d')!;
+  const cells: number[] = wallCells(cols, rows, faceRight);
+  for (let y: number = 0; y < rows; y++) {
+    for (let x: number = 0; x < cols; x++) {
+      ctx.fillStyle = WALL_SHADES[cells[y * cols + x]];
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  wallCanvases.set(key, canvas);
+  return canvas;
+}
+
+/**
+ * The floor-2 cracked stone wall filling `wall`: dressed stones in running bond, weathered and
+ * damp at the foot, with a crushed dent and cracks fanning up from where the boulder will hit
+ * its open face (on the right when `faceRight`).
+ */
+export function drawCrackedWall(
+  ctx: CanvasRenderingContext2D,
+  wall: Box,
+  faceRight: boolean,
+): void {
+  const cols: number = Math.ceil(wall.width / ART_PX);
+  const rows: number = Math.ceil(wall.height / ART_PX);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.beginPath();
+  ctx.rect(wall.x, wall.y, wall.width, wall.height);
+  ctx.clip();
+  ctx.drawImage(
+    wallCanvas(cols, rows, faceRight),
+    Math.round(wall.x),
+    Math.round(wall.y),
+    cols * ART_PX,
+    rows * ART_PX,
+  );
+  ctx.restore();
+}
+
 // ─── Chute ───────────────────────────────────────────────
 
 /** Posts along the chute's guard rail, braced bay by bay. */

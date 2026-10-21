@@ -4,7 +4,7 @@ import { BoulderPuzzleLayout, Platform, Rope } from './engine-types';
 import { Prop, PROP_ART, PropArt, propArtWidth, RAIL_ART } from './level-generator';
 import { LightningStrike } from './storm';
 import { StormSky } from './storm-sky';
-import { drawCageArt, drawSpringBlock } from './puzzle-art';
+import { drawCageArt, drawCrackedWall, drawSpringBlock } from './puzzle-art';
 import { turnAroundCenter } from './prop-tumble';
 
 interface TileBlock {
@@ -261,36 +261,9 @@ export class MapRenderer {
     }
   }
 
-  /** The cracked stone wall: tiles over its whole box, the open-side column using the edge tile. */
+  /** The cracked stone wall over its whole box, its open face toward the room (a hint it can break). */
   drawPuzzleWall(ctx: CanvasRenderingContext2D, wall: Platform): void {
-    const cols: number = Math.round(wall.width / TILE_SIZE);
-    const rows: number = Math.ceil(wall.height / TILE_SIZE);
-    const faceCol: number = wall.x === 0 ? cols - 1 : 0;
-    const faceTile: number = wall.x === 0 ? GROUND_BLOCK.mr : GROUND_BLOCK.ml;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(wall.x, wall.y, wall.width, wall.height);
-    ctx.clip();
-    for (let row: number = 0; row < rows; row++) {
-      for (let col: number = 0; col < cols; col++) {
-        const tileId: number = col === faceCol ? faceTile : GROUND_BLOCK.mc;
-        this.drawTile(ctx, tileId, wall.x + col * TILE_SIZE, wall.y + row * TILE_SIZE);
-      }
-    }
-    // Cracks: a hint that it can break.
-    ctx.strokeStyle = 'rgba(10, 10, 15, 0.8)';
-    ctx.lineWidth = 2;
-    const faceX: number = wall.x === 0 ? wall.x + wall.width - 6 : wall.x + 6;
-    const inward: number = wall.x === 0 ? -1 : 1;
-    for (let y: number = 120; y < wall.height; y += 140) {
-      ctx.beginPath();
-      ctx.moveTo(faceX, y);
-      ctx.lineTo(faceX + inward * 14, y + 22);
-      ctx.lineTo(faceX + inward * 6, y + 44);
-      ctx.lineTo(faceX + inward * 22, y + 70);
-      ctx.stroke();
-    }
-    ctx.restore();
+    drawCrackedWall(ctx, wall, wall.x === 0);
   }
 
   /**
