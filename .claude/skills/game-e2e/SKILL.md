@@ -124,6 +124,12 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   `zombies[].type === 'eater'`, `eating`, `animState` (`eating`, `run`, ...), `animFrame` (an airborne Eater's `jump` frame follows its `velocityY`: `eaterJumpFrame`, launch 0, apex 4, touchdown 7). Lab:
   `npm run e2e:lab -- -g eater` (stuck spells, meals, puzzle side effects, host/guest). Rest players on the safe spot so a hungry Eater only has zombies to hunt.
   Specs: `solo/eater.spec.ts`, `online/eater-coop.spec.ts`.
+- **Dev tools dialog** (`game-dev-button-toggle-dialog`, dev builds and `/dev`): god mode, boxes,
+  drag player (left mouse grabs the player instead of attacking; `engine.devDragPoint`, works for
+  guests too), spawns on/off (`engine.zombieSpawnsPaused`: regular + Eater spawns, not puzzle
+  releases) and kill all (normal death path: corpse, XP, loot). The world ones are host/solo only
+  (disabled on guests). Helpers `openDevTools`/`pagePoint`/`liveZombies` in `support/dev-tools.ts`.
+  Specs: `solo/dev-tools.spec.ts`, `online/dev-tools-coop.spec.ts`.
 - Player: 90 ticks (1.8 s) invincible after a hit; move speed 3 (faster than most zombies).
 - Potions: key 7 (HP +50) / 8 (MP +30), 30-tick cooldown, start with 3 each, 30/20 gold.
   Auto-potion needs the class's auto-potion passive; without it nothing drinks for you.
