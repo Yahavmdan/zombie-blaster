@@ -347,6 +347,28 @@ describe('carrying props', (): void => {
     expect(c.y + c.height).toBe(cBottom);
     expect(c.velocityX).toBe(b.velocityX);
   });
+
+  it('a stack thrown with the attack key is reported as thrown; a plain toss is not', (): void => {
+    const thrower: CharacterState = player('t', 100, { carryingCorpseIds: [], attackThrow: true });
+    const tosser: CharacterState = player('s', 500, { carryingCorpseIds: [], attackThrow: false });
+    const thrown: LooseProp = barrel('thrown', 100, { carrierId: 't' });
+    const tossed: LooseProp = barrel('tossed', 500, { carrierId: 's' });
+    const result: string[] = assignCarriers([thrown, tossed], [thrower, tosser]).map(
+      (c: LooseProp | ZombieCorpse): string => c.id,
+    );
+    expect(result).toEqual(['thrown']);
+    expect(thrown.carrierId).toBeNull();
+    expect(tossed.carrierId).toBeNull();
+  });
+
+  it('going down drops the stack, never a throw', (): void => {
+    const p: CharacterState = player('p', 100, {
+      carryingCorpseIds: ['b'],
+      attackThrow: true,
+      isDown: true,
+    });
+    expect(assignCarriers([barrel('b', 100, { carrierId: 'p' })], [p])).toEqual([]);
+  });
 });
 describe('carried corpses sway', (): void => {
   /** A carrier on the ground at x walking at vx (px/tick). */

@@ -7,6 +7,7 @@ import { LoosePropSystem } from './loose-prop-system';
 import { VfxSystem } from './vfx-system';
 import { Box, Point } from './boulder-puzzle';
 import { isExplosive, PropKind } from './level-generator';
+import { Carriable } from './corpse-carry';
 import {
   barrelHitBy,
   blastBarrels,
@@ -31,7 +32,7 @@ const BLAST_DAMAGE_COLOR: string = '#ff8a3d';
 
 /**
  * Exploding barrels. The host (or solo) watches every player's attacks on the barrels: a hit
- * lights the fuse, and when it runs out the barrel blows up, hurting the zombies and players around
+ * lights the fuse (so does a throw with the attack key, `lightThrown`), and when it runs out the barrel blows up, hurting the zombies and players around
  * it, throwing the corpses lying there and setting off the barrels next to it. A guest caught in it
  * gets the hit in game-sync `attacks` (`isBlast`) and applies it to itself. The fuse and the blown-up barrels travel with the synced
  * props (LoosePropSystem.moved), so clients only draw them; the blast itself is a VFX event.
@@ -66,6 +67,15 @@ export class ExplodingBarrelSystem {
         }),
       );
     for (const b of this.props.respawn(inTheWay)) this.dropIn(b);
+  }
+
+  /** Host: barrels thrown with the attack key catch as they leave the hands. */
+  lightThrown(thrown: Carriable[]): void {
+    if (thrown.length === 0) return;
+    const ids: Set<string> = new Set<string>(thrown.map((t: Carriable): string => t.id));
+    for (const b of this.barrels()) {
+      if (ids.has(b.id) && lightFuse(b)) this.spark(b);
+    }
   }
 
   /** A blown-up barrel is back on its spawn spot. */

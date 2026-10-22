@@ -73,6 +73,8 @@ export interface CharacterState {
   revivingPlayerId?: string | null;
   /** Corpses and loose props (ids) this player wants to carry, bottom of the stack first: their request, confirmed by the host through `ZombieCorpse.carrierId` / `LooseProp.carrierId`. */
   carryingCorpseIds?: string[];
+  /** True when the player last let go of their stack with the attack key (a throw, not a toss): the host lights the explosives in it. Cleared by the next pick-up. */
+  attackThrow?: boolean;
   downTimer: number;
   unallocatedStatPoints: number;
   unallocatedSkillPoints: number;
