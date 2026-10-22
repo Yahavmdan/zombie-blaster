@@ -110,6 +110,81 @@ test.describe('exploding barrels in co-op', { tag: '@online' }, (): void => {
     await expectReplayed(guest, 'barrel-respawn', hostId, 'the guest sees it drop back in');
   });
 
+  test('a guest throws a barrel with the attack key: the host lights it, both see it fly off burning', async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }, testInfo: TestInfo): Promise<void> => {
+    test.setTimeout(120_000);
+    const session: RoomSession = await room(
+      [
+        { name: 'Host', classId: 'warrior' },
+        { name: 'Guest', classId: 'warrior' },
+      ],
+      'barrel-throw',
+    );
+    const host: GamePlayer = session.host;
+    const guest: GamePlayer = session.guests[0];
+    await host.probe.setGodMode(true);
+    await guest.probe.setGodMode(true);
+
+    const s0: E2eSnapshot = await layoutWhere(
+      host,
+      'a lone barrel on open ground',
+      (s: E2eSnapshot): boolean => pickableOnGround(s, isBarrel) !== undefined,
+    );
+    const barrel: LevelProp = pickableOnGround(s0, isBarrel)!;
+    const id: string = barrel.id!;
+    await guest.probe.waitFor(
+      "the guest follows the host's layout",
+      (s: E2eSnapshot): boolean =>
+        s.level.seed === s0.level.seed && findProp(s, id)?.x === barrel.x,
+      { timeoutMs: 5_000 },
+    );
+    const hostId: string = (await host.probe.state()).player!.id;
+    const guestId: string = (await guest.probe.state()).player!.id;
+
+    await standLeftOf(guest, barrel);
+    await guest.press(KEYS.carry, 70);
+    await host.probe.waitFor(
+      'the host grants the guest the barrel',
+      (s: E2eSnapshot): boolean => findProp(s, id)?.carrierId === guestId,
+      { timeoutMs: 5_000 },
+    );
+    expect(findProp(await host.probe.state(), id)!.fuseTicks, 'carried unlit').toBe(0);
+
+    await guest.press(KEYS.attack, 70);
+    await host.probe.waitFor(
+      "the host lights the guest's thrown barrel",
+      (s: E2eSnapshot): boolean => {
+        const q: LevelProp | undefined = findProp(s, id);
+        return !!q && q.carrierId === null && q.fuseTicks > 0;
+      },
+      { timeoutMs: 5_000 },
+    );
+    await guest.probe.waitFor(
+      'the guest sees its thrown barrel burning',
+      (s: E2eSnapshot): boolean => {
+        const q: LevelProp | undefined = findProp(s, id);
+        return !!q && q.carrierId === null && q.fuseTicks > 0;
+      },
+      { timeoutMs: 5_000 },
+    );
+    await expectReplayed(guest, 'hit-particles', hostId, 'the guest sees the fuse catch');
+    await guest.attachCanvas(testInfo, 'guest sees its thrown barrel lit');
+
+    await host.probe.waitFor(
+      'the thrown barrel blows up on the host',
+      (s: E2eSnapshot): boolean => findProp(s, id)?.exploded === true,
+      { timeoutMs: 10_000 },
+    );
+    await guest.probe.waitFor(
+      'the barrel is gone on the guest too',
+      (s: E2eSnapshot): boolean => findProp(s, id)?.exploded === true,
+      { timeoutMs: 5_000 },
+    );
+  });
+
   test("the host's blast hurts and throws the guest beside it, and both see the corpses there fly", async ({
     room,
   }: {

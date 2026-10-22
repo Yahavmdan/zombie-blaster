@@ -4,7 +4,8 @@ import { Point } from './boulder-puzzle';
 
 /**
  * Exploding barrel rules, free of engine state so the host system, the renderer and the tests use
- * the same math. An attack on a barrel lights its fuse; BARREL_FUSE_TICKS later it blows up,
+ * the same math. An attack on a barrel lights its fuse, and so does throwing a carried one with the
+ * attack key (CharacterState.attackThrow); BARREL_FUSE_TICKS later it blows up,
  * hurting every zombie and player near it, throwing the corpses lying there and setting off the
  * barrels next to it (a chain reaction).
  */

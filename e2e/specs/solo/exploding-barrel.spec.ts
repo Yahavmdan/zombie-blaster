@@ -112,6 +112,60 @@ test.describe('exploding barrels', { tag: '@solo' }, (): void => {
     expectArtMatchesCollision(await drawnGeometry(p, 'barrel back'), 'barrel back');
   });
 
+  test('a barrel thrown with the attack key flies off lit; tossed with E it stays unlit', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }, testInfo: TestInfo): Promise<void> => {
+    test.setTimeout(90_000);
+    const p: GamePlayer = await solo('warrior');
+    await p.probe.setGodMode(true);
+    const s0: E2eSnapshot = await layoutWhere(
+      p,
+      'a lone barrel on open ground',
+      (s: E2eSnapshot): boolean => pickableOnGround(s, isBarrel) !== undefined,
+    );
+    const barrel: LevelProp = pickableOnGround(s0, isBarrel)!;
+    const id: string = barrel.id!;
+    await standLeftOf(p, barrel);
+
+    // E tosses it: no swing, no fuse.
+    await pickUp(p, id);
+    await p.press(KEYS.carry, 70);
+    const tossed: E2eSnapshot = await p.probe.waitFor(
+      'the tossed barrel lands',
+      (s: E2eSnapshot): boolean => {
+        const q: LevelProp | undefined = findProp(s, id);
+        return s.player!.carryingCorpseIds.length === 0 && !!q && q.carrierId === null && q.resting;
+      },
+    );
+    expect(findProp(tossed, id)!.fuseTicks, 'a plain toss leaves it unlit').toBe(0);
+
+    // The attack key throws it lit, in one press.
+    await standLeftOf(p, findProp(tossed, id)!);
+    await pickUp(p, id);
+    const lighting: E2eVfxLogEntry[] = await vfxQueuedBy(p, async (): Promise<void> => {
+      await p.press(KEYS.attack, 70);
+    });
+    const flying: E2eSnapshot = await p.probe.waitFor(
+      'the thrown barrel leaves the hands burning',
+      (s: E2eSnapshot): boolean => {
+        const q: LevelProp | undefined = findProp(s, id);
+        return !!q && q.carrierId === null && q.fuseTicks > 0;
+      },
+    );
+    expect(findProp(flying, id)!.fuseTicks, 'lit as it was thrown').toBeGreaterThan(FUSE_TICKS - 40);
+    expect(typesOf(lighting), 'sparks as the fuse catches, queued for the others').toContain(
+      'hit-particles',
+    );
+    await p.attachCanvas(testInfo, 'lit barrel flying');
+    await p.probe.waitFor(
+      'the thrown barrel blows up',
+      (s: E2eSnapshot): boolean => findProp(s, id)?.exploded === true,
+      { timeoutMs: 10_000 },
+    );
+  });
+
   test('the blast hurts and throws the player who lit it and flings the corpses lying beside it', async ({
     solo,
   }: {
@@ -289,3 +343,14 @@ test.describe('exploding barrels', { tag: '@solo' }, (): void => {
     expect(after?.exploded).toBe(false);
   });
 });
+
+/** E beside the prop: it is picked up and rides overhead, unlit. */
+async function pickUp(p: GamePlayer, id: string): Promise<void> {
+  await p.press(KEYS.carry, 70);
+  const carrying: E2eSnapshot = await p.probe.waitFor(
+    'the barrel is picked up',
+    (s: E2eSnapshot): boolean =>
+      s.player!.carryingCorpseIds.includes(id) && findProp(s, id)?.carrierId === s.player!.id,
+  );
+  expect(findProp(carrying, id)!.fuseTicks, 'picking it up does not light it').toBe(0);
+}

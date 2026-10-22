@@ -45,7 +45,9 @@ export class CorpseCarrySystem {
     if (!p) return false;
     const ids: string[] = carriedIds(p);
     if (ids.length > 0 && attackPressed) {
+      // Thrown with a swing: the host lights the explosives in the stack as they fly.
       p.carryingCorpseIds = [];
+      p.attackThrow = true;
       return true;
     }
     if (!carryPressed) return ids.length > 0;
@@ -53,18 +55,24 @@ export class CorpseCarrySystem {
       ids.length < carryCapacity(p) ? nearestCarriable(p, this.items()) : null;
     if (item) {
       p.carryingCorpseIds = [...ids, item.id];
+      p.attackThrow = false;
       this.unconfirmedTicks.set(item.id, 0);
       return true;
     }
     p.carryingCorpseIds = [];
+    p.attackThrow = false;
     return ids.length > 0;
   }
 
-  update(): void {
-    if (!this.e.isMultiplayerClient) assignCarriers(this.items(), this.players());
+  /** Host: settles who carries what. Returns what was thrown with the attack key this tick. */
+  update(): Carriable[] {
+    const thrown: Carriable[] = this.e.isMultiplayerClient
+      ? []
+      : assignCarriers(this.items(), this.players());
     this.settleLocalRequests();
     this.holdCarried();
     this.swayCorpses();
+    return thrown;
   }
 
   /** Eases every carried corpse toward the sway its carrier's motion gives it (bodies settle). */

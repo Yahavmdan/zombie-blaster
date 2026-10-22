@@ -228,9 +228,10 @@ export function toss(item: Carriable, carrier: CarrierView, restY: number = 0): 
  * Host: settles who carries what this tick. Things whose carrier let go or went down are tossed
  * together (bottom one first, so the stack keeps its order and lands as a pile); a carrier who left
  * the game just drops theirs. Then requests are granted, first come first served, for lying
- * corpses and props within reach, up to each player's `carryCapacity`.
+ * corpses and props within reach, up to each player's `carryCapacity`. Returns what was thrown
+ * with the attack key (`attackThrow`) this tick.
  */
-export function assignCarriers(items: Carriable[], players: CharacterState[]): void {
+export function assignCarriers(items: Carriable[], players: CharacterState[]): Carriable[] {
   const byId: Map<string, CharacterState> = new Map<string, CharacterState>(
     players.map((p: CharacterState): [string, CharacterState] => [p.id, p]),
   );
@@ -245,11 +246,14 @@ export function assignCarriers(items: Carriable[], players: CharacterState[]): v
       released.set(carrier, [...(released.get(carrier) ?? []), item]);
     }
   }
+  const thrown: Carriable[] = [];
   for (const [carrier, stack] of released) {
     // Lowest on the head (largest box bottom) is the bottom of the stack.
     stack.sort((a: Carriable, b: Carriable): number => b.y + b.height - (a.y + a.height));
     let restY: number = 0;
     for (const item of stack) restY = toss(item, carrier, restY);
+    // Going down drops the stack, it is no throw.
+    if (carrier.attackThrow && canCarry(carrier)) thrown.push(...stack);
   }
   for (const p of players) {
     if (!canCarry(p)) continue;
@@ -264,6 +268,7 @@ export function assignCarriers(items: Carriable[], players: CharacterState[]): v
       held++;
     }
   }
+  return thrown;
 }
 
 /**

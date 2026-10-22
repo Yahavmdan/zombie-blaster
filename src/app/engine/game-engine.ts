@@ -835,7 +835,7 @@ export class GameEngine implements IGameEngine {
     this.vfxSystem.updatePlayerTints();
     // The host's sky decides when lightning strikes; guests see it through the Lightning event.
     this.vfxSystem.updateLightning(!this.isMultiplayerClient);
-    this.corpseCarrySystem.update();
+    this.explodingBarrelSystem.lightThrown(this.corpseCarrySystem.update());
     this.loosePropSystem.update();
     this.zombieSystem.updateZombieCorpses();
 
