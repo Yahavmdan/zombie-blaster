@@ -11,3 +11,16 @@
   display: block;
   image-rendering: pixelated;
 }
+
+/* Dev tools mouse tools: drag grabs anything, spawn places a zombie. */
+.canvas--drag {
+  cursor: grab;
+}
+
+.canvas--dragging {
+  cursor: grabbing;
+}
+
+.canvas--spawn {
+  cursor: crosshair;
+}

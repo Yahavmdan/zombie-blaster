@@ -1,1 +1,7 @@
-<canvas #gameCanvas class="canvas"></canvas>
+<canvas
+  #gameCanvas
+  class="canvas"
+  [class.canvas--drag]="devMouseTool() === 'drag'"
+  [class.canvas--dragging]="dragging()"
+  [class.canvas--spawn]="devMouseTool() === 'spawn'"
+></canvas>

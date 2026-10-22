@@ -26,6 +26,7 @@ import {
   getAutoPotionSuccessChance,
 } from '@shared/index';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { DraggableDialogDirective } from '../../ui/draggable-dialog.directive';
 import { PixelIconId } from '@shared/pixel-icon';
 
 export interface SkillTreeNode {
@@ -43,7 +44,7 @@ export interface SkillTreeNode {
 
 @Component({
   selector: 'app-skill-tree',
-  imports: [PixelIconComponent],
+  imports: [PixelIconComponent, DraggableDialogDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'skill-tree',

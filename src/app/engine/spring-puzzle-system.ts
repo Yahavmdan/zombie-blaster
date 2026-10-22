@@ -59,6 +59,15 @@ export class SpringPuzzleSystem {
     if (pressButton(spring)) this.buttonClank(puzzle);
   }
 
+  /** Dev tools: the button is up and pressed now; the 3-2-1 launches whoever stands on the spring. */
+  solve(): void {
+    const puzzle: SpringPuzzleLayout | null = this.e.springPuzzle;
+    const spring: SpringState | null = this.e.spring;
+    if (!puzzle || !spring) return;
+    spring.buttonTicks = GAME_CONSTANTS.SPRING_BUTTON_RISE_TICKS;
+    if (pressButton(spring)) this.buttonClank(puzzle);
+  }
+
   tickClient(): void {
     if (this.e.spring) tickSpringClient(this.e.spring);
   }

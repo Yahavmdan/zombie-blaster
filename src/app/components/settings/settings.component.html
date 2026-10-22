@@ -9,7 +9,7 @@
 
 @if (isOpen()) {
   <div class="settings-overlay px-overlay">
-    <div class="kb-layout">
+    <div class="kb-layout" appDraggableDialog dragHandle=".kb-header" data-testid="game-settings-panel-window">
       <div class="kb-panel px-panel">
         <div class="kb-header px-header">
           <app-pixel-icon [icon]="'gear'" [size]="24" />

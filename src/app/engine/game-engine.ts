@@ -10,6 +10,7 @@ import {
   SkillType,
   VfxEvent,
   VfxEventType,
+  ZOMBIE_TYPES,
 } from '@shared/index';
 import {
   ActiveSpecialEffect,
@@ -25,6 +26,7 @@ import {
   WorldDrop,
   LooseProp,
   ZombieCorpse,
+  ZombieDefinition,
   ZombieState,
   ZombieType,
 } from '@shared/game-entities';
@@ -74,7 +76,7 @@ import { Box, boulderPath, gateBox, gateBroken } from './boulder-puzzle';
 import { SpringPuzzleSystem } from './spring-puzzle-system';
 import { CagePuzzleSystem } from './cage-puzzle-system';
 import { PlatePuzzleSystem } from './plate-puzzle-system';
-import { PLATE_MAX_WEIGHT, newPlateState } from './plate-puzzle';
+import { PLATE_MAX_WEIGHT, newPlateState, plateBox } from './plate-puzzle';
 import {
   EXIT_CAGE,
   CAGE_MAX_FALL_TICKS,
@@ -99,6 +101,7 @@ import {
   Prop,
 } from './level-generator';
 import { RenderSystem } from './render-system';
+import { DevToolsSystem } from './dev-tools-system';
 import { restsOnSafeSpot } from './safe-spot';
 import { WorkerInterval } from './worker-interval';
 import { refreshDerivedStats } from './derived-stats';
@@ -248,6 +251,10 @@ export class GameEngine implements IGameEngine {
 
   godMode: boolean = false;
   showCollisionBoxes: boolean = false;
+  zombieSpawnsPaused: boolean = false;
+  zombiesFrozen: boolean = false;
+  /** Simulation ticks run so far (dev tools: pause / step / slow motion are measured by it). */
+  simTicks: number = 0;
   isMultiplayerHost: boolean = false;
   isMultiplayerClient: boolean = false;
   isLocalAfk: boolean = false;
@@ -284,6 +291,7 @@ export class GameEngine implements IGameEngine {
   private readonly loosePropSystem: LoosePropSystem;
   private readonly explodingBarrelSystem: ExplodingBarrelSystem;
   private readonly renderSystem: RenderSystem;
+  readonly devTools: DevToolsSystem;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -310,6 +318,7 @@ export class GameEngine implements IGameEngine {
       this.vfxSystem,
     );
     this.renderSystem = new RenderSystem(this);
+    this.devTools = new DevToolsSystem(this);
 
     this.initExitPlatform();
     this.applyLevel();
@@ -562,9 +571,100 @@ export class GameEngine implements IGameEngine {
     this.zombieSystem.startFloor();
   }
 
-  /** A zombie climbing out of the ground at x (cage-release rules: never a boss; `kind` forces the type); e2e probe setup. */
-  spawnZombieAt(x: number, kind: ZombieType | null = null): void {
-    this.zombieSystem.spawnZombieAt(x, GAME_CONSTANTS.GROUND_Y, kind);
+  /**
+   * A zombie climbing out of the surface at `groundY` (the ground by default) at x (cage-release
+   * rules: never a boss; `kind` forces the type); e2e probe setup and the dev tools' spawn tool.
+   */
+  spawnZombieAt(x: number, kind: ZombieType | null = null, groundY: number = GAME_CONSTANTS.GROUND_Y): void {
+    this.zombieSystem.spawnZombieAt(x, groundY, kind);
+  }
+
+  /** Dev tools: every zombie dies where it stands, as if slain (corpse, XP, loot). Host/solo only. */
+  killAllZombies(): void {
+    if (this.isMultiplayerClient) return;
+    for (const z of this.zombies) {
+      if (!z.isDead) this.combatSystem.handleZombieDeath(z);
+    }
+    this.combatSystem.filterDeadZombies();
+  }
+
+  /**
+   * Walker corpses dropped from above the screen over `centerX`, staggered and a little scattered:
+   * they land one by one, like the slain, and pile by normal physics. Host/solo (dev tools, e2e setup).
+   */
+  dropCorpses(centerX: number, count: number): void {
+    if (this.isMultiplayerClient) return;
+    for (let i: number = 0; i < count; i++) {
+      const jitter: number = (Math.random() - 0.5) * GAME_CONSTANTS.DEV_CORPSE_DROP_JITTER_PX;
+      this.addWalkerCorpse(centerX + jitter, (height: number): number => -height - i * GAME_CONSTANTS.DEV_CORPSE_DROP_SPACING_PX);
+    }
+  }
+
+  /** Walker corpses laid right on top of `box`, spread along it (a surface with a ledge over it). Host/solo. */
+  layCorpsesOn(box: Box, count: number): void {
+    if (this.isMultiplayerClient) return;
+    for (let i: number = 0; i < count; i++) {
+      this.addWalkerCorpse(box.x + ((i + 0.5) / count) * box.width, (height: number): number => box.y - height);
+    }
+  }
+
+  /** One walker-sized corpse centered on x, falling from `topOf(height)`. */
+  private addWalkerCorpse(centerX: number, topOf: (height: number) => number): void {
+    const def: ZombieDefinition = ZOMBIE_TYPES[ZombieType.Walker];
+    const width: number = Math.round((def.widthMin + def.widthMax) / 2);
+    const height: number = Math.round((def.heightMin + def.heightMax) / 2);
+    const linger: number = GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS;
+    const id: string = `dropped-corpse-${crypto.randomUUID()}`;
+    this.zombieCorpses.push({
+      id,
+      type: ZombieType.Walker,
+      x: centerX - width / 2,
+      y: topOf(height),
+      width,
+      height,
+      spriteKey: this.zombieSpriteAnimator.getSpriteKey(ZombieType.Walker),
+      facing: Math.random() < 0.5 ? -1 : 1,
+      velocityX: 0,
+      velocityY: 0,
+      isGrounded: false,
+      frozen: false,
+      landProcessed: false,
+      fadeTimer: linger,
+      maxFadeTimer: linger,
+      showBlood: false,
+      carrierId: null,
+      angle: 0,
+      spin: 0,
+    });
+    this.zombieSpriteAnimator.setState(id, ZombieAnimState.Dead);
+  }
+
+  /** Dev tools: corpses fall under the exit (the way up on a regular floor). */
+  pileCorpsesAtExit(): void {
+    this.dropCorpses(this.exitPlatform.x + this.exitPlatform.width / 2, GAME_CONSTANTS.DEV_PILE_CORPSES);
+  }
+
+  /**
+   * Dev tools: this floor's puzzle does its part through its own rules and effects. Floor 2: the
+   * gate breaks and the boulder rolls. Floor 3: the button is up and pressed with the player on the
+   * spring (the launch throws them onto the exit). Floor 4: the exit cage's chain snaps. Floor 5:
+   * corpses lie on the plate. Host/solo only; other floors have no puzzle.
+   */
+  solvePuzzle(): void {
+    if (this.isMultiplayerClient) return;
+    if (this.boulderPuzzle) this.boulderPuzzleSystem.solve();
+    if (this.springPuzzle) {
+      this.devTools.standOn(this.springPuzzle.spring);
+      this.springPuzzleSystem.solve();
+    }
+    if (this.cagePuzzle) this.cagePuzzleSystem.solve();
+    if (this.platePuzzle) {
+      // Laid on, not dropped: the plate's ledge can have another one over it.
+      this.layCorpsesOn(
+        plateBox(this.platePuzzle),
+        GAME_CONSTANTS.PLATE_WEIGHT_NEEDED + GAME_CONSTANTS.DEV_PLATE_EXTRA_CORPSES,
+      );
+    }
   }
 
   /** One regular spawn now (the floor's type roll, at most one boss at a time); e2e probe setup. */
@@ -657,16 +757,19 @@ export class GameEngine implements IGameEngine {
   private advance(now: number): void {
     const dt: number = Math.min(Math.max(now - this.lastTimestamp, 0), MAX_CATCH_UP_MS);
     this.lastTimestamp = now;
-    this.accumulator += dt;
+    // Dev tools: paused (0) or slow motion; steps run while paused.
+    this.accumulator += dt * this.devTools.timeScale();
 
     while (this.accumulator >= this.fixedDt) {
       this.update();
       this.accumulator -= this.fixedDt;
     }
+    for (let i: number = this.devTools.takeSteps(); i > 0; i--) this.update();
   }
 
   private update(): void {
     if (!this.player) return;
+    this.simTicks++;
 
     if (this.hitStopCooldown > 0) this.hitStopCooldown--;
     if (this.hitStopTicks > 0) {
@@ -755,6 +858,7 @@ export class GameEngine implements IGameEngine {
       this.combatSystem.updatePassiveSkills();
       this.combatSystem.updateAutoPotion();
     }
+    this.devTools.update();
 
     if (!this.isMultiplayerClient) {
       this.zombieSystem.checkFloorCompletion();

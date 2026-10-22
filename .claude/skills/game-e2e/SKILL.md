@@ -124,6 +124,24 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   `zombies[].type === 'eater'`, `eating`, `animState` (`eating`, `run`, ...), `animFrame` (an airborne Eater's `jump` frame follows its `velocityY`: `eaterJumpFrame`, launch 0, apex 4, touchdown 7). Lab:
   `npm run e2e:lab -- -g eater` (stuck spells, meals, puzzle side effects, host/guest). Rest players on the safe spot so a hungry Eater only has zombies to hunt.
   Specs: `solo/eater.spec.ts`, `online/eater-coop.spec.ts`.
+- **Dev tools dialog** (`game-dev-button-toggle-dialog`, dev builds and `/dev`; engine side in
+  `engine/dev-tools-system.ts`, `engine.devTools`). Left mouse tool: Attack / Drag (grabs the topmost
+  player, zombie, prop or corpse under the cursor, else brings the player there; guests drag only
+  themselves) / Spawn <type> (each click spawns that type on the surface under the cursor). Picking a
+  tool closes the dialog. Zombies: spawns on/off (`zombieSpawnsPaused`: regular + Eater, not puzzle
+  releases), freeze (`zombiesFrozen`: no AI/moves/attacks, they hang where they are; spawning ones
+  still climb out), kill all (normal death path). Time: pause / step / slow motion
+  (`devTools.timeScale()`; probe `state().ticks` counts sim ticks). Player: full heal, infinite MP,
+  to exit, to safe spot. World: next floor, pile corpses at exit (`engine.dropCorpses`, also the
+  probe's `dropCorpses`), solve puzzle (floors 2-5 through each puzzle's own `solve()`; floor 5 lays
+  corpses on the plate with `layCorpsesOn` because a ledge can hang over it). World tools are
+  disabled on guests. Dev, game-over, AFK and every in-game dialog drag by their title bar
+  (`appDraggableDialog`, `ui/draggable-dialog.directive.ts`). Helpers `openDevTools`/`pagePoint`/
+  `dragOnCanvas`/`liveZombies` in `support/dev-tools.ts`; the tool buttons close the dialog, so don't
+  click close after them. Specs: `solo/dev-tools.spec.ts`, `online/dev-tools-coop.spec.ts`,
+  `solo/draggable-dialogs.spec.ts`.
+- The game's window `mouseup` must not `preventDefault` the left button: it swallowed the release a
+  number input's spinner waits for (one click on the dev floor arrow kept counting forever).
 - Player: 90 ticks (1.8 s) invincible after a hit; move speed 3 (faster than most zombies).
 - Potions: key 7 (HP +50) / 8 (MP +30), 30-tick cooldown, start with 3 each, 30/20 gold.
   Auto-potion needs the class's auto-potion passive; without it nothing drinks for you.

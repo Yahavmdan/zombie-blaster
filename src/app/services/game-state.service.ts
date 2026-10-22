@@ -67,6 +67,7 @@ export class GameStateService {
   readonly isPaused: WritableSignal<boolean> = signal<boolean>(false);
   readonly godMode: WritableSignal<boolean> = signal<boolean>(false);
   readonly showCollisionBoxes: WritableSignal<boolean> = signal<boolean>(false);
+  readonly zombieSpawnsPaused: WritableSignal<boolean> = signal<boolean>(false);
 
   readonly isAlive: Signal<boolean> = computed((): boolean => {
     const p: CharacterState | null = this.player();

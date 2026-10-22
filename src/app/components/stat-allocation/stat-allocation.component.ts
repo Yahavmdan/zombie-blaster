@@ -19,6 +19,7 @@ import {
 } from '@shared/index';
 import { GameStateService } from '../../services/game-state.service';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { DraggableDialogDirective } from '../../ui/draggable-dialog.directive';
 import { PixelIconId } from '@shared/pixel-icon';
 
 export interface StatPreviewDelta {
@@ -45,7 +46,7 @@ export interface StatRow {
 
 @Component({
   selector: 'app-stat-allocation',
-  imports: [PixelIconComponent],
+  imports: [PixelIconComponent, DraggableDialogDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'stat-allocation',
