@@ -278,10 +278,15 @@ export const GAME_CONSTANTS = {
   // ─── Spitter (Ranged Poison) ────────────────
   SPITTER_ATTACK_RANGE: 280, // Distance at which the spitter starts shooting
   SPITTER_KEEP_DISTANCE: 200, // Spitter tries to stay at least this far from the player
-  SPITTER_PROJECTILE_SPEED: 5, // How fast spitter projectiles travel in pixels per tick
-  SPITTER_PROJECTILE_LIFETIME: 80, // How many ticks a spitter projectile lives before disappearing
+  SPITTER_PROJECTILE_SPEED: 4.5, // Straight-line distance to the target / this = the glob's flight ticks (then clamped below)
+  SPIT_FLIGHT_MIN_TICKS: 30, // A glob is in the air at least this long, so a close or overhead shot can still be dodged
+  SPIT_FLIGHT_MAX_TICKS: 75, // ...and at most this long, so a far shot doesn't crawl
+  SPIT_HIT_BOX_PX: 12, // Side of the square around a glob that hits a player
+  SPITTER_ATTACK_COOLDOWN_MIN: 80, // Minimum ticks between spits (other zombies: ZOMBIE_ATTACK_COOLDOWN_*)
+  SPITTER_ATTACK_COOLDOWN_MAX: 120, // Maximum ticks between spits
+  SPITTER_PROJECTILE_LIFETIME: 160, // Ticks a glob lives: longer than any flight, so a miss falls on until it splats on a surface
   SPITTER_PROJECTILE_GRAVITY: 0.08, // Downward pull on spitter projectiles (arcing shots)
-  SPITTER_POISON_DURATION_TICKS: 150, // Total ticks the poison effect lasts on the player
+  SPITTER_POISON_DURATION_TICKS: 100, // Total ticks the poison effect lasts on the player
   SPITTER_POISON_TICK_INTERVAL: 25, // Ticks between each poison damage tick
   SPITTER_POISON_DAMAGE_PER_TICK: 3, // Base damage dealt per poison tick
   SPITTER_POISON_DAMAGE_WAVE_SCALE: 0.5, // Extra poison damage scaling per wave

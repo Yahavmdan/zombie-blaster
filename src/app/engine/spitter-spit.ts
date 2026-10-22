@@ -54,13 +54,26 @@ export function spitterMouth(z: ZombieState, state: ZombieAnimState, frame: numb
 }
 
 /**
- * A lobbed shot from `from` that comes down on `to`: horizontal speed `speed`, pulled down by
+ * Ticks a glob takes from `from` to `to`: the straight-line distance at `speed`, kept between
+ * SPIT_FLIGHT_MIN_TICKS and SPIT_FLIGHT_MAX_TICKS. Timing by the whole distance (not just the
+ * horizontal part) keeps a shot at a player overhead or close by from arriving almost at once.
+ */
+export function spitFlightTicks(from: Point, to: Point, speed: number): number {
+  const ticks: number = Math.round(Math.hypot(to.x - from.x, to.y - from.y) / speed);
+  return Math.min(
+    GAME_CONSTANTS.SPIT_FLIGHT_MAX_TICKS,
+    Math.max(GAME_CONSTANTS.SPIT_FLIGHT_MIN_TICKS, ticks),
+  );
+}
+
+/**
+ * A lobbed shot from `from` that comes down on `to` after `spitFlightTicks`, pulled down by
  * `gravity` every tick (the update adds velocity, then gravity), so it arcs like real spit.
  */
 export function aimSpit(from: Point, to: Point, speed: number, gravity: number): Velocity {
   const dx: number = to.x - from.x;
   const dy: number = to.y - from.y;
-  const ticks: number = Math.max(1, Math.round(Math.abs(dx) / speed));
+  const ticks: number = spitFlightTicks(from, to, speed);
   return {
     vx: dx / ticks,
     vy: (dy - (gravity * ticks * (ticks - 1)) / 2) / ticks,

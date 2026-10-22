@@ -9,6 +9,7 @@ import {
   Velocity,
   aimSpit,
   puddleX,
+  spitFlightTicks,
   spitSurfaceHit,
   spitterMouth,
 } from './spitter-spit';
@@ -47,9 +48,8 @@ describe('aimSpit', (): void => {
     const from: Point = { x: 100, y: 500 };
     const to: Point = { x: 360, y: 560 };
     const v: Velocity = aimSpit(from, to, SPEED, GRAVITY);
-    const ticks: number = Math.round(260 / SPEED);
 
-    const end: Point = fly(from, v, ticks);
+    const end: Point = fly(from, v, spitFlightTicks(from, to, SPEED));
     expect(end.x).toBeCloseTo(to.x, 6);
     expect(end.y).toBeCloseTo(to.y, 6);
     expect(v.vy, 'thrown up first').toBeLessThan(0);
@@ -60,8 +60,33 @@ describe('aimSpit', (): void => {
     const to: Point = { x: 400, y: 420 };
     const v: Velocity = aimSpit(from, to, SPEED, GRAVITY);
     expect(v.vx).toBeLessThan(0);
-    const end: Point = fly(from, v, Math.round(200 / SPEED));
+    const end: Point = fly(from, v, spitFlightTicks(from, to, SPEED));
     expect(end.y).toBeCloseTo(to.y, 6);
+  });
+
+  it('gives a player overhead or close by as long to dodge as the flight minimum', (): void => {
+    const from: Point = { x: 300, y: 580 };
+    const overhead: Point = { x: 302, y: 380 };
+    const close: Point = { x: 340, y: 580 };
+    expect(spitFlightTicks(from, overhead, SPEED)).toBeGreaterThanOrEqual(GAME_CONSTANTS.SPIT_FLIGHT_MIN_TICKS);
+    expect(spitFlightTicks(from, close, SPEED)).toBe(GAME_CONSTANTS.SPIT_FLIGHT_MIN_TICKS);
+    const end: Point = fly(from, aimSpit(from, overhead, SPEED, GRAVITY), spitFlightTicks(from, overhead, SPEED));
+    expect(end.y, 'still lands on the player overhead').toBeCloseTo(overhead.y, 6);
+  });
+
+  it('never launches a glob suddenly fast, wherever the target is', (): void => {
+    const from: Point = { x: 400, y: 580 };
+    const range: number = GAME_CONSTANTS.SPITTER_ATTACK_RANGE;
+    const speeds: number[] = [];
+    for (let dx: number = -range; dx <= range; dx += 20) {
+      for (let dy: number = -range; dy <= range; dy += 20) {
+        if (Math.hypot(dx, dy) < 20) continue;
+        const v: Velocity = aimSpit(from, { x: from.x + dx, y: from.y + dy }, SPEED, GRAVITY);
+        speeds.push(Math.hypot(v.vx, v.vy));
+      }
+    }
+    // Before: a player straight overhead took the glob in 1 tick at ~200 px/tick.
+    expect(Math.max(...speeds), 'never a sudden fast one').toBeLessThan(SPEED * 2);
   });
 });
 
