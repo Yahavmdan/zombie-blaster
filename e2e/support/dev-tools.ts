@@ -33,3 +33,18 @@ export async function pagePoint(
 export function liveZombies(s: E2eSnapshot): number {
   return s.zombies.filter((z: E2eZombieView): boolean => !z.isDead).length;
 }
+
+/** Drag tool: press on world point `from`, move to `to`; `release` lets go there too. */
+export async function dragOnCanvas(
+  page: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  release: boolean,
+): Promise<void> {
+  const start: { x: number; y: number } = await pagePoint(page, from.x, from.y);
+  const end: { x: number; y: number } = await pagePoint(page, to.x, to.y);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 10 });
+  if (release) await page.mouse.up();
+}

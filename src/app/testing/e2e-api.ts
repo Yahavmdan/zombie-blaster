@@ -391,6 +391,8 @@ export interface E2eSnapshot {
   floor: number;
   floorTransitionTimer: number;
   godMode: boolean;
+  /** Simulation ticks run so far (frozen while the dev tools pause time). */
+  ticks: number;
   player: E2ePlayerView | null;
   localAnimState: string;
   remotePlayers: E2eRemotePlayerView[];

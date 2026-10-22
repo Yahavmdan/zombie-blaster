@@ -37,6 +37,7 @@ import { GameAction, SKILL_KEY_ACTIONS } from '@shared/messages';
 import { GameStateService } from '../../services/game-state.service';
 import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { DraggableDialogDirective } from '../../ui/draggable-dialog.directive';
 
 export type TreeNodeState = 'locked' | 'available' | 'owned';
 export type TreeLinkState = 'lit' | 'ready' | 'dim';
@@ -168,7 +169,7 @@ function statSource(stat: ScalingStat, p: CharacterState): string {
  */
 @Component({
   selector: 'app-tree-skill-window',
-  imports: [PixelIconComponent],
+  imports: [PixelIconComponent, DraggableDialogDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'tree-skill-window',

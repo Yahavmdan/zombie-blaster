@@ -359,6 +359,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
     floor: engine.floor,
     floorTransitionTimer: engine.floorTransitionTimer,
     godMode: engine.godMode,
+    ticks: engine.simTicks,
     player: player ? toPlayerView(player, engine) : null,
     localAnimState: engine.spriteAnimator.getState(),
     remotePlayers,
@@ -522,38 +523,7 @@ const engineControls: E2eEngineControls = {
     engine.zombies = [];
   },
   dropCorpses(centerX: number, count: number): void {
-    const engine: GameEngine | null = currentEngine;
-    if (!engine || engine.isMultiplayerClient) return;
-    const width: number = 30;
-    const height: number = 41;
-    const spriteKey: string = engine.zombieSpriteAnimator.getSpriteKey(ZombieType.Walker);
-    for (let i: number = 0; i < count; i++) {
-      const id: string = `e2e-corpse-${Date.now()}-${i}`;
-      // Staggered above the screen top, a little scattered: they land one by one, like the slain.
-      const jitter: number = (Math.random() - 0.5) * 24;
-      engine.zombieCorpses.push({
-        id,
-        type: ZombieType.Walker,
-        x: centerX - width / 2 + jitter,
-        y: -height - i * 60,
-        width,
-        height,
-        spriteKey,
-        facing: Math.random() < 0.5 ? -1 : 1,
-        velocityX: 0,
-        velocityY: 0,
-        isGrounded: false,
-        frozen: false,
-        landProcessed: false,
-        fadeTimer: GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS,
-        maxFadeTimer: GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS,
-        showBlood: false,
-        carrierId: null,
-        angle: 0,
-        spin: 0,
-      });
-      engine.zombieSpriteAnimator.setState(id, ZombieAnimState.Dead);
-    }
+    currentEngine?.dropCorpses(centerX, count);
   },
   clearPickables(from: number, to: number): void {
     const engine: GameEngine | null = currentEngine;

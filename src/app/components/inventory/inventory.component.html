@@ -1,5 +1,5 @@
 <div class="inv-overlay px-overlay" (click)="onClose()">
-  <div class="inv-panel px-panel" (click)="$event.stopPropagation()">
+  <div class="inv-panel px-panel" appDraggableDialog data-testid="inventory-panel-window" (click)="$event.stopPropagation()">
     <div class="inv-header px-header">
       <app-pixel-icon [icon]="'bag'" [size]="24" />
       <h2 class="inv-title">Inventory</h2>

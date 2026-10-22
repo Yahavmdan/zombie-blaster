@@ -1,5 +1,5 @@
 <div class="px-overlay" (click)="onClose()" data-testid="tree-overlay-close"></div>
-<div class="window px-panel" data-testid="tree-window">
+<div class="window px-panel" appDraggableDialog data-testid="tree-window">
   <div class="px-header">
     <app-pixel-icon [icon]="classIcon()" [size]="24" />
     <h2 class="title">

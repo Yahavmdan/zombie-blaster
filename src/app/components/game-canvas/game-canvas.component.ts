@@ -18,9 +18,10 @@ import {
   WritableSignal,
 } from '@angular/core';
 import { CharacterClass, CharacterState, GAME_CONSTANTS, MagnetPullRequest, RemotePlayerAttack, SKILLS, SkillDefinition, SkillType, VfxEvent, ZombieEffectRequest, getSkillTree } from '@shared/index';
-import { ActiveSpecialEffect, BoulderState, CagePuzzleState, DropType, LooseProp, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
+import { ActiveSpecialEffect, BoulderState, CagePuzzleState, DropType, LooseProp, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType, ZombieType } from '@shared/game-entities';
 import { GameAction, KeyBindings } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
+import { DevMouseTool, DevToolsSystem } from '../../engine/dev-tools-system';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
 import { InputKeys } from '@shared/messages';
 import { KeyBindingsService, formatKeyName, mouseButtonKey } from '../../services/key-bindings.service';
@@ -31,6 +32,9 @@ import { attachEngineProbe } from '../../testing/e2e-hooks';
 const UI_ACTIONS: Set<string> = new Set<string>(['openStats', 'openSkills', 'openShop', 'openInventory']);
 /** Answer the special-drop prompt; they never reach the engine as held keys. */
 const DROP_PROMPT_ACTIONS: Set<string> = new Set<string>(['confirmDrop', 'declineDrop']);
+
+/** `MouseEvent.button` of the back side button; forward is the next one. */
+const MOUSE_BACK_BUTTON: number = 3;
 
 /** Typing in a dialog's text field must not toggle dialogs. */
 function isTextField(target: EventTarget | null): boolean {
@@ -55,9 +59,11 @@ export class GameCanvasComponent implements OnDestroy {
   readonly inputDisabled: InputSignal<boolean> = input<boolean>(false);
   /** While input is disabled by a dialog, its keys (P/O/B/I) still close it or switch to another one. */
   readonly dialogKeysEnabled: InputSignal<boolean> = input<boolean>(false);
-  /** Dev tools: the left mouse button grabs the player and drags them anywhere instead of attacking. */
-  readonly devDragEnabled: InputSignal<boolean> = input<boolean>(false);
-  /** The left button is down on the canvas in drag mode. */
+  /** Dev tools: what the left mouse button does on the canvas (attack, drag anything, spawn a zombie). */
+  readonly devMouseTool: InputSignal<DevMouseTool> = input<DevMouseTool>('attack');
+  /** Dev tools: the zombie type the spawn tool places. */
+  readonly devSpawnType: InputSignal<ZombieType> = input<ZombieType>(ZombieType.Walker);
+  /** The left button is down on the canvas with the drag tool. */
   readonly dragging: WritableSignal<boolean> = signal<boolean>(false);
 
   readonly playerUpdated: OutputEmitterRef<CharacterState> = output<CharacterState>();
@@ -141,7 +147,7 @@ export class GameCanvasComponent implements OnDestroy {
     });
 
     effect((): void => {
-      if (!this.devDragEnabled() || this.inputDisabled()) this.stopDrag();
+      if (this.devMouseTool() !== 'drag' || this.inputDisabled()) this.stopDrag();
     });
 
     effect((): void => {
@@ -234,9 +240,31 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
+  /** Dev tools: zombies stand still (host/solo simulation). */
+  setZombiesFrozen(frozen: boolean): void {
+    if (this.engine) {
+      this.engine.zombiesFrozen = frozen;
+    }
+  }
+
   /** Dev tools: kill every zombie on the floor (host/solo simulation). */
   killAllZombies(): void {
     this.engine?.killAllZombies();
+  }
+
+  /** Dev tools: corpses fall under the exit (host/solo simulation). */
+  pileCorpsesAtExit(): void {
+    this.engine?.pileCorpsesAtExit();
+  }
+
+  /** Dev tools: the floor's puzzle does its part (host/solo simulation). */
+  solvePuzzle(): void {
+    this.engine?.solvePuzzle();
+  }
+
+  /** Dev tools in the engine: time, heal, teleport, infinite MP (null before the engine starts). */
+  devTools(): DevToolsSystem | null {
+    return this.engine?.devTools ?? null;
   }
 
   drinkQuickSlotPotion(drink: () => boolean): boolean {
@@ -600,9 +628,10 @@ export class GameCanvasComponent implements OnDestroy {
       return;
     }
     if (this.inputDisabled()) return;
-    if (this.devDragEnabled() && e.button === 0) {
+    if (e.button === 0 && this.devMouseTool() !== 'attack') {
       e.preventDefault();
-      this.startDrag(e);
+      if (this.devMouseTool() === 'drag') this.startDrag(e);
+      else this.spawnAtCursor(e);
       return;
     }
     // preventDefault stops middle-click autoscroll on a bound button.
@@ -615,8 +644,11 @@ export class GameCanvasComponent implements OnDestroy {
       return;
     }
     const key: string | null = mouseButtonKey(e.button);
+    if (!key || !this.releaseBinding(key)) return;
     // preventDefault on a bound side button stops the browser navigating back/forward out of the game.
-    if (key && this.releaseBinding(key)) e.preventDefault();
+    // Only there: on the left button it swallowed the release a number input's arrow waits for, and
+    // one click kept stepping the value forever.
+    if (e.button >= MOUSE_BACK_BUTTON) e.preventDefault();
   }
 
   private onContextMenu(e: MouseEvent): void {
@@ -624,23 +656,34 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private startDrag(e: MouseEvent): void {
+    if (!this.engine) return;
     this.dragging.set(true);
     window.addEventListener('mousemove', this.boundDragMove);
-    this.dragTo(e);
+    const at: { x: number; y: number } = this.worldPoint(e);
+    this.engine.devTools.grabAt(at.x, at.y);
   }
 
   private stopDrag(): void {
     if (!this.dragging()) return;
     this.dragging.set(false);
     window.removeEventListener('mousemove', this.boundDragMove);
-    if (this.engine) this.engine.devDragPoint = null;
+    this.engine?.devTools.release();
+  }
+
+  private dragTo(e: MouseEvent): void {
+    const at: { x: number; y: number } = this.worldPoint(e);
+    this.engine?.devTools.dragTo(at.x, at.y);
+  }
+
+  private spawnAtCursor(e: MouseEvent): void {
+    const at: { x: number; y: number } = this.worldPoint(e);
+    this.engine?.devTools.spawnAt(at.x, at.y, this.devSpawnType());
   }
 
   /** The canvas is stretched to the page: page px back to world px per axis. */
-  private dragTo(e: MouseEvent): void {
-    if (!this.engine) return;
+  private worldPoint(e: MouseEvent): { x: number; y: number } {
     const page: DOMRect = this.canvasRef().nativeElement.getBoundingClientRect();
-    this.engine.devDragPoint = {
+    return {
       x: ((e.clientX - page.left) / page.width) * GAME_CONSTANTS.CANVAS_WIDTH,
       y: ((e.clientY - page.top) / page.height) * GAME_CONSTANTS.CANVAS_HEIGHT,
     };

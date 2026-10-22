@@ -217,6 +217,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     godMode: false,
     showCollisionBoxes: false,
     zombieSpawnsPaused: false,
+    zombiesFrozen: false,
     isMultiplayerHost: false,
     isMultiplayerClient: false,
     isLocalAfk: false,

@@ -23,6 +23,7 @@ import {
   PotionCategory,
 } from '@shared/game-entities';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { DraggableDialogDirective } from '../../ui/draggable-dialog.directive';
 
 export interface ShopRow {
   item: ShopItemDefinition;
@@ -40,7 +41,7 @@ export interface AutoPotionChange {
 
 @Component({
   selector: 'app-shop',
-  imports: [PixelIconComponent],
+  imports: [PixelIconComponent, DraggableDialogDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'shop',

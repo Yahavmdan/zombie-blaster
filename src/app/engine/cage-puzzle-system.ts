@@ -74,6 +74,18 @@ export class CagePuzzleSystem {
     });
   }
 
+  /** Dev tools: the exit cage's chain snaps now (as on its last swing) and the cage falls. */
+  solve(): void {
+    const puzzle: CagePuzzleLayout | null = this.e.cagePuzzle;
+    const cage: CageState | undefined = this.e.cages?.cages[EXIT_CAGE];
+    if (!puzzle || !cage) return;
+    let hit: CleatHit | null = hitCleat(cage);
+    while (hit === 'hit') hit = hitCleat(cage);
+    if (hit !== 'snap') return;
+    this.cleatSparks(puzzle, EXIT_CAGE, hit);
+    this.e.placeCages();
+  }
+
   tickClient(): void {
     const puzzle: CagePuzzleLayout | null = this.e.cagePuzzle;
     const cages: CagePuzzleState | null = this.e.cages;

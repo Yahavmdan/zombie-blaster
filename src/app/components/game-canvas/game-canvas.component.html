@@ -1,6 +1,7 @@
 <canvas
   #gameCanvas
   class="canvas"
-  [class.canvas--drag]="devDragEnabled()"
+  [class.canvas--drag]="devMouseTool() === 'drag'"
   [class.canvas--dragging]="dragging()"
+  [class.canvas--spawn]="devMouseTool() === 'spawn'"
 ></canvas>

@@ -8,7 +8,8 @@
       [player]="p"
       [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen() || shopOpen() || inventoryOpen() || devDialogOpen() || isGameOver() || afkState() !== 'none'"
       [dialogKeysEnabled]="!settingsOpen() && !devDialogOpen() && !isGameOver() && afkState() === 'none'"
-      [devDragEnabled]="showDevTools() && devDragPlayer()"
+      [devMouseTool]="showDevTools() ? devMouseTool() : 'attack'"
+      [devSpawnType]="devSpawnType()"
       (playerUpdated)="onPlayerUpdate($event)"
       (xpGained)="onXpGained($event)"
       (scoreUpdated)="onScoreUpdate($event)"
@@ -61,7 +62,7 @@
 
     @if (showDevTools() && devDialogOpen()) {
       <div class="dev-backdrop" (click)="closeDevDialog()"></div>
-      <div class="dev-dialog px-panel">
+      <div class="dev-dialog px-panel" appDraggableDialog data-testid="game-dev-panel-window">
         <div class="px-header">
           <app-pixel-icon [icon]="'gear'" [size]="24" />
           <span class="dev-dialog__title">Dev tools</span>
@@ -96,14 +97,147 @@
               >
                 {{ showCollisionBoxes() ? 'Boxes on' : 'Boxes off' }}
               </button>
+            </div>
+          </section>
+
+          <!-- Mouse: what the left button does on the canvas -->
+          <section class="dev-section">
+            <h3 class="dev-section__title px-label">Left mouse</h3>
+            <div class="dev-section__row">
               <button
                 class="px-btn px-btn--sm px-btn--ghost"
-                [class.px-btn--good]="devDragPlayer()"
-                title="Left mouse drags the player instead of attacking"
-                data-testid="game-dev-button-drag-player"
-                (click)="devToggleDragPlayer()"
+                [class.px-btn--good]="devMouseTool() === 'attack'"
+                data-testid="game-dev-button-mouse-attack"
+                (click)="devSetMouseTool('attack')"
               >
-                {{ devDragPlayer() ? 'Drag player on' : 'Drag player off' }}
+                Attack
+              </button>
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                [class.px-btn--good]="devMouseTool() === 'drag'"
+                [title]="simulatesWorld() ? 'Drag the player, zombies, corpses or props' : 'Drag the player (the rest is the host\'s)'"
+                data-testid="game-dev-button-mouse-drag"
+                (click)="devSetMouseTool('drag')"
+              >
+                Drag
+              </button>
+            </div>
+            <div class="dev-section__row dev-section__row--wrap">
+              @for (z of devZombieTypes; track z.type) {
+                <button
+                  class="px-btn px-btn--sm px-btn--ghost"
+                  [class.px-btn--good]="devMouseTool() === 'spawn' && devSpawnType() === z.type"
+                  [disabled]="!simulatesWorld()"
+                  [title]="simulatesWorld() ? 'Click the map to spawn one' : 'Host only'"
+                  [attr.data-testid]="'game-dev-button-spawn-' + z.type"
+                  (click)="devSpawnWith(z.type)"
+                >
+                  Spawn {{ z.name }}
+                </button>
+              }
+            </div>
+          </section>
+
+          <!-- Zombies -->
+          <section class="dev-section">
+            <h3 class="dev-section__title px-label">Zombies</h3>
+            <div class="dev-section__row dev-section__row--wrap">
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                [class.px-btn--good]="!zombieSpawnsPaused()"
+                [disabled]="!simulatesWorld()"
+                [title]="simulatesWorld() ? 'Regular and Eater spawns' : 'Host only'"
+                data-testid="game-dev-button-zombie-spawns"
+                (click)="devToggleZombieSpawns()"
+              >
+                {{ zombieSpawnsPaused() ? 'Spawns off' : 'Spawns on' }}
+              </button>
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                [class.px-btn--good]="devZombiesFrozen()"
+                [disabled]="!simulatesWorld()"
+                [title]="simulatesWorld() ? 'Zombies stand still and never attack' : 'Host only'"
+                data-testid="game-dev-button-freeze-zombies"
+                (click)="devToggleFreezeZombies()"
+              >
+                {{ devZombiesFrozen() ? 'Frozen' : 'Freeze' }}
+              </button>
+              <button
+                class="px-btn px-btn--sm px-btn--primary"
+                [disabled]="!simulatesWorld()"
+                [title]="simulatesWorld() ? 'Every zombie dies where it stands' : 'Host only'"
+                data-testid="game-dev-button-kill-all"
+                (click)="devKillAllZombies()"
+              >
+                Kill all zombies
+              </button>
+            </div>
+          </section>
+
+          <!-- Time -->
+          <section class="dev-section">
+            <h3 class="dev-section__title px-label">Time</h3>
+            <div class="dev-section__row">
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                [class.px-btn--good]="devPaused()"
+                data-testid="game-dev-button-pause"
+                (click)="devTogglePause()"
+              >
+                {{ devPaused() ? 'Paused' : 'Pause' }}
+              </button>
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                [disabled]="!devPaused()"
+                title="One tick (20 ms) while paused"
+                data-testid="game-dev-button-step"
+                (click)="devStep()"
+              >
+                Step
+              </button>
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                [class.px-btn--good]="devSlowMotion()"
+                data-testid="game-dev-button-slow-motion"
+                (click)="devToggleSlowMotion()"
+              >
+                {{ devSlowMotion() ? 'Slow motion on' : 'Slow motion off' }}
+              </button>
+            </div>
+          </section>
+
+          <!-- Player -->
+          <section class="dev-section">
+            <h3 class="dev-section__title px-label">Player</h3>
+            <div class="dev-section__row dev-section__row--wrap">
+              <button
+                class="px-btn px-btn--sm px-btn--good"
+                data-testid="game-dev-button-heal"
+                (click)="devHeal()"
+              >
+                Full heal
+              </button>
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                [class.px-btn--good]="devInfiniteMp()"
+                data-testid="game-dev-button-infinite-mp"
+                (click)="devToggleInfiniteMp()"
+              >
+                {{ devInfiniteMp() ? 'Infinite MP on' : 'Infinite MP off' }}
+              </button>
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                data-testid="game-dev-button-teleport-exit"
+                (click)="devTeleportToExit()"
+              >
+                To exit
+              </button>
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                data-testid="game-dev-button-teleport-safe-spot"
+                (click)="devTeleportToSafeSpot()"
+              >
+                To safe spot
               </button>
             </div>
           </section>
@@ -174,26 +308,34 @@
               >
                 Set floor
               </button>
-            </div>
-            <div class="dev-section__row">
               <button
                 class="px-btn px-btn--sm px-btn--ghost"
-                [class.px-btn--good]="!zombieSpawnsPaused()"
                 [disabled]="!simulatesWorld()"
-                [title]="simulatesWorld() ? 'Regular and Eater spawns' : 'Host only'"
-                data-testid="game-dev-button-zombie-spawns"
-                (click)="devToggleZombieSpawns()"
+                [title]="simulatesWorld() ? 'Skip to floor ' + (floor() + 1) : 'Host only'"
+                data-testid="game-dev-button-next-floor"
+                (click)="devNextFloor()"
               >
-                {{ zombieSpawnsPaused() ? 'Spawns off' : 'Spawns on' }}
+                Next floor
+              </button>
+            </div>
+            <div class="dev-section__row dev-section__row--wrap">
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                [disabled]="!simulatesWorld()"
+                [title]="simulatesWorld() ? 'Corpses fall under the exit' : 'Host only'"
+                data-testid="game-dev-button-pile-exit"
+                (click)="devPileAtExit()"
+              >
+                Pile corpses at exit
               </button>
               <button
-                class="px-btn px-btn--sm px-btn--primary"
+                class="px-btn px-btn--sm px-btn--accent"
                 [disabled]="!simulatesWorld()"
-                [title]="simulatesWorld() ? 'Every zombie dies where it stands' : 'Host only'"
-                data-testid="game-dev-button-kill-all"
-                (click)="devKillAllZombies()"
+                [title]="simulatesWorld() ? 'Floors 2-5: the puzzle does its part' : 'Host only'"
+                data-testid="game-dev-button-solve-puzzle"
+                (click)="devSolvePuzzle()"
               >
-                Kill all zombies
+                Solve puzzle
               </button>
             </div>
           </section>
@@ -264,7 +406,7 @@
 
     @if (isGameOver()) {
       <div class="game-over-overlay">
-        <div class="game-over-panel px-panel">
+        <div class="game-over-panel px-panel" appDraggableDialog data-testid="game-over-panel-window">
           <h1 class="game-over-title px-header px-title">
             <app-pixel-icon [icon]="'skull'" [size]="32" />
             Game over
@@ -309,7 +451,7 @@
 
     @if (afkState() !== 'none' && !isGameOver()) {
       <div class="afk-overlay" data-testid="game-afk-overlay" [attr.data-state]="afkState()">
-        <div class="afk-panel px-panel">
+        <div class="afk-panel px-panel" appDraggableDialog data-testid="game-afk-panel-window">
           <h2 class="afk-title px-header">
             <app-pixel-icon [icon]="'moon'" [size]="24" />
             @switch (afkState()) {

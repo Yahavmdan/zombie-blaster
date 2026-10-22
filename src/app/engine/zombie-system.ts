@@ -142,6 +142,8 @@ export class ZombieSystem {
         }
         continue;
       }
+      // Dev tools freeze: it still climbs out, then stands (or hangs) exactly where it is.
+      if (this.e.zombiesFrozen) continue;
 
       // Monster magnet: the drag owns the zombie until it lands at the caster's spot.
       if (advanceMagnetPull(z)) {
@@ -324,7 +326,7 @@ export class ZombieSystem {
       tickKnockTilt(z);
     }
 
-    this.resolveZombieCollisions();
+    if (!this.e.zombiesFrozen) this.resolveZombieCollisions();
   }
 
   private tickHesitation(z: ZombieState, target: TargetInfo): void {

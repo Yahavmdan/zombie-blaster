@@ -2,8 +2,8 @@ import { Component, ChangeDetectionStrategy, WritableSignal, Signal, signal, inj
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, VfxEvent, GAME_CONSTANTS, MagnetPullRequest, ZombieEffectRequest } from '@shared/index';
-import { SpecialDropType, SpecialDropDefinition } from '@shared/game-entities';
+import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, ZOMBIE_TYPES, VfxEvent, GAME_CONSTANTS, MagnetPullRequest, ZombieEffectRequest } from '@shared/index';
+import { SpecialDropType, SpecialDropDefinition, ZombieDefinition, ZombieType } from '@shared/game-entities';
 import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, RemotePlayerAttack, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload, HostMigratedPayload, ReconnectResultPayload, RoomInfo, RoomPlayer, RoomUpdatedPayload, SetAfkPayload } from '@shared/multiplayer';
 import { ActiveSpecialEffect, BoulderState, CagePuzzleState, LooseProp, PlateState, SpringState, ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
@@ -26,6 +26,8 @@ import { ResumeState, SessionResumeService } from '../../services/session-resume
 import { attachGameControls } from '../../testing/e2e-hooks';
 import { E2eControls } from '../../testing/e2e-api';
 import { WorkerInterval } from '../../engine/worker-interval';
+import { DevMouseTool, DevToolsSystem } from '../../engine/dev-tools-system';
+import { DraggableDialogDirective } from '../../ui/draggable-dialog.directive';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
 
 /**
@@ -41,7 +43,7 @@ const ACTIVITY_EVENTS: readonly string[] = ['keydown', 'mousedown', 'mousemove',
 @Component({
   selector: 'app-game',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PixelIconComponent, GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, TreeSkillWindowComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule],
+  imports: [PixelIconComponent, GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, TreeSkillWindowComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule, DraggableDialogDirective],
   host: {
     class: 'game-page',
   },
@@ -751,8 +753,15 @@ export class GameComponent implements OnInit, OnDestroy {
   readonly godMode: WritableSignal<boolean> = this.gameState.godMode;
   readonly showCollisionBoxes: WritableSignal<boolean> = this.gameState.showCollisionBoxes;
   readonly zombieSpawnsPaused: WritableSignal<boolean> = this.gameState.zombieSpawnsPaused;
-  /** Dev tools: the left mouse button drags the player instead of attacking. */
-  readonly devDragPlayer: WritableSignal<boolean> = signal<boolean>(false);
+  /** Dev tools: what the left mouse button does on the canvas. */
+  readonly devMouseTool: WritableSignal<DevMouseTool> = signal<DevMouseTool>('attack');
+  /** Dev tools: the zombie type the spawn tool places. */
+  readonly devSpawnType: WritableSignal<ZombieType> = signal<ZombieType>(ZombieType.Walker);
+  readonly devZombieTypes: ZombieDefinition[] = Object.values(ZOMBIE_TYPES);
+  readonly devZombiesFrozen: WritableSignal<boolean> = signal<boolean>(false);
+  readonly devPaused: WritableSignal<boolean> = signal<boolean>(false);
+  readonly devSlowMotion: WritableSignal<boolean> = signal<boolean>(false);
+  readonly devInfiniteMp: WritableSignal<boolean> = signal<boolean>(false);
   /** This tab runs the zombies (solo or host): world dev tools only work here. */
   readonly simulatesWorld: WritableSignal<boolean> = signal<boolean>(true);
 
@@ -821,10 +830,67 @@ export class GameComponent implements OnInit, OnDestroy {
     this.gameState.showCollisionBoxes.update((v: boolean) => !v);
   }
 
-  /** Turning drag mode on closes the dialog, so the next press on the canvas grabs the player. */
-  devToggleDragPlayer(): void {
-    this.devDragPlayer.update((v: boolean) => !v);
-    if (this.devDragPlayer()) this.closeDevDialog();
+  /** Picking drag closes the dialog, so the next press on the canvas grabs. */
+  devSetMouseTool(tool: DevMouseTool): void {
+    this.devMouseTool.set(tool);
+    if (tool !== 'attack') this.closeDevDialog();
+  }
+
+  /** Picking a zombie type arms the spawn tool: every left click on the canvas places one. */
+  devSpawnWith(type: ZombieType): void {
+    this.devSpawnType.set(type);
+    this.devSetMouseTool('spawn');
+  }
+
+  devToggleFreezeZombies(): void {
+    this.devZombiesFrozen.update((v: boolean) => !v);
+    this.gameCanvas()?.setZombiesFrozen(this.devZombiesFrozen());
+  }
+
+  devTogglePause(): void {
+    this.devPaused.update((v: boolean) => !v);
+    const dev: DevToolsSystem | null = this.gameCanvas()?.devTools() ?? null;
+    if (dev) dev.paused = this.devPaused();
+  }
+
+  devStep(): void {
+    this.gameCanvas()?.devTools()?.step();
+  }
+
+  devToggleSlowMotion(): void {
+    this.devSlowMotion.update((v: boolean) => !v);
+    const dev: DevToolsSystem | null = this.gameCanvas()?.devTools() ?? null;
+    if (dev) dev.slowMotion = this.devSlowMotion();
+  }
+
+  devToggleInfiniteMp(): void {
+    this.devInfiniteMp.update((v: boolean) => !v);
+    const dev: DevToolsSystem | null = this.gameCanvas()?.devTools() ?? null;
+    if (dev) dev.infiniteMp = this.devInfiniteMp();
+  }
+
+  devHeal(): void {
+    this.gameCanvas()?.devTools()?.heal();
+  }
+
+  devTeleportToExit(): void {
+    this.gameCanvas()?.devTools()?.teleportToExit();
+  }
+
+  devTeleportToSafeSpot(): void {
+    this.gameCanvas()?.devTools()?.teleportToSafeSpot();
+  }
+
+  devPileAtExit(): void {
+    this.gameCanvas()?.pileCorpsesAtExit();
+  }
+
+  devSolvePuzzle(): void {
+    this.gameCanvas()?.solvePuzzle();
+  }
+
+  devNextFloor(): void {
+    this.setFloor(this.floor() + 1);
   }
 
   devToggleZombieSpawns(): void {

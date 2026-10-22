@@ -193,3 +193,15 @@
   scrollbar-color: var(--panel-3) var(--ink-2);
   scrollbar-width: thin;
 }
+/* Dialog title bar that drags its window (DraggableDialogDirective) */
+.px-drag-handle {
+  cursor: move;
+  touch-action: none;
+}
+.px-dragging,
+.px-dragging * {
+  user-select: none;
+}
+.px-dragging .px-drag-handle {
+  cursor: grabbing;
+}

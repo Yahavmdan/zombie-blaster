@@ -54,6 +54,15 @@ export class BoulderPuzzleSystem {
     if (rollBoulder(boulder, path)) this.breakWall(puzzle);
   }
 
+  /** Dev tools: the gate breaks now (as on its last hit) and the boulder starts rolling. */
+  solve(): void {
+    const puzzle: BoulderPuzzleLayout | null = this.e.boulderPuzzle;
+    const boulder: BoulderState | null = this.e.boulder;
+    if (!puzzle || !boulder || gateBroken(boulder)) return;
+    boulder.gateHits = GAME_CONSTANTS.BOULDER_GATE_HITS;
+    this.breakGate(puzzle, this.e.exitPlatform.y);
+  }
+
   tickClient(): void {
     const puzzle: BoulderPuzzleLayout | null = this.e.boulderPuzzle;
     const boulder: BoulderState | null = this.e.boulder;
@@ -68,16 +77,14 @@ export class BoulderPuzzleSystem {
     if (!players.some((p: CharacterState): boolean => gateHitBy(p, puzzle, ledgeY))) return;
     boulder.gateHits++;
     this.hitCooldown = GAME_CONSTANTS.BOULDER_HIT_COOLDOWN_TICKS;
+    if (gateBroken(boulder)) {
+      this.breakGate(puzzle, ledgeY);
+      return;
+    }
     const gate: Box = gateBox(puzzle, ledgeY);
     const cx: number = gate.x + gate.width / 2;
     const cy: number = gate.y + gate.height / 2;
     const playerId: string = this.e.player?.id ?? '';
-    if (gateBroken(boulder)) {
-      this.e.breakPuzzleGate();
-      this.vfx.spawnGateBreak(cx, cy);
-      this.e.pendingVfxEvents.push({ type: VfxEventType.GateBreak, playerId, x: cx, y: cy });
-      return;
-    }
     this.vfx.spawnHitParticles(cx, cy, WOOD_COLOR);
     this.e.pendingVfxEvents.push({
       type: VfxEventType.HitParticles,
@@ -86,6 +93,15 @@ export class BoulderPuzzleSystem {
       y: cy,
       color: WOOD_COLOR,
     });
+  }
+
+  private breakGate(puzzle: BoulderPuzzleLayout, ledgeY: number): void {
+    const gate: Box = gateBox(puzzle, ledgeY);
+    const cx: number = gate.x + gate.width / 2;
+    const cy: number = gate.y + gate.height / 2;
+    this.e.breakPuzzleGate();
+    this.vfx.spawnGateBreak(cx, cy);
+    this.e.pendingVfxEvents.push({ type: VfxEventType.GateBreak, playerId: this.e.player?.id ?? '', x: cx, y: cy });
   }
 
   private breakWall(puzzle: BoulderPuzzleLayout): void {

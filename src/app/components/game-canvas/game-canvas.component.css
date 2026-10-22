@@ -12,11 +12,15 @@
   image-rendering: pixelated;
 }
 
-/* Dev tools drag mode: the left button grabs the player. */
+/* Dev tools mouse tools: drag grabs anything, spawn places a zombie. */
 .canvas--drag {
   cursor: grab;
 }
 
 .canvas--dragging {
   cursor: grabbing;
+}
+
+.canvas--spawn {
+  cursor: crosshair;
 }

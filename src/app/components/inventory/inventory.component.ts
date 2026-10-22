@@ -18,6 +18,7 @@ import {
 import { PotionDefinition } from '@shared/game-entities';
 import { PixelIconId } from '@shared/pixel-icon';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { DraggableDialogDirective } from '../../ui/draggable-dialog.directive';
 
 export interface InventoryRow {
   potion: PotionDefinition;
@@ -30,7 +31,7 @@ const BAG_MIN_SLOTS: number = 10;
 
 @Component({
   selector: 'app-inventory',
-  imports: [PixelIconComponent],
+  imports: [PixelIconComponent, DraggableDialogDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'inventory',

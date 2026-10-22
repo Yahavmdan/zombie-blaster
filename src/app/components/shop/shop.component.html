@@ -1,5 +1,5 @@
 <div class="shop-overlay px-overlay" (click)="onClose()">
-  <div class="shop-panel px-panel" (click)="$event.stopPropagation()">
+  <div class="shop-panel px-panel" appDraggableDialog data-testid="shop-panel-window" (click)="$event.stopPropagation()">
     <div class="shop-header px-header">
       <app-pixel-icon [icon]="'shop'" [size]="24" />
       <h2 class="shop-title">Shop</h2>

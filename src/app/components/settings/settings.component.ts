@@ -33,6 +33,7 @@ import { KeyBindingsService, formatKeyName, mouseButtonKey } from '../../service
 import { QuickSlotService } from '../../services/quick-slot.service';
 import { GameStateService } from '../../services/game-state.service';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
+import { DraggableDialogDirective } from '../../ui/draggable-dialog.directive';
 import { PixelIconId } from '@shared/pixel-icon';
 
 export interface KbKey {
@@ -92,7 +93,7 @@ function gap(w: number = 0.5): KbKey {
     class: 'settings',
     '(document:keydown.escape)': 'onEscapeKey()',
   },
-  imports: [PixelIconComponent, NgTemplateOutlet],
+  imports: [PixelIconComponent, NgTemplateOutlet, DraggableDialogDirective],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.css',
 })

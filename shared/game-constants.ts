@@ -582,6 +582,7 @@ export const GAME_CONSTANTS = {
   NEW_MOVE_TOAST_MS: 6000, // The HUD's "New move" plate stays up this long after a tree skill is learned
   SKILL_COOLDOWN_HUD_REFRESH_MS: 100, // The HUD's skill bar redraws its cooldown shades this often
   HUD_EXIT_SIGN_PX: 64, // The EXIT sign and arrows over the exit: a HUD plate over them (or over a player) turns see-through
+  HUD_DIALOG_DRAG_KEEP_VISIBLE_PX: 40, // A dialog dragged by its title bar keeps at least this much of the bar on screen
   TREE_SKILL_VFX_LEVEL: 10, // Particle density tree-skill animations play at (they have no skill level)
 
   // ─── Warrior tree mechanics ─────────────────────
@@ -624,6 +625,13 @@ export const GAME_CONSTANTS = {
   SKILL_MAX_REMOTE_LAUNCH_FORCE: 16, // Host clamp for a guest's launch request (px per tick, upward)
   SKILL_MAX_REMOTE_PUSH_FORCE: 14, // Host clamp for a guest's knockback request
   SKILL_STUN_STAR_COLOR: '#ffe08a', // Stars circling a stunned zombie
+
+  // ─── Dev tools (dev builds and /dev) ─────────────
+  DEV_PILE_CORPSES: 10, // "Pile at exit" drops this many corpses under the exit per press
+  DEV_CORPSE_DROP_SPACING_PX: 60, // Dropped corpses start this far apart above the screen, so they land one by one
+  DEV_CORPSE_DROP_JITTER_PX: 24, // ...and this much scattered sideways, like the slain
+  DEV_PLATE_EXTRA_CORPSES: 2, // "Solve puzzle" on the plate floor drops PLATE_WEIGHT_NEEDED + this many (zombies kick some off)
+  DEV_SLOW_MOTION_SCALE: 0.25, // "Slow motion" runs the simulation at this speed
 
 } as const;
 
