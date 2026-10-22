@@ -307,7 +307,8 @@ export class ProjectileSystem {
     for (const target of this.getAllTargets()) {
       if (!this.physics.rectsOverlap(
         target.x, target.y, target.width, target.height,
-        proj.x - 10, proj.y - 10, 20, 20,
+        proj.x - GAME_CONSTANTS.SPIT_HIT_BOX_PX / 2, proj.y - GAME_CONSTANTS.SPIT_HIT_BOX_PX / 2,
+        GAME_CONSTANTS.SPIT_HIT_BOX_PX, GAME_CONSTANTS.SPIT_HIT_BOX_PX,
       )) continue;
 
       const knockDir: number = proj.velocityX > 0 ? 1 : -1;

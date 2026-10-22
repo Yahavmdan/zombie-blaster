@@ -1,6 +1,6 @@
 import { ActiveBuff, CharacterState, ClassSkillTree, GAME_CONSTANTS, ZOMBIE_TYPES, SkillDefinition, TreeSkill, VfxEvent, getSkillTree, isZombieWindingUp, ownsTreeSkill } from '@shared/index';
 import { ActiveSpecialEffect, DropType, SpecialDropType, BoulderState, CagePuzzleState, CageState, LooseProp, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
-import { AcidPuddle, BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, PlayerTint, Rope, SpringPuzzleLayout } from '../engine/engine-types';
+import { AcidPuddle, BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, PlayerTint, Rope, SpitterProjectile, SpringPuzzleLayout } from '../engine/engine-types';
 import { EXIT_CAGE, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
 import { doorBox, isDoorOpen, isHeld, plateBox } from '../engine/plate-puzzle';
 import { buttonBox, scaleBox } from '../engine/spring-puzzle';
@@ -23,6 +23,7 @@ import {
   E2eControls,
   E2eCorpseView,
   E2eDropView,
+  E2eSpitGlobView,
   E2eExitPile,
   E2eEngineControls,
   E2eGeometryReport,
@@ -423,6 +424,13 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
       spitter: engine.spitterProjectiles.length,
       dragon: engine.dragonProjectiles.length,
     },
+    spitGlobs: engine.spitterProjectiles.map(
+      (p: SpitterProjectile): E2eSpitGlobView => ({
+        vx: p.velocityX,
+        vy: p.velocityY,
+        ticksFlown: GAME_CONSTANTS.SPITTER_PROJECTILE_LIFETIME - p.lifetime,
+      }),
+    ),
     acidPuddles: engine.acidPuddles.map((p: AcidPuddle): { x: number; y: number; width: number } => ({ x: p.x, y: p.y, width: p.width })),
     potionCooldownTicks: engine.potionCooldown,
     invincibilityFrames: engine.invincibilityFrames,
