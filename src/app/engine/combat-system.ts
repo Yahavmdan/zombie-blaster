@@ -1558,7 +1558,10 @@ export class CombatSystem {
     const initialAnim: ZombieAnimState = useDeadImmediate ? ZombieAnimState.Dead : ZombieAnimState.Hurt;
     this.e.zombieSpriteAnimator.setState(z.id, initialAnim);
 
-    const lingerTicks: number = GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS;
+    // A slain dragon falls, fades and is gone (ZombieSystem); the rest stay for piles.
+    const lingerTicks: number = z.type === ZombieType.DragonBoss
+      ? GAME_CONSTANTS.DRAGON_CORPSE_LINGER_TICKS
+      : GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS;
     const scatter: number = (Math.random() - 0.5) * GAME_CONSTANTS.ZOMBIE_CORPSE_DEATH_SCATTER * 2;
     const corpse: ZombieCorpse = {
       id: z.id,

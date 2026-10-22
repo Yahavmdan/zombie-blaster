@@ -274,6 +274,9 @@ export const GAME_CONSTANTS = {
   DRAGON_APPROACH_SPEED_MULT: 0.6, // Dragon moves at this fraction of its base speed when approaching
   DRAGON_PROJECTILE_SPEED: 7, // How fast dragon fireballs travel in pixels per tick
   DRAGON_PROJECTILE_LIFETIME: 100, // How many ticks a dragon fireball lives before disappearing
+  DRAGON_KNOCKBACK_TAKEN_MULT: 0.15, // A boss holds its ground: a hit pushes the dragon this fraction of a zombie's push (and pops it this fraction up)
+  DRAGON_KNOCKBACK_FRAMES: 4, // Ticks a hit keeps the dragon from steering (zombies: KNOCKBACK_ZOMBIE_FRAMES); it never tilts
+  DRAGON_CORPSE_LINGER_TICKS: 200, // A slain dragon lies this long (4 s), fading out over the second half, then it is gone (other corpses stay for piles)
 
   // ─── Spitter (Ranged Poison) ────────────────
   SPITTER_ATTACK_RANGE: 280, // Distance at which the spitter starts shooting

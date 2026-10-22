@@ -6,6 +6,7 @@ import {
   findTreeSkill,
   ownsTreeSkill,
   vary,
+  ZombieType,
 } from '@shared/index';
 import { LooseProp, ZombieCorpse } from '@shared/game-entities';
 
@@ -138,6 +139,11 @@ export function isCorpse(item: Carriable): item is ZombieCorpse {
   return 'spriteKey' in item;
 }
 
+/** A slain dragon is far too big to lift (and fades away soon); everything else can be carried. */
+function isLiftable(item: Carriable): boolean {
+  return !isCorpse(item) || item.type !== ZombieType.DragonBoss;
+}
+
 /** Gap between a carried thing's box bottom and what holds it (a lying corpse's body is high in its box). */
 function liftOf(item: Carriable): number {
   return isCorpse(item) ? GAME_CONSTANTS.CORPSE_CARRY_LIFT : 0;
@@ -172,7 +178,7 @@ export function nearestCarriable<T extends Carriable>(
   let best: T | null = null;
   let bestDist: number = GAME_CONSTANTS.CORPSE_CARRY_RANGE;
   for (const item of items) {
-    if (!item.isGrounded || item.carrierId !== null) continue;
+    if (!item.isGrounded || item.carrierId !== null || !isLiftable(item)) continue;
     const dist: number = distanceTo(player, item);
     if (dist <= bestDist) {
       best = item;
@@ -252,7 +258,7 @@ export function assignCarriers(items: Carriable[], players: CharacterState[]): v
     for (const id of carriedIds(p)) {
       if (held >= capacity) break;
       const item: Carriable | undefined = items.find((c: Carriable): boolean => c.id === id);
-      if (!item || item.carrierId !== null || !item.isGrounded) continue;
+      if (!item || item.carrierId !== null || !item.isGrounded || !isLiftable(item)) continue;
       if (distanceTo(p, item) > GAME_CONSTANTS.CORPSE_CARRY_RANGE * HOST_RANGE_SLACK) continue;
       item.carrierId = p.id;
       held++;

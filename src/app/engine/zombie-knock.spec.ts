@@ -111,4 +111,21 @@ describe('knocked zombies (different every time)', (): void => {
     for (let t: number = 0; t < 20; t++) tickKnockTilt(z);
     expect(z.angle).toBe(0);
   });
+
+  it('the dragon holds its ground: a hit only nudges it, briefly, and it never tilts', (): void => {
+    const walker: ZombieState = zombie();
+    const dragon: ZombieState = { ...zombie(), type: ZombieType.DragonBoss, isGrounded: false };
+    knockZombie(walker, 1, 8, -5, 10);
+    knockZombie(dragon, 1, 8, -5, 10);
+    const mult: number = GAME_CONSTANTS.DRAGON_KNOCKBACK_TAKEN_MULT;
+    expect(dragon.velocityX).toBeCloseTo(8 * mult);
+    expect(dragon.velocityY).toBeCloseTo(-5 * mult);
+    expect(dragon.velocityX).toBeLessThan(walker.velocityX / 4);
+    expect(dragon.knockbackFrames).toBe(GAME_CONSTANTS.DRAGON_KNOCKBACK_FRAMES);
+    expect(dragon.knockbackFrames).toBeLessThan(walker.knockbackFrames);
+    // It never lands, so a tilt would never stand back up.
+    for (let t: number = 0; t < 30; t++) tickKnockTilt(dragon);
+    expect(dragon.spin).toBe(0);
+    expect(dragon.angle).toBe(0);
+  });
 });

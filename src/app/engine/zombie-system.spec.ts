@@ -557,6 +557,65 @@ describe('CombatSystem — kills and XP', () => {
   });
 });
 
+describe('Dragon boss', (): void => {
+  let engine: IGameEngine;
+  let combat: CombatSystem;
+  let zombieSystem: ZombieSystem;
+
+  function dragon(x: number): ZombieState {
+    const height: number = 130;
+    return makeZombie({
+      id: 'dragon',
+      type: ZombieType.DragonBoss,
+      hp: 2000,
+      maxHp: 2000,
+      x,
+      y: GAME_CONSTANTS.GROUND_Y - height - GAME_CONSTANTS.DRAGON_HOVER_Y_OFFSET,
+      isGrounded: false,
+      instanceWidth: 140,
+      instanceHeight: height,
+      facing: -1,
+    });
+  }
+
+  beforeEach((): void => {
+    engine = makeMockEngine(makePlayer(), []);
+    const physics: PhysicsSystem = new PhysicsSystem(engine);
+    const vfx: VfxSystem = new VfxSystem(engine);
+    const dropSystemStub: DropSystem = { rollDrops: vi.fn(), getEffectiveGravity: (): number => GAME_CONSTANTS.GRAVITY } as never;
+    combat = new CombatSystem(engine, physics, vfx, dropSystemStub);
+    zombieSystem = new ZombieSystem(engine, physics, combat, new ProjectileSystem(engine, physics, vfx), new DropSystem(engine, physics, vfx));
+  });
+
+  it('turns to face a player who gets behind it, also while backing away', (): void => {
+    const d: ZombieState = dragon(600);
+    engine.zombies = [d];
+    engine.player!.x = 300;
+    zombieSystem['updateZombieAI'](d, ZOMBIE_TYPES[ZombieType.DragonBoss]);
+    expect(d.facing, 'player on its left').toBe(-1);
+
+    // The player slips under it to its right: it turns, even though it backs off to the left.
+    engine.player!.x = d.x + d.instanceWidth / 2 + 40;
+    zombieSystem['updateZombieAI'](d, ZOMBIE_TYPES[ZombieType.DragonBoss]);
+    expect(d.facing, 'player on its right').toBe(1);
+    expect(d.velocityX, 'it backs away from the player').toBeLessThan(0);
+  });
+
+  it('a slain dragon falls, fades and is gone; other corpses stay', (): void => {
+    combat.handleZombieDeath(dragon(600));
+    combat.handleZombieDeath(makeZombie({ id: 'walker', x: 200 }));
+    const dead: ZombieCorpse = engine.zombieCorpses.find((c: ZombieCorpse): boolean => c.id === 'dragon')!;
+    expect(dead.maxFadeTimer).toBe(GAME_CONSTANTS.DRAGON_CORPSE_LINGER_TICKS);
+
+    for (let t: number = 0; t < GAME_CONSTANTS.DRAGON_CORPSE_LINGER_TICKS / 2; t++) zombieSystem.updateZombieCorpses();
+    expect(dead.isGrounded, 'it fell to the ground').toBe(true);
+    expect(engine.zombieCorpses.some((c: ZombieCorpse): boolean => c.id === 'dragon'), 'still there, fading').toBe(true);
+
+    for (let t: number = 0; t < GAME_CONSTANTS.DRAGON_CORPSE_LINGER_TICKS / 2; t++) zombieSystem.updateZombieCorpses();
+    expect(engine.zombieCorpses.map((c: ZombieCorpse): string => c.id)).toEqual(['walker']);
+  });
+});
+
 describe('monster magnet drag', () => {
   const casterX: number = 100;
   const casterY: number = GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT;
