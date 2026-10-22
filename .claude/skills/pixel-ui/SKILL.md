@@ -15,7 +15,7 @@ The hard rule lives in `CLAUDE.md` ("Pixel UI kit"); component-level conventions
 
 ## The "looks AI-generated" checklist (never ship these)
 
-- System / Impact / Segoe UI / `monospace` fonts, or any font other than Pixelify Sans
+- System / Impact / Segoe UI / `monospace` fonts, or any font other than Jersey 10 (the one pixel font, scaled 150% by `size-adjust` in `styles.css`: a single 400 face, DOM and canvas)
 - Emoji as icons (in templates, TS data, `<option>` text or canvas `fillText`)
 - Blurred `box-shadow` / `text-shadow` glows, `backdrop-filter`, `shadowBlur` on canvas (allowed only on crit damage numbers and the level-up title)
 - Rounded corners (`border-radius` > 0, canvas `roundRect`)

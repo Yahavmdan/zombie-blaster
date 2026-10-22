@@ -22,32 +22,29 @@ export const CANVAS_BLOOD_HI: string = '#e0503f';
 /** `--toxic-hi`: good / go. */
 export const CANVAS_TOXIC_HI: string = '#b5e05a';
 
-export type CanvasFontWeight = 400 | 500 | 700;
-
-export const CANVAS_FONT_FAMILY: string = "'Pixelify Sans', monospace";
+export const CANVAS_FONT_FAMILY: string = "'Jersey 10', monospace";
 
 /** The canvas type scale: every canvas font size is one of these. */
 const CANVAS_FONT_SIZES: readonly number[] = [10, 12, 14, 16, 20, 28, 40, 52];
-
-/** Every weight the canvas draws with (all three are bundled by `styles.css`). */
-const CANVAS_FONT_WEIGHTS: readonly CanvasFontWeight[] = [400, 500, 700];
 
 /** Border width of square canvas boxes and panels. */
 const CANVAS_BORDER_PX: number = 2;
 
 /**
- * Starts loading every canvas weight of the pixel font. Faces load on first use, and canvas text
- * drawn before then falls back to another font, so the engine asks for them up front.
+ * Starts loading the pixel font. Faces load on first use, and canvas text drawn before then falls
+ * back to another font, so the engine asks for it up front.
  */
 export function preloadCanvasFonts(): void {
   if (typeof document === 'undefined' || !document.fonts) return;
-  for (const weight of CANVAS_FONT_WEIGHTS) {
-    document.fonts.load(pixelFont(16, weight)).catch((): void => undefined);
-  }
+  document.fonts.load(pixelFont(16)).catch((): void => undefined);
 }
 
-export function pixelFont(sizePx: number, weight: CanvasFontWeight = 500): string {
-  return `${weight} ${sizePx}px ${CANVAS_FONT_FAMILY}`;
+/**
+ * The pixel font at one size. It has a single 400 face and is never bolded: a synthesized bold
+ * smears the pixel strokes, so hierarchy comes from size and colour.
+ */
+export function pixelFont(sizePx: number): string {
+  return `400 ${sizePx}px ${CANVAS_FONT_FAMILY}`;
 }
 
 /** The type-scale size closest to `sizePx` (for sizes computed from an animation). */

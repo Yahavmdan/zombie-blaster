@@ -371,7 +371,7 @@ export class RenderSystem {
       ctx.restore();
     }
 
-    ctx.font = pixelFont(12, 700);
+    ctx.font = pixelFont(12);
     ctx.textAlign = 'center';
     fillOutlinedText(ctx, p.name, p.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, p.y - 12, classColor);
     ctx.font = pixelFont(10);
@@ -434,14 +434,14 @@ export class RenderSystem {
     ctx.lineWidth = 1;
     ctx.strokeRect(barX, barY, barWidth, barHeight);
 
-    ctx.font = pixelFont(12, 700);
+    ctx.font = pixelFont(12);
     ctx.textAlign = 'center';
     fillOutlinedText(ctx, `${timerSeconds}s`, cx, barY - 4, CANVAS_BONE);
 
-    ctx.font = pixelFont(10, 700);
+    ctx.font = pixelFont(10);
     fillOutlinedText(ctx, 'Downed', cx, barY - 16, CANVAS_BLOOD_HI);
 
-    ctx.font = pixelFont(12, 700);
+    ctx.font = pixelFont(12);
     fillOutlinedText(ctx, p.name, cx, barY - 28, classColor);
   }
 
@@ -473,7 +473,7 @@ export class RenderSystem {
     ctx.lineWidth = 1;
     ctx.strokeRect(barX, barY, barWidth, barHeight);
 
-    ctx.font = pixelFont(10, 700);
+    ctx.font = pixelFont(10);
     ctx.textAlign = 'center';
     fillOutlinedText(ctx, 'Reviving...', cx, barY - 4, '#44ff88');
 
@@ -543,14 +543,14 @@ export class RenderSystem {
 
       ctx.restore();
 
-      ctx.font = pixelFont(12, 700);
+      ctx.font = pixelFont(12);
       ctx.textAlign = 'center';
       fillOutlinedText(ctx, rp.name, rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 12, classColor);
       ctx.font = pixelFont(10);
       fillOutlinedText(ctx, `Lv.${rp.level}`, rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 2, CANVAS_BONE);
       this.drawSkillCharge(ctx, rp);
       if (rp.isAfk) {
-        ctx.font = pixelFont(12, 700);
+        ctx.font = pixelFont(12);
         fillOutlinedText(ctx, 'Away', rp.x + GAME_CONSTANTS.PLAYER_WIDTH / 2, rp.y - 30, CANVAS_BONE_DIM);
       }
 
@@ -924,7 +924,7 @@ export class RenderSystem {
     ctx.save();
     ctx.translate(cx, z.y - 8);
     ctx.scale(scale, scale);
-    ctx.font = pixelFont(28, 700);
+    ctx.font = pixelFont(28);
     ctx.textAlign = 'center';
     fillOutlinedText(ctx, '!', 0, 0, pulse > 0.5 ? '#ffdd33' : '#ff3030', CANVAS_INK, 6);
     ctx.restore();
@@ -1009,7 +1009,7 @@ export class RenderSystem {
       if (z.stunTicks > 0) this.drawStunStars(ctx, z.x + z.instanceWidth / 2, barY - 8, z.stunTicks);
 
       if (isDragon) {
-        ctx.font = pixelFont(12, 700);
+        ctx.font = pixelFont(12);
         ctx.textAlign = 'center';
         const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
         fillOutlinedText(ctx, zDef.name, z.x + z.instanceWidth / 2, barY - 4, '#88ccff');
@@ -1181,7 +1181,7 @@ export class RenderSystem {
     ctx.fill();
     ctx.restore();
     ctx.textAlign = 'center';
-    ctx.font = pixelFont(18, 700);
+    ctx.font = pixelFont(18);
     // Above the "[E] Carry" prompt, which sits right over the barrel.
     fillOutlinedText(ctx, String(fuseSeconds(p)), cx, p.y - 32, '#ffcc33');
     ctx.restore();
@@ -1209,7 +1209,7 @@ export class RenderSystem {
     // A corpse's body lies low in its tall box; a prop's art fills its box.
     const y: number = isCorpse(anchor) ? anchor.y + anchor.height - 34 : anchor.y - 6;
     ctx.save();
-    ctx.font = pixelFont(12, 700);
+    ctx.font = pixelFont(12);
     ctx.textAlign = 'center';
     const w: number = Math.round(ctx.measureText(label).width) + 12;
     fillPixelBox(ctx, Math.round(cx - w / 2), y - 14, w, 20, CANVAS_INK_2);
@@ -1809,7 +1809,7 @@ export class RenderSystem {
       ctx.arc(cx - r * 0.2, cy - r * 0.25, r * 0.35, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.font = pixelFont(10, 700);
+      ctx.font = pixelFont(10);
       ctx.textAlign = 'center';
       fillOutlinedText(ctx, c.label, cx, cy + size + 6, CANVAS_BONE, CANVAS_INK, 2);
       ctx.restore();
@@ -1865,7 +1865,7 @@ export class RenderSystem {
     drawPixelIcon(ctx, def.icon, cx - iconPx / 2, cy - iconPx / 2, iconPx);
     ctx.textAlign = 'center';
 
-    ctx.font = pixelFont(10, 700);
+    ctx.font = pixelFont(10);
     ctx.textBaseline = 'top';
     fillOutlinedText(ctx, def.name, cx, cy + size / 2 + 6, CANVAS_BONE, CANVAS_INK, 2);
     ctx.restore();
@@ -1878,7 +1878,7 @@ export class RenderSystem {
 
       const baseSize: number = d.isCrit ? 28 : 20;
       const fontSize: number = snapFontSize(baseSize * d.scale);
-      ctx.font = pixelFont(fontSize, 700);
+      ctx.font = pixelFont(fontSize);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
@@ -1927,14 +1927,14 @@ export class RenderSystem {
 
     const titleScale: number = progress < 0.1 ? 0.8 + progress * 2 : 1;
     const titleFontSize: number = snapFontSize(16 * titleScale);
-    ctx.font = pixelFont(titleFontSize, 700);
+    ctx.font = pixelFont(titleFontSize);
 
     ctx.shadowColor = CANVAS_GOLD;
     ctx.shadowBlur = 12;
     fillOutlinedText(ctx, 'Level up!', cx, y, CANVAS_GOLD);
 
     ctx.shadowBlur = 0;
-    ctx.font = pixelFont(12, 700);
+    ctx.font = pixelFont(12);
     const subText: string = `Lv.${n.oldLevel} → Lv.${n.newLevel}`;
     fillOutlinedText(ctx, subText, cx, y + 16, CANVAS_BONE, CANVAS_INK, 2);
 
@@ -1973,7 +1973,7 @@ export class RenderSystem {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    ctx.font = pixelFont(20, 700);
+    ctx.font = pixelFont(20);
     fillOutlinedText(ctx, def.name, boxX + boxW / 2, boxY + 62, def.color);
 
     ctx.fillStyle = CANVAS_BONE_DIM;
@@ -1995,10 +1995,10 @@ export class RenderSystem {
     ctx.fillStyle = timerProgress > 0.4 ? def.color : timerProgress > 0.2 ? '#ff8800' : '#ff2222';
     ctx.fillRect(barX + 2, barY + 2, Math.round((barW - 4) * timerProgress), barH - 4);
 
-    ctx.font = pixelFont(12, 700);
+    ctx.font = pixelFont(12);
     fillOutlinedText(ctx, `${secondsLeft}s`, boxX + boxW / 2, barY + barH + 12, CANVAS_BONE, CANVAS_INK, 2);
 
-    ctx.font = pixelFont(14, 700);
+    ctx.font = pixelFont(14);
     const promptY: number = boxY + boxH - 14;
 
     ctx.globalAlpha = pulse;
@@ -2053,7 +2053,7 @@ export class RenderSystem {
       const slideOffset: number = (1 - textFadeIn) * 60;
       const cy: number = GAME_CONSTANTS.CANVAS_HEIGHT / 2 + slideOffset;
 
-      ctx.font = pixelFont(52, 700);
+      ctx.font = pixelFont(52);
       ctx.textAlign = 'center';
       fillOutlinedText(ctx, `Floor ${this.e.floor}`, GAME_CONSTANTS.CANVAS_WIDTH / 2, cy, CANVAS_GOLD, CANVAS_INK, 6);
 
@@ -2108,7 +2108,7 @@ export class RenderSystem {
 
     // No hints about how to get up here: players work out that the dead pile up under it.
     ctx.fillStyle = CANVAS_BONE;
-    ctx.font = pixelFont(14, 700);
+    ctx.font = pixelFont(14);
     ctx.textAlign = 'center';
     ctx.globalAlpha = pulse;
     ctx.fillText('EXIT', exit.x + exit.width / 2, signY - 8);
@@ -2191,7 +2191,7 @@ export class RenderSystem {
     drawScalePan(ctx, pan, loaded);
     drawScalePost(ctx, scalePostX(puzzle), scalePostTopY(), ground, ground - 56, gaugeFraction(spring));
 
-    ctx.font = pixelFont(14, 700);
+    ctx.font = pixelFont(14);
     ctx.textAlign = 'center';
     const readout: string = loaded ? '#7dff7d' : '#ffd166';
     const needed: number = GAME_CONSTANTS.SPRING_SCALE_KG_NEEDED;
@@ -2212,10 +2212,10 @@ export class RenderSystem {
       ctx.save();
       ctx.translate(cx, block.y - 120);
       ctx.scale(beatScale, beatScale);
-      ctx.font = pixelFont(countdownPx, 700);
+      ctx.font = pixelFont(countdownPx);
       fillOutlinedText(ctx, String(seconds), 0, 0, CANVAS_BONE, CANVAS_INK, 6);
       ctx.restore();
-      ctx.font = pixelFont(16, 700);
+      ctx.font = pixelFont(16);
       fillOutlinedText(ctx, 'Get on the spring!', cx, block.y - 86, '#aaeeff');
     }
     ctx.restore();
@@ -2241,7 +2241,7 @@ export class RenderSystem {
     const signX: number = wall.x + wall.width / 2;
     const signY: number = GAME_CONSTANTS.GROUND_Y - 70;
     ctx.save();
-    ctx.font = pixelFont(14, 700);
+    ctx.font = pixelFont(14);
     ctx.textAlign = 'center';
     fillOutlinedText(ctx, 'Exit', signX, signY, CANVAS_BONE);
     drawExitArrows(ctx, signX, signY + 8, puzzle.wallDir, performance.now());
@@ -2344,7 +2344,7 @@ export class RenderSystem {
 
     ctx.globalAlpha = 0.85;
     ctx.fillStyle = '#9dffb0';
-    ctx.font = pixelFont(14, 700);
+    ctx.font = pixelFont(14);
     ctx.textAlign = 'center';
     ctx.fillText('SAFE', cx, spot.y - 40);
     ctx.restore();
@@ -2421,7 +2421,7 @@ export class RenderSystem {
       const rowIdx: number = this.e.dropNotifications.length - 1 - i;
       const y: number = baseY - rowIdx * rowHeight - rowHeight / 2;
 
-      ctx.font = pixelFont(14, 700);
+      ctx.font = pixelFont(14);
       const toastIconPx: number = 16;
       const labelWidth: number = ctx.measureText(n.label).width;
       // Wide enough for the icon and label, never narrower than the old fixed toast.

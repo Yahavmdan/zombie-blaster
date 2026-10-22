@@ -2,7 +2,7 @@ import { Locator, Page } from '@playwright/test';
 import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer, KEYS } from '../../support/game-player';
 
-const PIXEL_FONT: string = 'Pixelify Sans';
+const PIXEL_FONT: string = 'Jersey 10';
 
 interface PanelCase {
   name: string;
@@ -51,10 +51,21 @@ async function expectPixelFont(page: Page): Promise<void> {
     (): string => getComputedStyle(document.body).fontFamily,
   );
   expect(family).toContain(PIXEL_FONT);
+  // A face of it is loaded. Not document.fonts.check: the font comes in many unicode-range
+  // subsets (Japanese chunks overlap ASCII) and only the ones the page uses ever load.
   await expect
     .poll(
       (): Promise<boolean> =>
-        page.evaluate((f: string): boolean => document.fonts.check(`16px "${f}"`), PIXEL_FONT),
+        page.evaluate(
+          (f: string): boolean => {
+            let loaded: boolean = false;
+            document.fonts.forEach((face: FontFace): void => {
+              if (face.family.replace(/"/g, '') === f && face.status === 'loaded') loaded = true;
+            });
+            return loaded;
+          },
+          PIXEL_FONT,
+        ),
     )
     .toBe(true);
 }
