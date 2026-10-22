@@ -22,4 +22,20 @@
       </div>
     }
   </div>
+  <div class="qs-stock">
+    @for (stock of potionStock(); track stock.category) {
+      <div
+        class="qs-stock-cell px-panel--inset"
+        [class.qs-stock-cell--low]="stock.isLow"
+        [title]="stock.isLow ? stock.label + ' running low' : stock.label"
+        [attr.data-testid]="'quickslot-stock-' + stock.category"
+      >
+        <app-pixel-icon [icon]="stock.icon" [size]="24" />
+        <span class="qs-stock-count" [attr.data-testid]="'quickslot-stock-count-' + stock.category">{{ stock.count }}</span>
+        @if (stock.isLow) {
+          <span class="qs-stock-low" [attr.data-testid]="'quickslot-stock-low-' + stock.category">Low</span>
+        }
+      </div>
+    }
+  </div>
 </div>

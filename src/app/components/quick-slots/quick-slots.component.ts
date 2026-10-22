@@ -14,8 +14,10 @@ import {
   SkillType,
   ClassSkillTree,
   TreeSkill,
+  GAME_CONSTANTS,
   getPotionById,
   getSkillTree,
+  getTotalPotionsByCategory,
   isSlottable,
   ownsTreeSkill,
 } from '@shared/index';
@@ -23,6 +25,7 @@ import {
   QuickSlotEntry,
   QuickSlotAction,
   QUICK_SLOT_ACTIONS,
+  PotionCategory,
   PotionDefinition,
   ACTION_INFO,
   ActionInfo,
@@ -45,6 +48,20 @@ export interface QuickSlotDisplay {
   isEmpty: boolean;
   isBuff: boolean;
 }
+
+/** One always-on counter in the tray: every potion of a kind the player holds. */
+export interface PotionStockDisplay {
+  category: PotionCategory;
+  icon: PixelIconId;
+  label: string;
+  count: number;
+  isLow: boolean;
+}
+
+const POTION_STOCK_KINDS: { category: PotionCategory; icon: PixelIconId; label: string }[] = [
+  { category: 'hp', icon: 'potion-hp-s', label: 'HP potions' },
+  { category: 'mp', icon: 'potion-mp-s', label: 'MP potions' },
+];
 
 @Component({
   selector: 'app-quick-slots',
@@ -143,6 +160,17 @@ export class QuickSlotsComponent {
         isBuff: skillDef?.type === SkillType.Buff,
       };
     });
+  });
+
+  /** Potions held, by kind, whether slotted or not; below HUD_POTION_LOW_COUNT they warn. */
+  readonly potionStock: Signal<PotionStockDisplay[]> = computed((): PotionStockDisplay[] => {
+    const potions: Record<string, number> = this.player().inventory.potions;
+    return POTION_STOCK_KINDS.map(
+      (kind: { category: PotionCategory; icon: PixelIconId; label: string }): PotionStockDisplay => {
+        const count: number = getTotalPotionsByCategory(potions, kind.category);
+        return { ...kind, count, isLow: count < GAME_CONSTANTS.HUD_POTION_LOW_COUNT };
+      },
+    );
   });
 
   onDragOver(event: DragEvent): void {
