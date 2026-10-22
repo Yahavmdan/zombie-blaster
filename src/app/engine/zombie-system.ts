@@ -977,6 +977,7 @@ export class ZombieSystem {
       this.e.floorTransitionTimer--;
       return;
     }
+    if (this.e.zombieSpawnsPaused) return;
 
     const playerCount: number = Math.max(1, this.countPlayersUp());
     this.updateEaterSpawning(playerCount);

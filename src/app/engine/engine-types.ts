@@ -408,6 +408,8 @@ export interface IGameEngine {
 
   godMode: boolean;
   showCollisionBoxes: boolean;
+  /** Dev tools: no regular or Eater spawns (host/solo); puzzle releases still come. */
+  zombieSpawnsPaused: boolean;
   isMultiplayerHost: boolean;
   isMultiplayerClient: boolean;
   /** The local player is away from the keyboard (online): frozen, sent as `player.isAfk`. */

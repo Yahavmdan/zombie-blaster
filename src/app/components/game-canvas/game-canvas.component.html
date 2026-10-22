@@ -1,1 +1,6 @@
-<canvas #gameCanvas class="canvas"></canvas>
+<canvas
+  #gameCanvas
+  class="canvas"
+  [class.canvas--drag]="devDragEnabled()"
+  [class.canvas--dragging]="dragging()"
+></canvas>

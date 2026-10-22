@@ -11,3 +11,12 @@
   display: block;
   image-rendering: pixelated;
 }
+
+/* Dev tools drag mode: the left button grabs the player. */
+.canvas--drag {
+  cursor: grab;
+}
+
+.canvas--dragging {
+  cursor: grabbing;
+}

@@ -14,6 +14,8 @@ import {
   effect,
   computed,
   isDevMode,
+  signal,
+  WritableSignal,
 } from '@angular/core';
 import { CharacterClass, CharacterState, GAME_CONSTANTS, MagnetPullRequest, RemotePlayerAttack, SKILLS, SkillDefinition, SkillType, VfxEvent, ZombieEffectRequest, getSkillTree } from '@shared/index';
 import { ActiveSpecialEffect, BoulderState, CagePuzzleState, DropType, LooseProp, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
@@ -53,6 +55,10 @@ export class GameCanvasComponent implements OnDestroy {
   readonly inputDisabled: InputSignal<boolean> = input<boolean>(false);
   /** While input is disabled by a dialog, its keys (P/O/B/I) still close it or switch to another one. */
   readonly dialogKeysEnabled: InputSignal<boolean> = input<boolean>(false);
+  /** Dev tools: the left mouse button grabs the player and drags them anywhere instead of attacking. */
+  readonly devDragEnabled: InputSignal<boolean> = input<boolean>(false);
+  /** The left button is down on the canvas in drag mode. */
+  readonly dragging: WritableSignal<boolean> = signal<boolean>(false);
 
   readonly playerUpdated: OutputEmitterRef<CharacterState> = output<CharacterState>();
   readonly xpGained: OutputEmitterRef<number> = output<number>();
@@ -108,6 +114,7 @@ export class GameCanvasComponent implements OnDestroy {
   private readonly boundMouseDown: (e: MouseEvent) => void = (e: MouseEvent): void => this.onMouseDown(e);
   private readonly boundMouseUp: (e: MouseEvent) => void = (e: MouseEvent): void => this.onMouseUp(e);
   private readonly boundContextMenu: (e: MouseEvent) => void = (e: MouseEvent): void => this.onContextMenu(e);
+  private readonly boundDragMove: (e: MouseEvent) => void = (e: MouseEvent): void => this.dragTo(e);
   private readonly heldQuickSlotActions: Map<string, GameAction> = new Map<string, GameAction>();
 
   constructor() {
@@ -131,6 +138,10 @@ export class GameCanvasComponent implements OnDestroy {
       if (disabled) {
         this.resetAllKeys();
       }
+    });
+
+    effect((): void => {
+      if (!this.devDragEnabled() || this.inputDisabled()) this.stopDrag();
     });
 
     effect((): void => {
@@ -214,6 +225,18 @@ export class GameCanvasComponent implements OnDestroy {
     if (this.engine) {
       this.engine.showCollisionBoxes = enabled;
     }
+  }
+
+  /** Dev tools: stop or resume the floor's zombie spawns (host/solo simulation). */
+  setZombieSpawnsPaused(paused: boolean): void {
+    if (this.engine) {
+      this.engine.zombieSpawnsPaused = paused;
+    }
+  }
+
+  /** Dev tools: kill every zombie on the floor (host/solo simulation). */
+  killAllZombies(): void {
+    this.engine?.killAllZombies();
   }
 
   drinkQuickSlotPotion(drink: () => boolean): boolean {
@@ -384,6 +407,7 @@ export class GameCanvasComponent implements OnDestroy {
     window.removeEventListener('keyup', this.boundKeyUp);
     window.removeEventListener('blur', this.boundBlur);
     window.removeEventListener('mouseup', this.boundMouseUp);
+    window.removeEventListener('mousemove', this.boundDragMove);
     this.canvasRef().nativeElement.removeEventListener('mousedown', this.boundMouseDown);
     this.canvasRef().nativeElement.removeEventListener('contextmenu', this.boundContextMenu);
   }
@@ -576,11 +600,20 @@ export class GameCanvasComponent implements OnDestroy {
       return;
     }
     if (this.inputDisabled()) return;
+    if (this.devDragEnabled() && e.button === 0) {
+      e.preventDefault();
+      this.startDrag(e);
+      return;
+    }
     // preventDefault stops middle-click autoscroll on a bound button.
     if (key && this.pressBinding(key)) e.preventDefault();
   }
 
   private onMouseUp(e: MouseEvent): void {
+    if (this.dragging() && e.button === 0) {
+      this.stopDrag();
+      return;
+    }
     const key: string | null = mouseButtonKey(e.button);
     // preventDefault on a bound side button stops the browser navigating back/forward out of the game.
     if (key && this.releaseBinding(key)) e.preventDefault();
@@ -588,5 +621,28 @@ export class GameCanvasComponent implements OnDestroy {
 
   private onContextMenu(e: MouseEvent): void {
     if (this.keyBindingsService.getActionForKey('mouseright')) e.preventDefault();
+  }
+
+  private startDrag(e: MouseEvent): void {
+    this.dragging.set(true);
+    window.addEventListener('mousemove', this.boundDragMove);
+    this.dragTo(e);
+  }
+
+  private stopDrag(): void {
+    if (!this.dragging()) return;
+    this.dragging.set(false);
+    window.removeEventListener('mousemove', this.boundDragMove);
+    if (this.engine) this.engine.devDragPoint = null;
+  }
+
+  /** The canvas is stretched to the page: page px back to world px per axis. */
+  private dragTo(e: MouseEvent): void {
+    if (!this.engine) return;
+    const page: DOMRect = this.canvasRef().nativeElement.getBoundingClientRect();
+    this.engine.devDragPoint = {
+      x: ((e.clientX - page.left) / page.width) * GAME_CONSTANTS.CANVAS_WIDTH,
+      y: ((e.clientY - page.top) / page.height) * GAME_CONSTANTS.CANVAS_HEIGHT,
+    };
   }
 }

@@ -248,6 +248,9 @@ export class GameEngine implements IGameEngine {
 
   godMode: boolean = false;
   showCollisionBoxes: boolean = false;
+  zombieSpawnsPaused: boolean = false;
+  /** Dev tools: where the mouse holds the local player (its center), or null when nobody drags. */
+  devDragPoint: { x: number; y: number } | null = null;
   isMultiplayerHost: boolean = false;
   isMultiplayerClient: boolean = false;
   isLocalAfk: boolean = false;
@@ -567,6 +570,28 @@ export class GameEngine implements IGameEngine {
     this.zombieSystem.spawnZombieAt(x, GAME_CONSTANTS.GROUND_Y, kind);
   }
 
+  /** Dev tools: every zombie dies where it stands, as if slain (corpse, XP, loot). Host/solo only. */
+  killAllZombies(): void {
+    if (this.isMultiplayerClient) return;
+    for (const z of this.zombies) {
+      if (!z.isDead) this.combatSystem.handleZombieDeath(z);
+    }
+    this.combatSystem.filterDeadZombies();
+  }
+
+  /** Dev tools: the mouse holds the player with its center on `point`, kept inside the screen; no speed kept. */
+  private holdPlayerAt(point: { x: number; y: number }): void {
+    const p: CharacterState = this.player!;
+    const maxX: number = GAME_CONSTANTS.CANVAS_WIDTH - GAME_CONSTANTS.PLAYER_WIDTH;
+    const maxY: number = GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.PLAYER_HEIGHT;
+    p.x = Math.min(Math.max(point.x - GAME_CONSTANTS.PLAYER_WIDTH / 2, 0), maxX);
+    p.y = Math.min(Math.max(point.y - GAME_CONSTANTS.PLAYER_HEIGHT / 2, 0), maxY);
+    p.velocityX = 0;
+    p.velocityY = 0;
+    p.isClimbing = false;
+    p.isGrounded = false;
+  }
+
   /** One regular spawn now (the floor's type roll, at most one boss at a time); e2e probe setup. */
   spawnRolledZombie(): void {
     this.zombieSystem.spawnRolledZombie();
@@ -695,6 +720,7 @@ export class GameEngine implements IGameEngine {
       this.physicsSystem.updateDownedBody();
       this.treeSkillSystem.downed();
     }
+    if (this.devDragPoint) this.holdPlayerAt(this.devDragPoint);
 
     this.combatSystem.updatePlayerProjectiles();
 

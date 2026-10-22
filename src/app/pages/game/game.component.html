@@ -8,6 +8,7 @@
       [player]="p"
       [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen() || shopOpen() || inventoryOpen() || devDialogOpen() || isGameOver() || afkState() !== 'none'"
       [dialogKeysEnabled]="!settingsOpen() && !devDialogOpen() && !isGameOver() && afkState() === 'none'"
+      [devDragEnabled]="showDevTools() && devDragPlayer()"
       (playerUpdated)="onPlayerUpdate($event)"
       (xpGained)="onXpGained($event)"
       (scoreUpdated)="onScoreUpdate($event)"
@@ -95,6 +96,15 @@
               >
                 {{ showCollisionBoxes() ? 'Boxes on' : 'Boxes off' }}
               </button>
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                [class.px-btn--good]="devDragPlayer()"
+                title="Left mouse drags the player instead of attacking"
+                data-testid="game-dev-button-drag-player"
+                (click)="devToggleDragPlayer()"
+              >
+                {{ devDragPlayer() ? 'Drag player on' : 'Drag player off' }}
+              </button>
             </div>
           </section>
 
@@ -163,6 +173,27 @@
                 (click)="devSetFloor()"
               >
                 Set floor
+              </button>
+            </div>
+            <div class="dev-section__row">
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                [class.px-btn--good]="!zombieSpawnsPaused()"
+                [disabled]="!simulatesWorld()"
+                [title]="simulatesWorld() ? 'Regular and Eater spawns' : 'Host only'"
+                data-testid="game-dev-button-zombie-spawns"
+                (click)="devToggleZombieSpawns()"
+              >
+                {{ zombieSpawnsPaused() ? 'Spawns off' : 'Spawns on' }}
+              </button>
+              <button
+                class="px-btn px-btn--sm px-btn--primary"
+                [disabled]="!simulatesWorld()"
+                [title]="simulatesWorld() ? 'Every zombie dies where it stands' : 'Host only'"
+                data-testid="game-dev-button-kill-all"
+                (click)="devKillAllZombies()"
+              >
+                Kill all zombies
               </button>
             </div>
           </section>

@@ -137,6 +137,13 @@ export class GameComponent implements OnInit, OnDestroy {
       }
     });
     effect((): void => {
+      const paused: boolean = this.gameState.zombieSpawnsPaused();
+      const canvas: GameCanvasComponent | undefined = this.gameCanvas();
+      if (canvas) {
+        canvas.setZombieSpawnsPaused(paused);
+      }
+    });
+    effect((): void => {
       const away: boolean = this.afkState() !== 'none';
       this.gameCanvas()?.setAfk(away);
     });
@@ -157,6 +164,7 @@ export class GameComponent implements OnInit, OnDestroy {
     this.roomId = this.route.snapshot.queryParamMap.get('roomId') ?? '';
     this.isMultiplayer = mode === GameMode.Multiplayer && this.roomId !== '';
     this.isHost = this.route.snapshot.queryParamMap.get('isHost') === '1';
+    this.simulatesWorld.set(!this.isMultiplayer || this.isHost);
 
     // A reloaded tab: the character is gone from memory, but the page saved it on the way out.
     const resume: ResumeState | null =
@@ -742,6 +750,11 @@ export class GameComponent implements OnInit, OnDestroy {
   });
   readonly godMode: WritableSignal<boolean> = this.gameState.godMode;
   readonly showCollisionBoxes: WritableSignal<boolean> = this.gameState.showCollisionBoxes;
+  readonly zombieSpawnsPaused: WritableSignal<boolean> = this.gameState.zombieSpawnsPaused;
+  /** Dev tools: the left mouse button drags the player instead of attacking. */
+  readonly devDragPlayer: WritableSignal<boolean> = signal<boolean>(false);
+  /** This tab runs the zombies (solo or host): world dev tools only work here. */
+  readonly simulatesWorld: WritableSignal<boolean> = signal<boolean>(true);
 
   readonly specialDropDefs: SpecialDropDefinition[] = SPECIAL_DROP_DEFINITIONS;
 
@@ -806,6 +819,20 @@ export class GameComponent implements OnInit, OnDestroy {
 
   devToggleCollisionBoxes(): void {
     this.gameState.showCollisionBoxes.update((v: boolean) => !v);
+  }
+
+  /** Turning drag mode on closes the dialog, so the next press on the canvas grabs the player. */
+  devToggleDragPlayer(): void {
+    this.devDragPlayer.update((v: boolean) => !v);
+    if (this.devDragPlayer()) this.closeDevDialog();
+  }
+
+  devToggleZombieSpawns(): void {
+    this.gameState.zombieSpawnsPaused.update((v: boolean) => !v);
+  }
+
+  devKillAllZombies(): void {
+    this.gameCanvas()?.killAllZombies();
   }
 
   retry(): void {
@@ -901,6 +928,7 @@ export class GameComponent implements OnInit, OnDestroy {
   private promoteToHost(): void {
     if (this.isHost) return;
     this.isHost = true;
+    this.simulatesWorld.set(true);
     this.gameCanvas()?.promoteToHost();
   }
 
@@ -908,6 +936,7 @@ export class GameComponent implements OnInit, OnDestroy {
   private demoteToGuest(): void {
     if (!this.isHost) return;
     this.isHost = false;
+    this.simulatesWorld.set(false);
     this.gameCanvas()?.demoteToGuest();
   }
 
