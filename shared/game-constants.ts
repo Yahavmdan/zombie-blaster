@@ -590,6 +590,7 @@ export const GAME_CONSTANTS = {
   NEW_MOVE_TOAST_MS: 6000, // The HUD's "New move" plate stays up this long after a tree skill is learned
   SKILL_COOLDOWN_HUD_REFRESH_MS: 100, // The HUD's skill bar redraws its cooldown shades this often
   HUD_EXIT_SIGN_PX: 64, // The EXIT sign and arrows over the exit: a HUD plate over them (or over a player) turns see-through
+  HUD_POTION_LOW_COUNT: 10, // The tray's HP/MP potion counters warn (blink red, "Low") when a kind drops below this many
   HUD_DIALOG_DRAG_KEEP_VISIBLE_PX: 40, // A dialog dragged by its title bar keeps at least this much of the bar on screen
   TREE_SKILL_VFX_LEVEL: 10, // Particle density tree-skill animations play at (they have no skill level)
 
