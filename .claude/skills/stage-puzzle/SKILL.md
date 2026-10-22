@@ -80,6 +80,12 @@ Rules that came out of building it:
 - **Art equals collision.** Anything that looks walkable must be walkable. Boulder-only tracks
   are drawn per frame as clearly non-walkable (trough plus guard rail). The generator keeps every
   platform and rope out of the chute's horizontal span.
+- **Breaking a part looks physical.** When a drawn solid goes away, cut its own art into pieces
+  (`ParticleShape.Chunk` + `Particle.chunk`, drawn from the part's cached art canvas) and let them
+  fall with `floorY` (bounce, slide, dust: `DEBRIS_*`); `delay` holds a piece in place, drawn,
+  until it lets go. The floor-2 wall (`spawnWallBreak`, `WALL_BREAK_*`) is the reference: its
+  stones (`crackedWallStones`) blast out near the impact (`wallImpactY`), crumble upward, settle.
+  Derive everything from the event's coordinates so the replay draws the same pieces.
 - **Exits:** standing on a puzzle-floor exit platform must not complete the floor if the puzzle
   says so. Corpse footholds sit about 5 px above the ground, so an exit check must not demand
   feet exactly on `GROUND_Y`.

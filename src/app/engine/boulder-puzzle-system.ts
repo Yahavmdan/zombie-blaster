@@ -9,6 +9,7 @@ import {
   BoulderPath,
   boulderBox,
   boulderPath,
+  wallImpactY,
   crushTargets,
   debrisBox,
   gateBox,
@@ -89,7 +90,7 @@ export class BoulderPuzzleSystem {
 
   private breakWall(puzzle: BoulderPuzzleLayout): void {
     const cx: number = puzzle.wall.x + puzzle.wall.width / 2;
-    const impactY: number = GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.BOULDER_CHUTE_END_CLEARANCE_PX;
+    const impactY: number = wallImpactY();
     this.e.breakPuzzleWall();
     this.vfx.spawnWallBreak(cx, impactY);
     this.e.pendingVfxEvents.push({

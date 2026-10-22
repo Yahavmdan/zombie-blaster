@@ -1,4 +1,5 @@
-import { Box, Point } from './boulder-puzzle';
+import { GAME_CONSTANTS } from '@shared/index';
+import { Box, Point, wallImpactY } from './boulder-puzzle';
 import {
   ART_PX,
   PIXEL,
@@ -132,6 +133,14 @@ function boulderFrame(frame: number): HTMLCanvasElement {
   return canvas;
 }
 
+/** The unturned boulder at one canvas pixel per art cell (what it shatters into). */
+export function boulderArt(): HTMLCanvasElement {
+  return boulderFrame(0);
+}
+
+/** The boulder's art is this many art cells across. */
+export const BOULDER_ART_CELLS: number = BOULDER_CELLS;
+
 /** The boulder in `box`, turned by `angle` (radians), lit from the top-left. */
 export function drawBoulder(ctx: CanvasRenderingContext2D, box: Box, angle: number): void {
   const turn: number = (((angle / (Math.PI * 2)) % 1) + 1) % 1;
@@ -157,8 +166,9 @@ const WALL_INK: number = 0;
 const WALL_MORTAR: number = 1;
 const WALL_SHADOW: number = 2;
 const WALL_HI: number = 5;
-/** Where the boulder hits, in art cells up from the wall's foot (its centre rolls 24 px up). */
-const WALL_IMPACT_ROWS: number = 12;
+/** Seeds of the stone layout (shared with the debris it falls apart into) and of its painting. */
+const WALL_LAYOUT_SEED: number = 0x3a11;
+const WALL_PAINT_SEED: number = 0x3a12;
 /** Cracks fanning out of the impact: heading (degrees; 180 is into the wall, -90 up), length, width. */
 const WALL_CRACKS: readonly [number, number, number][] = [
   [-100, 160, 3],
@@ -209,13 +219,54 @@ function paintWallStone(
 }
 
 /**
+ * The cracked wall's stones in art cells (running bond, mirrored with the face side), each with
+ * its bottom and right mortar joint; the first and last of a course reach past the wall's sides.
+ */
+function wallStoneLayout(cols: number, rows: number, faceRight: boolean): Box[] {
+  const rand: Random = seededRandom(WALL_LAYOUT_SEED);
+  const stones: Box[] = [];
+  for (let y: number = 0, course: number = 0; y < rows; course++) {
+    const height: number = 11 + Math.floor(rand() * 6);
+    let x: number = -(course % 2 === 0 ? 4 : 14) - Math.floor(rand() * 6);
+    while (x < cols) {
+      const width: number = 14 + Math.floor(rand() * 12);
+      stones.push({ x: faceRight ? x : cols - x - width, y, width, height });
+      x += width;
+    }
+    y += height;
+  }
+  return stones;
+}
+
+/** The cracked wall's stones in art cells, cut to the wall (what it falls apart into). */
+export function crackedWallStones(cols: number, rows: number, faceRight: boolean): Box[] {
+  return wallStoneLayout(cols, rows, faceRight)
+    .map((s: Box): Box => {
+      const x: number = Math.max(0, s.x);
+      const y: number = Math.max(0, s.y);
+      return {
+        x,
+        y,
+        width: Math.min(cols, s.x + s.width) - x,
+        height: Math.min(rows, s.y + s.height) - y,
+      };
+    })
+    .filter((s: Box): boolean => s.width > 0 && s.height > 0);
+}
+
+/** Art-cell row where the boulder's centre meets a wall `rows` tall standing on the ground. */
+function wallImpactRow(rows: number): number {
+  return rows - Math.round((GAME_CONSTANTS.GROUND_Y - wallImpactY()) / ART_PX);
+}
+
+/**
  * The wall's shade per art cell: stones in running bond, damp grime at the foot and streaks down
  * the face, a crushed dent where the boulder will hit (at the open face, near the ground), cracks
  * fanning out of it with branches, and hairline cracks higher up. Lit from the top-left whichever
  * side the face is on.
  */
 function wallCells(cols: number, rows: number, faceRight: boolean): number[] {
-  const rand: Random = seededRandom(0x3a11);
+  const rand: Random = seededRandom(WALL_PAINT_SEED);
   const cells: number[] = new Array<number>(cols * rows).fill(3);
   const joints: number[] = new Array<number>(cols * rows).fill(0);
   /** Screen column of a column counted with the open face on the right (local column cols - 1). */
@@ -223,16 +274,8 @@ function wallCells(cols: number, rows: number, faceRight: boolean): number[] {
   const inside: (x: number, y: number) => boolean = (x: number, y: number): boolean =>
     x >= 0 && y >= 0 && x < cols && y < rows;
 
-  for (let y: number = 0, course: number = 0; y < rows; course++) {
-    const height: number = 11 + Math.floor(rand() * 6);
-    let x: number = -(course % 2 === 0 ? 4 : 14) - Math.floor(rand() * 6);
-    while (x < cols) {
-      const width: number = 14 + Math.floor(rand() * 12);
-      const stone: Box = { x: faceRight ? x : cols - x - width, y, width, height };
-      paintWallStone(cells, joints, cols, rows, stone, rand);
-      x += width;
-    }
-    y += height;
+  for (const stone of wallStoneLayout(cols, rows, faceRight)) {
+    paintWallStone(cells, joints, cols, rows, stone, rand);
   }
 
   const darken: (x: number, y: number) => void = (x: number, y: number): void => {
@@ -253,7 +296,7 @@ function wallCells(cols: number, rows: number, faceRight: boolean): number[] {
   // The dent: spalled stone, dark on its upper-left slope, freshly broken (light) on its
   // lower-right one, rubble inside.
   const ox: number = cols - 1;
-  const oy: number = rows - WALL_IMPACT_ROWS;
+  const oy: number = wallImpactRow(rows);
   for (let y: number = oy - 12; y <= oy + 12; y++) {
     for (let lx: number = ox - 12; lx <= ox; lx++) {
       const x: number = screenX(lx);
@@ -346,8 +389,11 @@ function wallCells(cols: number, rows: number, faceRight: boolean): number[] {
   return cells;
 }
 
-/** The wall's art at one canvas pixel per art cell, rendered once per size and side. */
-function wallCanvas(cols: number, rows: number, faceRight: boolean): HTMLCanvasElement {
+/**
+ * The cracked wall's art at one canvas pixel per art cell, rendered once per size and side (the
+ * wall and the debris cut from it draw from it).
+ */
+export function crackedWallArt(cols: number, rows: number, faceRight: boolean): HTMLCanvasElement {
   const key: string = `${cols}x${rows}${faceRight ? 'r' : 'l'}`;
   const cached: HTMLCanvasElement | undefined = wallCanvases.get(key);
   if (cached) return cached;
@@ -384,7 +430,7 @@ export function drawCrackedWall(
   ctx.rect(wall.x, wall.y, wall.width, wall.height);
   ctx.clip();
   ctx.drawImage(
-    wallCanvas(cols, rows, faceRight),
+    crackedWallArt(cols, rows, faceRight),
     Math.round(wall.x),
     Math.round(wall.y),
     cols * ART_PX,

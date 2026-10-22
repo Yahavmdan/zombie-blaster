@@ -5,7 +5,8 @@ import {
   VfxEventType,
 } from '@shared/index';
 import { DropType, ZombieType } from '@shared/game-entities';
-import { Particle, ParticleShape, FadeMode } from './particle-types';
+import { ChunkSource, Particle, ParticleChunk, ParticleShape, FadeMode } from './particle-types';
+import { BOULDER_ART_CELLS, crackedWallStones } from './puzzle-art';
 import { SKILL_ANIMATIONS, SkillAnimation } from './skill-animations';
 import { AcidPuddle, BarrelBlastFx, DamageNumber, DropNotification, IGameEngine, PlayerTint } from './engine-types';
 import { PixelIconId } from '@shared/pixel-icon';
@@ -909,54 +910,210 @@ export class VfxSystem {
     this.triggerScreenShake(14, 6);
   }
 
-  /** Stone debris down the whole wall, a dust cloud at the impact, and a heavy shake. */
-  spawnWallBreak(cx: number, impactY: number): void {
-    const stones: string[] = ['#6b6b78', '#8a8a96', '#4a4a55', '#a89c88'];
-    for (let i: number = 0; i < 60; i++) {
-      const life: number = 50 + Math.floor(Math.random() * 30);
-      this.addParticle({
-        x: cx + (Math.random() - 0.5) * 64,
-        y: Math.random() * GAME_CONSTANTS.GROUND_Y,
-        vx: (Math.random() - 0.5) * 8,
-        vy: -2 - Math.random() * 5,
-        life,
-        maxLife: life,
-        color: stones[i % stones.length],
-        size: 3 + Math.random() * 6,
-        shape: ParticleShape.Square,
-        rotation: Math.random() * Math.PI,
-        rotationSpeed: (Math.random() - 0.5) * 0.3,
-        fadeMode: FadeMode.Late,
-        scaleOverLife: false,
-      });
+  /** A slow, rising puff of stone dust. */
+  private addDust(x: number, y: number, vx: number, vy: number, size: number, life: number): void {
+    this.addParticle({
+      x,
+      y,
+      vx,
+      vy,
+      life,
+      maxLife: life,
+      color: 'rgba(150, 140, 126, 0.4)',
+      size,
+      shape: ParticleShape.Circle,
+      rotation: 0,
+      rotationSpeed: 0,
+      fadeMode: FadeMode.Linear,
+      scaleOverLife: false,
+      gravityScale: -0.04,
+    });
+  }
+
+  /**
+   * Debris that reached its floor: it bounces (less each time), then slides and spins to a stop;
+   * a chunk landing hard kicks up dust.
+   */
+  private landOnFloor(p: Particle, floorY: number): void {
+    const half: number = p.chunk ? (p.chunk.sh * ART_PX) / 2 : p.size / 2;
+    if (p.vy <= 0 || p.y + half < floorY) return;
+    if (p.chunk && p.vy > GAME_CONSTANTS.DEBRIS_DUST_MIN_SPEED) {
+      const spread: number = p.chunk.sw * ART_PX;
+      this.addDust(p.x, floorY - 6, (Math.random() - 0.5) * 2, -0.3, spread, 50 + Math.random() * 30);
     }
-    for (let i: number = 0; i < 24; i++) {
-      const life: number = 40 + Math.floor(Math.random() * 20);
+    p.y = floorY - half;
+    p.vy = p.vy > GAME_CONSTANTS.DEBRIS_BOUNCE_MIN_SPEED ? -p.vy * GAME_CONSTANTS.DEBRIS_BOUNCE : 0;
+    p.vx *= GAME_CONSTANTS.DEBRIS_FRICTION;
+    p.rotationSpeed *= GAME_CONSTANTS.DEBRIS_FRICTION;
+  }
+
+  /** A piece of a puzzle part's art, falling under debris gravity onto the ground. */
+  private addDebrisChunk(
+    chunk: ParticleChunk,
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    spin: number,
+    delay: number,
+  ): void {
+    const life: number = GAME_CONSTANTS.DEBRIS_LIFE_TICKS + Math.floor(Math.random() * 40);
+    this.addParticle({
+      x,
+      y,
+      vx,
+      vy,
+      life,
+      maxLife: life,
+      color: PIXEL['stone'],
+      size: Math.max(chunk.sw, chunk.sh) * ART_PX,
+      shape: ParticleShape.Chunk,
+      rotation: 0,
+      rotationSpeed: spin,
+      fadeMode: FadeMode.Late,
+      scaleOverLife: false,
+      gravityScale: GAME_CONSTANTS.DEBRIS_GRAVITY_SCALE,
+      chunk,
+      delay,
+      floorY: GAME_CONSTANTS.GROUND_Y,
+    });
+  }
+
+  /**
+   * The boulder smashes the floor-2 wall (`cx` its middle, `impactY` the boulder's centre): the
+   * boulder bursts into shards and chips, the wall's own stones near the impact are blown out into
+   * the room, the rest crumble from the impact upward and come down, tumbling and bouncing on the
+   * ground, and dust rolls out along its foot. The wall's box comes from `cx` alone (it always spans
+   * the screen top to the ground at a screen edge), so a replay draws the same stones.
+   */
+  spawnWallBreak(cx: number, impactY: number): void {
+    const width: number = GAME_CONSTANTS.BOULDER_WALL_TILES * GAME_CONSTANTS.LEVEL_TILE_PX;
+    const wallX: number = cx - width / 2;
+    const faceRight: boolean = wallX <= 0;
+    const room: number = faceRight ? 1 : -1;
+    const faceX: number = faceRight ? wallX + width : wallX;
+    const cols: number = Math.ceil(width / ART_PX);
+    const rows: number = Math.ceil(GAME_CONSTANTS.GROUND_Y / ART_PX);
+    const source: ChunkSource = { kind: 'wall', cols, rows, faceRight };
+
+    for (const stone of crackedWallStones(cols, rows, faceRight)) {
+      // Near the impact a stone breaks into a few pieces; higher up most come down whole.
+      const stoneY: number = (stone.y + stone.height / 2) * ART_PX;
+      const near: boolean = Math.abs(stoneY - impactY) < GAME_CONSTANTS.WALL_BREAK_BLAST_PX;
+      const pieces: number = near ? 2 + Math.floor(Math.random() * 2) : Math.random() < 0.4 ? 2 : 1;
+      const end: number = stone.x + stone.width;
+      for (let i: number = 0, sx: number = stone.x; sx < end; i++) {
+        const cut: number = Math.round((stone.width / pieces) * (0.7 + Math.random() * 0.6));
+        // The last piece (or a sliver too thin to cut off) takes the rest of the stone.
+        const sw: number = i === pieces - 1 || end - sx - cut < 3 ? end - sx : Math.max(3, cut);
+        const chunk: ParticleChunk = { source, sx, sy: stone.y, sw, sh: stone.height };
+        const x: number = wallX + (sx + sw / 2) * ART_PX;
+        const y: number = stoneY;
+        sx += sw;
+        const reach: number = 1 - Math.hypot(x - faceX, y - impactY) / GAME_CONSTANTS.WALL_BREAK_BLAST_PX;
+        if (reach > 0) {
+          const speed: number = GAME_CONSTANTS.WALL_BREAK_BLAST_SPEED * reach * (0.5 + Math.random() * 0.5);
+          const up: number = (y - impactY) / GAME_CONSTANTS.WALL_BREAK_BLAST_PX;
+          this.addDebrisChunk(
+            chunk, x, y,
+            room * speed,
+            (up - 0.6) * speed * 0.6,
+            (Math.random() - 0.5) * 0.4,
+            Math.floor(Math.random() * 3),
+          );
+        } else {
+          // Let go one after another from the impact up; topple outward a little as it drops.
+          const delay: number =
+            Math.abs(impactY - y) * GAME_CONSTANTS.WALL_BREAK_CRUMBLE_TICKS_PER_PX + Math.random() * 8;
+          this.addDebrisChunk(
+            chunk, x, y,
+            room * Math.random() * 1.4 + (Math.random() - 0.5) * 0.6,
+            0,
+            room * (0.02 + Math.random() * 0.06),
+            Math.floor(delay),
+          );
+        }
+      }
+    }
+
+    // The boulder shatters into a grid of shards that rebound into the room.
+    const radius: number = GAME_CONSTANTS.BOULDER_SIZE_PX / 2;
+    const boulderX: number = faceX + room * radius;
+    const grid: number = 3;
+    const cell: number = BOULDER_ART_CELLS / grid;
+    for (let gy: number = 0; gy < grid; gy++) {
+      for (let gx: number = 0; gx < grid; gx++) {
+        const chunk: ParticleChunk = { source: { kind: 'boulder' }, sx: gx * cell, sy: gy * cell, sw: cell, sh: cell };
+        this.addDebrisChunk(
+          chunk,
+          boulderX + (gx + 0.5 - grid / 2) * cell * ART_PX,
+          impactY + (gy + 0.5 - grid / 2) * cell * ART_PX,
+          room * (1 + Math.random() * 3) + (gx - 1) * room * 0.8,
+          -2 - Math.random() * 3 + (gy - 1) * 1.5,
+          (Math.random() - 0.5) * 0.5,
+          0,
+        );
+      }
+    }
+
+    // Chips and grit spraying from the impact.
+    const grit: string[] = [PIXEL['stoneHi'], PIXEL['stone'], PIXEL['stoneMid'], PIXEL['stoneDark']];
+    for (let i: number = 0; i < 40; i++) {
+      const life: number = 40 + Math.floor(Math.random() * 30);
       this.addParticle({
-        x: cx + (Math.random() - 0.5) * 80,
-        y: impactY - Math.random() * 40,
-        vx: (Math.random() - 0.5) * 3,
-        vy: -0.5 - Math.random(),
+        x: faceX + (Math.random() - 0.5) * 16,
+        y: impactY + (Math.random() - 0.5) * 40,
+        vx: room * Math.random() * 7 + (Math.random() - 0.5) * 2,
+        vy: -1 - Math.random() * 5,
         life,
         maxLife: life,
-        color: 'rgba(190, 180, 160, 0.7)',
-        size: 10 + Math.random() * 14,
-        shape: ParticleShape.Circle,
+        color: grit[i % grit.length],
+        size: 2 + Math.random() * 4,
+        shape: ParticleShape.Pixel,
         rotation: 0,
         rotationSpeed: 0,
-        fadeMode: FadeMode.Linear,
-        scaleOverLife: true,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: false,
+        gravityScale: GAME_CONSTANTS.DEBRIS_GRAVITY_SCALE / 2,
+        floorY: GAME_CONSTANTS.GROUND_Y,
       });
     }
-    this.triggerScreenShake(24, 10);
+
+    // Dust: a burst at the impact and a cloud rolling out along the ground (more puffs where stones land).
+    for (let i: number = 0; i < 14; i++) {
+      this.addDust(
+        faceX,
+        impactY,
+        room * Math.random() * 3,
+        (Math.random() - 0.5) * 2,
+        14 + Math.random() * 14,
+        50 + Math.random() * 30,
+      );
+    }
+    for (let i: number = 0; i < 22; i++) {
+      this.addDust(
+        faceX + room * Math.random() * 40,
+        GAME_CONSTANTS.GROUND_Y - Math.random() * 24,
+        room * (0.4 + Math.random() * 1.8),
+        -0.1 - Math.random() * 0.3,
+        22 + Math.random() * 22,
+        90 + Math.random() * 60,
+      );
+    }
+    this.triggerScreenShake(GAME_CONSTANTS.WALL_BREAK_SHAKE_FRAMES, GAME_CONSTANTS.WALL_BREAK_SHAKE_INTENSITY);
   }
 
   updateParticles(): void {
     for (const p of this.e.particles) {
+      if (p.delay) {
+        p.delay--;
+        continue;
+      }
       p.x += p.vx;
       p.y += p.vy;
       p.vy += GAME_CONSTANTS.PARTICLE_GRAVITY * (p.gravityScale ?? 1);
       p.rotation += p.rotationSpeed;
+      if (p.floorY !== undefined) this.landOnFloor(p, p.floorY);
       p.life--;
     }
     this.e.particles = this.e.particles.filter((p: Particle) => p.life > 0);

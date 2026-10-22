@@ -60,6 +60,11 @@ export function gateBox(puzzle: BoulderPuzzleLayout, ledgeY: number): Box {
   return { x, y: ledgeY - height, width, height };
 }
 
+/** Height of the boulder's centre when it meets the wall (the chute's low end). */
+export function wallImpactY(): number {
+  return GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.BOULDER_CHUTE_END_CLEARANCE_PX - R;
+}
+
 export function boulderPath(puzzle: BoulderPuzzleLayout, ledgeY: number): BoulderPath {
   const dir: number = puzzle.wallDir;
   const gate: Box = gateBox(puzzle, ledgeY);
@@ -69,10 +74,7 @@ export function boulderPath(puzzle: BoulderPuzzleLayout, ledgeY: number): Boulde
     y: ledgeY - R,
   };
   const wallFace: number = dir === 1 ? puzzle.wall.x : puzzle.wall.x + puzzle.wall.width;
-  const end: Point = {
-    x: wallFace - dir * R,
-    y: GAME_CONSTANTS.GROUND_Y - GAME_CONSTANTS.BOULDER_CHUTE_END_CLEARANCE_PX - R,
-  };
+  const end: Point = { x: wallFace - dir * R, y: wallImpactY() };
   const flat: number = Math.abs(edge.x - start.x);
   const down: number = Math.hypot(end.x - edge.x, end.y - edge.y);
   return { start, edge, end, length: flat + down };

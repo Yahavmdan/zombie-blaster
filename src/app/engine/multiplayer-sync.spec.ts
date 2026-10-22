@@ -43,6 +43,7 @@ import { ProjectileSystem } from './projectile-system';
 import { SpriteAnimator } from './sprite-animator';
 import { ZombieAnimState } from './zombie-sprite-animator';
 import { Particle, ParticleShape } from './particle-types';
+import { ART_PX } from './pixel-art';
 import { GameEngine } from './game-engine';
 
 function makePlayer(overrides: Partial<CharacterState> = {}): CharacterState {
@@ -764,6 +765,37 @@ describe('Boulder puzzle (floor 2)', (): void => {
     engine.replayRemoteVfxEvents([{ type: VfxEventType.WallBreak, playerId: 'host', x: 1248, y: 560 }]);
     expect(engine.particles.length).toBeGreaterThan(afterGate);
     expect(engine.screenShakeFrames).toBeGreaterThan(0);
+  });
+
+  it('the wall comes apart into its own stones: they crumble from the impact up and settle on the ground', (): void => {
+    const vfx: VfxSystem = new VfxSystem(engine);
+    vfx.spawnWallBreak(1248, 536);
+    const stones: Particle[] = engine.particles.filter(
+      (p: Particle): boolean => p.chunk?.source.kind === 'wall',
+    );
+    const shards: Particle[] = engine.particles.filter(
+      (p: Particle): boolean => p.chunk?.source.kind === 'boulder',
+    );
+    expect(stones.length).toBeGreaterThan(20);
+    expect(shards.length).toBe(9);
+    // Every stone starts inside the wall (x 1216..1280, the screen top to the ground).
+    for (const s of stones) {
+      expect(s.x).toBeGreaterThanOrEqual(1216);
+      expect(s.x).toBeLessThanOrEqual(1280);
+      expect(s.y).toBeLessThanOrEqual(GAME_CONSTANTS.GROUND_Y);
+    }
+    // Stones high up let go later than those at the impact.
+    const top: Particle = stones.reduce((a: Particle, b: Particle): Particle => (b.y < a.y ? b : a));
+    const atImpact: Particle = stones.reduce((a: Particle, b: Particle): Particle =>
+      Math.abs(b.y - 536) < Math.abs(a.y - 536) ? b : a,
+    );
+    expect(top.delay ?? 0).toBeGreaterThan(atImpact.delay ?? 0);
+    for (let t: number = 0; t < 120; t++) vfx.updateParticles();
+    const left: Particle[] = engine.particles.filter((p: Particle): boolean => p.chunk !== undefined);
+    expect(left.length).toBeGreaterThan(0);
+    for (const s of left) {
+      expect(s.y + (s.chunk!.sh * ART_PX) / 2).toBeLessThanOrEqual(GAME_CONSTANTS.GROUND_Y + 0.001);
+    }
   });
 
   it('the snapshot carries the boulder', (): void => {

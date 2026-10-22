@@ -28,7 +28,7 @@ import {
 import {
   getSpecialDropDefinition,
 } from '@shared/game-constants';
-import { Particle, ParticleShape, FadeMode } from './particle-types';
+import { ChunkSource, Particle, ParticleChunk, ParticleShape, FadeMode } from './particle-types';
 import { PlayerAnimState, SpriteAnimator } from './sprite-animator';
 import { ZombieAnimState, ZombieSpriteAnchor, zombieSpriteSize } from './zombie-sprite-animator';
 import { LooseProp, MagnetPull, ZombieCorpse } from '@shared/game-entities';
@@ -105,6 +105,8 @@ import {
 import { drawPixelIcon } from '../ui/pixel-icon-raster';
 import { lightningFlash } from './storm';
 import {
+  boulderArt,
+  crackedWallArt,
   drawBoulder,
   drawButton,
   drawCable,
@@ -1682,6 +1684,10 @@ export class RenderSystem {
       this.renderPixelParticle(ctx, p, alpha, size);
       return;
     }
+    if (p.chunk) {
+      this.renderChunkParticle(ctx, p, p.chunk, alpha);
+      return;
+    }
 
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -1717,6 +1723,27 @@ export class RenderSystem {
         ctx.fillRect(-size / 2, -size / 2, size, size);
     }
 
+    ctx.restore();
+  }
+
+  /** A piece of a puzzle part's art (wall stone, boulder shard), turned about its middle. */
+  private renderChunkParticle(
+    ctx: CanvasRenderingContext2D,
+    p: Particle,
+    chunk: ParticleChunk,
+    alpha: number,
+  ): void {
+    const src: ChunkSource = chunk.source;
+    const art: HTMLCanvasElement =
+      src.kind === 'wall' ? crackedWallArt(src.cols, src.rows, src.faceRight) : boulderArt();
+    const w: number = chunk.sw * ART_PX;
+    const h: number = chunk.sh * ART_PX;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(Math.round(p.x), Math.round(p.y));
+    ctx.rotate(p.rotation);
+    ctx.drawImage(art, chunk.sx, chunk.sy, chunk.sw, chunk.sh, -w / 2, -h / 2, w, h);
     ctx.restore();
   }
 

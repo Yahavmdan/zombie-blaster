@@ -452,6 +452,17 @@ export const GAME_CONSTANTS = {
   DEATH_PARTICLE_UP_BIAS: 3, // Extra upward push on death particles
   DEATH_PARTICLE_LIFE: 45, // Lifetime of death particles in ticks
   PARTICLE_GRAVITY: 0.15, // Downward pull on particles each tick
+  DEBRIS_GRAVITY_SCALE: 2.5, // Falling stone debris (wall stones, boulder shards) feels this many times PARTICLE_GRAVITY
+  DEBRIS_BOUNCE: 0.3, // Debris landing faster than DEBRIS_BOUNCE_MIN_SPEED bounces back up with this share of its fall speed
+  DEBRIS_BOUNCE_MIN_SPEED: 2, // Fall speed (px/tick) below which landing debris stays down
+  DEBRIS_DUST_MIN_SPEED: 5, // A chunk of debris landing faster than this (px/tick) kicks up a puff of dust
+  DEBRIS_FRICTION: 0.6, // Share of its slide and spin a piece of debris keeps per landing
+  DEBRIS_LIFE_TICKS: 150, // Debris lies this long (after it lets go) before it is gone; it fades over the last 30%
+  WALL_BREAK_BLAST_PX: 100, // Wall stones this close to the boulder's impact are blown out into the room
+  WALL_BREAK_BLAST_SPEED: 7, // Top speed (px/tick) of a stone at the impact; it falls off to 0 at WALL_BREAK_BLAST_PX
+  WALL_BREAK_CRUMBLE_TICKS_PER_PX: 0.08, // The wall crumbles up from the impact: a stone this many ticks per px above it lets go later
+  WALL_BREAK_SHAKE_FRAMES: 40, // Screen shake when the wall comes down: this long...
+  WALL_BREAK_SHAKE_INTENSITY: 10, // ...and this strong
 
   // ─── Storm Sky (scenery, never walkable) ─────────
   STORM_CLOUD_SPEED_PX_S: 14, // The background clouds' drift speed (pixels per second, to the left)
