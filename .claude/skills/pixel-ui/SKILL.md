@@ -95,7 +95,13 @@ Angular build budget is 6 kB per component CSS: reusing the kit keeps you under 
 
 ### New HUD element
 - A small `px-panel` "plate" (see `hud.component.html`): label `--fs-12 --bone-dim`, value `--fs-16`/`--fs-20` in an accent.
-- Don't cover play space: the top band holds the portrait plate (left), floor sign (centre), score + chips + gear (right); the bottom band is the quick-slot tray. Buff timers sit just above the tray.
+- Don't cover play space. Keep the top band short, because the exit can hang at y 100 (spring floor) and the canvas is stretched to the page while the HUD is in page px:
+  - left: the portrait plate with the 1-6 skill bar beside the bars (2x3), not under them;
+  - centre: the floor sign;
+  - right: one row holding the point buttons, the chips, the score and the gear.
+- The bottom band is the quick-slot tray. Buff and special-drop timers sit just above it in the DOM; never draw timers on the canvas under a plate.
+- A top plate that has a player or the exit sign (`HUD_EXIT_SIGN_PX`) behind it turns see-through (`.hud-see-through`). The HUD measures this from `keepVisibleOf` (page rects from `GameCanvasComponent.keepVisibleRects`). Anything else that must stay visible goes into that list.
+- `e2e/specs/solo/hud-layout.spec.ts` checks at 1280x720 that no plate covers any floor's exit.
 - Attention states blink with `steps(2)` and stop under `prefers-reduced-motion`.
 
 ### New icon

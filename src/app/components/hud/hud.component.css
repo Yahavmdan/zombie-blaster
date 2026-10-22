@@ -13,14 +13,25 @@
   padding: 8px;
 }
 
-/* ---- top-left: portrait, name, bars ---- */
+/* A player or the exit is behind this plate: let the game show through (still clickable) */
+.hud-see-through {
+  opacity: 0.3;
+}
+
+/* ---- top-left: portrait, name, bars; the skill bar beside them keeps the plate short ---- */
 
 .hud-left {
   display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+}
+
+.hud-vitals {
+  display: flex;
   flex-direction: column;
   gap: 6px;
-  width: 268px;
-  padding: 6px;
+  width: 256px;
 }
 
 .player-info {
@@ -110,10 +121,10 @@
   color: var(--bone-dim);
 }
 
-/* tree-class skill bar (keys 1-6): the shade drains as the cooldown runs */
+/* tree-class skill bar (keys 1-6), two rows of three: the shade drains as the cooldown runs */
 .cd-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, 32px);
   gap: 4px;
 }
 
@@ -248,12 +259,11 @@
   color: var(--blood-hi);
 }
 
-/* ---- top-right: score, stats, point buttons (clear of the settings gear) ---- */
+/* ---- top-right: point buttons, stats and score in one short row (clear of the settings gear) ---- */
 
 .hud-right {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 6px;
   margin-right: 44px;
 }
@@ -311,7 +321,7 @@
   }
 }
 
-/* ---- bottom: buff timers (sit just above the quick slot tray) ---- */
+/* ---- bottom: buff and special drop timers (sit just above the quick slot tray) ---- */
 
 .hud-bottom {
   position: absolute;

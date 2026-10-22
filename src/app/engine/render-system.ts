@@ -231,7 +231,6 @@ export class RenderSystem {
     this.e.spriteEffectSystem.render(ctx);
     this.renderDamageNumbers(ctx);
     this.renderDropNotifications(ctx);
-    this.renderActiveSpecialEffects(ctx);
     this.renderPendingSpecialDropDialog(ctx);
     this.renderLevelUpNotification(ctx);
     this.renderFloorInfo(ctx);
@@ -1940,55 +1939,6 @@ export class RenderSystem {
     fillOutlinedText(ctx, subText, cx, y + 16, CANVAS_BONE, CANVAS_INK, 2);
 
     ctx.restore();
-  }
-
-  private renderActiveSpecialEffects(ctx: CanvasRenderingContext2D): void {
-    const effects: ActiveSpecialEffect[] = this.e.activeSpecialEffects;
-    if (effects.length === 0) return;
-
-    const barWidth: number = 140;
-    const barHeight: number = 20;
-    const padding: number = 4;
-    const startX: number = GAME_CONSTANTS.CANVAS_WIDTH - barWidth - 10;
-    // Under the HUD's score plate and stat chips in the top-right corner.
-    let startY: number = 84;
-
-    for (const eff of effects) {
-      const def: ReturnType<typeof getSpecialDropDefinition> = getSpecialDropDefinition(eff.type);
-      if (!def) continue;
-
-      const progress: number = eff.remainingTicks / eff.totalTicks;
-      const secondsLeft: number = Math.ceil(eff.remainingTicks / GAME_CONSTANTS.TICK_RATE);
-
-      ctx.save();
-      fillPixelPanel(ctx, startX, startY, barWidth, barHeight);
-
-      // Time left: the buff's colour fills the panel's inside from the left.
-      const inset: number = 2;
-      ctx.fillStyle = def.color;
-      ctx.globalAlpha = 0.55;
-      ctx.fillRect(
-        startX + inset,
-        startY + inset,
-        Math.round((barWidth - inset * 2) * progress),
-        barHeight - inset * 2,
-      );
-
-      ctx.globalAlpha = 1;
-      ctx.font = pixelFont(12, 700);
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      const textY: number = startY + barHeight / 2;
-      const buffIconPx: number = 12;
-      drawPixelIcon(ctx, def.icon, startX + padding + 2, textY - buffIconPx / 2, buffIconPx);
-      fillOutlinedText(ctx, def.name, startX + padding + 6 + buffIconPx, textY, CANVAS_BONE, CANVAS_INK, 2);
-
-      ctx.textAlign = 'right';
-      fillOutlinedText(ctx, `${secondsLeft}s`, startX + barWidth - padding - 2, textY, CANVAS_BONE, CANVAS_INK, 2);
-
-      ctx.restore();
-      startY += barHeight + 3;
-    }
   }
 
   private renderPendingSpecialDropDialog(ctx: CanvasRenderingContext2D): void {

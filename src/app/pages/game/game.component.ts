@@ -98,6 +98,12 @@ export class GameComponent implements OnInit, OnDestroy {
   /** Remaining cooldown of a skill in the running engine (ms), read by the HUD. */
   readonly skillCooldownMs: (skillId: string) => number = (skillId: string): number =>
     this.gameCanvas()?.skillCooldownMs(skillId) ?? 0;
+  /** Special drop effects running in the engine, read by the HUD's timers. */
+  readonly specialEffects: () => ActiveSpecialEffect[] = (): ActiveSpecialEffect[] =>
+    this.gameCanvas()?.activeSpecialEffects() ?? [];
+  /** Players and the exit in page px: a HUD plate over one of them turns see-through. */
+  readonly keepVisibleRects: () => DOMRect[] = (): DOMRect[] =>
+    this.gameCanvas()?.keepVisibleRects() ?? [];
   readonly shutdownWarning: WritableSignal<string> = signal<string>('');
   readonly afkState: WritableSignal<AfkState> = signal<AfkState>('none');
   readonly afkLostReason: WritableSignal<string> = signal<string>('');

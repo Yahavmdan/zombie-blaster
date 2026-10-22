@@ -581,6 +581,7 @@ export const GAME_CONSTANTS = {
   SKILL_CHARGE_BAR_RAISE_PX: 34, // ...and how far above the body's top it sits
   NEW_MOVE_TOAST_MS: 6000, // The HUD's "New move" plate stays up this long after a tree skill is learned
   SKILL_COOLDOWN_HUD_REFRESH_MS: 100, // The HUD's skill bar redraws its cooldown shades this often
+  HUD_EXIT_SIGN_PX: 64, // The EXIT sign and arrows over the exit: a HUD plate over them (or over a player) turns see-through
   TREE_SKILL_VFX_LEVEL: 10, // Particle density tree-skill animations play at (they have no skill level)
 
   // ─── Warrior tree mechanics ─────────────────────

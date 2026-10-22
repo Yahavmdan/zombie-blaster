@@ -1,6 +1,8 @@
-import { Component, ChangeDetectionStrategy, DestroyRef, EffectCleanupRegisterFn, InputSignal, OutputEmitterRef, Signal, WritableSignal, input, output, computed, effect, inject, signal } from '@angular/core';
+import { Component, ChangeDetectionStrategy, DestroyRef, EffectCleanupRegisterFn, ElementRef, InputSignal, OutputEmitterRef, Signal, WritableSignal, input, output, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { ActiveBuff, ATTACK_COMBO_HINTS, CharacterState, CHARACTER_CLASSES, SKILLS, SkillDefinition, SkillType, getSkillMpCost, getSkillHpCost, KeyBindings, GameAction, SKILL_KEY_ACTIONS, getTotalPotionsByCategory, ClassSkillTree, TreeSkill, getSkillTree, findTreeSkill, isSlottable, ownsTreeSkill, treeSkillCooldownMs, GAME_CONSTANTS } from '@shared/index';
+import { ActiveSpecialEffect, SpecialDropDefinition } from '@shared/game-entities';
+import { getSpecialDropDefinition } from '@shared/game-constants';
 import { KeyBindingsService, formatKeyName } from '../../services/key-bindings.service';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
 import { PixelIconId } from '@shared/pixel-icon';
@@ -43,6 +45,7 @@ export interface ActiveBuffDisplay {
   color: string;
   remainingPercent: number;
   remainingSec: number;
+  testId: string;
 }
 
 @Component({
@@ -65,13 +68,27 @@ export class HudComponent {
   readonly cooldownMsOf: InputSignal<(skillId: string) => number> = input<(skillId: string) => number>(
     (): number => 0,
   );
+  /** Special drop effects running in the engine (they act on the whole floor). */
+  readonly specialEffectsOf: InputSignal<() => ActiveSpecialEffect[]> = input<() => ActiveSpecialEffect[]>(
+    (): ActiveSpecialEffect[] => [],
+  );
+  /** What no plate may hide, in page px (players, the exit and its sign). */
+  readonly keepVisibleOf: InputSignal<() => DOMRect[]> = input<() => DOMRect[]>((): DOMRect[] => []);
+
+  private readonly leftPlate: Signal<ElementRef<HTMLElement>> = viewChild.required<ElementRef<HTMLElement>>('leftPlate');
+  private readonly floorSign: Signal<ElementRef<HTMLElement>> = viewChild.required<ElementRef<HTMLElement>>('floorSign');
+  private readonly rightPlate: Signal<ElementRef<HTMLElement>> = viewChild.required<ElementRef<HTMLElement>>('rightPlate');
+  /** Plates with a player or the exit behind them: see-through so the game shows. */
+  readonly leftSeeThrough: WritableSignal<boolean> = signal<boolean>(false);
+  readonly floorSeeThrough: WritableSignal<boolean> = signal<boolean>(false);
+  readonly rightSeeThrough: WritableSignal<boolean> = signal<boolean>(false);
 
   readonly statPanelRequested: OutputEmitterRef<void> = output<void>();
   readonly skillTreeRequested: OutputEmitterRef<void> = output<void>();
   readonly shopRequested: OutputEmitterRef<void> = output<void>();
   readonly inventoryRequested: OutputEmitterRef<void> = output<void>();
 
-  /** Ticks while a tree class plays, so the skill bar re-reads the engine's cooldowns. */
+  /** Ticks while playing, so the skill bar and the special drop timers re-read the engine. */
   private readonly clock: WritableSignal<number> = signal<number>(0);
   /** Tree skills owned at the last player update (null until the first one), to spot a new one. */
   private knownTreeSkills: Set<string> | null = null;
@@ -128,11 +145,10 @@ export class HudComponent {
     });
 
     effect((onCleanup: EffectCleanupRegisterFn): void => {
-      if (!this.skillTree()) return;
-      const id: ReturnType<typeof setInterval> = setInterval(
-        (): void => this.clock.update((t: number): number => t + 1),
-        GAME_CONSTANTS.SKILL_COOLDOWN_HUD_REFRESH_MS,
-      );
+      const id: ReturnType<typeof setInterval> = setInterval((): void => {
+        this.clock.update((t: number): number => t + 1);
+        this.updateSeeThrough();
+      }, GAME_CONSTANTS.SKILL_COOLDOWN_HUD_REFRESH_MS);
       onCleanup((): void => clearInterval(id));
     });
 
@@ -236,10 +252,26 @@ export class HudComponent {
     });
   });
 
+  /** Skill buffs, then special drop effects: their timers sit above the quick slot tray. */
   readonly activeBuffs: Signal<ActiveBuffDisplay[]> = computed((): ActiveBuffDisplay[] => {
+    this.clock();
     const p: CharacterState = this.playerData();
     const seen: Set<string> = new Set<string>();
-    return p.activeBuffs
+    const specials: ActiveBuffDisplay[] = this.specialEffectsOf()().flatMap(
+      (eff: ActiveSpecialEffect): ActiveBuffDisplay[] => {
+        const def: SpecialDropDefinition | undefined = getSpecialDropDefinition(eff.type);
+        if (!def) return [];
+        return [{
+          skillName: def.name,
+          icon: def.icon,
+          color: def.color,
+          remainingPercent: (eff.remainingTicks / eff.totalTicks) * 100,
+          remainingSec: Math.ceil(eff.remainingTicks / GAME_CONSTANTS.TICK_RATE),
+          testId: `hud-special-${eff.type}`,
+        }];
+      },
+    );
+    const buffs: ActiveBuffDisplay[] = p.activeBuffs
       .filter((buff: ActiveBuff): boolean => {
         if (seen.has(buff.skillId)) return false;
         seen.add(buff.skillId);
@@ -254,8 +286,10 @@ export class HudComponent {
           color: skill?.color ?? '#ffffff',
           remainingPercent: (buff.remainingMs / buff.totalDurationMs) * 100,
           remainingSec: Math.ceil(buff.remainingMs / 1000),
+          testId: `hud-buff-${buff.skillId}`,
         };
       });
+    return [...buffs, ...specials];
   });
 
   readonly hpPotions: Signal<number> = computed((): number =>
@@ -292,6 +326,19 @@ export class HudComponent {
       ? (p.inventory.autoPotionHpId ?? 'hp-potion-1')
       : (p.inventory.autoPotionMpId ?? 'mp-potion-1');
     event.dataTransfer?.setData('application/json', JSON.stringify({ type: 'potion', id: potionId }));
+  }
+
+  private updateSeeThrough(): void {
+    const keep: DOMRect[] = this.keepVisibleOf()();
+    const covers: (plate: ElementRef<HTMLElement>) => boolean = (plate: ElementRef<HTMLElement>): boolean => {
+      const r: DOMRect = plate.nativeElement.getBoundingClientRect();
+      return keep.some(
+        (k: DOMRect): boolean => k.left < r.right && k.right > r.left && k.top < r.bottom && k.bottom > r.top,
+      );
+    };
+    this.leftSeeThrough.set(covers(this.leftPlate()));
+    this.floorSeeThrough.set(covers(this.floorSign()));
+    this.rightSeeThrough.set(covers(this.rightPlate()));
   }
 
   private showNewMove(skill: TreeSkill): void {

@@ -15,8 +15,8 @@ import {
   computed,
   isDevMode,
 } from '@angular/core';
-import { CharacterClass, CharacterState, MagnetPullRequest, RemotePlayerAttack, SKILLS, SkillDefinition, SkillType, VfxEvent, ZombieEffectRequest, getSkillTree } from '@shared/index';
-import { BoulderState, CagePuzzleState, DropType, LooseProp, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
+import { CharacterClass, CharacterState, GAME_CONSTANTS, MagnetPullRequest, RemotePlayerAttack, SKILLS, SkillDefinition, SkillType, VfxEvent, ZombieEffectRequest, getSkillTree } from '@shared/index';
+import { ActiveSpecialEffect, BoulderState, CagePuzzleState, DropType, LooseProp, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType } from '@shared/game-entities';
 import { GameAction, KeyBindings } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
@@ -152,6 +152,41 @@ export class GameCanvasComponent implements OnDestroy {
   skillCooldownMs(skillId: string): number {
     if (!this.engine) return 0;
     return (this.engine.skillCooldowns.get(skillId) ?? 0) * this.engine.fixedDt;
+  }
+
+  /** Special drop effects running on this floor, for the HUD's timers. */
+  activeSpecialEffects(): ActiveSpecialEffect[] {
+    return this.engine?.activeSpecialEffects ?? [];
+  }
+
+  /**
+   * What the HUD must never hide, in page px: every player and the exit with its sign above it.
+   * The canvas is stretched to the page, so world boxes scale per axis.
+   */
+  keepVisibleRects(): DOMRect[] {
+    if (!this.engine) return [];
+    const page: DOMRect = this.canvasRef().nativeElement.getBoundingClientRect();
+    const sx: number = page.width / GAME_CONSTANTS.CANVAS_WIDTH;
+    const sy: number = page.height / GAME_CONSTANTS.CANVAS_HEIGHT;
+    const toPage: (x: number, y: number, width: number, height: number) => DOMRect = (
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+    ): DOMRect =>
+      new DOMRect(page.left + x * sx, page.top + y * sy, width * sx, height * sy);
+    const players: CharacterState[] = [
+      ...(this.engine.player ? [this.engine.player] : []),
+      ...this.engine.remotePlayers,
+    ];
+    const exit: { x: number; y: number; width: number; height: number } = this.engine.exitPlatform;
+    const sign: number = GAME_CONSTANTS.HUD_EXIT_SIGN_PX;
+    return [
+      ...players.map((p: CharacterState): DOMRect =>
+        toPage(p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT),
+      ),
+      toPage(exit.x, exit.y - sign, exit.width, exit.height + sign),
+    ];
   }
 
   syncLayoutSeed(seed: number): void {

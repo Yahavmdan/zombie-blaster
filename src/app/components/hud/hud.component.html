@@ -1,31 +1,33 @@
 <div class="hud-container">
-  <div class="hud-left px-panel">
-    <div class="player-info">
-      <div class="player-portrait px-panel--inset">
-        <app-pixel-icon class="player-class-icon" [icon]="classIcon()" [size]="32" />
+  <div #leftPlate class="hud-left px-panel" [class.hud-see-through]="leftSeeThrough()" data-testid="hud-left-plate">
+    <div class="hud-vitals">
+      <div class="player-info">
+        <div class="player-portrait px-panel--inset">
+          <app-pixel-icon class="player-class-icon" [icon]="classIcon()" [size]="32" />
+        </div>
+        <div class="player-identity">
+          <div class="player-nameplate">
+            <span class="player-name">{{ playerData().name }}</span>
+            <span class="player-level">Lv. {{ playerData().level }}</span>
+          </div>
+          <div class="bar hp-bar px-bar">
+            <div class="bar-fill px-bar__fill" [style.width.%]="hpPercent()"></div>
+            <span class="bar-label px-bar__label">HP {{ playerData().hp }}/{{ playerData().derived.maxHp }}</span>
+          </div>
+          <div class="bar mp-bar px-bar">
+            <div class="bar-fill px-bar__fill" [style.width.%]="mpPercent()"></div>
+            <span class="bar-label px-bar__label">MP {{ playerData().mp }}/{{ playerData().derived.maxMp }}</span>
+          </div>
+        </div>
       </div>
-      <div class="player-identity">
-        <div class="player-nameplate">
-          <span class="player-name">{{ playerData().name }}</span>
-          <span class="player-level">Lv. {{ playerData().level }}</span>
-        </div>
-        <div class="bar hp-bar px-bar">
-          <div class="bar-fill px-bar__fill" [style.width.%]="hpPercent()"></div>
-          <span class="bar-label px-bar__label">HP {{ playerData().hp }}/{{ playerData().derived.maxHp }}</span>
-        </div>
-        <div class="bar mp-bar px-bar">
-          <div class="bar-fill px-bar__fill" [style.width.%]="mpPercent()"></div>
-          <span class="bar-label px-bar__label">MP {{ playerData().mp }}/{{ playerData().derived.maxMp }}</span>
-        </div>
-      </div>
-    </div>
 
-    <div class="xp-row">
-      <span class="xp-tag">XP</span>
-      <div class="bar xp-bar px-bar">
-        <div class="bar-fill px-bar__fill" [style.width.%]="xpPercent()"></div>
+      <div class="xp-row">
+        <span class="xp-tag">XP</span>
+        <div class="bar xp-bar px-bar">
+          <div class="bar-fill px-bar__fill" [style.width.%]="xpPercent()"></div>
+        </div>
+        <span class="xp-value">{{ playerData().xp }}/{{ playerData().xpToNext }}</span>
       </div>
-      <span class="xp-value">{{ playerData().xp }}/{{ playerData().xpToNext }}</span>
     </div>
 
     @if (treeBar().length > 0) {
@@ -70,40 +72,42 @@
   }
 
   <div class="hud-center">
-    <div class="wave-info px-panel">
+    <div #floorSign class="wave-info px-panel" [class.hud-see-through]="floorSeeThrough()">
       <span class="wave-label">Floor</span>
       <span class="wave-number">{{ floor() }}</span>
     </div>
   </div>
 
-  <div class="hud-right">
-    <div class="score-display px-panel">
-      <span class="score-label">Score</span>
-      <span class="score-value">{{ score() }}</span>
-    </div>
-    <div class="stats-mini">
-      <span class="stat-mini px-chip">ATK <span class="stat-value">{{ playerData().derived.attack }}</span></span>
-      <span class="stat-mini px-chip">DEF <span class="stat-value">{{ playerData().derived.defense }}</span></span>
-      <span class="stat-mini px-chip">CRIT <span class="stat-value">{{ playerData().derived.critRate | number:'1.0-0' }}%</span></span>
-    </div>
+  <div #rightPlate class="hud-right" [class.hud-see-through]="rightSeeThrough()" data-testid="hud-right-plate">
     @if (hasStatPoints()) {
       <button
         class="sp-indicator px-btn px-btn--accent px-btn--sm"
+        title="Stat points to spend"
         (click)="onOpenStatPanel()"
         data-testid="hud-sp-button-open"
       >
-        Stat points: {{ unallocatedStatPoints() }}
+        Stats +{{ unallocatedStatPoints() }}
       </button>
     }
     @if (hasSkillPoints()) {
       <button
         class="skp-indicator px-btn px-btn--accent px-btn--sm"
+        title="Skill points to spend"
         (click)="onOpenSkillTree()"
         data-testid="hud-skp-button-open"
       >
-        Skill points: {{ unallocatedSkillPoints() }}
+        Skills +{{ unallocatedSkillPoints() }}
       </button>
     }
+    <div class="stats-mini">
+      <span class="stat-mini px-chip">ATK <span class="stat-value">{{ playerData().derived.attack }}</span></span>
+      <span class="stat-mini px-chip">DEF <span class="stat-value">{{ playerData().derived.defense }}</span></span>
+      <span class="stat-mini px-chip">CRIT <span class="stat-value">{{ playerData().derived.critRate | number:'1.0-0' }}%</span></span>
+    </div>
+    <div class="score-display px-panel">
+      <span class="score-label">Score</span>
+      <span class="score-value">{{ score() }}</span>
+    </div>
   </div>
 </div>
 
@@ -111,7 +115,7 @@
   @if (activeBuffs().length > 0) {
     <div class="active-buffs">
       @for (buff of activeBuffs(); track buff.skillName) {
-        <div class="buff-indicator px-panel">
+        <div class="buff-indicator px-panel" [title]="buff.skillName" [attr.data-testid]="buff.testId">
           <app-pixel-icon class="buff-icon" [icon]="buff.icon" [size]="16" />
           <div class="buff-timer-bar px-bar" [style.--bar-color]="buff.color">
             <div class="px-bar__fill" [style.width.%]="buff.remainingPercent"></div>
