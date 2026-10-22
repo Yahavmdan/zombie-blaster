@@ -151,6 +151,13 @@ export interface E2eDropView {
   value: number;
 }
 
+/** A spitter glob in flight. */
+export interface E2eSpitGlobView {
+  vx: number;
+  vy: number;
+  ticksFlown: number;
+}
+
 /** A skill of the local player's skill tree (classes in SKILL_TREES). */
 export interface E2eTreeSkillView {
   id: string;
@@ -419,6 +426,8 @@ export interface E2eSnapshot {
   drops: E2eDropView[];
   /** Hostile shots in flight: spitter acid and dragon fireballs. */
   zombieProjectiles: { spitter: number; dragon: number };
+  /** Spitter globs in flight: velocity now and ticks since launch (vy at launch = vy - gravity * ticksFlown). */
+  spitGlobs: E2eSpitGlobView[];
   /** Acid puddles where spit splatted (drawing only): centre x, surface y, width. */
   acidPuddles: { x: number; y: number; width: number }[];
   /** Ticks until the potion keys work again. */

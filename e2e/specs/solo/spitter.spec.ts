@@ -17,6 +17,10 @@ const PLAYER_HEIGHT: number = 48;
 const PLAYER_X: number = 300;
 /** Inside SPITTER_ATTACK_RANGE (280) and outside the spitter's back-off distance (100). */
 const SPITTER_X: number = 520;
+/** Mirror SPITTER_ATTACK_RANGE, SPITTER_PROJECTILE_SPEED and SPITTER_PROJECTILE_GRAVITY. */
+const SPITTER_RANGE: number = 280;
+const SPIT_SPEED: number = 4.5;
+const SPIT_GRAVITY: number = 0.08;
 
 async function faceASpitter(p: GamePlayer, godMode: boolean): Promise<void> {
   await p.probe.setGodMode(godMode);
@@ -63,6 +67,42 @@ test.describe('spitter spit and poison', { tag: '@solo' }, (): void => {
       expect(surfaces, 'a puddle lies on a surface').toContain(puddle.y);
       expect(puddle.width).toBeGreaterThanOrEqual(16);
     }
+  });
+
+  test('a player on a ledge right above a spitter gets a lob, not a near-instant shot', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }, testInfo: TestInfo): Promise<void> => {
+    test.setTimeout(90_000);
+    const p: GamePlayer = await solo('warrior');
+    await p.probe.setGodMode(true);
+    await p.probe.clearZombies();
+    const ledge: { x: number; y: number; width: number } | undefined = (await p.probe.state()).level.platforms.find(
+      (pl: { y: number; width: number }): boolean =>
+        pl.y > GROUND_Y - SPITTER_RANGE + 40 && pl.y < GROUND_Y - 80 && pl.width >= 60,
+    );
+    test.skip(!ledge, 'this layout has no ledge within spitting height');
+    const ledgeMid: number = ledge!.x + ledge!.width / 2;
+    await p.probe.teleport(ledgeMid - 10, ledge!.y - PLAYER_HEIGHT);
+
+    // Launch speed of every glob seen: vx never changes, vy gains gravity every tick.
+    const launchSpeeds: number[] = [];
+    await p.probe.spawnZombieAt(ledgeMid, 'spitter');
+    await p.probe.waitFor(
+      'a few globs in flight',
+      (s: E2eSnapshot): boolean => {
+        for (const g of s.spitGlobs) {
+          launchSpeeds.push(Math.hypot(g.vx, g.vy - SPIT_GRAVITY * g.ticksFlown));
+        }
+        return launchSpeeds.length >= 20;
+      },
+      { timeoutMs: 25_000, intervalMs: 16 },
+    );
+    await p.attachCanvas(testInfo, 'spit at a ledge overhead');
+
+    // Before: aimed by horizontal distance only, so a glob straight up arrived in about 1 tick.
+    expect(Math.max(...launchSpeeds), 'no glob shoots out suddenly fast').toBeLessThan(SPIT_SPEED * 2);
   });
 
   test('a glob that hits poisons the player: green tint, bubbles and drips', async ({

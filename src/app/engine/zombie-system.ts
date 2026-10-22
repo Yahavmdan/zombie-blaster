@@ -402,7 +402,9 @@ export class ZombieSystem {
       }
       z.attackAnimTimer = zDef.attackAnimTicks + (isRanged ? 0 : GAME_CONSTANTS.ZOMBIE_ATTACK_WINDUP_TICKS);
       z.attackHasHit = false;
-      z.attackCooldown = randomInt(GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN, GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX);
+      z.attackCooldown = isSpitter
+        ? randomInt(GAME_CONSTANTS.SPITTER_ATTACK_COOLDOWN_MIN, GAME_CONSTANTS.SPITTER_ATTACK_COOLDOWN_MAX)
+        : randomInt(GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MIN, GAME_CONSTANTS.ZOMBIE_ATTACK_COOLDOWN_MAX);
       if (!isRanged) {
         z.attackHesitation = randomInt(zDef.hesitationMin, zDef.hesitationMax);
         z.hesitationRange = randomInt(GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MIN, GAME_CONSTANTS.ZOMBIE_HESITATION_RANGE_MAX);
