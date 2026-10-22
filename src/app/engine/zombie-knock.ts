@@ -1,4 +1,4 @@
-import { GAME_CONSTANTS, randomBetween, vary, ZombieState } from '@shared/index';
+import { GAME_CONSTANTS, randomBetween, vary, ZombieState, ZombieType } from '@shared/index';
 import { limitTilt } from './prop-tumble';
 
 /**
@@ -6,7 +6,8 @@ import { limitTilt } from './prop-tumble';
  * push and the pop are scaled by a random factor, and the body tilts while it flies
  * (`ZombieState.angle`): mostly leaning with the push, sometimes swept off its feet the other way,
  * more or less each time, never past ZOMBIE_KNOCK_MAX_TILT. Once landed it stands back up. Its box
- * stays upright: the tilt is drawn only.
+ * stays upright: the tilt is drawn only. The dragon is a boss: a hit only nudges it, and it never
+ * tilts (it never lands, so it would never stand back up).
  */
 
 /** Throws the zombie `dir`-wards (1 right, -1 left) with a varied push and pop, tilting. */
@@ -17,6 +18,13 @@ export function knockZombie(
   up: number,
   frames: number,
 ): void {
+  if (z.type === ZombieType.DragonBoss) {
+    const mult: number = GAME_CONSTANTS.DRAGON_KNOCKBACK_TAKEN_MULT;
+    z.velocityX = dir * push * mult;
+    z.velocityY = up * mult;
+    z.knockbackFrames = GAME_CONSTANTS.DRAGON_KNOCKBACK_FRAMES;
+    return;
+  }
   z.velocityX = dir * vary(push, GAME_CONSTANTS.ZOMBIE_KNOCK_PUSH_SPREAD);
   z.velocityY = vary(up, GAME_CONSTANTS.ZOMBIE_KNOCK_UP_SPREAD);
   z.isGrounded = false;
@@ -26,6 +34,7 @@ export function knockZombie(
 
 /** Starts the body turning: mostly leaning with the push, sometimes swept back toward the hitter. */
 export function startKnockTilt(z: ZombieState, dir: number): void {
+  if (z.type === ZombieType.DragonBoss) return;
   const swept: boolean = Math.random() < GAME_CONSTANTS.ZOMBIE_KNOCK_SWEPT_CHANCE;
   const speed: number = randomBetween(
     GAME_CONSTANTS.ZOMBIE_KNOCK_SPIN_MIN,

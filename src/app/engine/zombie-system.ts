@@ -541,6 +541,11 @@ export class ZombieSystem {
     const dist: number = Math.abs(dx);
     const keepDist: number = GAME_CONSTANTS.DRAGON_KEEP_DISTANCE;
 
+    // It always turns to face its target, also while backing away or breathing fire (the fireball
+    // flies at the target).
+    const tCx: number = target.x + target.width / 2;
+    if (tCx !== zCx) z.facing = tCx > zCx ? 1 : -1;
+
     if (z.attackAnimTimer > 0) {
       z.velocityX *= 0.85;
       return;
@@ -1312,6 +1317,7 @@ export class ZombieSystem {
   }
 
   private tickCorpses(): void {
+    this.fadeDragonCorpses();
     this.revalidateGroundedCorpses();
 
     for (const corpse of this.e.zombieCorpses) {
@@ -1335,6 +1341,22 @@ export class ZombieSystem {
         this.e.zombieSpriteAnimator.tick(corpse.id, corpse.spriteKey);
       }
     }
+  }
+
+  /**
+   * A slain dragon is no pile material: its corpse counts down DRAGON_CORPSE_LINGER_TICKS (the
+   * renderer fades it over the second half) and is then gone. Guests follow the synced list.
+   */
+  private fadeDragonCorpses(): void {
+    const kept: ZombieCorpse[] = [];
+    for (const corpse of this.e.zombieCorpses) {
+      if (corpse.type === ZombieType.DragonBoss && --corpse.fadeTimer <= 0) {
+        this.e.zombieSpriteAnimator.removeInstance(corpse.id);
+        continue;
+      }
+      kept.push(corpse);
+    }
+    if (kept.length !== this.e.zombieCorpses.length) this.e.zombieCorpses = kept;
   }
 
   /**
