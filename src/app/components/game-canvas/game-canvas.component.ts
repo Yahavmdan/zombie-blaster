@@ -18,10 +18,11 @@ import {
   WritableSignal,
 } from '@angular/core';
 import { CharacterClass, CharacterState, GAME_CONSTANTS, MagnetPullRequest, RemotePlayerAttack, SKILLS, SkillDefinition, SkillType, VfxEvent, ZombieEffectRequest, getSkillTree } from '@shared/index';
-import { ActiveSpecialEffect, BoulderState, CagePuzzleState, DropType, LooseProp, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType, ZombieType } from '@shared/game-entities';
+import { ActiveSpecialEffect, BoulderState, CagePuzzleState, DropType, GadgetState, LooseProp, PlateState, SpringState, QUICK_SLOT_ACTION_SET, QuickSlotEntry, SpecialDropType, ZombieType } from '@shared/game-entities';
 import { GameAction, KeyBindings } from '@shared/messages';
 import { GameEngine } from '../../engine/game-engine';
 import { DevMouseTool, DevToolsSystem } from '../../engine/dev-tools-system';
+import { LevelEditorSystem } from '../../engine/level-editor-system';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
 import { InputKeys } from '@shared/messages';
 import { KeyBindingsService, formatKeyName, mouseButtonKey } from '../../services/key-bindings.service';
@@ -121,6 +122,7 @@ export class GameCanvasComponent implements OnDestroy {
   private readonly boundMouseUp: (e: MouseEvent) => void = (e: MouseEvent): void => this.onMouseUp(e);
   private readonly boundContextMenu: (e: MouseEvent) => void = (e: MouseEvent): void => this.onContextMenu(e);
   private readonly boundDragMove: (e: MouseEvent) => void = (e: MouseEvent): void => this.dragTo(e);
+  private readonly boundHover: (e: MouseEvent) => void = (e: MouseEvent): void => this.hover(e);
   private readonly heldQuickSlotActions: Map<string, GameAction> = new Map<string, GameAction>();
 
   constructor() {
@@ -147,7 +149,8 @@ export class GameCanvasComponent implements OnDestroy {
     });
 
     effect((): void => {
-      if (this.devMouseTool() !== 'drag' || this.inputDisabled()) this.stopDrag();
+      const tool: DevMouseTool = this.devMouseTool();
+      if ((tool !== 'drag' && tool !== 'build') || this.inputDisabled()) this.stopDrag();
     });
 
     effect((): void => {
@@ -262,6 +265,11 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.solvePuzzle();
   }
 
+  /** The dev level editor in the engine (null before the engine starts). */
+  levelEditor(): LevelEditorSystem | null {
+    return this.engine?.levelEditor ?? null;
+  }
+
   /** Dev tools in the engine: time, heal, teleport, infinite MP (null before the engine starts). */
   devTools(): DevToolsSystem | null {
     return this.engine?.devTools ?? null;
@@ -344,7 +352,7 @@ export class GameCanvasComponent implements OnDestroy {
     }
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: RemotePlayerAttack[]; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: import('@shared/game-entities').ZombieState[]; corpses: import('@shared/game-entities').ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; gadgets: GadgetState[]; attacks: RemotePlayerAttack[]; revives: string[]; specialDropActivations: import('@shared/game-entities').SpecialDropType[]; activeSpecialEffects: import('@shared/game-entities').ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     return this.engine?.getStateSnapshot() ?? null;
   }
 
@@ -378,6 +386,10 @@ export class GameCanvasComponent implements OnDestroy {
 
   applyRemotePlate(state: PlateState | null): void {
     this.engine?.applyRemotePlate(state);
+  }
+
+  applyRemoteGadgets(states: GadgetState[]): void {
+    this.engine?.applyRemoteGadgets(states);
   }
 
   syncRemoteFloor(floor: number): void {
@@ -438,6 +450,7 @@ export class GameCanvasComponent implements OnDestroy {
     window.removeEventListener('mousemove', this.boundDragMove);
     this.canvasRef().nativeElement.removeEventListener('mousedown', this.boundMouseDown);
     this.canvasRef().nativeElement.removeEventListener('contextmenu', this.boundContextMenu);
+    this.canvasRef().nativeElement.removeEventListener('mousemove', this.boundHover);
   }
 
   private initEngine(): void {
@@ -504,6 +517,7 @@ export class GameCanvasComponent implements OnDestroy {
     window.addEventListener('mouseup', this.boundMouseUp);
     this.canvasRef().nativeElement.addEventListener('mousedown', this.boundMouseDown);
     this.canvasRef().nativeElement.addEventListener('contextmenu', this.boundContextMenu);
+    this.canvasRef().nativeElement.addEventListener('mousemove', this.boundHover);
   }
 
   private onKeyDown(e: KeyboardEvent): void {
@@ -628,9 +642,24 @@ export class GameCanvasComponent implements OnDestroy {
       return;
     }
     if (this.inputDisabled()) return;
-    if (e.button === 0 && this.devMouseTool() !== 'attack') {
+    const tool: DevMouseTool = this.devMouseTool();
+    // The level editor: the middle button opens what is under it to adjust it.
+    if (e.button === 1 && tool === 'build') {
       e.preventDefault();
-      if (this.devMouseTool() === 'drag') this.startDrag(e);
+      const at: { x: number; y: number } = this.worldPoint(e);
+      this.engine?.levelEditor.inspect(at.x, at.y, e.clientX, e.clientY);
+      return;
+    }
+    // The level editor: the right button erases what is under it.
+    if (e.button === 2 && tool === 'build') {
+      e.preventDefault();
+      const at: { x: number; y: number } = this.worldPoint(e);
+      this.engine?.levelEditor.eraseAt(at.x, at.y);
+      return;
+    }
+    if (e.button === 0 && tool !== 'attack') {
+      e.preventDefault();
+      if (tool === 'drag' || tool === 'build') this.startDrag(e);
       else this.spawnAtCursor(e);
       return;
     }
@@ -652,7 +681,9 @@ export class GameCanvasComponent implements OnDestroy {
   }
 
   private onContextMenu(e: MouseEvent): void {
-    if (this.keyBindingsService.getActionForKey('mouseright')) e.preventDefault();
+    if (this.devMouseTool() === 'build' || this.keyBindingsService.getActionForKey('mouseright')) {
+      e.preventDefault();
+    }
   }
 
   private startDrag(e: MouseEvent): void {
@@ -660,7 +691,8 @@ export class GameCanvasComponent implements OnDestroy {
     this.dragging.set(true);
     window.addEventListener('mousemove', this.boundDragMove);
     const at: { x: number; y: number } = this.worldPoint(e);
-    this.engine.devTools.grabAt(at.x, at.y);
+    if (this.devMouseTool() === 'build') this.engine.levelEditor.pointerDown(at.x, at.y);
+    else this.engine.devTools.grabAt(at.x, at.y);
   }
 
   private stopDrag(): void {
@@ -668,11 +700,20 @@ export class GameCanvasComponent implements OnDestroy {
     this.dragging.set(false);
     window.removeEventListener('mousemove', this.boundDragMove);
     this.engine?.devTools.release();
+    this.engine?.levelEditor.pointerUp();
   }
 
   private dragTo(e: MouseEvent): void {
     const at: { x: number; y: number } = this.worldPoint(e);
-    this.engine?.devTools.dragTo(at.x, at.y);
+    if (this.devMouseTool() === 'build') this.engine?.levelEditor.pointerMove(at.x, at.y);
+    else this.engine?.devTools.dragTo(at.x, at.y);
+  }
+
+  /** The level editor follows the pointer over the map (its ghost and hover marks) while nothing is held. */
+  private hover(e: MouseEvent): void {
+    if (this.dragging() || this.devMouseTool() !== 'build') return;
+    const at: { x: number; y: number } = this.worldPoint(e);
+    this.engine?.levelEditor.pointerMove(at.x, at.y);
   }
 
   private spawnAtCursor(e: MouseEvent): void {

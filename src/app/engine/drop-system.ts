@@ -49,10 +49,10 @@ export class DropSystem {
   }
 
   /** A floor-4 loot cage bursts: gold and both potions pop out, centered on cx, from surfaceY. */
-  spawnCageLoot(cx: number, surfaceY: number): void {
+  spawnCageLoot(cx: number, surfaceY: number, gold: number = GAME_CONSTANTS.CAGE_LOOT_GOLD): void {
     const y: number = surfaceY - GAME_CONSTANTS.DROP_SIZE;
     const x: number = cx - GAME_CONSTANTS.DROP_SIZE / 2;
-    this.spawnDrop(DropType.Gold, x, y, GAME_CONSTANTS.CAGE_LOOT_GOLD);
+    if (gold > 0) this.spawnDrop(DropType.Gold, x, y, gold);
     this.spawnDrop(DropType.HpPotion, x - 18, y, GAME_CONSTANTS.HP_POTION_RESTORE);
     this.spawnDrop(DropType.MpPotion, x + 18, y, GAME_CONSTANTS.MP_POTION_RESTORE);
   }

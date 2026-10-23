@@ -1,12 +1,15 @@
 import { ActiveBuff, CharacterState, ClassSkillTree, GAME_CONSTANTS, ZOMBIE_TYPES, SkillDefinition, TreeSkill, VfxEvent, getSkillTree, isZombieWindingUp, ownsTreeSkill } from '@shared/index';
-import { ActiveSpecialEffect, DropType, SpecialDropType, BoulderState, CagePuzzleState, CageState, LooseProp, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
+import { ActiveSpecialEffect, DropType, SpecialDropType, BoulderState, CagePuzzleState, CageState, GadgetState, LooseProp, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import { AcidPuddle, BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, PlayerTint, Rope, SpitterProjectile, SpringPuzzleLayout } from '../engine/engine-types';
 import { EXIT_CAGE, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
 import { doorBox, isDoorOpen, isHeld, plateBox } from '../engine/plate-puzzle';
 import { buttonBox, scaleBox } from '../engine/spring-puzzle';
 import { measureLevelGeometry } from './geometry-report';
 import { BoulderPath, boulderBox, boulderPath, gateBox } from '../engine/boulder-puzzle';
-import { pickableProps, Prop } from '../engine/level-generator';
+import { LevelLayout, pickableProps, Prop } from '../engine/level-generator';
+import { parseLayout } from '../engine/level-editor';
+import { Gadget } from '../engine/engine-types';
+import { isSource, stateOf } from '../engine/gadgets';
 import { isResting } from '../engine/prop-tumble';
 import { CorpseSurface, corpseSurface } from '../engine/corpse-surface';
 import { CorpseDrape, maxDrop } from '../engine/corpse-drape';
@@ -21,6 +24,7 @@ import {
   E2ePlateView,
   E2eSpringView,
   E2eControls,
+  E2eGadgetView,
   E2eCorpseView,
   E2eDropView,
   E2eSpitGlobView,
@@ -412,11 +416,46 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
       })),
       props: propViews(engine),
       safeSpot: safeSpotView(engine),
+      walls: (engine.level.walls ?? []).map(
+        (w: Platform): { x: number; y: number; width: number; height: number } => ({
+          x: w.x,
+          y: w.y,
+          width: w.width,
+          height: w.height,
+        }),
+      ),
     },
     puzzle: puzzleView(engine),
     spring: springView(engine),
     cages: cagesView(engine),
     plate: plateView(engine),
+    gadgets: engine.gadgets.map((g: Gadget): E2eGadgetView => {
+      const s: GadgetState | undefined = stateOf(engine.gadgetStates, g.id);
+      return {
+        id: g.id,
+        kind: g.kind,
+        box: { x: g.x, y: g.y, width: g.width, height: g.height },
+        on: s?.on ?? false,
+        kg: s?.kg ?? 0,
+        hits: s?.hits ?? 0,
+        broken: s?.broken ?? false,
+        openTicks: s?.openTicks ?? 0,
+        launches: s?.launches ?? 0,
+        dropped: s?.dropped ?? false,
+        landed: s?.landed ?? false,
+        body: s?.body
+          ? {
+              x: s.body.x,
+              y: s.body.y,
+              vx: s.body.velocityX,
+              vy: s.body.velocityY,
+              grounded: s.body.isGrounded,
+            }
+          : null,
+        targets: isSource(g) ? [...g.targets] : [],
+      };
+    }),
+    exitLocked: engine.isExitLocked(),
     drops: engine.worldDrops.map(
       (d: WorldDrop): E2eDropView => ({ id: d.id, type: d.type, x: d.x, y: d.y, value: d.value }),
     ),
@@ -550,6 +589,14 @@ const engineControls: E2eEngineControls = {
     if (!engine || engine.isMultiplayerClient) return;
     engine.layoutSeed = seed;
     engine.applyLevel();
+  },
+  loadLayout(json: string): string | null {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine) return 'No engine';
+    const parsed: LevelLayout | { error: string } = parseLayout(json);
+    if ('error' in parsed) return parsed.error;
+    engine.useCustomLevel({ ...parsed, floor: engine.floor });
+    return null;
   },
   geometryReport(): E2eGeometryReport {
     return currentEngine

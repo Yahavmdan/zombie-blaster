@@ -17,6 +17,7 @@ import {
   PlateState,
   CageState,
   DropType,
+  GadgetState,
   SpringState,
   PendingSpecialDropConfirm,
   SpecialDropDefinition,
@@ -97,6 +98,7 @@ import {
   SpringPuzzleLayout,
   DashPhaseState,
   DropNotification,
+  EXIT_TARGET,
   IGameEngine,
   LevelUpNotification,
   Platform,
@@ -123,6 +125,8 @@ import {
 } from './puzzle-art';
 import { ART_PX, PIXEL } from './pixel-art';
 import { drawAcidPuddle, drawSpitGlob } from './spit-art';
+import { crackBandArt, drawGadgetWires, drawGadgets } from './gadget-art';
+import { doorOpenFraction, stateOf } from './gadgets';
 import {
   CANVAS_BLOOD_HI,
   CANVAS_BONE,
@@ -203,12 +207,15 @@ export class RenderSystem {
     // The exit cage's chain runs down behind the exit.
     this.renderCageChains(ctx);
     this.renderSpringCable(ctx);
+    // Wires run behind the exit, like the cables.
+    drawGadgetWires(ctx, this.e.gadgets, this.e.gadgetStates, this.e.exitPlatform);
     this.renderExitPlatform(ctx);
     this.renderSafeSpotMarker(ctx);
     this.renderBoulderPuzzle(ctx);
     this.renderSpringPuzzle(ctx);
     this.renderCages(ctx);
     this.renderPlate(ctx);
+    drawGadgets(ctx, this.e.gadgets, this.e.gadgetStates, this.e.platforms);
     this.renderScorchMarks(ctx);
     this.renderAcidPuddles(ctx);
     this.renderLyingProps(ctx);
@@ -1734,7 +1741,11 @@ export class RenderSystem {
   ): void {
     const src: ChunkSource = chunk.source;
     const art: HTMLCanvasElement =
-      src.kind === 'wall' ? crackedWallArt(src.cols, src.rows, src.faceRight) : boulderArt();
+      src.kind === 'wall'
+        ? crackedWallArt(src.cols, src.rows, src.faceRight)
+        : src.kind === 'crack'
+          ? crackBandArt(src.cols, src.rows, GAME_CONSTANTS.GADGET_CRACK_HITS - 1)
+          : boulderArt();
     const w: number = chunk.sw * ART_PX;
     const h: number = chunk.sh * ART_PX;
     ctx.save();
@@ -2104,7 +2115,10 @@ export class RenderSystem {
     // On the plate floor a barred door stands on the exit: the sign goes over it.
     const plate: PlateState | null = this.e.plate;
     if (plate) this.renderExitDoor(ctx, doorBox(exit), plate);
-    const signY: number = plate ? doorBox(exit).y : exit.y;
+    // A wired exit (designed floors) has the same door, opened by its wires.
+    const lock: GadgetState | undefined = stateOf(this.e.gadgetStates, EXIT_TARGET);
+    if (lock) drawExitDoorArt(ctx, doorBox(exit), doorOpenFraction(lock));
+    const signY: number = plate || lock ? doorBox(exit).y : exit.y;
 
     // No hints about how to get up here: players work out that the dead pile up under it.
     ctx.fillStyle = CANVAS_BONE;

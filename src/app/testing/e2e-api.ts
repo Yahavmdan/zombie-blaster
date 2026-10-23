@@ -269,6 +269,8 @@ export interface E2eLevelView {
   }>;
   /** The floor's safe spot (also listed in `platforms`); its ladder is in `ropes`. */
   safeSpot: { x: number; y: number; width: number } | null;
+  /** A designed layout's solid walls (dev level editor); generated floors have none. */
+  walls: Array<{ x: number; y: number; width: number; height: number }>;
 }
 
 /** Where one collision object's art was actually drawn, measured from rendered pixels. */
@@ -390,6 +392,27 @@ export interface E2ePlateView {
   door: { x: number; y: number; width: number; height: number };
 }
 
+/** One gadget of a designed floor (dev level editor), as the host simulates it. */
+export interface E2eGadgetView {
+  id: string;
+  kind: string;
+  /** Its layout box (a boulder: where it was placed; see `body` for where it is). */
+  box: { x: number; y: number; width: number; height: number };
+  on: boolean;
+  kg: number;
+  hits: number;
+  broken: boolean;
+  openTicks: number;
+  launches: number;
+  /** A cage let go of its chain; landed (`broken`: smashed there). */
+  dropped: boolean;
+  landed: boolean;
+  /** A boulder's (or a dropped cage's) body now (box top-left, speed). */
+  body: { x: number; y: number; vx: number; vy: number; grounded: boolean } | null;
+  /** A source's wires (target ids, `exit` for the exit). */
+  targets: string[];
+}
+
 export interface E2eSnapshot {
   at: number;
   role: E2eRole;
@@ -423,6 +446,10 @@ export interface E2eSnapshot {
   cages: E2eCagePuzzleView | null;
   /** Floor-5 plate: weight, door (null on other floors). */
   plate: E2ePlateView | null;
+  /** A designed floor's gadgets ([] on generated floors). */
+  gadgets: E2eGadgetView[];
+  /** A wire runs to the exit and its door isn't fully open yet. */
+  exitLocked: boolean;
   drops: E2eDropView[];
   /** Hostile shots in flight: spitter acid and dragon fireballs. */
   zombieProjectiles: { spitter: number; dragon: number };
@@ -471,6 +498,11 @@ export interface E2eEngineControls {
   peekPendingVfx(): E2eVfxEventView[];
   /** Solo/host setup only: pin the run's layout seed (the current floor is rebuilt from it). */
   setLayoutSeed(seed: number): void;
+  /**
+   * Setup only: plays a designed layout (the level editor's JSON export) on the current floor of
+   * this page. Online, load the same layout on every page. Returns the parse error, or null.
+   */
+  loadLayout(json: string): string | null;
   /** Measures the drawn level art against the collision geometry (see E2eGeometryReport). */
   geometryReport(): E2eGeometryReport;
   /** Solo/host setup only: drops N corpses from above x; they fall and pile up by the normal corpse physics. */

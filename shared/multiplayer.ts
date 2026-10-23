@@ -307,6 +307,13 @@ export enum VfxEventType {
   CageSmash = 'cage-smash',
   DoorOpen = 'door-open',
   DoorShut = 'door-shut',
+  /**
+   * A cracked wall's crack band broke out (designed floors): its stones blow out of the band from
+   * x..`endX`, y..`targetY`, away from the hit (`dir` -1 or 1).
+   */
+  CrackBreak = 'crack-break',
+  /** A spring or slingshot fired (designed floors): dust off its pad at (x, y), streaks at `value` degrees. */
+  GadgetLaunch = 'gadget-launch',
   /** A player took a hit: every screen tints that player's sprite red for a moment. */
   PlayerHurt = 'player-hurt',
   /**

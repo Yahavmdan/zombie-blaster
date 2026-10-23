@@ -38,6 +38,9 @@ const BLAST_DAMAGE_COLOR: string = '#ff8a3d';
  * props (LoosePropSystem.moved), so clients only draw them; the blast itself is a VFX event.
  */
 export class ExplodingBarrelSystem {
+  /** Called on every blast (host): designed floors' gadgets react to it (GadgetSystem.blast). */
+  onBlast: ((center: Point) => void) | null = null;
+
   constructor(
     private readonly e: IGameEngine,
     private readonly props: LoosePropSystem,
@@ -136,6 +139,7 @@ export class ExplodingBarrelSystem {
       const fling: { vx: number; vy: number; spin: number } = propFling(p, center);
       this.props.launch(p, fling.vx, fling.vy, fling.spin);
     }
+    this.onBlast?.(center);
     this.hurtPlayers(center);
   }
 

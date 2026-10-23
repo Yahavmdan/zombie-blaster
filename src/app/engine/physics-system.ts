@@ -12,6 +12,7 @@ import { IGameEngine, Platform, Rope } from './engine-types';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
 import { isCarrying } from './corpse-carry';
 import { pushOutOfSolids, stepUpOnto } from './solid-blocks';
+import { slopeTopUnder, slopesOf } from './gadgets';
 
 export class PhysicsSystem {
   /** Ticks left in which a jump still works after leaving the ground. */
@@ -129,6 +130,7 @@ export class PhysicsSystem {
     p.x += p.velocityX;
     this.blockSideways(p, prevX);
     p.y += p.velocityY;
+    const wasGrounded: boolean = p.isGrounded;
     p.isGrounded = false;
     for (const plat of this.e.platforms) {
       if (this.e.platformDropTimer > 0 && plat.y !== GAME_CONSTANTS.GROUND_Y) continue;
@@ -153,6 +155,7 @@ export class PhysicsSystem {
       p.velocityY = 0;
       p.isGrounded = true;
     }
+    this.standOnSlope(p, wasGrounded);
 
     this.clampPlayerX(p);
   }
@@ -165,6 +168,44 @@ export class PhysicsSystem {
   }
 
   /** Walking into a low prop steps up onto it; taller solids stop the player at their sides. */
+  /**
+   * Jumping (or being thrown) up into a solid's underside stops there: a wall standing over a hole
+   * is a ceiling, nobody passes up through it.
+   */
+  private bumpHead(p: CharacterState, prevY: number): void {
+    for (const s of this.e.platforms) {
+      if (!s.solid) continue;
+      const underside: number = s.y + s.height;
+      if (prevY < underside || p.y >= underside) continue;
+      if (p.x + GAME_CONSTANTS.PLAYER_WIDTH <= s.x || p.x >= s.x + s.width) continue;
+      p.y = underside;
+      p.velocityY = 0;
+    }
+  }
+
+  /**
+   * A designed floor's slopes are one-way like platforms: a player landing on one, or walking
+   * along it, stands on its surface wherever it is (unless something higher already holds them).
+   * Down + jump drops through it like through a platform.
+   */
+  private standOnSlope(p: CharacterState, wasGrounded: boolean): void {
+    if (this.e.platformDropTimer > 0 || this.e.gadgets.length === 0) return;
+    const height: number = GAME_CONSTANTS.PLAYER_HEIGHT;
+    const top: number | null = slopeTopUnder(
+      slopesOf(this.e.gadgets),
+      p.x,
+      GAME_CONSTANTS.PLAYER_WIDTH,
+      p.y + height,
+      p.velocityX,
+      p.velocityY,
+      wasGrounded,
+    );
+    if (top === null || (p.isGrounded && p.y + height < top)) return;
+    p.y = top - height;
+    p.velocityY = 0;
+    p.isGrounded = true;
+  }
+
   private blockSideways(p: CharacterState, prevX: number): void {
     if (p.isGrounded) {
       const stepY: number | null = stepUpOnto(
@@ -342,7 +383,9 @@ export class PhysicsSystem {
     p.x += p.velocityX;
     this.blockSideways(p, prevX);
     p.y += p.velocityY;
+    if (p.velocityY < 0) this.bumpHead(p, p.y - p.velocityY);
 
+    const wasGrounded: boolean = p.isGrounded;
     p.isGrounded = false;
     for (const plat of this.e.platforms) {
       if (this.e.platformDropTimer > 0 && plat.y !== GAME_CONSTANTS.GROUND_Y) continue;
@@ -367,6 +410,7 @@ export class PhysicsSystem {
       p.velocityY = 0;
       p.isGrounded = true;
     }
+    this.standOnSlope(p, wasGrounded);
 
     this.clampPlayerToGround(p);
 

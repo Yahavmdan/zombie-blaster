@@ -70,6 +70,7 @@ export class MapRenderer {
   private geometryCanvas: HTMLCanvasElement | null = null;
   private platforms: Platform[] = [];
   private ropes: Rope[] = [];
+  private walls: Platform[] = [];
   private puzzle: BoulderPuzzleLayout | null = null;
   private wallStanding: boolean = false;
   private loaded: boolean = false;
@@ -130,19 +131,21 @@ export class MapRenderer {
   }
 
   /**
-   * Sets the floor's platforms (ground excluded), ropes, props and floor-2 puzzle (its wall is drawn
-   * while it stands), and redraws the geometry layer.
+   * Sets the floor's platforms (ground excluded), ropes, props, walls (a designed layout's solid
+   * blocks) and floor-2 puzzle (its wall is drawn while it stands), and redraws the geometry layer.
    */
   setLevel(
     platforms: Platform[],
     ropes: Rope[],
     props: Prop[],
+    walls: Platform[],
     puzzle: BoulderPuzzleLayout | null,
     wallStanding: boolean,
   ): void {
     this.platforms = platforms.map((p: Platform): Platform => ({ ...p }));
     this.ropes = ropes.map((r: Rope): Rope => ({ ...r }));
     this.props = props.map((p: Prop): Prop => ({ ...p }));
+    this.walls = walls.map((w: Platform): Platform => ({ ...w }));
     this.puzzle = puzzle;
     this.wallStanding = wallStanding;
     if (this.loaded) this.composeGeometry();
@@ -193,6 +196,9 @@ export class MapRenderer {
     this.drawGroundTiles(ctx);
     for (const plat of this.platforms) {
       this.drawPlatformSurface(ctx, plat);
+    }
+    for (const wall of this.walls) {
+      this.drawWall(ctx, wall);
     }
     if (this.puzzle && this.wallStanding) this.drawPuzzleWall(ctx, this.puzzle.wall);
     for (const rope of this.ropes) {
@@ -259,6 +265,33 @@ export class MapRenderer {
       const srcH: number = (img.naturalHeight * h) / TILE_SIZE;
       ctx.drawImage(img, 0, 0, img.naturalWidth, srcH, x, y, LADDER_TILE_WIDTH, h);
     }
+  }
+
+  /**
+   * A solid block of ground tiles: the platform's top row, then the ground's middle and bottom
+   * rows, cut at the box's edges so the art is exactly its collision box.
+   */
+  drawWall(ctx: CanvasRenderingContext2D, wall: Platform): void {
+    const cols: number = Math.max(1, Math.ceil(wall.width / TILE_SIZE));
+    const rows: number = Math.max(1, Math.ceil(wall.height / TILE_SIZE));
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(wall.x, wall.y, wall.width, wall.height);
+    ctx.clip();
+    for (let row: number = 0; row < rows; row++) {
+      for (let col: number = 0; col < cols; col++) {
+        const left: boolean = col === 0;
+        const right: boolean = col === cols - 1;
+        const tileId: number =
+          row === 0
+            ? left ? PLATFORM_BLOCK.tl : right ? PLATFORM_BLOCK.tr : PLATFORM_BLOCK.tc
+            : row === rows - 1 && rows > 2
+              ? left ? GROUND_BLOCK.bl : right ? GROUND_BLOCK.br : GROUND_BLOCK.bc
+              : left ? GROUND_BLOCK.ml : right ? GROUND_BLOCK.mr : GROUND_BLOCK.mc;
+        this.drawTile(ctx, tileId, wall.x + col * TILE_SIZE, wall.y + row * TILE_SIZE);
+      }
+    }
+    ctx.restore();
   }
 
   /** The cracked stone wall over its whole box, its open face toward the room (a hint it can break). */

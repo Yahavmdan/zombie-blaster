@@ -1,5 +1,6 @@
 import { Page } from '@playwright/test';
 import type {
+  E2eEngineControls,
   E2eGeometryReport,
   E2eSnapshot,
   E2eVfxEventView,
@@ -12,6 +13,7 @@ export type {
   E2eCagePuzzleView,
   E2eCageView,
   E2ePlateView,
+  E2eGadgetView,
   E2eCorpseView,
   E2eExitPile,
   E2eDropView,
@@ -106,6 +108,21 @@ export class GameProbe {
   /** Setup only (solo/host): pin the layout seed so a test gets a known level. */
   async setLayoutSeed(seed: number): Promise<void> {
     await this.page.evaluate((n: number): void => window.__zbE2e?.engine?.setLayoutSeed(n), seed);
+  }
+
+  /**
+   * Setup only: plays a designed layout (the level editor's JSON export) on this page's current
+   * floor; online, call it on every page. Throws on a layout that doesn't parse.
+   */
+  async loadLayout(json: string): Promise<void> {
+    const error: string | null = await this.page.evaluate(
+      (text: string): string | null => {
+        const engine: E2eEngineControls | null | undefined = window.__zbE2e?.engine;
+        return engine ? engine.loadLayout(text) : 'No engine';
+      },
+      json,
+    );
+    if (error) throw new Error(`loadLayout: ${error}`);
   }
 
   /** Where the level art is actually drawn, measured against the collision geometry. */

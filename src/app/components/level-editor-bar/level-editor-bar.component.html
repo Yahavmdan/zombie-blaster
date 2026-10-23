@@ -1,0 +1,309 @@
+<div class="le-window px-panel" appDraggableDialog data-testid="level-editor-panel-window">
+  <div class="px-header">
+    <app-pixel-icon [icon]="'book'" [size]="24" />
+    <span class="le-title">Level editor</span>
+    <button
+      class="px-btn px-close"
+      aria-label="Close"
+      data-testid="level-editor-button-close"
+      (click)="onClose()"
+    >
+      <app-pixel-icon [icon]="'close'" [size]="16" />
+    </button>
+  </div>
+
+  <div class="le-body px-scroll">
+    @for (group of groups; track group.title) {
+      <section class="le-group">
+        <h3 class="le-group__title px-label">{{ group.title }}</h3>
+        <div class="le-tools">
+          @for (b of group.tools; track b.tool) {
+            <button
+              class="px-btn px-btn--ghost le-tool le-tool--icon"
+              [class.px-btn--good]="tool() === b.tool"
+              [title]="b.label + ': ' + b.hint"
+              [attr.aria-label]="b.label"
+              [attr.data-testid]="'level-editor-tool-' + b.tool"
+              (click)="pickTool(b.tool)"
+            >
+              <canvas class="le-tool__icon" width="40" height="40" [appToolIcon]="b.tool"></canvas>
+            </button>
+          }
+        </div>
+      </section>
+    }
+
+    <div class="le-tools le-actions">
+      <button
+        class="px-btn px-btn--sm"
+        title="Undo (Ctrl+Z)"
+        data-testid="level-editor-button-undo"
+        [disabled]="!canUndo()"
+        (click)="undo()"
+      >
+        Undo
+      </button>
+      <button
+        class="px-btn px-btn--sm"
+        title="Redo (Ctrl+Shift+Z)"
+        data-testid="level-editor-button-redo"
+        [disabled]="!canRedo()"
+        (click)="redo()"
+      >
+        Redo
+      </button>
+      <button
+        class="px-btn px-btn--sm px-btn--accent"
+        [class.px-btn--good]="panel() === 'export'"
+        data-testid="level-editor-button-export"
+        (click)="toggleExport()"
+      >
+        Export
+      </button>
+      <button
+        class="px-btn px-btn--sm"
+        [class.px-btn--good]="panel() === 'import'"
+        data-testid="level-editor-button-import"
+        (click)="toggleImport()"
+      >
+        Import
+      </button>
+      <button
+        class="px-btn px-btn--sm"
+        [class.px-btn--good]="panel() === 'notes'"
+        title="Explain the puzzle: it is exported with the layout"
+        data-testid="level-editor-button-notes"
+        (click)="toggleNotes()"
+      >
+        Notes
+      </button>
+      <button
+        class="px-btn px-btn--sm px-btn--ghost"
+        title="The last design autosaved in this browser"
+        data-testid="level-editor-button-draft"
+        (click)="loadDraft()"
+      >
+        Load draft
+      </button>
+      <button
+        class="px-btn px-btn--sm px-btn--ghost"
+        title="Everything but the exit goes"
+        data-testid="level-editor-button-clear"
+        (click)="clear()"
+      >
+        Clear
+      </button>
+      <button
+        class="px-btn px-btn--sm px-btn--ghost"
+        title="Back to this floor's generated layout"
+        data-testid="level-editor-button-reset"
+        (click)="reset()"
+      >
+        Reset
+      </button>
+    </div>
+
+    <p class="le-hint" data-testid="level-editor-text-hint">{{ hint() }}</p>
+    @if (!hasWayOut()) {
+      <p class="le-warning" data-testid="level-editor-text-no-exit">
+        No way out: add an exit door (middle click a door) or put the exit back
+      </p>
+    }
+
+    @if (selection(); as sel) {
+      <section class="le-selection px-panel--inset">
+        <div class="le-selection__row">
+          <span class="le-selection__name" data-testid="level-editor-text-selection">{{
+            sel.label
+          }}</span>
+          <span class="px-chip">{{ sel.box.x }},{{ sel.box.y }}</span>
+          <span class="px-chip">{{ sel.box.width }}x{{ sel.box.height }}</span>
+        </div>
+        @if (sel.cageContent; as content) {
+          <div class="le-tools">
+            @for (c of contents; track c) {
+              <button
+                class="px-btn px-btn--sm px-btn--ghost le-tool"
+                [class.px-btn--good]="content === c"
+                [attr.data-testid]="'level-editor-button-content-' + c"
+                (click)="setContent(c)"
+              >
+                {{ c === 'zombies' ? 'Zombies' : c === 'loot' ? 'Loot' : 'Empty' }}
+              </button>
+            }
+          </div>
+        }
+        <ng-container
+          *ngTemplateOutlet="fieldList; context: { $implicit: sel.fields, prefix: 'level-editor' }"
+        />
+        @if (sel.gadget; as g) {
+          @if (g.wires; as wires) {
+            <div class="le-tools" data-testid="level-editor-list-wires">
+              @for (w of wires; track w.targetId) {
+                <button
+                  class="px-btn px-btn--sm px-btn--ghost le-tool"
+                  title="Take this wire away"
+                  [attr.data-testid]="'level-editor-button-unwire-' + w.targetId"
+                  (click)="unwire(w.targetId)"
+                >
+                  To {{ w.label }}
+                </button>
+              } @empty {
+                <span class="le-hint">No wires yet: pick Link, then click a target</span>
+              }
+            </div>
+          }
+        }
+        <button
+          class="px-btn px-btn--sm px-btn--primary"
+          data-testid="level-editor-button-delete"
+          (click)="removeSelected()"
+        >
+          Delete
+        </button>
+      </section>
+    }
+
+    @if (panel() === 'export') {
+      <textarea
+        class="le-json px-input"
+        readonly
+        data-testid="level-editor-textarea-export"
+        [value]="exportText()"
+        (keydown)="stopKeys($event)"
+      ></textarea>
+      <button
+        class="px-btn px-btn--sm px-btn--ghost"
+        data-testid="level-editor-button-download"
+        (click)="download()"
+      >
+        Download .json
+      </button>
+    }
+
+    @if (panel() === 'notes') {
+      <textarea
+        class="le-json px-input"
+        placeholder="What is this puzzle, and how is it solved? (exported with the layout)"
+        data-testid="level-editor-textarea-notes"
+        [value]="notesText()"
+        (input)="onNotesInput($event)"
+        (keydown)="stopKeys($event)"
+      ></textarea>
+    }
+
+    @if (panel() === 'import') {
+      <textarea
+        class="le-json px-input"
+        placeholder="Paste an exported layout"
+        data-testid="level-editor-textarea-import"
+        [value]="importText()"
+        (input)="onImportInput($event)"
+        (keydown)="stopKeys($event)"
+      ></textarea>
+      <button
+        class="px-btn px-btn--sm px-btn--good"
+        data-testid="level-editor-button-apply-import"
+        (click)="applyImport()"
+      >
+        Apply
+      </button>
+    }
+
+    @if (message(); as msg) {
+      <p class="le-message" data-testid="level-editor-text-message">{{ msg }}</p>
+    }
+  </div>
+</div>
+
+<ng-template #fieldList let-fields let-prefix="prefix">
+  @for (f of fields; track f.key) {
+    @if (f.kind === 'number') {
+      <label class="le-field">
+        <span class="le-field__label">{{ f.label }}</span>
+        <span class="le-field__row">
+          <input
+            class="le-range"
+            type="range"
+            [min]="f.min"
+            [max]="f.max"
+            [step]="f.step"
+            [value]="f.value"
+            [attr.data-testid]="prefix + '-range-' + f.key"
+            (input)="onFieldInput(f.key, $event)"
+          />
+          <input
+            class="px-input le-number"
+            type="number"
+            [min]="f.min"
+            [max]="f.max"
+            [step]="f.step"
+            [value]="f.value"
+            [attr.data-testid]="prefix + '-input-' + f.key"
+            (change)="onFieldInput(f.key, $event)"
+            (keydown)="stopKeys($event)"
+          />
+          <span class="px-label">{{ f.unit }}</span>
+        </span>
+      </label>
+    } @else if (f.kind === 'toggle') {
+      <button
+        class="px-btn px-btn--sm px-btn--ghost"
+        [class.px-btn--good]="f.value === 1"
+        [attr.data-testid]="prefix + '-toggle-' + f.key"
+        (click)="setField(f.key, f.value === 1 ? 0 : 1)"
+      >
+        {{ f.label }}: {{ f.value === 1 ? 'yes' : 'no' }}
+      </button>
+    } @else {
+      <div class="le-field">
+        <span class="le-field__label">{{ f.label }}</span>
+        <span class="le-tools">
+          @for (option of f.options; track option; let i = $index) {
+            <button
+              class="px-btn px-btn--sm px-btn--ghost le-tool"
+              [class.px-btn--good]="f.value === i"
+              [attr.data-testid]="prefix + '-choice-' + f.key + '-' + option"
+              (click)="setField(f.key, i)"
+            >
+              {{ option }}
+            </button>
+          }
+        </span>
+      </div>
+    }
+  } @empty {
+    <span class="le-hint">Nothing to adjust here: drag it to move it</span>
+  }
+</ng-template>
+
+<!-- Keyed by the click: a new middle click opens it afresh there, not where it was last dragged. -->
+@for (ins of inspectors(); track ins.key) {
+  <div
+    class="le-props px-panel"
+    appDraggableDialog
+    data-testid="level-editor-panel-props"
+    [style.left.px]="ins.left"
+    [style.top.px]="ins.top"
+  >
+    <div class="px-header">
+      <span class="le-title" data-testid="level-editor-text-props-title">{{ ins.label }}</span>
+      <button
+        class="px-btn px-close"
+        aria-label="Close"
+        data-testid="level-editor-button-props-close"
+        (click)="closeInspector()"
+      >
+        <app-pixel-icon [icon]="'close'" [size]="16" />
+      </button>
+    </div>
+    <div class="le-props__body">
+      <ng-container
+        *ngTemplateOutlet="
+          fieldList;
+          context: { $implicit: ins.fields, prefix: 'level-editor-props' }
+        "
+      />
+    </div>
+  </div>
+}

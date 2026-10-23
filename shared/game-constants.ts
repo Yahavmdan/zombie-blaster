@@ -213,6 +213,61 @@ export const GAME_CONSTANTS = {
   PLATE_KICK_COOLDOWN_TICKS: 240, // A zombie kicks at most one corpse this often (one per pass over the plate)
   SAFE_SPOT_HEADROOM_PX: 160, // Players up to this far above the safe spot (jumping on it) still count as resting there
 
+  // ─── Gadgets (designed floors: dev level editor) ─
+  // Standalone pieces. Sources (button, scale, lever) give a signal; a wire carries it to targets
+  // (spring, slingshot, door, the exit). The boulder and the cracked wall stand on their own.
+  GADGET_BOULDER_KG: 600, // A new boulder's weight (granite, BOULDER_SIZE_PX across; the editor sets each): it weighs on buttons and scales
+  GADGET_BOULDER_ROLL_FRICTION: 0.98, // Sideways speed a rolling boulder keeps per tick on a surface
+  GADGET_BOULDER_AIR_DRAG: 0.995, // ...and per tick in the air (heavy: it flies far)
+  GADGET_BOULDER_BOUNCE: 0.25, // A hard landing, or a solid it rolls into, throws it back with this share of its speed
+  GADGET_BOULDER_BOUNCE_MIN_SPEED: 4, // Landing slower than this (px/tick) it stays down
+  GADGET_BOULDER_MAX_SPEED: 16, // Fastest it rolls or flies sideways (px/tick)
+  GADGET_BOULDER_PUSH_SPEED: 7, // A swing at a boulder of GADGET_BOULDER_KG rolls it away from the swinger this fast (px/tick)
+  GADGET_BOULDER_SPEED_SCALE_MIN: 0.25, // A heavier boulder moves off a swing or blast slower (usual kg / its kg), down to this share...
+  GADGET_BOULDER_SPEED_SCALE_MAX: 2, // ...a lighter one faster, up to this many times
+  GADGET_BOULDER_HIT_REACH_PX: 24, // Max gap between an attacking player's box and the boulder for the swing to push it
+  GADGET_BOULDER_CRUSH_SPEED: 3, // Moving at least this fast (px/tick) it crushes the zombies it meets...
+  GADGET_BOULDER_CRUSH_DAMAGE_PERCENT: 100, // ...taking this share of their max HP (they die)...
+  GADGET_BOULDER_BOSS_CRUSH_PERCENT: 25, // ...a boss only this share
+  GADGET_BOULDER_BREAK_SPEED: 4, // Hitting a crack band at least this fast (px/tick) breaks it out
+  GADGET_BOULDER_BLAST_SPEED_X: 6, // A barrel blast throws a boulder in reach this fast sideways...
+  GADGET_BOULDER_BLAST_SPEED_Y: -5, // ...and up (negative = up)
+  GADGET_HIT_COOLDOWN_TICKS: 36, // One hit per swing on a gadget (a held attack swings every 36 ticks)
+  GADGET_HIT_REACH_PX: 24, // Max gap between an attacking player's box and a lever or crack band for the swing to hit it
+  GADGET_CRACK_HITS: 5, // Swings on a cracked wall's crack band before it breaks out (a blast or a fast boulder does it at once)
+  GADGET_CRACK_WALL_TILES: 6, // A new cracked wall is DEV_EDITOR_WALL_TILES wide and this many tiles tall...
+  GADGET_CRACK_BAND_TILES: 2, // ...its crack band this many tiles high at its foot (a hole to walk through)
+  GADGET_BUTTON_KG: 60, // A new floor button needs this many kg (a player presses it, so does a boulder or a few corpses)
+  GADGET_BUTTON_WIDTH_PX: 48, // A floor button, set into its surface's top: this wide
+  GADGET_BUTTON_STACK_PX: 40, // Things piled up to this far above a button still press on it
+  GADGET_SCALE_KG: 500, // A new scale gives its signal at this many kg
+  GADGET_SCALE_WIDTH_PX: 96, // A scale's pan, set into its surface's top: this wide
+  GADGET_SCALE_STACK_PX: 80, // Things piled up to this far above a scale's pan still weigh on it
+  GADGET_MAX_KG: 99_999, // Most kg a button or scale needs or reports (clamps editor input and synced state)
+  GADGET_LEVER_WIDTH_PX: 16, // A lever standing on its surface (scenery, hit it to flip it): this wide...
+  GADGET_LEVER_HEIGHT_PX: 32, // ...and this tall
+  GADGET_SPRING_WIDTH_PX: 64, // A spring pad (solid, you hop onto it): this wide...
+  GADGET_SPRING_HEIGHT_PX: 32, // ...and this tall
+  GADGET_SPRING_POWER: 18, // A new spring launches what rests on it straight up this fast (px/tick: ~320 px high)
+  GADGET_SLINGSHOT_WIDTH_PX: 64, // A slingshot's base (solid, its cup on top): this wide...
+  GADGET_SLINGSHOT_HEIGHT_PX: 24, // ...and this tall
+  GADGET_SLINGSHOT_POWER: 16, // A new slingshot throws what rests on it this fast (px/tick)...
+  GADGET_SLINGSHOT_ANGLE: 60, // ...at this angle (degrees: 0 right, 90 straight up, 180 left)
+  GADGET_LAUNCH_MAX_POWER: 30, // Fastest launch a spring or slingshot can be set to (px/tick)
+  GADGET_LAUNCH_WIND_TICKS: 25, // Without a wire, a spring or slingshot fires this long after something lands on it
+  GADGET_LAUNCH_BOUNCE_TICKS: 40, // Its release-and-settle after it fired (it can't fire again meanwhile)
+  GADGET_LAUNCH_FLING_WINDOW_TICKS: 10, // A client launches itself only while the synced bounce is this fresh (not on a late join)
+  GADGET_DOOR_TICKS: 30, // A door (or the wired exit's door) slides fully open or shut in this long; only a fully open exit lets you out
+  GADGET_DOOR_LINTEL_PX: 8, // A door's housing at its top stays solid when it is open (art equals collision)
+  GADGET_DOOR_TILES: 4, // A new door is one tile wide and this many tall
+  GADGET_SLOPE_TILES_WIDE: 6, // A new slope is this many tiles wide...
+  GADGET_SLOPE_TILES_HIGH: 3, // ...and rises this many (the editor sets each)
+  GADGET_SLOPE_STICK_PX: 12, // A player or boulder walking/rolling on a slope keeps to it within this (plus its drop per tick); farther, it flies off
+  GADGET_CAGE_SIZE_PX: 64, // A new hanging cage is this big (square)
+  GADGET_CAGE_MAX_ZOMBIES: 8, // Most zombies the editor lets a cage hide (a new one hides CAGE_ZOMBIES)
+  GADGET_CAGE_MAX_GOLD: 1000, // Most gold the editor lets a loot cage hold (a new one holds CAGE_LOOT_GOLD)
+  GADGET_WIRE_DOT_SPACING_PX: 12, // The wire from a source to a target shows as dots this far apart (lit while it carries the signal)
+
   // ─── Zombie Spawning ───────────────────────────
   ZOMBIE_SPAWN_INTERVAL_MS: 2000, // Time between zombie spawns in milliseconds
   ZOMBIE_SPAWN_MIN_INTERVAL_MS: 500, // Fastest possible spawn interval after scaling
@@ -641,6 +696,14 @@ export const GAME_CONSTANTS = {
   DEV_CORPSE_DROP_JITTER_PX: 24, // ...and this much scattered sideways, like the slain
   DEV_PLATE_EXTRA_CORPSES: 2, // "Solve puzzle" on the plate floor drops PLATE_WEIGHT_NEEDED + this many (zombies kick some off)
   DEV_SLOW_MOTION_SCALE: 0.25, // "Slow motion" runs the simulation at this speed
+  DEV_EDITOR_SNAP_PX: 4, // Level editor: positions snap to this grid (widths and wall heights to whole tiles)
+  DEV_EDITOR_PLATFORM_TILES: 5, // A new platform is this many tiles wide
+  DEV_EDITOR_WALL_TILES: 2, // A new wall is this many tiles wide...
+  DEV_EDITOR_WALL_HEIGHT_TILES: 4, // ...and this many tall, standing on the surface under the click
+  DEV_EDITOR_EDGE_GRAB_PX: 8, // Pressing this close to a box's side (or a ladder's end) resizes it instead of moving it
+  DEV_EDITOR_SURFACE_SNAP_PX: 16, // A ladder end, prop, cleat or plate lands on a surface this close above the pointer
+  DEV_EDITOR_LADDER_MIN_PX: 32, // Shortest ladder
+  DEV_EDITOR_HISTORY_STEPS: 30, // Ctrl+Z goes back this many steps (and Ctrl+Shift+Z forward again)
 
 } as const;
 
