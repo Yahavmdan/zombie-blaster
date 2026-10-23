@@ -32,9 +32,21 @@ A port already in use is left as is and reported. Don't start them again yoursel
 `take <branch>` refuses when that branch is already checked out in the primary or in a locked slot,
 and names the worktree: work there if that session is yours, otherwise ask the user.
 
-No free slot: run `& $wt all`, show which worktrees are close to free, and ask the user whether to
-`/reset-worktree` one of them or grow the pool (`& $wt init -Count <n+1>`, a clean install each).
-Never pick a worktree that is dirty, locked, or on a branch with an open PR.
+No free slot: take the **primary checkout** without asking, when it is clean, on the base branch
+(`main`) and has no `wt-slot.lock` in its git dir (`git -C <primary> rev-parse --absolute-git-dir`).
+`take` never hands it out, so do it by hand in one call:
+- write the lock (`(detached origin/main)` or the branch, then `Get-Date -Format s`, one per line) to
+  `<git dir>\wt-slot.lock`, so other sessions see it is taken;
+- `git -C <primary> pull --ff-only origin main`;
+- its ports are 1111/1112 (`& $wt ports <primary>`); its dev servers usually run already - start
+  them with `& $wt serve <primary>` only when they are down.
+Branch it (`git switch -c feat/<slug>`) before the first edit: never commit on `main`. When the work is
+done, release it by hand: `git switch main` (clean only), delete the lock, leave its dev servers running
+(`& $wt release` handles pool slots only, and detaches them).
+
+Primary not clean, not on `main`, or locked: run `& $wt all`, show which worktrees are close to free,
+and ask the user whether to `/reset-worktree` one of them or grow the pool (`& $wt init -Count <n+1>`,
+a clean install each). Never pick a worktree that is dirty, locked, or on a branch with an open PR.
 
 ## 2. Work only there
 
@@ -43,8 +55,8 @@ Tell the user in one line: `Working in <path> (<branch|detached>), app on http:/
 For the rest of the session the slot is the working directory:
 - PowerShell / Bash: `Set-Location <path>` (cd) first - the shell keeps it between calls.
 - Read / Edit / Write / Grep / Glob: absolute paths under `<path>` only.
-- git: run inside `<path>` (or `git -C <path>`). Never edit or switch branches in the primary
-  checkout or any other worktree.
+- git: run inside `<path>` (or `git -C <path>`). Never edit or switch branches in any other
+  worktree (the primary included, unless it is the one you took).
 - Follow-up prompts in this session (a re-review, review fixes, a question about the work) run in the
   same slot. Do not go back to the directory the session started in, also not for read-only
   commands: it is on another branch, so what you read or run there is not this task's code.
