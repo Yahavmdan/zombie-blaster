@@ -4,6 +4,7 @@ import {
   BoulderPuzzleLayout,
   CageContent,
   CagePuzzleLayout,
+  Gadget,
   HangingCage,
   PlatePuzzleLayout,
   Platform,
@@ -38,6 +39,19 @@ export interface LevelLayout {
   cagePuzzle?: CagePuzzleLayout;
   /** Floor-5 puzzle (the pressure plate on a far, high ledge that holds the exit door open). */
   platePuzzle?: PlatePuzzleLayout;
+  /**
+   * A designed layout (the dev level editor): the exit's fixed height. Generated floors leave it
+   * out, and the exit follows `exitPlatformY` (or the spring floor's top ledge).
+   */
+  exitY?: number;
+  /** A designed layout: solid blocks of tiles (stand on top, their sides block). Generated floors have none. */
+  walls?: Platform[];
+  /** A designed layout: no hanging exit (the way out is an exit door). */
+  exitHidden?: boolean;
+  /** A designed layout: standalone gadgets (boulders, cracked walls, buttons, scales, levers, launchers, doors) and their wires. */
+  gadgets?: Gadget[];
+  /** A designed layout: the designer's explanation of the puzzle (what it is, how it is solved), kept with the export. */
+  notes?: string;
 }
 
 export const GROUND_PLATFORM: Platform = {
@@ -258,7 +272,7 @@ export function isExplosive(kind: PropKind): boolean {
   return PROP_MATERIAL[kind] === 'barrel';
 }
 
-const PROP_KINDS: PropKind[] = [...(Object.keys(PROP_ART) as SinglePropKind[]), 'rail'];
+export const PROP_KINDS: PropKind[] = [...(Object.keys(PROP_ART) as SinglePropKind[]), 'rail'];
 const STACKABLE: SinglePropKind[] = ['box1', 'box2', 'box3'];
 
 /** A prop's collision box (top-left x/y, size) equals its visible art. */
@@ -717,7 +731,7 @@ function placeMidCages(rand: Random, count: number, exitX: number, platforms: Pl
 }
 
 /** Top of what a mid-screen cage lands on: the highest platform under it, else the ground. */
-function cageLandY(cage: Platform, platforms: Platform[]): number {
+export function cageLandY(cage: Platform, platforms: Platform[]): number {
   const bottom: number = cage.y + cage.height;
   const under: Platform[] = platforms.filter(
     (p: Platform): boolean => p.y >= bottom && p.x < cage.x + cage.width && p.x + p.width > cage.x,
@@ -779,7 +793,7 @@ function cleatSpots(exitX: number, platforms: Platform[], ropes: Rope[]): Array<
 }
 
 /** Points a chain winds through in the ceiling band, around the span between its cleat and its hook. */
-function chainKinks(rand: Random, fromX: number, toX: number): Array<{ x: number; y: number }> {
+export function chainKinks(rand: Random, fromX: number, toX: number): Array<{ x: number; y: number }> {
   const margin: number = 16;
   const lo: number = Math.max(margin, Math.min(fromX, toX) - 200);
   const hi: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - margin, Math.max(fromX, toX) + 200);

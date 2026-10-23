@@ -1103,6 +1103,97 @@ export class VfxSystem {
     this.triggerScreenShake(GAME_CONSTANTS.WALL_BREAK_SHAKE_FRAMES, GAME_CONSTANTS.WALL_BREAK_SHAKE_INTENSITY);
   }
 
+  /**
+   * A cracked wall's crack band breaks out (designed floors): its shattered stones (cut from the
+   * band's own art) blow out away from the hit (`dir`) and fall, with grit and dust. Derived from
+   * the band's box only, so a replay draws the same pieces.
+   */
+  spawnCrackBreak(band: { x: number; y: number; width: number; height: number }, dir: number): void {
+    const cols: number = Math.ceil(band.width / ART_PX);
+    const rows: number = Math.ceil(band.height / ART_PX);
+    const source: ChunkSource = { kind: 'crack', cols, rows };
+    const piece: number = 8;
+    for (let sy: number = 0; sy < rows; sy += piece) {
+      for (let sx: number = 0; sx < cols; sx += piece) {
+        const sw: number = Math.min(piece, cols - sx);
+        const sh: number = Math.min(piece, rows - sy);
+        const x: number = band.x + (sx + sw / 2) * ART_PX;
+        const y: number = band.y + (sy + sh / 2) * ART_PX;
+        this.addDebrisChunk(
+          { source, sx, sy, sw, sh },
+          x,
+          y,
+          dir * (1 + Math.random() * GAME_CONSTANTS.WALL_BREAK_BLAST_SPEED * 0.6),
+          -1 - Math.random() * 4,
+          (Math.random() - 0.5) * 0.5,
+          Math.floor(Math.random() * 4),
+        );
+      }
+    }
+    const grit: string[] = [PIXEL['stoneHi'], PIXEL['stone'], PIXEL['stoneMid'], PIXEL['stoneDark']];
+    const faceX: number = dir === 1 ? band.x + band.width : band.x;
+    for (let i: number = 0; i < 24; i++) {
+      const life: number = 40 + Math.floor(Math.random() * 30);
+      this.addParticle({
+        x: faceX + (Math.random() - 0.5) * 12,
+        y: band.y + Math.random() * band.height,
+        vx: dir * Math.random() * 6,
+        vy: -1 - Math.random() * 4,
+        life,
+        maxLife: life,
+        color: grit[i % grit.length],
+        size: 2 + Math.random() * 4,
+        shape: ParticleShape.Pixel,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: false,
+        gravityScale: GAME_CONSTANTS.DEBRIS_GRAVITY_SCALE / 2,
+        floorY: GAME_CONSTANTS.GROUND_Y,
+      });
+    }
+    for (let i: number = 0; i < 10; i++) {
+      this.addDust(
+        faceX,
+        band.y + Math.random() * band.height,
+        dir * Math.random() * 2.5,
+        (Math.random() - 0.5) * 1.5,
+        12 + Math.random() * 12,
+        50 + Math.random() * 30,
+      );
+    }
+    this.triggerScreenShake(GAME_CONSTANTS.WALL_BREAK_SHAKE_FRAMES, GAME_CONSTANTS.WALL_BREAK_SHAKE_INTENSITY);
+  }
+
+  /** A spring or slingshot fired: a dust puff off its pad and streaks along the throw (`angle` degrees). */
+  spawnGadgetLaunch(cx: number, topY: number, angle: number): void {
+    for (let i: number = 0; i < 10; i++) {
+      this.addDust(cx + (Math.random() - 0.5) * 48, topY - 4, (Math.random() - 0.5) * 3, -0.5, 8 + Math.random() * 8, 35 + Math.random() * 20);
+    }
+    const a: number = (angle * Math.PI) / 180;
+    for (let i: number = 0; i < 12; i++) {
+      const life: number = 18 + Math.floor(Math.random() * 12);
+      const speed: number = 6 + Math.random() * 6;
+      this.addParticle({
+        x: cx + (Math.random() - 0.5) * 40,
+        y: topY - Math.random() * 20,
+        vx: Math.cos(a) * speed,
+        vy: -Math.sin(a) * speed,
+        life,
+        maxLife: life,
+        color: i % 2 === 0 ? PIXEL['white'] : PIXEL['steelLight'],
+        size: 6 + Math.random() * 8,
+        shape: ParticleShape.Line,
+        rotation: -a,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Linear,
+        scaleOverLife: false,
+        gravityScale: 0,
+      });
+    }
+    this.triggerScreenShake(6, 3);
+  }
+
   updateParticles(): void {
     for (const p of this.e.particles) {
       if (p.delay) {

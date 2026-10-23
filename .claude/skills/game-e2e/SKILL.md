@@ -184,7 +184,12 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   platform/rope coordinates in tests. Read them from `state().level` (`levelPlatforms(s)`,
   `levelRopes(s)`, `goToFloorWhere(player, 'a rope', pred)`), or pin a layout with
   `probe.setLayoutSeed(n)` (solo/host). Tiers at y 530 / 430 / 330; ropes only where the layout
-  has them (floor 1 may have none, later floors always have one). Props (`state().level.props`) are
+  has them (floor 1 may have none, later floors always have one). A designed layout (dev level
+  editor, `e2e/specs/solo/level-editor.spec.ts`) adds solid `state().level.walls` and gadgets:
+  `state().gadgets` (id, kind, box, on, kg, hits, broken, openTicks, launches, a boulder's `body`,
+  a source's `targets`) and `state().exitLocked`. Load a designed floor with
+  `probe.loadLayout(json)` (online: on every page); builders in `e2e/support/gadget-layouts.ts`;
+  specs `e2e/specs/solo/gadgets.spec.ts`, `e2e/specs/online/gadgets-coop.spec.ts`. Props (`state().level.props`) are
   solid: you stand on them; walking into one up to 26 px tall steps you onto it, a stack (or
   taller) blocks (the Brain hops when a held direction stalls). Barrels and boxes are `pickable`:
   their entry has the game-state `id`, current x/y, `isGrounded`, `carrierId`. Find a test layout

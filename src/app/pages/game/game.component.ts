@@ -5,7 +5,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CharacterClass, CharacterClassDefinition, CharacterState, CharacterStats, SkillDefinition, GameMode, ServerMessageType, ClientMessageType, SPECIAL_DROP_DEFINITIONS, CHARACTER_CLASSES, ZOMBIE_TYPES, VfxEvent, GAME_CONSTANTS, MagnetPullRequest, ZombieEffectRequest } from '@shared/index';
 import { SpecialDropType, SpecialDropDefinition, ZombieDefinition, ZombieType } from '@shared/game-entities';
 import type { ServerMessage, ZombieDamagePayload, RemoteZombieDamagePayload, ZombieAttackPlayerPayload, RemotePlayerAttack, PlayerLeftPayload, RevivePlayerPayload, ServerShuttingDownPayload, HostMigratedPayload, ReconnectResultPayload, RoomInfo, RoomPlayer, RoomUpdatedPayload, SetAfkPayload } from '@shared/multiplayer';
-import { ActiveSpecialEffect, BoulderState, CagePuzzleState, LooseProp, PlateState, SpringState, ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
+import { ActiveSpecialEffect, BoulderState, CagePuzzleState, GadgetState, LooseProp, PlateState, SpringState, ShopPurchase, ZombieCorpse, ZombieState, QuickSlotEntry, QUICK_SLOT_ACTION_SET } from '@shared/game-entities';
 import { GameAction } from '@shared/messages';
 import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
 import { AutoPotionChange } from '../../components/shop/shop.component';
@@ -28,6 +28,8 @@ import { E2eControls } from '../../testing/e2e-api';
 import { WorkerInterval } from '../../engine/worker-interval';
 import { DevMouseTool, DevToolsSystem } from '../../engine/dev-tools-system';
 import { DraggableDialogDirective } from '../../ui/draggable-dialog.directive';
+import { LevelEditorBarComponent } from '../../components/level-editor-bar/level-editor-bar.component';
+import { LevelEditorSystem } from '../../engine/level-editor-system';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
 
 /**
@@ -43,7 +45,7 @@ const ACTIVITY_EVENTS: readonly string[] = ['keydown', 'mousedown', 'mousemove',
 @Component({
   selector: 'app-game',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PixelIconComponent, GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, TreeSkillWindowComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule, DraggableDialogDirective],
+  imports: [PixelIconComponent, GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, TreeSkillWindowComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule, DraggableDialogDirective, LevelEditorBarComponent],
   host: {
     class: 'game-page',
   },
@@ -240,8 +242,8 @@ export class GameComponent implements OnInit, OnDestroy {
     this.ws.onMessage(ServerMessageType.GameSync)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((msg: ServerMessage): void => {
-        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props?: LooseProp[]; floor: number; layoutSeed?: number; boulder?: BoulderState | null; spring?: SpringState | null; cages?: CagePuzzleState | null; plate?: PlateState | null; attacks?: RemotePlayerAttack[]; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] } =
-          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props?: LooseProp[]; floor: number; layoutSeed?: number; boulder?: BoulderState | null; spring?: SpringState | null; cages?: CagePuzzleState | null; plate?: PlateState | null; attacks?: RemotePlayerAttack[]; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] };
+        const payload: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props?: LooseProp[]; floor: number; layoutSeed?: number; boulder?: BoulderState | null; spring?: SpringState | null; cages?: CagePuzzleState | null; plate?: PlateState | null; gadgets?: GadgetState[]; attacks?: RemotePlayerAttack[]; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] } =
+          msg.payload as { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props?: LooseProp[]; floor: number; layoutSeed?: number; boulder?: BoulderState | null; spring?: SpringState | null; cages?: CagePuzzleState | null; plate?: PlateState | null; gadgets?: GadgetState[]; attacks?: RemotePlayerAttack[]; revives?: string[]; activeSpecialEffects?: ActiveSpecialEffect[]; vfxEvents?: VfxEvent[]; spitterProjectiles?: SpitterProjectile[]; dragonProjectiles?: DragonProjectile[] };
 
         this.remotePlayerStates.set(payload.player.id, payload.player);
 
@@ -256,6 +258,7 @@ export class GameComponent implements OnInit, OnDestroy {
           this.gameCanvas()?.applyRemoteSpring(payload.spring ?? null);
           this.gameCanvas()?.applyRemoteCages(payload.cages ?? null);
           this.gameCanvas()?.applyRemotePlate(payload.plate ?? null);
+          this.gameCanvas()?.applyRemoteGadgets(payload.gadgets ?? []);
           this.gameCanvas()?.applyRemoteSpecialEffects(payload.activeSpecialEffects ?? []);
           this.gameCanvas()?.applyRemoteProjectiles(payload.spitterProjectiles ?? [], payload.dragonProjectiles ?? []);
           this.floor.set(payload.floor);
@@ -399,7 +402,7 @@ export class GameComponent implements OnInit, OnDestroy {
         const canvas: GameCanvasComponent | undefined = this.gameCanvas();
         if (!canvas) return;
 
-        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: RemotePlayerAttack[]; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null =
+        const snapshot: { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; gadgets: GadgetState[]; attacks: RemotePlayerAttack[]; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null =
           canvas.getStateSnapshot();
         if (!snapshot) return;
 
@@ -746,6 +749,12 @@ export class GameComponent implements OnInit, OnDestroy {
   readonly devClassList: CharacterClassDefinition[] = Object.values(CHARACTER_CLASSES);
   readonly devFloorInput: WritableSignal<number> = signal<number>(1);
   readonly devDialogOpen: WritableSignal<boolean> = signal<boolean>(false);
+  /** Dev tools: the level editor's bar floats over the map (solo). */
+  readonly levelEditorOpen: WritableSignal<boolean> = signal<boolean>(false);
+  /** The engine's level editor while its bar is open. */
+  readonly levelEditor: Signal<LevelEditorSystem | null> = computed((): LevelEditorSystem | null =>
+    this.levelEditorOpen() ? (this.gameCanvas()?.levelEditor() ?? null) : null,
+  );
   readonly devPlayerLevel: Signal<number> = computed((): number => {
     const p: CharacterState | null = this.gameState.player();
     return p ? p.level : 0;
@@ -796,6 +805,8 @@ export class GameComponent implements OnInit, OnDestroy {
   devSelectClass(classId: CharacterClass): void {
     const p: CharacterState | null = this.gameState.player();
     if (!p) return;
+    // A new class restarts the engine, and its level editor with it.
+    this.devCloseLevelEditor();
     this.gameState.createPlayer(p.name, classId, p.id);
     this.syncCanvasProgression();
   }
@@ -833,7 +844,25 @@ export class GameComponent implements OnInit, OnDestroy {
   /** Picking drag closes the dialog, so the next press on the canvas grabs. */
   devSetMouseTool(tool: DevMouseTool): void {
     this.devMouseTool.set(tool);
+    if (tool !== 'build') this.levelEditorOpen.set(false);
     if (tool !== 'attack') this.closeDevDialog();
+  }
+
+  /** Dev tools: the level editor's bar over the map; the left mouse places and drags what it picks (solo). */
+  devOpenLevelEditor(): void {
+    if (this.isMultiplayer) return;
+    this.devSetMouseTool('build');
+    this.levelEditorOpen.set(true);
+  }
+
+  devCloseLevelEditor(): void {
+    this.levelEditorOpen.set(false);
+    if (this.devMouseTool() === 'build') this.devMouseTool.set('attack');
+  }
+
+  /** Online the floors come from the host's seed: the editor is solo only. */
+  levelEditorAllowed(): boolean {
+    return !this.isMultiplayer;
   }
 
   /** Picking a zombie type arms the spawn tool: every left click on the canvas places one. */

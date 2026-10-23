@@ -154,7 +154,7 @@ export function drawBoulder(ctx: CanvasRenderingContext2D, box: Box, angle: numb
 // ─── Cracked wall ────────────────────────────────────────
 
 /** Wall shades by index, darkest first: ink, then the stone ramp up to its highlight. */
-const WALL_SHADES: string[] = [
+export const WALL_SHADES: string[] = [
   K,
   PIXEL['stoneDeep'],
   PIXEL['stoneDark'],
@@ -162,8 +162,8 @@ const WALL_SHADES: string[] = [
   PIXEL['stone'],
   PIXEL['stoneHi'],
 ];
-const WALL_INK: number = 0;
-const WALL_MORTAR: number = 1;
+export const WALL_INK: number = 0;
+export const WALL_MORTAR: number = 1;
 const WALL_SHADOW: number = 2;
 const WALL_HI: number = 5;
 /** Seeds of the stone layout (shared with the debris it falls apart into) and of its painting. */
@@ -182,7 +182,7 @@ const wallCanvases: Map<string, HTMLCanvasElement> = new Map<string, HTMLCanvasE
  * One dressed stone; it owns its bottom and right mortar joints (marked in `joints`: 1 the bed
  * joint under it, 2 the joint on its right) and is bevelled toward the light.
  */
-function paintWallStone(
+export function paintWallStone(
   cells: number[],
   joints: number[],
   cols: number,
@@ -222,7 +222,7 @@ function paintWallStone(
  * The cracked wall's stones in art cells (running bond, mirrored with the face side), each with
  * its bottom and right mortar joint; the first and last of a course reach past the wall's sides.
  */
-function wallStoneLayout(cols: number, rows: number, faceRight: boolean): Box[] {
+export function wallStoneLayout(cols: number, rows: number, faceRight: boolean): Box[] {
   const rand: Random = seededRandom(WALL_LAYOUT_SEED);
   const stones: Box[] = [];
   for (let y: number = 0, course: number = 0; y < rows; course++) {

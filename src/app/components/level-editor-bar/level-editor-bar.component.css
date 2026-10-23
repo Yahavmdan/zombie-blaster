@@ -1,0 +1,162 @@
+/* Floats over the map, no backdrop: the map stays clickable. Top-left, under the portrait plate. */
+.le-window {
+  position: absolute;
+  top: 120px;
+  left: 8px;
+  z-index: 250;
+  width: 320px;
+  max-height: calc(100% - 200px);
+  display: flex;
+  flex-direction: column;
+  border-top: 6px solid var(--toxic);
+}
+
+.le-title {
+  flex: 1;
+}
+
+.le-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.le-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.le-group__title {
+  margin: 0;
+  padding-bottom: 2px;
+  font-weight: 500;
+  border-bottom: var(--px) solid var(--ink);
+}
+
+.le-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.le-tool {
+  font-size: var(--fs-12);
+}
+
+.le-actions {
+  padding-top: 4px;
+  border-top: var(--px) solid var(--ink);
+}
+
+.le-hint,
+.le-message {
+  margin: 0;
+  font-size: var(--fs-12);
+  color: var(--bone-dim);
+}
+
+.le-message {
+  color: var(--gold);
+}
+
+.le-selection {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.le-selection__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.le-selection__name {
+  font-size: var(--fs-14);
+  color: var(--toxic-hi);
+}
+
+.le-json {
+  width: 100%;
+  min-height: 120px;
+  font-size: var(--fs-12);
+  resize: vertical;
+}
+
+.le-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.le-number {
+  width: 88px;
+  font-size: var(--fs-12);
+}
+
+.le-field {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+}
+
+.le-field__label {
+  font-size: var(--fs-12);
+  color: var(--bone-dim);
+}
+
+.le-field__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.le-range {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--toxic);
+}
+
+/* Middle-click popup: opens by the click, over the map. */
+.le-props {
+  position: fixed;
+  z-index: 260;
+  width: 260px;
+  border-top: 6px solid var(--gold);
+}
+
+.le-props__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px 10px;
+}
+
+.le-warning {
+  margin: 0;
+  font-size: var(--fs-12);
+  color: var(--blood-hi);
+}
+
+/* Tool buttons are pictures of what they place (the name is in the tooltip and the hint). */
+.le-tool--icon {
+  width: 48px;
+  height: 48px;
+  padding: 2px;
+  display: grid;
+  place-items: center;
+}
+
+.le-tool__icon {
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
+}

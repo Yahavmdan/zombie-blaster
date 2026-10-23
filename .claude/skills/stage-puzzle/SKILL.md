@@ -258,6 +258,74 @@ restore.
   user wanted a slope, a gate, and the corpse climb. `docs/superpowers/specs|plans/2026-10-06-boulder-*`
   describe that **old** design; trust the code and this skill.
 
+## Designed layouts (dev level editor)
+
+The user designs floors by eye in the dev level editor (Dev > Open level editor, solo only) and
+sends the JSON export, with notes (`notes`) that explain the puzzle: build the floor's hint and
+instructions from them. The user wants **standalone gadgets**, never combos: a boulder is just a
+boulder (not a chute + wall + ledge), a spring is not tied to a scale. Anything triggers anything
+through wires (Portal-style: a button, scale or lever drives springs, slingshots, doors or the exit;
+the dots show in the game and light up). Gadgets live in `gadgets.ts` / `gadget-system.ts` /
+`gadget-art.ts`; what each does:
+- **Boulder** (600 kg): a swing rolls it; moving fast it crushes zombies (bosses take a share) and
+  breaks crack bands; it weighs on buttons/scales; launchers and blasts throw it. Still, it is solid.
+- **Cracked wall**: stone, solid; only its crack band (y range set in the editor) breaks: 5 swings
+  level with the band, a barrel blast in reach, or a fast boulder. The rest stands (a hole).
+- **Button / scale**: on while their kg rest on them (corpses, props, zombies, players with what they
+  carry, boulders). **Lever**: a swing flips it.
+- **Spring / slingshot**: wired, they fire as the signal comes on; unwired, when something lands on
+  them. They throw corpses, props, boulders and players (guests launch themselves on a fresh launch).
+- **Door**: open while its input is on (`latch`: stays open); with no wire it stands open. An
+  `exit` door finishes the floor for a player standing in it while fully open. A wire to `exit`
+  locks the hanging exit behind a door; `exitHidden` on the layout removes the hanging exit (it
+  hangs far above the screen) so a door is the way out.
+- **Slope**: a one-way ramp across its box (`risesRight`). Players walk up and down it
+  (`PhysicsSystem.standOnSlope`, down + jump drops through), boulders roll down it gathering speed.
+  Zombies walk on them too (`ZombieSystem.standOnSlope`, the same `slopeTopUnder`); corpses, props
+  and drops do not use slopes yet (they fall through). Struts are drawn down to what is under them.
+- **Cage**: hangs on a chain from the ceiling, solid. A wire's signal (unwired: a swing; also a
+  blast or a fast boulder) drops it; it crushes what is under it, lands as a step (or `smashes`),
+  and lets out `zombies` zombies, `gold` gold and potions, or nothing (`content`).
+- Physics added for them: players bump their heads on solids' undersides (`PhysicsSystem.bumpHead`).
+- The editor's tool buttons are pictures (`tool-icons.ts`), names in tooltips and the hint line.
+  Ctrl+Z / Ctrl+Shift+Z (and the Undo / Redo buttons) step through the last
+  `DEV_EDITOR_HISTORY_STEPS` (30) changes (`LevelEditorSystem.play(tag)` records each; a drag or a
+  slider is one step). Erasing the hanging exit hides it (`exitHidden`, its wires go); the Exit tool
+  puts it back; the bar warns when the design has no way out (no exit and no exit door).
+- **Middle click** in the editor opens a popup by the cursor to adjust the thing clicked (sliders
+  and numbers, same list in the bar's selection): scale/button kg, spring/slingshot power and angle
+  (the editor draws where a boulder would fly), boulder weight (heavier rolls slower off a swing or
+  blast), wall/door/crack wall width and height (the foot stays), crack band height above the foot
+  and its size, door latch, lever "starts on", platform/rail width, ladder length. New adjustable
+  data goes in `fieldsOf`/`setField` (`level-editor.ts`). Pieces: `level-editor.ts` (pure rules), `level-editor-system.ts`
+(`engine.levelEditor`), `level-editor-art.ts` (overlay), `components/level-editor-bar` (tool bar,
+export/import, autosaved draft in localStorage `zb-level-editor-draft`). Every edit is played at once
+through `GameEngine.useCustomLevel`, for the floor it was made on only.
+
+- **The export is a `LevelLayout`**: `floor`, `exitX` + `exitY` (fixed exit height),
+  `platforms` (`safe: true` = the safe spot), `ropes` (ladders), `walls` (solid tile blocks),
+  `props`, `gadgets` (each `{ id, kind, x, y, width, height, ... }`: `kg`/`targets` on sources,
+  `power`/`angle` on launchers, `crackTop`/`crackBottom` on cracked walls, `latch` on doors), and
+  `notes`. Generated floors 2-5 still carry `boulderPuzzle`, `springPuzzle`, `cagePuzzle`,
+  `platePuzzle` (editable in the editor, no longer placeable).
+- **Derived parts are rebuilt on import** (`parseLayout` → `followExit`): the boulder ledge is the
+  exit, the spring spans from the exit's nearer screen edge, cage `landY` and chain `kinks` (seeded
+  from `seed`). Don't hand-edit those in an export.
+- **Adding an export to the game:** keep it as a typed constant (one file per floor, e.g.
+  `src/app/engine/designed-levels.ts`, `DESIGNED_LEVELS: Record<number, LevelLayout>`) and have
+  `generateLevel` return a copy of it for that floor (seed set). Every client has the same constant,
+  so nothing new syncs. Then: `levelViolations` holds generator rules (tiers, exit gaps, puzzle on its
+  floor) that a designed floor may break on purpose: check them for that floor, keep the ones that
+  still matter (art equals collision, a ladder under each high ledge, puzzles reachable) and skip the
+  rest for designed floors only. `level-geometry.spec.ts` + `level-sync.spec.ts` must pass (walls are
+  drawn whole tiles clipped to their box), and the Brain may need a route for the new floor.
+  Gadget state already syncs (game-sync `gadgets`, VFX `CrackBreak`, `GadgetLaunch`), so a designed
+  floor works in co-op as soon as every client has its layout.
+- Probe: `state().level.walls`, `state().gadgets`, `state().exitLocked`, `probe.loadLayout`. E2E:
+  `e2e/specs/solo/level-editor.spec.ts` (the editor UI), `e2e/specs/solo/gadgets.spec.ts`,
+  `e2e/specs/online/gadgets-coop.spec.ts`; the dev-tools online spec checks the editor is disabled in
+  co-op (designing there would split the world).
+
 ## Finishing a stage
 
 1. All tests above are green and you have looked at the screenshot.

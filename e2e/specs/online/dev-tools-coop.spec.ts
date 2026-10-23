@@ -146,4 +146,17 @@ test.describe('dev tools in co-op', { tag: '@online' }, (): void => {
     );
     await host.page.mouse.up();
   });
+
+  test('the level editor is solo only: host and guest both see it disabled', async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }): Promise<void> => {
+    const session: RoomSession = await twoWarriors(room, 'dev-level-editor');
+    for (const p of [session.host, session.guests[0]]) {
+      await openDevTools(p.page);
+      await expect(p.page.getByTestId('game-dev-button-level-editor'), `${p.name}: solo only`).toBeDisabled();
+      await closeDevTools(p.page);
+    }
+  });
 });

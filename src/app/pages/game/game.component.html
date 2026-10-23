@@ -340,6 +340,23 @@
             </div>
           </section>
 
+          <!-- Level editor: design a floor on the map, export it as JSON -->
+          <section class="dev-section">
+            <h3 class="dev-section__title px-label">Level editor</h3>
+            <div class="dev-section__row">
+              <button
+                class="px-btn px-btn--sm px-btn--accent"
+                [class.px-btn--good]="levelEditorOpen()"
+                [disabled]="!levelEditorAllowed()"
+                [title]="levelEditorAllowed() ? 'Place platforms, ladders, walls, props and puzzle parts on this floor' : 'Solo only'"
+                data-testid="game-dev-button-level-editor"
+                (click)="devOpenLevelEditor()"
+              >
+                Open level editor
+              </button>
+            </div>
+          </section>
+
           <!-- Special Drops -->
           <section class="dev-section">
             <h3 class="dev-section__title px-label">Special drops</h3>
@@ -360,6 +377,10 @@
           </section>
         </div>
       </div>
+    }
+
+    @if (showDevTools() && levelEditor(); as editor) {
+      <app-level-editor-bar [editor]="editor" (closed)="devCloseLevelEditor()" />
     }
 
     @if (statPanelOpen()) {

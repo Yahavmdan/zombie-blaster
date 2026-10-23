@@ -366,6 +366,47 @@ export interface CagePuzzleState {
   cages: CageState[];
 }
 
+/** A moving gadget where it is now (box top-left): a boulder rolling, flying or at rest, or a cage falling. */
+export interface GadgetBody {
+  x: number;
+  y: number;
+  velocityX: number;
+  velocityY: number;
+  isGrounded: boolean;
+  /** Turn in radians (it rolls: the distance rolled over its radius). */
+  angle: number;
+}
+
+/**
+ * One gadget of a designed floor (dev level editor), or the wired exit's door (id `exit`): the
+ * host simulates it and sends it with every game-sync. Fields a kind doesn't use stay 0 / false.
+ */
+export interface GadgetState {
+  id: string;
+  /** A button, scale or lever: giving its signal now. A spring, slingshot, door or the exit: its input is on. */
+  on: boolean;
+  /** A button or scale: kg resting on it now. */
+  kg: number;
+  /** A cracked wall: swings its crack band took. */
+  hits: number;
+  /** A cracked wall: its crack band broke out (for good this floor). */
+  broken: boolean;
+  /** A door or the exit's door: 0 (shut) to GADGET_DOOR_TICKS (open). */
+  openTicks: number;
+  /** A spring or slingshot: launches so far (a client launches itself on a fresh one). */
+  launches: number;
+  /** A spring or slingshot: release-and-settle after a launch (it can't fire again meanwhile). */
+  bounceTicks: number;
+  /** An unwired spring or slingshot: wind-up while something rests on it; it fires when it is full. */
+  windTicks: number;
+  /** A boulder's body, or a cage's once it dropped (null otherwise). */
+  body: GadgetBody | null;
+  /** A cage: let go of its chain (for good this floor). */
+  dropped: boolean;
+  /** A cage: came down on something (for good this floor); `broken` when it smashed there. */
+  landed: boolean;
+}
+
 /** Floor-5 pressure plate: the host weighs it and sends it with every game-sync. */
 export interface PlateState {
   /** Weight on the plate (a lying corpse 1, a standing player PLATE_PLAYER_WEIGHT). */

@@ -29,6 +29,7 @@ import { drapeCorpses } from './corpse-drape';
 import { corpseAtRest, flyCorpse, landCorpse, slideCorpse } from './corpse-tumble';
 import { advanceMagnetPull } from './magnet-pull';
 import { pushOutOfSolids } from './solid-blocks';
+import { slopeTopUnder, slopesOf } from './gadgets';
 import { EaterStep, Feet, eaterStep } from './eater-path';
 import { MealContext, isEaterFood, isEaterMeal } from './eater-meals';
 
@@ -235,6 +236,7 @@ export class ZombieSystem {
         }
         z.y += z.velocityY;
 
+        const wasGrounded: boolean = z.isGrounded;
         z.isGrounded = false;
         for (const plat of this.e.platforms) {
           if (z.platformDropTimer > 0 && plat.y !== GAME_CONSTANTS.GROUND_Y) continue;
@@ -254,6 +256,7 @@ export class ZombieSystem {
             z.isGrounded = true;
           }
         }
+        this.standOnSlope(z, wasGrounded);
 
         let bestCorpseSurface: number | null = null;
         const zBot: number = z.y + z.instanceHeight;
@@ -452,6 +455,27 @@ export class ZombieSystem {
         this.e.onRemotePlayerDamaged?.(target.id, rawDamage, z.x, z.y, knockDir, false);
       }
     }
+  }
+
+  /**
+   * A designed floor's slopes carry zombies like players (one-way): one landing on a slope, or
+   * walking along it, stands on its surface; dropping through a platform drops through it too.
+   */
+  private standOnSlope(z: ZombieState, wasGrounded: boolean): void {
+    if (z.platformDropTimer > 0 || this.e.gadgets.length === 0) return;
+    const top: number | null = slopeTopUnder(
+      slopesOf(this.e.gadgets),
+      z.x,
+      z.instanceWidth,
+      z.y + z.instanceHeight,
+      z.velocityX,
+      z.velocityY,
+      wasGrounded,
+    );
+    if (top === null || (z.isGrounded && z.y + z.instanceHeight < top)) return;
+    z.y = top - z.instanceHeight;
+    z.velocityY = 0;
+    z.isGrounded = true;
   }
 
   private updateZombieAI(z: ZombieState, zDef: ZombieDefinition): void {
@@ -1237,10 +1261,13 @@ export class ZombieSystem {
         bottom <= exit.y + exit.height + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE &&
         c.isGrounded;
       // The floor-5 exit has a door: it lets players out only while it stands fully open.
-      const doorOpen: boolean = !this.e.plate || isDoorOpen(this.e.plate);
+      // A wired exit (designed floors) has a door too: only fully open does it let players out.
+      const doorOpen: boolean =
+        (!this.e.plate || isDoorOpen(this.e.plate)) && !this.e.isExitLocked();
 
       const leaves: boolean =
-        puzzle && boulder ? leavesThroughOpening(c, puzzle, boulder) : onExitPlatform && doorOpen;
+        (puzzle && boulder ? leavesThroughOpening(c, puzzle, boulder) : onExitPlatform && doorOpen) ||
+        this.e.leavesThroughDoor(c);
       if (leaves) {
         this.e.onFloorComplete?.();
         this.advanceFloor();

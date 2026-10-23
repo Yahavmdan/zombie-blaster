@@ -4,8 +4,8 @@ import type { GameEngine } from './game-engine';
 import { Box } from './boulder-puzzle';
 import { Platform } from './engine-types';
 
-/** What the left mouse button does on the canvas while the dev tools are on. */
-export type DevMouseTool = 'attack' | 'drag' | 'spawn';
+/** What the left mouse button does on the canvas while the dev tools are on (`build`: the level editor). */
+export type DevMouseTool = 'attack' | 'drag' | 'spawn' | 'build';
 
 type DevGrabKind = 'player' | 'zombie' | 'corpse' | 'prop';
 

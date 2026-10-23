@@ -16,6 +16,7 @@ import {
   ActiveSpecialEffect,
   BoulderState,
   CagePuzzleState,
+  GadgetState,
   PlateState,
   CageState,
   SpringState,
@@ -42,6 +43,7 @@ import {
   BackgroundStar,
   BoulderPuzzleLayout,
   CagePuzzleLayout,
+  Gadget,
   PlatePuzzleLayout,
   SpringPuzzleLayout,
   DamageNumber,
@@ -72,7 +74,7 @@ import { applyZombieEffect } from './zombie-effects';
 import { ProjectileSystem } from './projectile-system';
 import { ZombieSystem } from './zombie-system';
 import { BoulderPuzzleSystem } from './boulder-puzzle-system';
-import { Box, boulderPath, gateBox, gateBroken } from './boulder-puzzle';
+import { Box, Point, boulderPath, gateBox, gateBroken } from './boulder-puzzle';
 import { SpringPuzzleSystem } from './spring-puzzle-system';
 import { CagePuzzleSystem } from './cage-puzzle-system';
 import { PlatePuzzleSystem } from './plate-puzzle-system';
@@ -88,6 +90,8 @@ import {
 import { CorpseCarrySystem } from './corpse-carry-system';
 import { LoosePropSystem } from './loose-prop-system';
 import { ExplodingBarrelSystem } from './exploding-barrel-system';
+import { GadgetSystem } from './gadget-system';
+import { exitLocked, leavesThroughDoor } from './gadgets';
 import { CarryPose } from './corpse-carry';
 import { CorpseDrape } from './corpse-drape';
 import { SCALE_MAX_KG, flingIfOnSpring, freshLaunch, newSpringState } from './spring-puzzle';
@@ -102,6 +106,8 @@ import {
 } from './level-generator';
 import { RenderSystem } from './render-system';
 import { DevToolsSystem } from './dev-tools-system';
+import { LevelEditorSystem } from './level-editor-system';
+import { drawLevelEditor } from './level-editor-art';
 import { restsOnSafeSpot } from './safe-spot';
 import { WorkerInterval } from './worker-interval';
 import { refreshDerivedStats } from './derived-stats';
@@ -114,6 +120,8 @@ const INTERPOLATION_TICKS: number = 3;
 const MAX_EXTRAPOLATION_TICKS: number = 2;
 /** Most time one frame catches up on (~12 ticks): a long stall resumes instead of replaying every tick at once. */
 const MAX_CATCH_UP_MS: number = 250;
+/** Where a designed floor's hidden exit hangs: far above the screen. */
+const HIDDEN_EXIT_Y: number = -10_000;
 
 export type {
   DamageNumber,
@@ -149,6 +157,8 @@ export class GameEngine implements IGameEngine {
   /** Seed for this run's floor layouts: the host picks it, clients adopt it from game-sync. */
   layoutSeed: number = Math.floor(Math.random() * 0x7fffffff);
   level: LevelLayout = generateLevel(this.layoutSeed, 1);
+  /** Dev level editor: the designed layout played instead of the generated one, on its own floor only (solo). */
+  private customLevel: LevelLayout | null = null;
   keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, confirmDrop: false, declineDrop: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false, quickSlot9: false, quickSlot10: false, quickSlot11: false, quickSlot12: false };
   attackCooldown: number = 0;
   attackAnimTicks: number = 0;
@@ -180,6 +190,8 @@ export class GameEngine implements IGameEngine {
   cages: CagePuzzleState | null = null;
   platePuzzle: PlatePuzzleLayout | null = null;
   plate: PlateState | null = null;
+  gadgets: Gadget[] = [];
+  gadgetStates: GadgetState[] = [];
 
   backgroundStars: BackgroundStar[] = [];
 
@@ -290,8 +302,10 @@ export class GameEngine implements IGameEngine {
   private readonly corpseCarrySystem: CorpseCarrySystem;
   private readonly loosePropSystem: LoosePropSystem;
   private readonly explodingBarrelSystem: ExplodingBarrelSystem;
+  readonly gadgetSystem: GadgetSystem;
   private readonly renderSystem: RenderSystem;
   readonly devTools: DevToolsSystem;
+  readonly levelEditor: LevelEditorSystem;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -317,8 +331,19 @@ export class GameEngine implements IGameEngine {
       this.combatSystem,
       this.vfxSystem,
     );
+    this.gadgetSystem = new GadgetSystem(
+      this,
+      this.combatSystem,
+      this.vfxSystem,
+      this.loosePropSystem,
+      this.dropSystem,
+      this.zombieSystem,
+    );
+    // A barrel blast also throws boulders, breaks crack bands and knocks down cages.
+    this.explodingBarrelSystem.onBlast = (center: Point): void => this.gadgetSystem.blast(center);
     this.renderSystem = new RenderSystem(this);
     this.devTools = new DevToolsSystem(this);
+    this.levelEditor = new LevelEditorSystem(this);
 
     this.initExitPlatform();
     this.applyLevel();
@@ -346,7 +371,10 @@ export class GameEngine implements IGameEngine {
    * drawn map come from the same data, so what players see is exactly what they stand on.
    */
   applyLevel(): void {
-    this.level = generateLevel(this.layoutSeed, this.floor);
+    this.level =
+      this.customLevel && this.customLevel.floor === this.floor
+        ? structuredClone(this.customLevel)
+        : generateLevel(this.layoutSeed, this.floor);
     this.boulderPuzzle = this.level.boulderPuzzle ?? null;
     this.boulder = this.boulderPuzzle
       ? { gateHits: 0, progress: 0, speed: 0, wallBroken: false }
@@ -365,6 +393,8 @@ export class GameEngine implements IGameEngine {
       ...this.fixedProps().map(
         (p: Prop): Platform => ({ x: p.x, y: p.y, width: p.width, height: p.height, solid: true }),
       ),
+      // A designed layout's walls: solid blocks.
+      ...(this.level.walls ?? []).map((w: Platform): Platform => ({ ...w, solid: true })),
       // The puzzle wall is solid too, until the boulder breaks it (the gate: placeGate).
       ...(this.boulderPuzzle
         ? [{ ...this.boulderPuzzle.wall, solid: true, puzzlePart: 'wall' as const }]
@@ -375,9 +405,27 @@ export class GameEngine implements IGameEngine {
         : []),
     ];
     this.ropes = this.level.ropes.map((r: Rope): Rope => ({ ...r }));
-    this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.fixedProps(), this.boulderPuzzle, true);
+    this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.fixedProps(), this.level.walls ?? [], this.boulderPuzzle, true);
     this.loosePropSystem.reset(this.level);
+    this.gadgetSystem.reset(this.level);
     this.repositionExitPlatform();
+  }
+
+  isExitLocked(): boolean {
+    return exitLocked(this.gadgetStates);
+  }
+
+  leavesThroughDoor(p: CharacterState): boolean {
+    return leavesThroughDoor(this.gadgets, this.gadgetStates, p);
+  }
+
+  /**
+   * Dev level editor: plays `layout` on its floor instead of the generated one (null: back to
+   * generated), rebuilding collision, art and the puzzles' state at once.
+   */
+  useCustomLevel(layout: LevelLayout | null): void {
+    this.customLevel = layout ? structuredClone(layout) : null;
+    this.applyLevel();
   }
 
   /** The layout's props that never move (lockers): part of the drawn geometry layer. */
@@ -403,7 +451,7 @@ export class GameEngine implements IGameEngine {
     if (!this.boulderPuzzle || !this.boulder || this.boulder.wallBroken) return;
     this.boulder.wallBroken = true;
     this.platforms = this.platforms.filter((p: Platform): boolean => p.puzzlePart !== 'wall');
-    this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.fixedProps(), this.boulderPuzzle, false);
+    this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.fixedProps(), this.level.walls ?? [], this.boulderPuzzle, false);
   }
 
   puzzleWall(): Platform | null {
@@ -447,9 +495,14 @@ export class GameEngine implements IGameEngine {
    */
   repositionExitPlatform(): void {
     this.exitPlatform.x = this.level.exitX;
-    this.exitPlatform.y = this.springPuzzle
-      ? GAME_CONSTANTS.SPRING_LEDGE_Y
-      : exitPlatformY(this.floor, this.remotePlayers.length);
+    // A designed floor can do without the hanging exit (its way out is an exit door): it hangs far
+    // above the screen, where nothing reaches it or sees it.
+    this.exitPlatform.y = this.level.exitHidden
+      ? HIDDEN_EXIT_Y
+      : this.level.exitY ??
+      (this.springPuzzle
+        ? GAME_CONSTANTS.SPRING_LEDGE_Y
+        : exitPlatformY(this.floor, this.remotePlayers.length));
     this.placeGate();
     this.placeCages();
   }
@@ -750,6 +803,7 @@ export class GameEngine implements IGameEngine {
   private loop(timestamp: number): void {
     this.advance(timestamp);
     this.renderSystem.render();
+    if (this.levelEditor.active) drawLevelEditor(this.ctx, this.levelEditor.overlay());
     this.animationFrameId = requestAnimationFrame((t: number) => this.loop(t));
   }
 
@@ -809,6 +863,7 @@ export class GameEngine implements IGameEngine {
       this.springPuzzleSystem.update();
       this.cagePuzzleSystem.update();
       this.platePuzzleSystem.update();
+      this.gadgetSystem.update();
       this.explodingBarrelSystem.update();
       this.projectileSystem.updateDragonProjectiles();
       this.projectileSystem.updateSpitterProjectiles();
@@ -820,6 +875,7 @@ export class GameEngine implements IGameEngine {
       this.springPuzzleSystem.tickClient();
       this.cagePuzzleSystem.tickClient();
       this.platePuzzleSystem.tickClient();
+      this.gadgetSystem.tickClient();
       this.projectileSystem.tickClientProjectileVisuals();
       this.projectileSystem.updatePoisonEffect();
       if (this.floorTransitionTimer > 0) this.floorTransitionTimer--;
@@ -1126,7 +1182,7 @@ export class GameEngine implements IGameEngine {
     if (this.attackCooldown > 0) this.attackCooldown--;
   }
 
-  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; attacks: RemotePlayerAttack[]; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
+  getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; gadgets: GadgetState[]; attacks: RemotePlayerAttack[]; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     if (!this.player) return null;
     const attacks: RemotePlayerAttack[] = [...this.pendingRemoteAttacks];
     this.pendingRemoteAttacks.length = 0;
@@ -1155,6 +1211,7 @@ export class GameEngine implements IGameEngine {
         ? { cages: this.cages.cages.map((c: CageState): CageState => ({ ...c })) }
         : null,
       plate: this.plate ? { ...this.plate } : null,
+      gadgets: this.gadgetSystem.snapshot(),
       attacks,
       revives,
       specialDropActivations,
@@ -1369,6 +1426,11 @@ export class GameEngine implements IGameEngine {
     );
   }
 
+  /** Clients follow the host's gadgets (validated in GadgetSystem.applyRemote). */
+  applyRemoteGadgets(states: GadgetState[]): void {
+    this.gadgetSystem.applyRemote(states);
+  }
+
   applyRemoteProjectiles(spitterProjectiles: SpitterProjectile[], dragonProjectiles: DragonProjectile[]): void {
     if (!this.isMultiplayerClient) return;
     this.spitterProjectiles = spitterProjectiles;
@@ -1471,6 +1533,17 @@ export class GameEngine implements IGameEngine {
           break;
         case VfxEventType.DoorShut:
           this.vfxSystem.spawnDoorShut(evt.x, evt.y);
+          break;
+        case VfxEventType.CrackBreak:
+          if (Number.isFinite(evt.endX) && Number.isFinite(evt.targetY)) {
+            this.vfxSystem.spawnCrackBreak(
+              { x: evt.x, y: evt.y, width: evt.endX! - evt.x, height: evt.targetY! - evt.y },
+              evt.dir === -1 ? -1 : 1,
+            );
+          }
+          break;
+        case VfxEventType.GadgetLaunch:
+          this.vfxSystem.spawnGadgetLaunch(evt.x, evt.y, evt.value ?? 90);
           break;
         case VfxEventType.Lightning:
           this.vfxSystem.strikeLightning(evt.x, evt.value!);

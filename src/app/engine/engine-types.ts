@@ -11,6 +11,7 @@ import {
   ActiveSpecialEffect,
   BoulderState,
   CagePuzzleState,
+  GadgetState,
   PlateState,
   SpringState,
   DropType,
@@ -95,11 +96,131 @@ export interface Platform {
    * `gate` holding the boulder on its ledge (broken by players' hits). The floor-3 `spring` is a
    * solid puzzle part that stays for the whole floor. The floor-4 `cage` (the exit cage: hanging,
    * then standing on the ground) and each `hanging-cage` (mid-screen) go when their chain snaps.
+   * A `gadget` solid belongs to a designed floor's gadget (`gadgetId`): a resting boulder, a
+   * cracked wall's pieces, a door, a spring or slingshot base.
    */
-  puzzlePart?: 'wall' | 'gate' | 'spring' | 'cage' | 'hanging-cage';
+  puzzlePart?: 'wall' | 'gate' | 'spring' | 'cage' | 'hanging-cage' | 'gadget';
   /** A loose prop's box: it follows the prop, and is gone while the prop is carried or in the air. */
   propId?: string;
+  /** The gadget this `gadget` solid belongs to. */
+  gadgetId?: string;
 }
+
+/**
+ * Designed floors (dev level editor): standalone gadgets, each a box (x, y top-left). Sources (a
+ * button, scale or lever) wire their signal to `targets` (spring, slingshot and door ids, or
+ * `EXIT_TARGET`); a target with several wires is on while any of them is.
+ */
+interface GadgetBox {
+  /** Unique on its floor (`g1`, `g2`, ...): wires and the layout's notes name gadgets by it. */
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A loose boulder, at rest here when the floor starts: push it, launch it, let it roll. */
+export interface BoulderGadget extends GadgetBox {
+  kind: 'boulder';
+  /** Its weight: what it presses buttons and scales with; heavier ones roll slower off a swing or blast. */
+  kg: number;
+}
+
+/** A solid wall with a crack band (`crackTop`..`crackBottom`, screen y inside the box) that breaks out. */
+export interface CrackWallGadget extends GadgetBox {
+  kind: 'crack-wall';
+  crackTop: number;
+  crackBottom: number;
+}
+
+/** A floor button set into its surface's top (`y`): on while `kg` or more rest on it. */
+export interface ButtonGadget extends GadgetBox {
+  kind: 'button';
+  kg: number;
+  targets: string[];
+}
+
+/** A scale's pan set into its surface's top (`y`): on while `kg` or more rest on it. */
+export interface ScaleGadget extends GadgetBox {
+  kind: 'scale';
+  kg: number;
+  targets: string[];
+}
+
+/** A lever standing on its surface (scenery): every hit flips it on or off. */
+export interface LeverGadget extends GadgetBox {
+  kind: 'lever';
+  targets: string[];
+  /** Flipped on when the floor starts. */
+  startsOn: boolean;
+}
+
+/** A spring pad (solid): launches what rests on it straight up at `power` px/tick. */
+export interface SpringGadget extends GadgetBox {
+  kind: 'spring';
+  power: number;
+}
+
+/** A slingshot (solid base): throws what rests on it at `power` px/tick, `angle` degrees (0 right, 90 up). */
+export interface SlingshotGadget extends GadgetBox {
+  kind: 'slingshot';
+  power: number;
+  angle: number;
+}
+
+/**
+ * A solid door: slides up open while its input is on (and stays open once open when `latch`); a
+ * door with no wire stands open. An `exit` door finishes the floor for whoever walks into it
+ * while it is fully open.
+ */
+export interface DoorGadget extends GadgetBox {
+  kind: 'door';
+  latch: boolean;
+  exit: boolean;
+}
+
+/**
+ * A ramp across its box (one-way, like a platform): from the bottom-left corner up to the
+ * top-right one when `risesRight`, else from the top-left down to the bottom-right. Players walk
+ * on it; a boulder rolls down it.
+ */
+export interface SlopeGadget extends GadgetBox {
+  kind: 'slope';
+  risesRight: boolean;
+}
+
+/**
+ * A covered cage hanging on a chain from the ceiling (solid: stand on it). A wire's signal (or,
+ * unwired, a swing at it) drops it: it crushes what it falls on, then stands there as a step (or
+ * smashes when `smashes`) and lets out what it hid: `zombies` of them, `gold` and potions, or nothing.
+ */
+export interface CageGadget extends GadgetBox {
+  kind: 'cage';
+  content: CageContent;
+  zombies: number;
+  gold: number;
+  smashes: boolean;
+}
+
+export type Gadget =
+  | BoulderGadget
+  | CrackWallGadget
+  | ButtonGadget
+  | ScaleGadget
+  | LeverGadget
+  | SpringGadget
+  | SlingshotGadget
+  | DoorGadget
+  | SlopeGadget
+  | CageGadget;
+
+export type GadgetKind = Gadget['kind'];
+export type SourceGadget = ButtonGadget | ScaleGadget | LeverGadget;
+export type LauncherGadget = SpringGadget | SlingshotGadget;
+
+/** A wire to this target id opens the floor's exit: it gets a door that lets players out only while open. */
+export const EXIT_TARGET: string = 'exit';
 
 export interface Rope {
   x: number;
@@ -349,6 +470,13 @@ export interface IGameEngine {
   /** Floor-5 puzzle layout and its plate and exit door (null on other floors). */
   platePuzzle: PlatePuzzleLayout | null;
   plate: PlateState | null;
+  /** A designed floor's gadgets (dev level editor) and their live state ([] on generated floors). */
+  gadgets: Gadget[];
+  gadgetStates: GadgetState[];
+  /** A wire runs to the exit and its door isn't fully open: standing on the exit doesn't finish the floor. */
+  isExitLocked(): boolean;
+  /** The player stands in a fully open exit door (designed floors): the floor is done. */
+  leavesThroughDoor(p: CharacterState): boolean;
 
   backgroundStars: BackgroundStar[];
 
