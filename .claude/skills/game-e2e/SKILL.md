@@ -124,6 +124,11 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   `zombies[].type === 'eater'`, `eating`, `animState` (`eating`, `run`, ...), `animFrame` (an airborne Eater's `jump` frame follows its `velocityY`: `eaterJumpFrame`, launch 0, apex 4, touchdown 7). Lab:
   `npm run e2e:lab -- -g eater` (stuck spells, meals, puzzle side effects, host/guest). Rest players on the safe spot so a hungry Eater only has zombies to hunt.
   Specs: `solo/eater.spec.ts`, `online/eater-coop.spec.ts`.
+- **Phone level editor** (`/mobile-editor`; `mobileRedirectGuard` sends every `(hover: none) and (pointer: coarse)` device there):
+  the `phone` fixture opens a landscape touch context (`PHONE_VIEWPORT`) and lands there with the probe ready.
+  Drive it with real touches (`Finger` in `solo/mobile-editor.spec.ts`: CDP `Input.dispatchTouchEvent`;
+  Playwright's touchscreen only taps). Rail ids `level-editor-rail-*`, pad ids `touch-controls-button-<action>`
+  (pointer events, held while pressed). Spec: `solo/mobile-editor.spec.ts`.
 - **Dev tools dialog** (`game-dev-button-toggle-dialog`, dev builds and `/dev`; engine side in
   `engine/dev-tools-system.ts`, `engine.devTools`). Left mouse tool: Attack / Drag (grabs the topmost
   player, zombie, prop or corpse under the cursor, else brings the player there; guests drag only

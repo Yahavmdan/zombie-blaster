@@ -66,6 +66,8 @@ export class GameCanvasComponent implements OnDestroy {
   readonly devSpawnType: InputSignal<ZombieType> = input<ZombieType>(ZombieType.Walker);
   /** The left button is down on the canvas with the drag tool. */
   readonly dragging: WritableSignal<boolean> = signal<boolean>(false);
+  /** The engine runs (its level editor and dev tools exist from now on). */
+  readonly engineReady: WritableSignal<boolean> = signal<boolean>(false);
 
   readonly playerUpdated: OutputEmitterRef<CharacterState> = output<CharacterState>();
   readonly xpGained: OutputEmitterRef<number> = output<number>();
@@ -123,6 +125,11 @@ export class GameCanvasComponent implements OnDestroy {
   private readonly boundContextMenu: (e: MouseEvent) => void = (e: MouseEvent): void => this.onContextMenu(e);
   private readonly boundDragMove: (e: MouseEvent) => void = (e: MouseEvent): void => this.dragTo(e);
   private readonly boundHover: (e: MouseEvent) => void = (e: MouseEvent): void => this.hover(e);
+  private readonly boundTouchStart: (e: TouchEvent) => void = (e: TouchEvent): void => this.onTouchStart(e);
+  private readonly boundTouchMove: (e: TouchEvent) => void = (e: TouchEvent): void => this.onTouchMove(e);
+  private readonly boundTouchEnd: (e: TouchEvent) => void = (e: TouchEvent): void => this.onTouchEnd(e);
+  /** The finger building on the map (a second finger is ignored), or null. */
+  private buildTouchId: number | null = null;
   private readonly heldQuickSlotActions: Map<string, GameAction> = new Map<string, GameAction>();
 
   constructor() {
@@ -306,6 +313,13 @@ export class GameCanvasComponent implements OnDestroy {
     }, 50);
   }
 
+  /** On-screen touch controls: an action stays held while its button is pressed. */
+  setHeld(action: GameAction, held: boolean): void {
+    if (held && this.inputDisabled()) return;
+    this.keys[action] = held;
+    this.engine?.setKeys({ ...this.keys });
+  }
+
   triggerQuickSlotAction(action: GameAction): void {
     if (action === 'openStats') { this.openStatsRequested.emit(); return; }
     if (action === 'openSkills') { this.openSkillsRequested.emit(); return; }
@@ -451,6 +465,10 @@ export class GameCanvasComponent implements OnDestroy {
     this.canvasRef().nativeElement.removeEventListener('mousedown', this.boundMouseDown);
     this.canvasRef().nativeElement.removeEventListener('contextmenu', this.boundContextMenu);
     this.canvasRef().nativeElement.removeEventListener('mousemove', this.boundHover);
+    this.canvasRef().nativeElement.removeEventListener('touchstart', this.boundTouchStart);
+    this.canvasRef().nativeElement.removeEventListener('touchmove', this.boundTouchMove);
+    this.canvasRef().nativeElement.removeEventListener('touchend', this.boundTouchEnd);
+    this.canvasRef().nativeElement.removeEventListener('touchcancel', this.boundTouchEnd);
   }
 
   private initEngine(): void {
@@ -467,6 +485,7 @@ export class GameCanvasComponent implements OnDestroy {
     this.bindEngineCallbacks();
     this.currentClassId = p.classId;
     this.engine.start({ ...p });
+    this.engineReady.set(true);
   }
 
   private restartEngine(p: CharacterState): void {
@@ -518,6 +537,11 @@ export class GameCanvasComponent implements OnDestroy {
     this.canvasRef().nativeElement.addEventListener('mousedown', this.boundMouseDown);
     this.canvasRef().nativeElement.addEventListener('contextmenu', this.boundContextMenu);
     this.canvasRef().nativeElement.addEventListener('mousemove', this.boundHover);
+    // Touch: not passive, so a finger on the map neither scrolls/zooms the page nor fakes mouse clicks.
+    this.canvasRef().nativeElement.addEventListener('touchstart', this.boundTouchStart, { passive: false });
+    this.canvasRef().nativeElement.addEventListener('touchmove', this.boundTouchMove, { passive: false });
+    this.canvasRef().nativeElement.addEventListener('touchend', this.boundTouchEnd);
+    this.canvasRef().nativeElement.addEventListener('touchcancel', this.boundTouchEnd);
   }
 
   private onKeyDown(e: KeyboardEvent): void {
@@ -716,13 +740,43 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.levelEditor.pointerMove(at.x, at.y);
   }
 
+  /** The level editor by finger: press, drag and let go like the left mouse button. */
+  private onTouchStart(e: TouchEvent): void {
+    e.preventDefault();
+    if (this.buildTouchId !== null || this.inputDisabled() || this.devMouseTool() !== 'build') return;
+    const touch: Touch = e.changedTouches[0];
+    this.buildTouchId = touch.identifier;
+    const at: { x: number; y: number } = this.worldPoint(touch);
+    this.engine?.levelEditor.pointerDown(at.x, at.y);
+  }
+
+  private onTouchMove(e: TouchEvent): void {
+    e.preventDefault();
+    const touch: Touch | null = this.buildTouch(e);
+    if (!touch) return;
+    const at: { x: number; y: number } = this.worldPoint(touch);
+    this.engine?.levelEditor.pointerMove(at.x, at.y);
+  }
+
+  private onTouchEnd(e: TouchEvent): void {
+    if (!this.buildTouch(e)) return;
+    this.buildTouchId = null;
+    this.engine?.levelEditor.pointerUp();
+  }
+
+  /** The building finger among the touches that changed, or null. */
+  private buildTouch(e: TouchEvent): Touch | null {
+    const touches: Touch[] = Array.from<Touch>(e.changedTouches);
+    return touches.find((t: Touch): boolean => t.identifier === this.buildTouchId) ?? null;
+  }
+
   private spawnAtCursor(e: MouseEvent): void {
     const at: { x: number; y: number } = this.worldPoint(e);
     this.engine?.devTools.spawnAt(at.x, at.y, this.devSpawnType());
   }
 
   /** The canvas is stretched to the page: page px back to world px per axis. */
-  private worldPoint(e: MouseEvent): { x: number; y: number } {
+  private worldPoint(e: { clientX: number; clientY: number }): { x: number; y: number } {
     const page: DOMRect = this.canvasRef().nativeElement.getBoundingClientRect();
     return {
       x: ((e.clientX - page.left) / page.width) * GAME_CONSTANTS.CANVAS_WIDTH,

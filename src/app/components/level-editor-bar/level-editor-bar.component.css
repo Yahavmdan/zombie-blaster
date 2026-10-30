@@ -160,3 +160,49 @@
   height: 40px;
   image-rendering: pixelated;
 }
+
+/* Phone layout: a rail of big buttons down the left edge, the map beside it (width --le-rail-w,
+   set by the game page), and the tool window sliding out over the map. */
+.le-rail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 255;
+  width: var(--le-rail-w, 60px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px;
+  overflow-y: auto;
+  border-right: var(--border) solid var(--toxic);
+}
+
+.le-rail__btn {
+  flex: none;
+  height: 40px;
+  padding: 0;
+  font-size: var(--fs-14);
+}
+
+.le-rail__btn .le-tool__icon {
+  width: 32px;
+  height: 32px;
+}
+
+:host(.le-compact) .le-window {
+  top: 0;
+  left: var(--le-rail-w, 60px);
+  width: min(340px, calc(100% - var(--le-rail-w, 60px)));
+  max-height: 100%;
+  height: 100%;
+}
+
+.le-window--hidden {
+  display: none;
+}
+
+:host(.le-compact) .le-props {
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+}

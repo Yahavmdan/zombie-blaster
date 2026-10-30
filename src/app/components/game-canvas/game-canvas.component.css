@@ -10,6 +10,8 @@
   height: 100%;
   display: block;
   image-rendering: pixelated;
+  /* Fingers build and play here: no page scroll or pinch zoom. */
+  touch-action: none;
 }
 
 /* Dev tools mouse tools: drag grabs anything, spawn places a zombie. */

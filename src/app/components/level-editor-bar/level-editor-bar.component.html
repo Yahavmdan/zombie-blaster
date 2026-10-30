@@ -1,4 +1,81 @@
-<div class="le-window px-panel" appDraggableDialog data-testid="level-editor-panel-window">
+@if (compact()) {
+  <nav class="le-rail px-panel" data-testid="level-editor-rail">
+    @if (mode() === 'build') {
+      <button
+        class="px-btn px-btn--ghost le-rail__btn"
+        [class.px-btn--good]="drawerOpen()"
+        aria-label="Tools"
+        data-testid="level-editor-rail-button-tools"
+        (click)="toggleDrawer()"
+      >
+        <canvas class="le-tool__icon" width="40" height="40" [appToolIcon]="tool()"></canvas>
+      </button>
+      @for (t of railTools; track t) {
+        <button
+          class="px-btn px-btn--ghost le-rail__btn"
+          [class.px-btn--good]="tool() === t"
+          [attr.aria-label]="t"
+          [attr.data-testid]="'level-editor-rail-tool-' + t"
+          (click)="pickTool(t)"
+        >
+          <canvas class="le-tool__icon" width="40" height="40" [appToolIcon]="t"></canvas>
+        </button>
+      }
+      <button
+        class="px-btn px-btn--sm le-rail__btn"
+        data-testid="level-editor-rail-button-undo"
+        [disabled]="!canUndo()"
+        (click)="undo()"
+      >
+        Undo
+      </button>
+      <button
+        class="px-btn px-btn--sm le-rail__btn"
+        data-testid="level-editor-rail-button-redo"
+        [disabled]="!canRedo()"
+        (click)="redo()"
+      >
+        Redo
+      </button>
+      <button
+        class="px-btn px-btn--sm px-btn--accent le-rail__btn"
+        title="Size, weight, power, wires: what middle click opens on a PC"
+        data-testid="level-editor-rail-button-adjust"
+        [disabled]="!selection()"
+        (click)="adjustSelected($event)"
+      >
+        Adjust
+      </button>
+    }
+    <button
+      class="px-btn px-btn--sm le-rail__btn"
+      [class.px-btn--good]="mode() === 'build'"
+      [class.px-btn--primary]="mode() === 'play'"
+      [title]="mode() === 'build' ? 'Walk the puzzle with touch controls' : 'Back to building'"
+      data-testid="level-editor-rail-button-mode"
+      (click)="toggleMode()"
+    >
+      {{ mode() === 'build' ? 'Play' : 'Build' }}
+    </button>
+    @if (canFullscreen) {
+      <button
+        class="px-btn px-btn--sm px-btn--ghost le-rail__btn"
+        title="Full screen"
+        data-testid="level-editor-rail-button-fullscreen"
+        (click)="toggleFullscreen()"
+      >
+        Full
+      </button>
+    }
+  </nav>
+}
+
+<div
+  class="le-window px-panel"
+  [class.le-window--hidden]="compact() && (!drawerOpen() || mode() === 'play')"
+  appDraggableDialog
+  data-testid="level-editor-panel-window"
+>
   <div class="px-header">
     <app-pixel-icon [icon]="'book'" [size]="24" />
     <span class="le-title">Level editor</span>

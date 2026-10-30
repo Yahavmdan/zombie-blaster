@@ -35,6 +35,18 @@
   background: var(--ink);
 }
 
+/* Phone level editor: the editor's rail takes the left edge, the map the rest (nothing covers it). */
+.game-wrapper--mobile {
+  --le-rail-w: 60px;
+}
+
+.game-wrapper--mobile app-game-canvas {
+  position: absolute;
+  inset: 0 0 0 var(--le-rail-w);
+  width: auto;
+  height: auto;
+}
+
 /* Game over */
 
 .game-over-overlay {

@@ -52,6 +52,9 @@ interface ToolGroup {
 
 type EditorPanel = 'none' | 'export' | 'import' | 'notes';
 
+/** Phone layout: build on the map, or walk the puzzle with the touch controls. */
+export type EditorMode = 'build' | 'play';
+
 /** The design autosaved in this browser, so a reload (or a dev server rebuild) doesn't lose it. */
 const DRAFT_KEY: string = 'zb-level-editor-draft';
 
@@ -174,6 +177,8 @@ const TOOL_GROUPS: ToolGroup[] = [
   },
 ];
 
+const RAIL_TOOLS: EditorTool[] = ['select', 'erase', 'link'];
+
 /**
  * The dev level editor's floating tool bar: pick what the left mouse places, change the
  * selection, and export / import the design as JSON. It opens the editor while it is shown.
@@ -182,13 +187,26 @@ const TOOL_GROUPS: ToolGroup[] = [
   selector: 'app-level-editor-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [PixelIconComponent, DraggableDialogDirective, NgTemplateOutlet, ToolIconDirective],
+  host: {
+    '[class.le-compact]': 'compact()',
+  },
   templateUrl: './level-editor-bar.component.html',
   styleUrl: './level-editor-bar.component.css',
 })
 export class LevelEditorBarComponent {
   readonly editor: InputSignal<LevelEditorSystem> = input.required<LevelEditorSystem>();
   readonly closed: OutputEmitterRef<void> = output<void>();
+  /** Phone layout: a rail of big buttons beside the map; the tool window slides out of it. */
+  readonly compact: InputSignal<boolean> = input<boolean>(false);
+  /** Phone layout: building or playing (the touch controls show). */
+  readonly mode: InputSignal<EditorMode> = input<EditorMode>('build');
+  readonly modeChanged: OutputEmitterRef<EditorMode> = output<EditorMode>();
+  /** Phone layout: the tool window is out. */
+  readonly drawerOpen: WritableSignal<boolean> = signal<boolean>(false);
+  readonly canFullscreen: boolean = typeof document !== 'undefined' && document.fullscreenEnabled;
 
+  /** Phone layout: tools always one tap away on the rail (the rest are in the tool window). */
+  readonly railTools: EditorTool[] = RAIL_TOOLS;
   readonly groups: ToolGroup[] = TOOL_GROUPS;
   readonly contents: CageContent[] = CAGE_CONTENTS;
   readonly panel: WritableSignal<EditorPanel> = signal<EditorPanel>('none');
@@ -246,7 +264,12 @@ export class LevelEditorBarComponent {
       const button: ToolButton | undefined = group.tools.find(
         (b: ToolButton): boolean => b.tool === tool,
       );
-      if (button) return `${button.label}: ${button.hint}`;
+      if (!button) continue;
+      // A phone has no middle button: the rail's Adjust opens the same popup.
+      const hint: string = this.compact()
+        ? button.hint.replace(/[Mm]iddle click/g, 'Adjust')
+        : button.hint;
+      return `${button.label}: ${hint}`;
     }
     return '';
   });
@@ -280,6 +303,33 @@ export class LevelEditorBarComponent {
 
   pickTool(tool: EditorTool): void {
     this.editor().setTool(tool);
+    // Phone: the window covers the map, so picking a tool puts it away.
+    this.drawerOpen.set(false);
+  }
+
+  toggleDrawer(): void {
+    this.drawerOpen.update((open: boolean): boolean => !open);
+  }
+
+  /** The rail's Adjust: the selection's popup opens beside the button. */
+  adjustSelected(event: MouseEvent): void {
+    const button: DOMRect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    this.drawerOpen.set(false);
+    this.editor().inspectSelected(button.right, button.top);
+  }
+
+  toggleMode(): void {
+    const next: EditorMode = this.mode() === 'build' ? 'play' : 'build';
+    if (next === 'play') {
+      this.drawerOpen.set(false);
+      this.editor().closeInspector();
+    }
+    this.modeChanged.emit(next);
+  }
+
+  toggleFullscreen(): void {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen();
   }
 
   removeSelected(): void {
@@ -387,7 +437,8 @@ export class LevelEditorBarComponent {
   }
 
   onClose(): void {
-    this.closed.emit();
+    if (this.compact()) this.drawerOpen.set(false);
+    else this.closed.emit();
   }
 
   /** Typing in the boxes must not move the player (the game reads keys on the window). */
