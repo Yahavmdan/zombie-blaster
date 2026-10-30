@@ -6,6 +6,7 @@ import {
   isExplosive,
   isPickable,
   LevelLayout,
+  levelFor,
   levelViolations,
   lyingProp,
   pickableProps,
@@ -18,11 +19,34 @@ import {
 } from './level-generator';
 import { pushOutOfSolids, stepUpOnto } from './solid-blocks';
 import { chuteSpan } from './boulder-puzzle';
-import { BoulderPuzzleLayout, CagePuzzleLayout, HangingCage, Platform, PlatePuzzleLayout, Rope, SpringPuzzleLayout } from './engine-types';
+import { BoulderPuzzleLayout, CagePuzzleLayout, Gadget, HangingCage, Platform, PlatePuzzleLayout, Rope, SpringPuzzleLayout } from './engine-types';
 import { springSpan } from './spring-puzzle';
 
 // Most tests here sweep thousands of seeded layouts: more than the default 5 s on a busy machine.
 vi.setConfig({ testTimeout: 20_000 });
+
+describe('designed floors', () => {
+  it('floor 1 is the designed one for every seed: a door on the right ledge, the button far left', (): void => {
+    for (const seed of [1, 42, 999_999]) {
+      const level: LevelLayout = levelFor(seed, 1);
+      expect(level.exitHidden).toBe(true);
+      expect(level.hint).toBe('Weigh down the button to open the door');
+      expect(level.gadgets?.map((g: Gadget): string => g.kind)).toEqual(['door', 'button']);
+      expect(level).toEqual(levelFor(7, 1));
+    }
+  });
+
+  it('every client plays a copy: changing one floor never changes the next', (): void => {
+    const level: LevelLayout = levelFor(1, 1);
+    level.platforms.length = 0;
+    expect(levelFor(1, 1).platforms.length).toBe(1);
+  });
+
+  it('other floors are still generated from the seed', (): void => {
+    expect(levelFor(42, 2)).toEqual(generateLevel(42, 2));
+    expect(levelFor(42, 6)).toEqual(generateLevel(42, 6));
+  });
+});
 
 describe('level generator', () => {
   it('every generated floor obeys the layout rules (tiles, exit clearance, reachability)', (): void => {

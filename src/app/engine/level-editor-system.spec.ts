@@ -45,6 +45,9 @@ function walls(engine: GameEngine): Platform[] {
   );
 }
 
+/** Floor 1 is designed in the level editor (`DESIGNED_LEVELS`); floor 6 is generated and has no puzzle. */
+const GENERATED_FLOOR: number = 6;
+
 describe('LevelEditorSystem on a real engine', () => {
   let engine: GameEngine;
   let editor: LevelEditorSystem;
@@ -52,6 +55,8 @@ describe('LevelEditorSystem on a real engine', () => {
 
   beforeEach((): void => {
     engine = new GameEngine(createMockCanvas());
+    engine.floor = GENERATED_FLOOR;
+    engine.applyLevel();
     editor = engine.levelEditor;
     changes = [];
     editor.onChange = (layoutChanged: boolean): void => {
@@ -274,6 +279,8 @@ describe('LevelEditorSystem on a real engine', () => {
   it('online it does nothing (floors come from the host seed)', () => {
     const online: GameEngine = new GameEngine(createMockCanvas());
     online.isMultiplayerHost = true;
+    online.floor = GENERATED_FLOOR;
+    online.applyLevel();
     online.levelEditor.open();
     online.levelEditor.setTool('wall');
     online.levelEditor.pointerDown(300, 600);

@@ -12,6 +12,7 @@ import {
   SpringPuzzleLayout,
 } from './engine-types';
 import { chuteSpan } from './boulder-puzzle';
+import { DESIGNED_LEVELS } from './designed-levels';
 
 /**
  * Procedural floor layouts. Every floor gets a new arrangement of platforms and ropes from a
@@ -52,6 +53,8 @@ export interface LevelLayout {
   gadgets?: Gadget[];
   /** A designed layout: the designer's explanation of the puzzle (what it is, how it is solved), kept with the export. */
   notes?: string;
+  /** A designed floor in the game: the subtitle under the floor title (how to get out). */
+  hint?: string;
 }
 
 export const GROUND_PLATFORM: Platform = {
@@ -880,6 +883,15 @@ function scaleClearSpan(puzzle: SpringPuzzleLayout): [number, number] {
 function springClearSpan(puzzle: SpringPuzzleLayout): [number, number] {
   const clear: number = GAME_CONSTANTS.SPRING_CLEAR_PX;
   return [puzzle.spring.x - clear, puzzle.spring.x + puzzle.spring.width + clear];
+}
+
+/**
+ * The floor the game plays: a floor designed in the level editor (the same for every seed, and
+ * every client has it), else the generated one.
+ */
+export function levelFor(seed: number, floor: number): LevelLayout {
+  const designed: LevelLayout | undefined = DESIGNED_LEVELS[floor];
+  return designed ? structuredClone(designed) : generateLevel(seed, floor);
 }
 
 export function generateLevel(seed: number, floor: number): LevelLayout {

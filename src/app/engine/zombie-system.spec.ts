@@ -154,6 +154,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     spawnTimer: 999,
     eaterSpawnTimer: 999,
     floorTransitionTimer: 0,
+    levelHint: null,
     exitPlatform: {
       x: (GAME_CONSTANTS.CANVAS_WIDTH - 250) / 2,
       y: 130,
