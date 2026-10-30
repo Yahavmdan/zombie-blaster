@@ -590,6 +590,12 @@ const engineControls: E2eEngineControls = {
     engine.layoutSeed = seed;
     engine.applyLevel();
   },
+  setDesignedFloors(enabled: boolean): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine || engine.designedFloors === enabled) return;
+    engine.designedFloors = enabled;
+    engine.applyLevel();
+  },
   loadLayout(json: string): string | null {
     const engine: GameEngine | null = currentEngine;
     if (!engine) return 'No engine';

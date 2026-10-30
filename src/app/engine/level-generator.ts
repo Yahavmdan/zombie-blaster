@@ -887,11 +887,11 @@ function springClearSpan(puzzle: SpringPuzzleLayout): [number, number] {
 
 /**
  * The floor the game plays: a floor designed in the level editor (the same for every seed, and
- * every client has it), else the generated one.
+ * every client has it), else the generated one. `designed` false always generates (e2e setup).
  */
-export function levelFor(seed: number, floor: number): LevelLayout {
-  const designed: LevelLayout | undefined = DESIGNED_LEVELS[floor];
-  return designed ? structuredClone(designed) : generateLevel(seed, floor);
+export function levelFor(seed: number, floor: number, designed: boolean = true): LevelLayout {
+  const made: LevelLayout | undefined = designed ? DESIGNED_LEVELS[floor] : undefined;
+  return made ? structuredClone(made) : generateLevel(seed, floor);
 }
 
 export function generateLevel(seed: number, floor: number): LevelLayout {

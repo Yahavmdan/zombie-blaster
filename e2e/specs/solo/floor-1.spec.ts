@@ -1,7 +1,10 @@
+import { TestInfo } from '@playwright/test';
 import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer, KEYS } from '../../support/game-player';
 import { E2eGadgetView, E2eSnapshot } from '../../support/probe';
 import { WORLD } from '../../support/invariants';
+import { drawnGeometry, expectArtMatchesCollision } from '../../support/level-geometry';
+import { E2eGeometryReport } from '../../support/probe';
 
 type PropView = E2eSnapshot['level']['props'][number];
 
@@ -25,6 +28,8 @@ function gadget(s: E2eSnapshot, id: string): E2eGadgetView {
 /** Floor 1 with nobody but the player around. */
 async function quietFloor1(solo: SoloFactory): Promise<GamePlayer> {
   const p: GamePlayer = await solo('warrior');
+  // The fixture plays generated floors: this spec is about the designed one.
+  await p.probe.setDesignedFloors(true);
   await p.probe.setGodMode(true);
   await p.probe.clearZombies();
   return p;
@@ -61,6 +66,15 @@ test.describe('floor 1: weigh down the button to open the door', { tag: '@solo' 
         !gadget(st, BUTTON.id).on && gadget(st, DOOR.id).openTicks === 0,
       { timeoutMs: 5_000 },
     );
+  });
+
+  test('what you see is what you stand on: the ledge, the crates and the door', async ({
+    solo,
+  }: { solo: SoloFactory }, testInfo: TestInfo): Promise<void> => {
+    const p: GamePlayer = await quietFloor1(solo);
+    const report: E2eGeometryReport = await drawnGeometry(p, 'floor 1');
+    await p.attachCanvas(testInfo, 'floor 1');
+    expectArtMatchesCollision(report, 'floor 1');
   });
 
   test('a box left on the button holds the door open: walk in from the ledge to reach floor 2', async ({

@@ -185,6 +185,9 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   held Space hops again on every landing. W/up never jumps: it grabs a ladder (from the
   floor too) and climbs. A test that holds jump past landing gets extra hops. On ropes: left/right
   turns, jump alone does nothing, direction + jump lets go, climbing past the top dismounts.
+- **Floor 1 is designed** (`DESIGNED_LEVELS`: button far left, exit door on the right ledge, no hanging
+  exit, no safe spot). The `solo` and `room` fixtures call `probe.setDesignedFloors(false)` on every page,
+  so specs play generated floors everywhere; `solo/floor-1.spec.ts` turns it back on to test the real floor 1.
 - **Levels are generated per floor** (`level-generator.ts`, seed from the host): never hard-code
   platform/rope coordinates in tests. Read them from `state().level` (`levelPlatforms(s)`,
   `levelRopes(s)`, `goToFloorWhere(player, 'a rope', pred)`), or pin a layout with

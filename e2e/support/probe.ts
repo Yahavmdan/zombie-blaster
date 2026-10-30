@@ -106,6 +106,17 @@ export class GameProbe {
   }
 
   /** Setup only (solo/host): pin the layout seed so a test gets a known level. */
+  /**
+   * Setup: false plays generated floors where a floor is designed (floor 1); the fixtures start
+   * every game this way. Online, set it on every page.
+   */
+  async setDesignedFloors(enabled: boolean): Promise<void> {
+    await this.page.evaluate(
+      (on: boolean): void => window.__zbE2e?.engine?.setDesignedFloors(on),
+      enabled,
+    );
+  }
+
   async setLayoutSeed(seed: number): Promise<void> {
     await this.page.evaluate((n: number): void => window.__zbE2e?.engine?.setLayoutSeed(n), seed);
   }
