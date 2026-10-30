@@ -78,16 +78,21 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
       height: h - groundY,
       draw: (ctx: CanvasRenderingContext2D): void => renderer.drawGroundTiles(ctx),
     },
-    {
-      object: `exit ${exit.x},${exit.y}`,
-      kind: 'exit',
-      x: exit.x,
-      y: exit.y,
-      width: exit.width,
-      height: tile,
-      draw: (ctx: CanvasRenderingContext2D): void =>
-        renderer.drawDynamicPlatform(ctx, exit.x, exit.y, exit.width, exit.height),
-    },
+    // A designed floor can hide the hanging exit (far above the screen; an exit door instead).
+    ...(engine.level.exitHidden
+      ? []
+      : [
+          {
+            object: `exit ${exit.x},${exit.y}`,
+            kind: 'exit' as const,
+            x: exit.x,
+            y: exit.y,
+            width: exit.width,
+            height: tile,
+            draw: (ctx: CanvasRenderingContext2D): void =>
+              renderer.drawDynamicPlatform(ctx, exit.x, exit.y, exit.width, exit.height),
+          },
+        ]),
     // The puzzle wall, like a prop: art in every column of its collision box.
     ...(wall
       ? [

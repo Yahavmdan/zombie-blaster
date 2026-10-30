@@ -63,6 +63,8 @@ export const test = base.extend<GameFixtures>({
       const player: GamePlayer = await GamePlayer.open(browser, { name, classId });
       opened.push(player);
       await player.startSolo();
+      // Specs play the generated floors; floor 1's designed puzzle has its own spec (floor-1.spec).
+      await player.probe.setDesignedFloors(false);
       return player;
     };
     await use(factory);

@@ -499,6 +499,11 @@ export interface E2eEngineControls {
   /** Solo/host setup only: pin the run's layout seed (the current floor is rebuilt from it). */
   setLayoutSeed(seed: number): void;
   /**
+   * Setup: false plays generated floors where a floor is designed (floor 1), for specs about the
+   * generated floors; the current floor is rebuilt. Online, set it on every page.
+   */
+  setDesignedFloors(enabled: boolean): void;
+  /**
    * Setup only: plays a designed layout (the level editor's JSON export) on the current floor of
    * this page. Online, load the same layout on every page. Returns the parse error, or null.
    */

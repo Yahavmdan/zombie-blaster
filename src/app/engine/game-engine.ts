@@ -157,6 +157,8 @@ export class GameEngine implements IGameEngine {
   /** Seed for this run's floor layouts: the host picks it, clients adopt it from game-sync. */
   layoutSeed: number = Math.floor(Math.random() * 0x7fffffff);
   level: LevelLayout = levelFor(this.layoutSeed, 1);
+  /** E2e setup: false plays generated floors everywhere, even where a floor is designed (floor 1). */
+  designedFloors: boolean = true;
 
   get levelHint(): string | null {
     return this.level.hint ?? null;
@@ -378,7 +380,7 @@ export class GameEngine implements IGameEngine {
     this.level =
       this.customLevel && this.customLevel.floor === this.floor
         ? structuredClone(this.customLevel)
-        : levelFor(this.layoutSeed, this.floor);
+        : levelFor(this.layoutSeed, this.floor, this.designedFloors);
     this.boulderPuzzle = this.level.boulderPuzzle ?? null;
     this.boulder = this.boulderPuzzle
       ? { gateHits: 0, progress: 0, speed: 0, wallBroken: false }
