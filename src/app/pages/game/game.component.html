@@ -3,7 +3,7 @@
 }
 
 @if (player(); as p) {
-  <div class="game-wrapper">
+  <div class="game-wrapper" [class.game-wrapper--mobile]="mobileEditor()">
     <app-game-canvas
       [player]="p"
       [inputDisabled]="settingsOpen() || statPanelOpen() || skillPanelOpen() || shopOpen() || inventoryOpen() || devDialogOpen() || isGameOver() || afkState() !== 'none'"
@@ -29,27 +29,29 @@
       (playerDowned)="onPlayerDowned()"
       (playerDownExpired)="onPlayerDownExpired()"
     />
-    <app-hud
-      [playerData]="currentPlayerDisplay()"
-      [floor]="floor()"
-      [score]="score()"
-      [cooldownMsOf]="skillCooldownMs"
-      [specialEffectsOf]="specialEffects"
-      [keepVisibleOf]="keepVisibleRects"
-      (statPanelRequested)="onStatPanelRequested()"
-      (skillTreeRequested)="onSkillTreeRequested()"
-      (shopRequested)="onShopRequested()"
-      (inventoryRequested)="onInventoryRequested()"
-    />
-    <app-settings
-      (openChanged)="onSettingsOpenChanged($event)"
-      (quitRequested)="backToMenu()"
-    />
-    <app-quick-slots
-      [player]="currentPlayerDisplay()"
-    />
+    @if (!mobileEditor()) {
+      <app-hud
+        [playerData]="currentPlayerDisplay()"
+        [floor]="floor()"
+        [score]="score()"
+        [cooldownMsOf]="skillCooldownMs"
+        [specialEffectsOf]="specialEffects"
+        [keepVisibleOf]="keepVisibleRects"
+        (statPanelRequested)="onStatPanelRequested()"
+        (skillTreeRequested)="onSkillTreeRequested()"
+        (shopRequested)="onShopRequested()"
+        (inventoryRequested)="onInventoryRequested()"
+      />
+      <app-settings
+        (openChanged)="onSettingsOpenChanged($event)"
+        (quitRequested)="backToMenu()"
+      />
+      <app-quick-slots
+        [player]="currentPlayerDisplay()"
+      />
+    }
 
-    @if (showDevTools()) {
+    @if (showDevTools() && !mobileEditor()) {
       <button
         class="dev-toggle-btn px-btn px-btn--sm px-btn--ghost"
         [class.px-btn--primary]="devDialogOpen()"
@@ -380,7 +382,17 @@
     }
 
     @if (showDevTools() && levelEditor(); as editor) {
-      <app-level-editor-bar [editor]="editor" (closed)="devCloseLevelEditor()" />
+      <app-level-editor-bar
+        [editor]="editor"
+        [compact]="mobileEditor()"
+        [mode]="mobileMode()"
+        (modeChanged)="setMobileMode($event)"
+        (closed)="devCloseLevelEditor()"
+      />
+    }
+
+    @if (mobileEditor() && mobileMode() === 'play') {
+      <app-touch-controls (hold)="onTouchHold($event)" />
     }
 
     @if (statPanelOpen()) {

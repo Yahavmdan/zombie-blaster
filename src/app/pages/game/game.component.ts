@@ -28,7 +28,8 @@ import { E2eControls } from '../../testing/e2e-api';
 import { WorkerInterval } from '../../engine/worker-interval';
 import { DevMouseTool, DevToolsSystem } from '../../engine/dev-tools-system';
 import { DraggableDialogDirective } from '../../ui/draggable-dialog.directive';
-import { LevelEditorBarComponent } from '../../components/level-editor-bar/level-editor-bar.component';
+import { EditorMode, LevelEditorBarComponent } from '../../components/level-editor-bar/level-editor-bar.component';
+import { TOUCH_ACTIONS, TouchControlsComponent, TouchHold } from '../../components/touch-controls/touch-controls.component';
 import { LevelEditorSystem } from '../../engine/level-editor-system';
 import { PixelIconComponent } from '../../ui/pixel-icon/pixel-icon.component';
 
@@ -45,7 +46,7 @@ const ACTIVITY_EVENTS: readonly string[] = ['keydown', 'mousedown', 'mousemove',
 @Component({
   selector: 'app-game',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PixelIconComponent, GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, TreeSkillWindowComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule, DraggableDialogDirective, LevelEditorBarComponent],
+  imports: [PixelIconComponent, GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, TreeSkillWindowComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule, DraggableDialogDirective, LevelEditorBarComponent, TouchControlsComponent],
   host: {
     class: 'game-page',
   },
@@ -129,9 +130,15 @@ export class GameComponent implements OnInit, OnDestroy {
     effect((): void => {
       const enabled: boolean = this.gameState.godMode();
       const canvas: GameCanvasComponent | undefined = this.gameCanvas();
-      if (canvas) {
+      // Re-run once the engine runs: god mode set before it (the dev pages) must reach it too.
+      if (canvas?.engineReady()) {
         canvas.setGodMode(enabled);
       }
+    });
+    // The phone editor opens with the level editor up as soon as the engine runs.
+    effect((): void => {
+      const ready: boolean = this.gameCanvas()?.engineReady() ?? false;
+      if (this.mobileEditor() && ready && !this.levelEditorOpen()) this.devOpenLevelEditor();
     });
     effect((): void => {
       const enabled: boolean = this.gameState.showCollisionBoxes();
@@ -746,15 +753,20 @@ export class GameComponent implements OnInit, OnDestroy {
   /** Shows the dev tools in production builds too (set by the /dev page). */
   readonly devTools: InputSignal<boolean> = input<boolean>(false);
   readonly showDevTools: Signal<boolean> = computed((): boolean => this.isDev || this.devTools());
+  /** The phone level editor (set by the /mobile-editor page): no HUD, a rail beside the map, touch controls. */
+  readonly mobileEditor: InputSignal<boolean> = input<boolean>(false);
+  /** Phone level editor: building on the map, or walking the puzzle with the touch controls. */
+  readonly mobileMode: WritableSignal<EditorMode> = signal<EditorMode>('build');
   readonly devClassList: CharacterClassDefinition[] = Object.values(CHARACTER_CLASSES);
   readonly devFloorInput: WritableSignal<number> = signal<number>(1);
   readonly devDialogOpen: WritableSignal<boolean> = signal<boolean>(false);
   /** Dev tools: the level editor's bar floats over the map (solo). */
   readonly levelEditorOpen: WritableSignal<boolean> = signal<boolean>(false);
   /** The engine's level editor while its bar is open. */
-  readonly levelEditor: Signal<LevelEditorSystem | null> = computed((): LevelEditorSystem | null =>
-    this.levelEditorOpen() ? (this.gameCanvas()?.levelEditor() ?? null) : null,
-  );
+  readonly levelEditor: Signal<LevelEditorSystem | null> = computed((): LevelEditorSystem | null => {
+    const canvas: GameCanvasComponent | undefined = this.gameCanvas();
+    return this.levelEditorOpen() && canvas?.engineReady() ? canvas.levelEditor() : null;
+  });
   readonly devPlayerLevel: Signal<number> = computed((): number => {
     const p: CharacterState | null = this.gameState.player();
     return p ? p.level : 0;
@@ -858,6 +870,18 @@ export class GameComponent implements OnInit, OnDestroy {
   devCloseLevelEditor(): void {
     this.levelEditorOpen.set(false);
     if (this.devMouseTool() === 'build') this.devMouseTool.set('attack');
+  }
+
+  /** Phone level editor: Play hands the map to the touch controls, Build back to the finger. */
+  setMobileMode(mode: EditorMode): void {
+    this.mobileMode.set(mode);
+    this.devMouseTool.set(mode === 'build' ? 'build' : 'attack');
+    // The touch controls go away with their buttons pressed: let go of everything.
+    for (const action of TOUCH_ACTIONS) this.gameCanvas()?.setHeld(action, false);
+  }
+
+  onTouchHold(hold: TouchHold): void {
+    this.gameCanvas()?.setHeld(hold.action, hold.held);
   }
 
   /** Online the floors come from the host's seed: the editor is solo only. */

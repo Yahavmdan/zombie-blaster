@@ -18,5 +18,7 @@ export class DevComponent implements OnInit {
 
   ngOnInit(): void {
     this.gameState.createPlayer('Dev', CharacterClass.Warrior);
+    // Dev play-tests puzzles: nothing hurts the player until god mode is turned off.
+    this.gameState.godMode.set(true);
   }
 }

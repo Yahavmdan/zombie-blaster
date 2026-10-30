@@ -6,6 +6,14 @@ export interface SoloFactory {
   (classId?: ClassId, name?: string): Promise<GamePlayer>;
 }
 
+/** Opens the site on a phone held sideways: it lands in the mobile level editor. */
+export interface PhoneFactory {
+  (): Promise<GamePlayer>;
+}
+
+/** A phone in landscape (CSS px). */
+export const PHONE_VIEWPORT: { width: number; height: number } = { width: 844, height: 390 };
+
 export interface RoomFactory {
   (members: RoomMember[], roomPrefix?: string): Promise<RoomSession>;
 }
@@ -13,6 +21,8 @@ export interface RoomFactory {
 interface GameFixtures {
   /** Opens a single-player game. Every player opened is checked for page errors at teardown. */
   solo: SoloFactory;
+  /** Opens the site on a phone. Every phone opened is checked for page errors at teardown. */
+  phone: PhoneFactory;
   /** Opens an N-player online room (members[0] hosts). Checked for page errors at teardown. */
   room: RoomFactory;
   /**
@@ -53,6 +63,31 @@ export const test = base.extend<GameFixtures>({
       const player: GamePlayer = await GamePlayer.open(browser, { name, classId });
       opened.push(player);
       await player.startSolo();
+      return player;
+    };
+    await use(factory);
+    try {
+      await assertNoPageErrors(opened, testInfo);
+    } finally {
+      await closeAll(opened);
+    }
+  },
+
+  phone: async (
+    { browser }: { browser: Browser },
+    use: (f: PhoneFactory) => Promise<void>,
+    testInfo: TestInfo,
+  ): Promise<void> => {
+    const opened: GamePlayer[] = [];
+    const factory: PhoneFactory = async (): Promise<GamePlayer> => {
+      const player: GamePlayer = await GamePlayer.open(browser, {
+        name: 'Dev',
+        classId: 'warrior',
+        viewport: PHONE_VIEWPORT,
+        phone: true,
+      });
+      opened.push(player);
+      await player.openOnPhone();
       return player;
     };
     await use(factory);

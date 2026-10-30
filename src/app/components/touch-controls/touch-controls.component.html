@@ -1,0 +1,27 @@
+<div class="tc-pad tc-pad--move">
+  @for (b of moveButtons; track b.action) {
+    <ng-container *ngTemplateOutlet="button; context: { $implicit: b }" />
+  }
+</div>
+<div class="tc-pad tc-pad--act">
+  @for (b of actButtons; track b.action) {
+    <ng-container *ngTemplateOutlet="button; context: { $implicit: b }" />
+  }
+</div>
+
+<ng-template #button let-b>
+  <button
+    class="px-btn px-btn--ghost tc-btn"
+    [class.tc-btn--attack]="b.action === 'attack'"
+    [class.tc-btn--jump]="b.action === 'jump'"
+    [style.grid-area]="b.action"
+    [attr.aria-label]="b.label"
+    [attr.data-testid]="'touch-controls-button-' + b.action"
+    (pointerdown)="press(b.action, $event)"
+    (pointerup)="release(b.action)"
+    (pointercancel)="release(b.action)"
+    (contextmenu)="$event.preventDefault()"
+  >
+    <app-pixel-icon [icon]="b.icon" [size]="32" />
+  </button>
+</ng-template>

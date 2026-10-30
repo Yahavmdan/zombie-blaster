@@ -148,6 +148,8 @@ export interface OpenPlayerOptions {
   baseUrl?: string;
   /** null = follow the window size (headed demo windows). */
   viewport?: { width: number; height: number } | null;
+  /** A phone: touch screen, no hover (the site sends it to the mobile level editor). */
+  phone?: boolean;
 }
 
 export interface WindowBounds {
@@ -190,6 +192,7 @@ export class GamePlayer {
     const context: BrowserContext = await browser.newContext({
       viewport: options.viewport === undefined ? { width: 1280, height: 800 } : options.viewport,
       ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
+      ...(options.phone ? { hasTouch: true, isMobile: true } : {}),
     });
     await context.addInitScript(trackSocketsInitScript);
     await context.addInitScript(backgroundTabInitScript);
@@ -232,6 +235,14 @@ export class GamePlayer {
     await this.page.getByTestId('menu-main-button-singleplayer').click();
     await this.pickCharacter();
     await this.page.waitForURL(/\/game/);
+    await this.probe.waitForReady();
+  }
+
+  /** A phone opening the site: sent to the mobile level editor, the probe ready. */
+  async openOnPhone(): Promise<void> {
+    await this.page.goto('/');
+    await this.failOnDevServerError();
+    await this.page.waitForURL(/\/mobile-editor/);
     await this.probe.waitForReady();
   }
 

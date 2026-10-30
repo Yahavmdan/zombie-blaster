@@ -137,6 +137,17 @@ describe('LevelEditorSystem on a real engine', () => {
     expect(editor.inspector()).toBeNull();
   });
 
+  it('the popup opens on the selection without a middle click (phones), and not on nothing', () => {
+    editor.clear();
+    editor.inspectSelected(40, 50);
+    expect(editor.inspector()).toBeNull();
+    editor.setTool('spring');
+    editor.pointerDown(900, 600);
+    editor.pointerUp();
+    editor.inspectSelected(40, 50);
+    expect(editor.inspector()).toMatchObject({ label: 'Spring g1', clientX: 40, clientY: 50 });
+  });
+
   it('undo goes back a step at a time and redo forward again; a drag is one step', () => {
     const walls: () => number = (): number => engine.level.walls?.length ?? 0;
     const platforms: () => number = (): number => engine.level.platforms.length;

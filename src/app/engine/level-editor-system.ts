@@ -271,6 +271,14 @@ export class LevelEditorSystem {
     this.notify();
   }
 
+  /** Opens the popup on what is selected, at (clientX, clientY) page px: a phone has no middle button. */
+  inspectSelected(clientX: number, clientY: number): void {
+    if (!this.layout || !this.selected || !itemBox(this.layout, this.selected)) return;
+    this.drag = null;
+    this.inspectAt = { clientX, clientY };
+    this.notify();
+  }
+
   closeInspector(): void {
     this.inspectAt = null;
     this.notify();

@@ -1,0 +1,55 @@
+/* Two thumb clusters in the bottom corners of the map; the space between them stays touchable map. */
+:host {
+  position: absolute;
+  /* Over the map only: the editor's rail (--le-rail-w) keeps the left edge. */
+  inset: auto 0 0 var(--le-rail-w, 0px);
+  z-index: 240;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 8px 12px;
+  pointer-events: none;
+}
+
+.tc-pad {
+  display: grid;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+/* A cross: up on top, left and right, down below. */
+.tc-pad--move {
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(3, 48px);
+  grid-template-areas:
+    '. up .'
+    'left . right'
+    '. down .';
+}
+
+/* Jump biggest, under the thumb's rest spot; attack and carry above it. */
+.tc-pad--act {
+  grid-template-columns: repeat(2, 64px);
+  grid-template-rows: 56px 64px;
+  grid-template-areas:
+    'carry attack'
+    'jump jump';
+}
+
+/* Each button sits in the grid area named after its action. */
+.tc-btn {
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.85;
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.tc-btn--attack {
+  --btn-bg: var(--blood);
+}
+
+.tc-btn--jump {
+  --btn-bg: var(--toxic);
+}
