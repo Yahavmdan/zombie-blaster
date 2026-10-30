@@ -436,6 +436,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     spawnTimer: 999,
     eaterSpawnTimer: 999,
     floorTransitionTimer: 0,
+    levelHint: null,
     exitPlatform: {
       x: (GAME_CONSTANTS.CANVAS_WIDTH - 250) / 2,
       y: 130,
@@ -1740,6 +1741,9 @@ describe('Spitter spit: lobbed globs, splats and acid puddles', (): void => {
   });
 });
 
+/** Floor 1 is designed in the level editor (`DESIGNED_LEVELS`); floor 6 is generated and has no puzzle. */
+const GENERATED_FLOOR: number = 6;
+
 describe('Exploding barrels', (): void => {
   const FUSE: number = GAME_CONSTANTS.BARREL_FUSE_TICKS;
   const CHAIN: number = GAME_CONSTANTS.BARREL_CHAIN_FUSE_TICKS;
@@ -1756,6 +1760,7 @@ describe('Exploding barrels', (): void => {
 
   /** Pins the first layout with at least `n` barrels and returns their ids. */
   function layoutWithBarrels(e: GameEngine, n: number): string[] {
+    e.floor = GENERATED_FLOOR;
     for (let seed: number = 1; seed < 500; seed++) {
       e.layoutSeed = seed;
       e.applyLevel();
@@ -1949,6 +1954,7 @@ describe('Exploding barrels', (): void => {
     const client: GameEngine = new GameEngine(createMockCanvas());
     client.isMultiplayerClient = true;
     client.layoutSeed = engine.layoutSeed;
+    client.floor = engine.floor;
     client.applyLevel();
     client.applyRemoteProps([{ ...b, exploded: true }]);
     expect(propById(client, id)).toBeUndefined();
@@ -2003,6 +2009,7 @@ describe('Exploding barrels', (): void => {
     const client: GameEngine = new GameEngine(createMockCanvas());
     client.isMultiplayerClient = true;
     client.layoutSeed = engine.layoutSeed;
+    client.floor = engine.floor;
     client.applyLevel();
     const lit: LooseProp = { ...propById(engine, id)!, fuseTicks: 90 };
 

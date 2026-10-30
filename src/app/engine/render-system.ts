@@ -2069,7 +2069,9 @@ export class RenderSystem {
       fillOutlinedText(ctx, `Floor ${this.e.floor}`, GAME_CONSTANTS.CANVAS_WIDTH / 2, cy, CANVAS_GOLD, CANVAS_INK, 6);
 
       ctx.font = pixelFont(20);
-      const hint: string = this.e.springPuzzle
+      const hint: string = this.e.levelHint
+        ? this.e.levelHint
+        : this.e.springPuzzle
         ? SPRING_FLOOR_HINT
         : this.e.cagePuzzle
           ? CAGE_FLOOR_HINT

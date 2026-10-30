@@ -158,6 +158,9 @@ const crackWall: Gadget = {
   crackBottom: GROUND_Y,
 };
 
+/** Floor 1 is designed in the level editor (`DESIGNED_LEVELS`); floor 6 is generated and has no puzzle. */
+const GENERATED_FLOOR: number = 6;
+
 describe('GadgetSystem on a real engine', () => {
   let engine: GameEngine;
 
@@ -600,6 +603,7 @@ describe('GadgetSystem on a real engine', () => {
     expect(engine.getStateSnapshot()?.gadgets.map((s: GadgetState): string => s.id)).toEqual([
       'g2',
     ]);
+    engine.floor = GENERATED_FLOOR;
     engine.useCustomLevel(null);
     expect(engine.gadgets).toEqual([]);
     expect(engine.getStateSnapshot()?.gadgets).toEqual([]);

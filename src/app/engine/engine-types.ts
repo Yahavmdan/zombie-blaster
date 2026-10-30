@@ -458,6 +458,8 @@ export interface IGameEngine {
   eaterSpawnTimer: number;
   floorTransitionTimer: number;
   exitPlatform: Platform;
+  /** A designed floor's subtitle under the floor title (how to get out), or null. */
+  readonly levelHint: string | null;
   /** Floor-2 puzzle layout and its boulder (null on other floors). */
   boulderPuzzle: BoulderPuzzleLayout | null;
   boulder: BoulderState | null;

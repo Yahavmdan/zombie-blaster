@@ -311,9 +311,12 @@ through `GameEngine.useCustomLevel`, for the floor it was made on only.
 - **Derived parts are rebuilt on import** (`parseLayout` → `followExit`): the boulder ledge is the
   exit, the spring spans from the exit's nearer screen edge, cage `landY` and chain `kinks` (seeded
   from `seed`). Don't hand-edit those in an export.
-- **Adding an export to the game:** keep it as a typed constant (one file per floor, e.g.
-  `src/app/engine/designed-levels.ts`, `DESIGNED_LEVELS: Record<number, LevelLayout>`) and have
-  `generateLevel` return a copy of it for that floor (seed set). Every client has the same constant,
+- **Adding an export to the game:** add it as a typed constant to `DESIGNED_LEVELS`
+  (`src/app/engine/designed-levels.ts`, keyed by floor; give it a `hint`: the subtitle under the
+  floor title). The engine plays `levelFor(seed, floor)`: a copy of the designed floor, else
+  `generateLevel` (which stays purely procedural, so its rule tests still sweep every floor).
+  Floor 1 is designed (button + exit door). Engine unit tests that need a generated floor set
+  `engine.floor = GENERATED_FLOOR` (6) and `applyLevel()`; a client engine copies the host's floor. Every client has the same constant,
   so nothing new syncs. Then: `levelViolations` holds generator rules (tiers, exit gaps, puzzle on its
   floor) that a designed floor may break on purpose: check them for that floor, keep the ones that
   still matter (art equals collision, a ladder under each high ledge, puzzles reachable) and skip the

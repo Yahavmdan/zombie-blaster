@@ -29,6 +29,10 @@ ships, tick its box here and rewrite its line to match what was built.
       on a cleat snap its chain. The exit cage lands under the exit as a solid step (the pile there
       rides up onto it) and spills its content on top; any other cage falls onto what is under it
       and smashes, letting 4 zombies loose, popping gold and potions, or nothing.
+- [x] **Button and door** (floor 1, designed on a phone in the level editor): no hanging exit; the
+      exit door stands on a ledge at the right, open only while 10 kg rest on the button at the far
+      left. Carry a crate (or a body) onto the button, then climb the crate stack to the ledge and
+      walk in. Standing on the button yourself opens it too, but it shuts once you step off.
 - [ ] **Explosive barrels**: lure zombies next to a cracked wall, shoot the barrel, and the wall
       breaks.
 - [ ] **Push crates**: push crates into stairs. Zombies can knock them over.

@@ -98,7 +98,7 @@ import { SCALE_MAX_KG, flingIfOnSpring, freshLaunch, newSpringState } from './sp
 import { pullZombiesToward } from './magnet-pull';
 import {
   exitPlatformY,
-  generateLevel,
+  levelFor,
   GROUND_PLATFORM,
   isPickable,
   LevelLayout,
@@ -156,7 +156,11 @@ export class GameEngine implements IGameEngine {
   ropes: Rope[] = [];
   /** Seed for this run's floor layouts: the host picks it, clients adopt it from game-sync. */
   layoutSeed: number = Math.floor(Math.random() * 0x7fffffff);
-  level: LevelLayout = generateLevel(this.layoutSeed, 1);
+  level: LevelLayout = levelFor(this.layoutSeed, 1);
+
+  get levelHint(): string | null {
+    return this.level.hint ?? null;
+  }
   /** Dev level editor: the designed layout played instead of the generated one, on its own floor only (solo). */
   private customLevel: LevelLayout | null = null;
   keys: InputKeys = { left: false, right: false, up: false, down: false, jump: false, attack: false, skill1: false, skill2: false, skill3: false, skill4: false, skill5: false, skill6: false, openStats: false, openSkills: false, useHpPotion: false, useMpPotion: false, openShop: false, openInventory: false, revive: false, carry: false, confirmDrop: false, declineDrop: false, quickSlot1: false, quickSlot2: false, quickSlot3: false, quickSlot4: false, quickSlot5: false, quickSlot6: false, quickSlot7: false, quickSlot8: false, quickSlot9: false, quickSlot10: false, quickSlot11: false, quickSlot12: false };
@@ -374,7 +378,7 @@ export class GameEngine implements IGameEngine {
     this.level =
       this.customLevel && this.customLevel.floor === this.floor
         ? structuredClone(this.customLevel)
-        : generateLevel(this.layoutSeed, this.floor);
+        : levelFor(this.layoutSeed, this.floor);
     this.boulderPuzzle = this.level.boulderPuzzle ?? null;
     this.boulder = this.boulderPuzzle
       ? { gateHits: 0, progress: 0, speed: 0, wallBroken: false }
