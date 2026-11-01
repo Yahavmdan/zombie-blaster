@@ -17,7 +17,8 @@ const scene = process.argv[2] ?? 'menu';
 const outDir = resolve(process.argv[3] ?? resolve(root, 'e2e/.results/ui-shots'));
 const base = `http://localhost:${process.env.WEB_PORT ?? '4200'}`;
 
-const browser = await chromium.launch({ channel: process.env.E2E_CHANNEL ?? 'chrome' });
+const channelSetting = process.env.E2E_CHANNEL ?? 'chromium';
+const browser = await chromium.launch({ channel: channelSetting === 'chromium' ? undefined : channelSetting });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
