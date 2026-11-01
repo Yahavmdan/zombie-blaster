@@ -8,8 +8,9 @@
  * WEB_PORT       Port of the local `ng serve` the config starts (default 4200).
  * API_PORT       Port of the local API the config starts (default 3001). A worktree slot N uses
  *                WEB_PORT=N*1111 and API_PORT=N*1111+1 (`wt.ps1 ports`), so slots never share servers.
- * E2E_CHANNEL    Browser channel: `chrome` (installed Chrome, default), `msedge`, or `chromium`
- *                (Playwright's bundled build; needs `npx playwright install chromium`).
+ * E2E_CHANNEL    Browser channel: `chromium` (Playwright's bundled build, default), `chrome` or `msedge`
+ *                (installed browsers). Never default to installed Chrome: it trips Windows logon checks
+ *                and locks the account. Bundled build needs `npx playwright install chromium`.
  * E2E_WORKERS    Parallel workers. Every page runs a full 50 tps game loop, so keep it low.
  * E2E_SLOWMO     Milliseconds between Playwright actions, for watching a headed run.
  */
@@ -24,7 +25,7 @@ function readInt(name: string, fallback: number): number {
   return Number.isNaN(parsed) ? fallback : parsed;
 }
 
-const channelSetting: string = readString('E2E_CHANNEL', 'chrome');
+const channelSetting: string = readString('E2E_CHANNEL', 'chromium');
 
 const webPort: number = readInt('WEB_PORT', 4200);
 const apiPort: number = readInt('API_PORT', 3001);

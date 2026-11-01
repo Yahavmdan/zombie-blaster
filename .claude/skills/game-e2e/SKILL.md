@@ -23,8 +23,8 @@ Real Chrome windows play the game through real key presses. A dev-build-only pro
 | Type-check suite    | `npm run e2e:typecheck`                                                                                   |
 
 The config starts `zombie-blaster-api` (`npm run dev`, :3001) and `ng serve` (:4200), or reuses
-running ones. Uses installed Chrome (`E2E_CHANNEL=chrome`); Playwright's Chromium download is
-blocked on this machine. Every page runs a 50 tps loop, so workers default to 2 (`E2E_WORKERS`).
+running ones. Uses Playwright's bundled Chromium (`E2E_CHANNEL=chromium`, default; `npx playwright install chromium`).
+Never default to installed Chrome: automating it set off Windows logon checks and locked the account. Every page runs a 50 tps loop, so workers default to 2 (`E2E_WORKERS`).
 Long runs: start them with `run_in_background` and wait for the notification.
 
 **In a worktree, use its own ports** or Playwright reuses another slot's servers and silently tests
