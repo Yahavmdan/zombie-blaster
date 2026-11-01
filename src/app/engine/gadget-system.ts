@@ -226,7 +226,11 @@ export class GadgetSystem {
     this.placeSolids();
   }
 
-  /** Every gadget's solids where its state says: resting boulders, crack wall pieces, doors, launcher bases. */
+  /**
+   * Every gadget's solids where its state says: resting boulders, crack wall pieces, doors, launcher
+   * bases. An exit door is no wall: players and zombies walk through it shut or open (only fully
+   * open does it let players out).
+   */
   placeSolids(): void {
     const solids: Platform[] = [];
     for (const g of this.e.gadgets) {
@@ -238,7 +242,7 @@ export class GadgetSystem {
       if (g.kind === 'boulder' && state.body && boulderResting(state.body))
         add(boulderBox(state.body));
       else if (g.kind === 'crack-wall') crackWallPieces(g, state.broken).forEach(add);
-      else if (g.kind === 'door') add(doorSolid(g, state));
+      else if (g.kind === 'door' && !g.exit) add(doorSolid(g, state));
       else if (isLauncher(g)) add(g);
       else if (g.kind === 'cage') {
         const cage: Box | null = cageSolid(g, state);

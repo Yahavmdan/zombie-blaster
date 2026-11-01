@@ -63,6 +63,27 @@ test.describe('floor 1: weigh down the button to open the door', { tag: '@solo' 
     );
   });
 
+  test('the shut exit door is no wall: the player walks through it and stays on floor 1', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await quietFloor1(solo);
+    await p.probe.teleport(DOOR.x - WORLD.playerWidth - 20, DOOR.floorY - WORLD.playerHeight);
+    await p.wait(300);
+    await p.hold(KEYS.right);
+    await p.probe.waitFor(
+      'the player walks through the shut door',
+      (st: E2eSnapshot): boolean =>
+        st.player!.x + WORLD.playerWidth / 2 > DOOR.x + DOOR.width &&
+        gadget(st, DOOR.id).openTicks === 0,
+      { timeoutMs: 5_000 },
+    );
+    await p.release(KEYS.right);
+    await p.wait(500);
+    expect((await p.probe.state()).floor, 'a shut door lets nobody out').toBe(1);
+  });
+
   test('a box left on the button holds the door open: walk in from the ledge to reach floor 2', async ({
     solo,
   }: {
