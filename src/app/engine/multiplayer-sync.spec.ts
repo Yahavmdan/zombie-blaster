@@ -536,6 +536,7 @@ function makeMockEngine(player: CharacterState, zombies: ZombieState[]): IGameEn
     plate: null,
     gadgets: [],
     gadgetStates: [],
+    noSpawnZones: [],
     isExitLocked: vi.fn((): boolean => false),
     leavesThroughDoor: vi.fn((): boolean => false),
     breakPuzzleWall: vi.fn(),

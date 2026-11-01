@@ -28,6 +28,7 @@ import { corpseSurface, CorpseSurface } from './corpse-surface';
 import { drapeCorpses } from './corpse-drape';
 import { corpseAtRest, flyCorpse, landCorpse, slideCorpse } from './corpse-tumble';
 import { advanceMagnetPull } from './magnet-pull';
+import { spawnSpans, zoneFreeSpot } from './spawn-zones';
 import { pushOutOfSolids } from './solid-blocks';
 import { slopeTopUnder, slopesOf } from './gadgets';
 import { EaterStep, Feet, eaterStep } from './eater-path';
@@ -58,6 +59,11 @@ export class ZombieSystem {
   private drapedLayout: number = NaN;
   /** Eaters in the air on a jump of their own (up through a ledge or a leap): they hold their course. */
   private readonly eatersOnCourse: WeakSet<ZombieState> = new WeakSet<ZombieState>();
+  /**
+   * Scripted zombies (a clue scene): id to the x their middle walks to. They ignore players (no
+   * hunting, no attacks) until the script lets go; knocks and stuns still work on them.
+   */
+  readonly scriptedGoals: Map<string, number> = new Map<string, number>();
 
   constructor(
     private readonly e: IGameEngine,
@@ -133,6 +139,7 @@ export class ZombieSystem {
     for (const z of this.e.zombies) {
       if (z.isDead) continue;
       const zDef: ZombieDefinition = ZOMBIE_TYPES[z.type];
+      const scriptedGoal: number | undefined = this.scriptedGoals.get(z.id);
 
       if (z.spawnTimer > 0) {
         z.spawnTimer--;
@@ -186,6 +193,8 @@ export class ZombieSystem {
         }
       } else if (z.eatingTimer > 0) {
         this.tickEaterMeal(z);
+      } else if (scriptedGoal !== undefined) {
+        this.walkToScriptedGoal(z, scriptedGoal);
       } else if (z.reactionDelay > 0) {
         z.reactionDelay--;
       } else {
@@ -209,7 +218,7 @@ export class ZombieSystem {
       const spriteKey: string = this.e.zombieSpriteAnimator.getSpriteKey(z.type);
       this.e.zombieSpriteAnimator.tick(z.id, spriteKey);
 
-      if (!stunned) this.updateZombieAttack(z, zDef);
+      if (!stunned && scriptedGoal === undefined) this.updateZombieAttack(z, zDef);
 
       if (z.type === ZombieType.DragonBoss) {
         const targetY: number = GAME_CONSTANTS.GROUND_Y - z.instanceHeight - GAME_CONSTANTS.DRAGON_HOVER_Y_OFFSET;
@@ -476,6 +485,18 @@ export class ZombieSystem {
     z.y = top - z.instanceHeight;
     z.velocityY = 0;
     z.isGrounded = true;
+  }
+
+  /** A scripted zombie walks (steps off ledges, falls) until its middle is on the goal, then stands. */
+  private walkToScriptedGoal(z: ZombieState, goalX: number): void {
+    if (!z.isGrounded) return;
+    const dx: number = goalX - (z.x + z.instanceWidth / 2);
+    if (Math.abs(dx) <= GAME_CONSTANTS.CLUE_SCENE_ARRIVE_PX) {
+      z.velocityX = 0;
+      return;
+    }
+    z.facing = Math.sign(dx);
+    z.velocityX = z.facing * Math.min(z.instanceSpeed, Math.abs(dx));
   }
 
   private updateZombieAI(z: ZombieState, zDef: ZombieDefinition): void {
@@ -1097,6 +1118,14 @@ export class ZombieSystem {
   /** Zombies rise on the ground and platforms: never on top of a prop or on the safe spot. */
   private pickSpawnSpot(width: number, height: number): { x: number; y: number } {
     const spawnSurfaces: Platform[] = this.e.platforms.filter((p: Platform): boolean => !p.solid && !p.safe);
+    // A designed floor's no-spawn zones: rise only where the body overlaps none (if any room is left).
+    if (this.e.noSpawnZones.length > 0) {
+      const spot: { x: number; y: number } | null = zoneFreeSpot(
+        spawnSpans(spawnSurfaces, this.e.noSpawnZones, width, height),
+        Math.random,
+      );
+      if (spot) return { x: spot.x, y: spot.y - height };
+    }
     const plat: Platform = spawnSurfaces[Math.floor(Math.random() * spawnSurfaces.length)];
     const platMinX: number = Math.max(0, plat.x);
     const platMaxX: number = Math.min(GAME_CONSTANTS.CANVAS_WIDTH - width, plat.x + plat.width - width);
@@ -1120,8 +1149,8 @@ export class ZombieSystem {
   }
 
   /** Floor-4 cage: a zombie climbs out of it, centered on x, standing on `groundY`. */
-  spawnZombieAt(x: number, groundY: number, kind: ZombieType | null = null): void {
-    this.spawnZombie({ x, groundY }, kind);
+  spawnZombieAt(x: number, groundY: number, kind: ZombieType | null = null): ZombieState {
+    return this.spawnZombie({ x, groundY }, kind);
   }
 
   /** A regular spawn: the floor's type roll (bosses included) at a random spawn spot. */
@@ -1133,7 +1162,7 @@ export class ZombieSystem {
    * A new zombie: at a random spawn spot, or (released from a cage, an Eater come to eat) at `at`,
    * never a boss then. `kind` forces the type: Eaters never come with the regular rolls.
    */
-  private spawnZombie(at: { x: number; groundY: number } | null = null, kind: ZombieType | null = null): void {
+  private spawnZombie(at: { x: number; groundY: number } | null = null, kind: ZombieType | null = null): ZombieState {
     let type: ZombieType = ZombieType.Walker;
     const roll: number = Math.random();
     if (this.e.floor >= GAME_CONSTANTS.ZOMBIE_TANK_MIN_WAVE && roll > GAME_CONSTANTS.ZOMBIE_TANK_ROLL_THRESHOLD) type = ZombieType.Tank;
@@ -1228,6 +1257,7 @@ export class ZombieSystem {
     this.e.zombies.push(zombie);
     this.e.zombieSpriteAnimator.setStateReversed(zombie.id, ZombieAnimState.Dead, spriteKey, GAME_CONSTANTS.ZOMBIE_SPAWN_ANIM_TICKS);
     this.e.onZombiesUpdate?.(this.e.zombies);
+    return zombie;
   }
 
   checkFloorCompletion(): void {
@@ -1311,6 +1341,7 @@ export class ZombieSystem {
   }
 
   startFloor(): void {
+    this.scriptedGoals.clear();
     this.e.zombies = this.e.zombies.filter((z: ZombieState) => !z.isDead);
     this.e.spawnTimer = GAME_CONSTANTS.FLOOR_INITIAL_SPAWN_DELAY_TICKS;
     this.e.eaterSpawnTimer = this.rollEaterSpawnDelay();

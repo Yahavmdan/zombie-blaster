@@ -95,6 +95,11 @@ const TOOL_GROUPS: ToolGroup[] = [
         hint: 'Click: a solid wall standing on the surface below. Drag its top or sides to size it',
       },
       {
+        tool: 'no-spawn',
+        label: 'No-spawn zone',
+        hint: 'Click: a zone where no zombie rises (shown only here, in the editor). Drag any side to size it',
+      },
+      {
         tool: 'safe-spot',
         label: 'Safe spot',
         hint: 'Click: the safe spot moves here (zombies never reach it)',

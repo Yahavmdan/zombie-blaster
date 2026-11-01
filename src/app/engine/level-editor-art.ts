@@ -18,6 +18,8 @@ function kindColor(kind: EditorRef['kind']): string {
       return PIXEL['tealHi'];
     case 'exit':
       return PIXEL['goldHi'];
+    case 'no-spawn':
+      return PIXEL['bloodHi'];
     default:
       return PIXEL['toxicHi'];
   }
@@ -41,7 +43,36 @@ function frame(
   ctx.fillRect(x + w - thickness, y, thickness, h);
 }
 
+/** Gap between a no-spawn zone's hatch stripes. */
+const ZONE_HATCH_PX: number = 16;
+
+/** A no-spawn zone: a faint blood-red wash with hard diagonal hatching (editor only, never in play). */
+function zoneFill(ctx: CanvasRenderingContext2D, box: Box): void {
+  const x: number = Math.round(box.x);
+  const y: number = Math.round(box.y);
+  const w: number = Math.round(box.width);
+  const h: number = Math.round(box.height);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.globalAlpha = 0.18;
+  ctx.fillStyle = PIXEL['blood'];
+  ctx.fillRect(x, y, w, h);
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = PIXEL['bloodHi'];
+  // Hatching in 2 px steps (no anti-aliased strokes): each stripe runs down-left from the top.
+  for (let start: number = 0; start < w + h; start += ZONE_HATCH_PX) {
+    for (let d: number = 0; d < h; d += 2) {
+      ctx.fillRect(x + start - d, y + d, 2, 2);
+    }
+  }
+  ctx.restore();
+}
+
+
 function drawItem(ctx: CanvasRenderingContext2D, item: EditorOverlayItem, erasing: boolean): void {
+  if (item.ref.kind === 'no-spawn') zoneFill(ctx, item.box);
   if (item.selected) {
     frame(
       ctx,

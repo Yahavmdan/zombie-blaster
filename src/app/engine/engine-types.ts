@@ -299,6 +299,19 @@ export interface PlatePuzzleLayout {
   /** Top of the surface the plate is set into (things standing on the plate have their feet here). */
   plateY: number;
 }
+/**
+ * A designed floor's clue scene: a zombie rises at (spawnX, spawnY), walks to the gadget
+ * `gadgetId` (a button) ignoring players, stands on it CLUE_SCENE_HOLD_TICKS, then hunts as usual.
+ */
+export interface ClueSceneLayout {
+  /** Middle of the zombie where it rises. */
+  spawnX: number;
+  /** Top of the surface it rises from (its feet). */
+  spawnY: number;
+  /** The gadget it walks onto (its middle is the goal). */
+  gadgetId: string;
+}
+
 export interface BackgroundStar {
   x: number;
   y: number;
@@ -475,6 +488,8 @@ export interface IGameEngine {
   /** A designed floor's gadgets (dev level editor) and their live state ([] on generated floors). */
   gadgets: Gadget[];
   gadgetStates: GadgetState[];
+  /** The floor's no-spawn zones (a designed layout's `noSpawn`): regular spawns keep zombies out of them. */
+  noSpawnZones: Platform[];
   /** A wire runs to the exit and its door isn't fully open: standing on the exit doesn't finish the floor. */
   isExitLocked(): boolean;
   /** The player stands in a fully open exit door (designed floors): the floor is done. */

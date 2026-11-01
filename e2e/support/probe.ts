@@ -201,6 +201,19 @@ export class GameProbe {
     await this.page.evaluate((): void => window.__zbE2e?.engine?.clearZombies());
   }
 
+  /** Setup only (solo/host): regular zombie spawns stop (true) or go on (false). */
+  async pauseZombieSpawns(paused: boolean): Promise<void> {
+    await this.page.evaluate(
+      (p: boolean): void => window.__zbE2e?.engine?.pauseZombieSpawns(p),
+      paused,
+    );
+  }
+
+  /** Setup only (solo/host): the floor-1 clue scene ends now, so its zombie never shows up on the button. */
+  async skipClueScene(): Promise<void> {
+    await this.page.evaluate((): void => window.__zbE2e?.engine?.skipClueScene());
+  }
+
   async maxAllSkills(): Promise<void> {
     await this.page.evaluate((): void => window.__zbE2e?.controls?.maxAllSkills());
   }

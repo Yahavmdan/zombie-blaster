@@ -26,6 +26,9 @@ The engine is split into focused files under `src/app/engine/`.
 | `storm.ts` | Lightning rules (pure): `LightningStrike` (x + seed + age), seeded bolt path (`lightningBolt`, lands on `lightningLandingY`), flash/bolt curves, next-strike delay and x |
 | `storm-sky.ts` | `StormSky`: animated scenery, never walkable. Gradient sky + stars, blocky blood moon behind the background art's own cloud bank (`tiles/backgrounds/2.png`, tinted, drifting as a wrapping mirrored strip; a lit copy blends in with the flash; the user wants these clouds, not new drawn ones), refinery silhouettes (`tiles/backgrounds/3-5.png` tinted, red haze, blinking beacons on the tallest stacks), the bolt striking the skyline top at its x, drifting ground fog, rain over the geometry. Time-driven (`nowMs`), so clouds/rain/fog are local; only strikes are synced |
 | `designed-levels.ts` | `DESIGNED_LEVELS`: floors made in the level editor (floor 1: button + exit door), played instead of a generated floor by `levelFor` (`level-generator.ts`) |
+| `clue-scene.ts` | A designed floor's clue scene rules (pure): `LevelLayout.clueScene` (spawn spot + gadget), phases waiting / walking / holding / done, goal x, `stepClueScene` |
+| `clue-scene-system.ts` | `engine.clueSceneSystem`: host/solo raises the clue zombie (`ZombieSystem.spawnZombieAt`), scripts it onto its gadget (`ZombieSystem.scriptedGoals`: walks there ignoring players, no attacks), holds `CLUE_SCENE_HOLD_TICKS`, then lets it hunt. Floor 1: a zombie drops onto the door button. Guests never run it (the zombie syncs as usual) |
+| `spawn-zones.ts` | No-spawn zones (pure): `spawnSpans` (where on each surface a body of a size overlaps no zone), `zoneFreeSpot` (a surface picked evenly, then a free spot). `ZombieSystem.pickSpawnSpot` uses them when `engine.noSpawnZones` (a designed layout's `noSpawn`, drawn only in the level editor) is not empty; scripted and cage spawns ignore zones |
 | `level-generator.ts` | Seeded per-floor layouts (platforms, ropes, exit side, safe spot + its ladder, floor-2 boulder puzzle: wall + ledge position, platforms kept out of the chute) + `levelViolations` rules; host picks the seed, clients follow it via game-sync |
 | `boulder-puzzle.ts` | Floor-2 puzzle rules (pure): gate box + hits, boulder path (ledge → chute → wall), rolling, crush targets, debris, `keepOutOfWall`, leaving through the opening |
 | `spring-puzzle.ts` | Floor-3 puzzle rules (pure): spring span, scale pan + what rests on it and its kg (`scaleLoadKg`), cable path, button box + rise (`tickButton`) + presses, 3-2-1 countdown + launch tick, on-spring check + fling, corpse scatter, plate offset |
@@ -137,6 +140,7 @@ DropSystem       -> Physics, Vfx
 CombatSystem     -> Physics, Vfx, Drop
 ProjectileSystem -> Physics, Vfx
 ZombieSystem     -> Physics, Combat, Projectile, Drop
+ClueSceneSystem  -> Zombie
 BoulderPuzzleSystem -> Combat, Vfx
 SpringPuzzleSystem  -> Vfx
 CagePuzzleSystem    -> Vfx, Zombie, Drop

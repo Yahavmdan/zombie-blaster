@@ -126,6 +126,20 @@ function wallScene(): HTMLCanvasElement {
   });
 }
 
+/** A no-spawn zone: a blood-red frame with diagonal hatching, as the editor draws it. */
+function noSpawnScene(): HTMLCanvasElement {
+  const size: number = 2 * TILE;
+  return scene(size, size, (ctx: CanvasRenderingContext2D): void => {
+    for (let d: number = 0; d < 2 * size; d += 12) {
+      pxLine(ctx, Math.min(d, size), Math.max(0, d - size), Math.max(0, d - size), Math.min(d, size), PIXEL['blood'], 2);
+    }
+    pxRect(ctx, 0, 0, size, 4, PIXEL['bloodHi']);
+    pxRect(ctx, 0, size - 4, size, 4, PIXEL['bloodHi']);
+    pxRect(ctx, 0, 0, 4, size, PIXEL['bloodHi']);
+    pxRect(ctx, size - 4, 0, 4, size, PIXEL['bloodHi']);
+  });
+}
+
 function exitScene(): HTMLCanvasElement {
   return scene(80, 56, (ctx: CanvasRenderingContext2D): void => {
     pxBar(ctx, 0, 40, 80, 16, PIXEL['steelLight'], PIXEL['steelHi'], PIXEL['steelDark']);
@@ -168,6 +182,8 @@ function toolScene(tool: EditorTool, then: () => void): HTMLCanvasElement {
       return ladderScene();
     case 'wall':
       return wallScene();
+    case 'no-spawn':
+      return noSpawnScene();
     case 'exit':
       return exitScene();
     case 'rail':
