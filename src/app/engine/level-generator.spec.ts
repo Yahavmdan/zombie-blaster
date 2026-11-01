@@ -39,7 +39,7 @@ describe('designed floors', () => {
   it('every client plays a copy: changing one floor never changes the next', (): void => {
     const level: LevelLayout = levelFor(1, 1);
     level.platforms.length = 0;
-    expect(levelFor(1, 1).platforms.length).toBe(1);
+    expect(levelFor(1, 1).platforms.length).toBe(5);
   });
 
   it('other floors are still generated from the seed', (): void => {
