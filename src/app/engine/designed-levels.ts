@@ -2,13 +2,16 @@ import type { LevelLayout } from './level-generator';
 
 /**
  * Floor 1, designed in the level editor: no hanging exit, the way out is the exit door on the
- * right ledge. The door is open only while something weighs down the button at the far left, so
+ * right ledge. The door is open only while something weighs down the button on the low left ledge, so
  * carry a box (or a body) onto the button, then climb the crate stack to the ledge.
  */
 const FLOOR_1: LevelLayout = {
   seed: 851510303,
   floor: 1,
   hint: 'Weigh down the button to open the door',
+  // The clue: a zombie rises on the middle ledge, walks off its left end and drops onto the button
+  // on the ledge below (the door opens), stands there 4 s, then hunts.
+  clueScene: { spawnX: 490, spawnY: 400, gadgetId: 'g2' },
   platforms: [
     { x: 1120, y: 452, width: 160, height: 32 },
     { x: 188, y: 228, width: 160, height: 32 },
@@ -52,7 +55,12 @@ const FLOOR_1: LevelLayout = {
       width: 64,
       height: 128,
     },
-    { id: 'g2', kind: 'button', kg: 10, targets: ['g1'], x: 104, y: 620, width: 48, height: 6 },
+    { id: 'g2', kind: 'button', kg: 10, targets: ['g1'], x: 376, y: 508, width: 48, height: 6 },
+  ],
+  // No zombie rises on the button's ledge (a random spawn there would open the door for free).
+  noSpawn: [
+    { x: 304, y: 412, width: 128, height: 128 },
+    { x: 176, y: 412, width: 128, height: 128 },
   ],
 };
 

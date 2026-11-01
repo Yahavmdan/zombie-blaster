@@ -236,7 +236,11 @@ export function drawGadgetButton(
     pxRect(ctx, capX + 2, y, 4, 2, PIXEL['white']);
     return;
   }
-  pxBar(ctx, capX, y - 4, capW, 8, PIXEL['bloodHi'], PIXEL['blood'], PIXEL['bloodDark']);
+  // The cap stands well proud (inked round) so an unpressed button reads from across the screen.
+  const cap: number = GAME_CONSTANTS.GADGET_BUTTON_CAP_PX;
+  pxRect(ctx, capX - 2, y - cap - 2, capW + 4, cap + 2, K);
+  pxBar(ctx, capX, y - cap, capW, cap + 4, PIXEL['bloodHi'], PIXEL['blood'], PIXEL['bloodDark']);
+  pxRect(ctx, capX + 2, y - cap + 2, 4, 2, PIXEL['white']);
 }
 
 /** A scale: its pan set into the surface, a post at its right end with a dial, and its load in kg. */

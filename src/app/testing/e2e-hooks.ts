@@ -416,6 +416,14 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
       })),
       props: propViews(engine),
       safeSpot: safeSpotView(engine),
+      noSpawn: engine.noSpawnZones.map(
+        (z: Platform): { x: number; y: number; width: number; height: number } => ({
+          x: z.x,
+          y: z.y,
+          width: z.width,
+          height: z.height,
+        }),
+      ),
       walls: (engine.level.walls ?? []).map(
         (w: Platform): { x: number; y: number; width: number; height: number } => ({
           x: w.x,
@@ -456,6 +464,7 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
       };
     }),
     exitLocked: engine.isExitLocked(),
+    clueScene: { phase: engine.clueSceneSystem.state.phase, zombieId: engine.clueSceneSystem.state.zombieId },
     drops: engine.worldDrops.map(
       (d: WorldDrop): E2eDropView => ({ id: d.id, type: d.type, x: d.x, y: d.y, value: d.value }),
     ),
@@ -568,6 +577,16 @@ const engineControls: E2eEngineControls = {
     if (!engine || engine.isMultiplayerClient) return;
     for (const z of engine.zombies) z.isDead = true;
     engine.zombies = [];
+  },
+  pauseZombieSpawns(paused: boolean): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine || engine.isMultiplayerClient) return;
+    engine.zombieSpawnsPaused = paused;
+  },
+  skipClueScene(): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine || engine.isMultiplayerClient) return;
+    engine.clueSceneSystem.skip();
   },
   dropCorpses(centerX: number, count: number): void {
     currentEngine?.dropCorpses(centerX, count);

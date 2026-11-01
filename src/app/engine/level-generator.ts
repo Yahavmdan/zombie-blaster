@@ -4,6 +4,7 @@ import {
   BoulderPuzzleLayout,
   CageContent,
   CagePuzzleLayout,
+  ClueSceneLayout,
   Gadget,
   HangingCage,
   PlatePuzzleLayout,
@@ -47,6 +48,8 @@ export interface LevelLayout {
   exitY?: number;
   /** A designed layout: solid blocks of tiles (stand on top, their sides block). Generated floors have none. */
   walls?: Platform[];
+  /** A designed layout: boxes where no zombie rises (its body never overlaps one). Drawn only in the level editor. */
+  noSpawn?: Platform[];
   /** A designed layout: no hanging exit (the way out is an exit door). */
   exitHidden?: boolean;
   /** A designed layout: standalone gadgets (boulders, cracked walls, buttons, scales, levers, launchers, doors) and their wires. */
@@ -55,6 +58,8 @@ export interface LevelLayout {
   notes?: string;
   /** A designed floor in the game: the subtitle under the floor title (how to get out). */
   hint?: string;
+  /** A designed floor in the game: a scripted zombie that shows how the puzzle works. */
+  clueScene?: ClueSceneLayout;
 }
 
 export const GROUND_PLATFORM: Platform = {

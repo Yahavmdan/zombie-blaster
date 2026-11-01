@@ -516,3 +516,59 @@ describe('level editor: slopes, cages, exit doors', () => {
     expect(hasWayOut(layout)).toBe(false);
   });
 });
+
+describe('level editor: no-spawn zones', () => {
+  const SIZE: number = GAME_CONSTANTS.DEV_EDITOR_NO_SPAWN_TILES * TILE;
+
+  it('places a square zone centered on the click, snapped, under everything else', () => {
+    const layout: LevelLayout = room();
+    const ref: EditorRef | null = placeAt(layout, 'no-spawn', 400, 400);
+    expect(ref).toEqual({ kind: 'no-spawn', index: 0 });
+    expect(layout.noSpawn).toEqual([{ x: 336, y: 336, width: SIZE, height: SIZE }]);
+    // A box standing in it is picked before the zone.
+    placeAt(layout, 'box1', 400, GROUND_Y);
+    expect(itemAt(layout, 400, 400)?.kind).toBe('no-spawn');
+    const box: Box = boxOf(layout, { kind: 'prop', index: 0 });
+    placeAt(layout, 'no-spawn', box.x + box.width / 2, GROUND_Y - 100);
+    expect(itemAt(layout, box.x + 2, box.y + 2)?.kind).toBe('prop');
+  });
+
+  it('resizes from every side in whole tiles, moves, adjusts and erases', () => {
+    const layout: LevelLayout = room();
+    const ref: EditorRef = placeAt(layout, 'no-spawn', 400, 400)!;
+    const zone: Box = boxOf(layout, ref);
+    expect(edgeAt(layout, ref, zone.x + 40, zone.y + zone.height - 1)).toBe('bottom');
+    expect(edgeAt(layout, ref, zone.x + 40, zone.y + 1)).toBe('top');
+    resizeTo(layout, ref, 'bottom', 0, zone.y + zone.height + 2 * TILE + 3);
+    expect(boxOf(layout, ref).height).toBe(SIZE + 2 * TILE);
+    resizeTo(layout, ref, 'right', zone.x + zone.width + TILE, 0);
+    expect(boxOf(layout, ref).width).toBe(SIZE + TILE);
+    moveTo(layout, ref, 600, 100);
+    expect(boxOf(layout, ref)).toMatchObject({ x: 600, y: 100 });
+    expect(fieldsOf(layout, ref).map((f: EditorField): string => f.key)).toEqual(['width', 'height']);
+    setField(layout, ref, 'width', 3 * TILE);
+    expect(boxOf(layout, ref).width).toBe(3 * TILE);
+    removeItem(layout, ref);
+    expect(layout.noSpawn).toEqual([]);
+  });
+
+  it('round-trips zones, the hint and the clue scene through export', () => {
+    const layout: LevelLayout = room();
+    placeAt(layout, 'no-spawn', 400, 400);
+    placeAt(layout, 'button', 200, GROUND_Y);
+    layout.hint = 'Press the button';
+    layout.clueScene = { spawnX: 100, spawnY: GROUND_Y, gadgetId: 'g1' };
+    expect(parseLayout(exportLayout(layout))).toEqual(layout);
+    expect(parseLayout(JSON.stringify({ ...layout, noSpawn: [{ x: 1 }] }))).toHaveProperty('error');
+    expect(
+      parseLayout(JSON.stringify({ ...layout, clueScene: { spawnX: 1 } })),
+    ).toHaveProperty('error');
+  });
+
+  it('clearing the room takes the zones too', () => {
+    const layout: LevelLayout = room();
+    placeAt(layout, 'no-spawn', 400, 400);
+    clearLayout(layout);
+    expect(layout.noSpawn).toEqual([]);
+  });
+});

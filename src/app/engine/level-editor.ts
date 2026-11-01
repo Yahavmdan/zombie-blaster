@@ -45,6 +45,7 @@ export type EditorTool =
   | 'platform'
   | 'ladder'
   | 'wall'
+  | 'no-spawn'
   | 'safe-spot'
   | 'exit'
   | GadgetKind
@@ -56,7 +57,10 @@ export type EditorTool =
  * the standalone gadgets.
  */
 export type EditorRef =
-  | { kind: 'platform' | 'ladder' | 'wall' | 'prop' | 'gadget' | 'cage' | 'cleat'; index: number }
+  | {
+      kind: 'platform' | 'ladder' | 'wall' | 'no-spawn' | 'prop' | 'gadget' | 'cage' | 'cleat';
+      index: number;
+    }
   | { kind: 'exit' | 'boulder-wall' | 'spring' | 'scale' | 'plate' };
 
 /** The side of a box (or end of a ladder, or edge of a crack band) being dragged to resize it. */
@@ -170,6 +174,28 @@ function walls(layout: LevelLayout): Platform[] {
   return layout.walls;
 }
 
+function noSpawn(layout: LevelLayout): Platform[] {
+  if (!layout.noSpawn) layout.noSpawn = [];
+  return layout.noSpawn;
+}
+
+/** The box of a plain boxed ref (platform, wall, no-spawn zone, prop), or undefined. */
+function plainBox(layout: LevelLayout, ref: EditorRef): Platform | Prop | undefined {
+  if (!('index' in ref)) return undefined;
+  switch (ref.kind) {
+    case 'platform':
+      return layout.platforms[ref.index];
+    case 'wall':
+      return walls(layout)[ref.index];
+    case 'no-spawn':
+      return noSpawn(layout)[ref.index];
+    case 'prop':
+      return layout.props[ref.index];
+    default:
+      return undefined;
+  }
+}
+
 function gadgets(layout: LevelLayout): Gadget[] {
   if (!layout.gadgets) layout.gadgets = [];
   return layout.gadgets;
@@ -238,6 +264,8 @@ export function itemBox(layout: LevelLayout, ref: EditorRef): Box | null {
       return layout.platforms[ref.index] ?? null;
     case 'wall':
       return walls(layout)[ref.index] ?? null;
+    case 'no-spawn':
+      return noSpawn(layout)[ref.index] ?? null;
     case 'prop':
       return layout.props[ref.index] ?? null;
     case 'gadget': {
@@ -293,10 +321,10 @@ export function itemBox(layout: LevelLayout, ref: EditorRef): Box | null {
 export function allRefs(layout: LevelLayout): EditorRef[] {
   const cages: number = layout.cagePuzzle?.cages.length ?? 0;
   const indexed: (
-    kind: 'platform' | 'ladder' | 'wall' | 'prop' | 'cage' | 'cleat',
+    kind: 'platform' | 'ladder' | 'wall' | 'no-spawn' | 'prop' | 'cage' | 'cleat',
     n: number,
   ) => EditorRef[] = (
-    kind: 'platform' | 'ladder' | 'wall' | 'prop' | 'cage' | 'cleat',
+    kind: 'platform' | 'ladder' | 'wall' | 'no-spawn' | 'prop' | 'cage' | 'cleat',
     n: number,
   ): EditorRef[] =>
     Array.from({ length: n }, (_: unknown, i: number): EditorRef => ({ kind, index: n - 1 - i }));
@@ -322,6 +350,8 @@ export function allRefs(layout: LevelLayout): EditorRef[] {
     ...indexed('wall', walls(layout).length),
     ...(layout.springPuzzle ? [{ kind: 'spring' } as EditorRef] : []),
     ...(layout.boulderPuzzle ? [{ kind: 'boulder-wall' } as EditorRef] : []),
+    // Zones lie under everything: a click inside one picks what stands in it first.
+    ...indexed('no-spawn', noSpawn(layout).length),
   ];
 }
 
@@ -359,6 +389,8 @@ export function refLabel(layout: LevelLayout, ref: EditorRef): string {
       return 'Ladder';
     case 'wall':
       return 'Wall';
+    case 'no-spawn':
+      return 'No-spawn zone';
     case 'prop':
       return `Prop: ${layout.props[ref.index]?.kind ?? '?'}`;
     case 'gadget': {
@@ -415,6 +447,13 @@ export function edgeAt(
     if (can.top && y - box.y <= grab) return 'top';
     if (can.sides && x - box.x <= grab) return 'left';
     if (can.sides && box.x + box.width - x <= grab) return 'right';
+    return null;
+  }
+  if (ref.kind === 'no-spawn') {
+    if (y - box.y <= grab) return 'top';
+    if (box.y + box.height - y <= grab) return 'bottom';
+    if (x - box.x <= grab) return 'left';
+    if (box.x + box.width - x <= grab) return 'right';
     return null;
   }
   const sideways: boolean =
@@ -608,6 +647,16 @@ export function placeAt(
       walls(layout).push({ x: wx, y: bottom - height, width, height });
       return { kind: 'wall', index: walls(layout).length - 1 };
     }
+    case 'no-spawn': {
+      const size: number = GAME_CONSTANTS.DEV_EDITOR_NO_SPAWN_TILES * TILE;
+      noSpawn(layout).push({
+        x: clamp(snap(x - size / 2), 0, W - size),
+        y: clamp(snap(y - size / 2), 0, GROUND_Y - size),
+        width: size,
+        height: size,
+      });
+      return { kind: 'no-spawn', index: noSpawn(layout).length - 1 };
+    }
     case 'ladder': {
       const lx: number = clamp(snap(x), LADDER_HALF_PX, W - LADDER_HALF_PX);
       const topY: number = surfaceBelow(surfaces(layout, false), lx, y);
@@ -672,9 +721,9 @@ function ontoSlope(layout: LevelLayout, box: Box, y: number): Box {
 export function moveTo(layout: LevelLayout, ref: EditorRef, left: number, top: number): void {
   switch (ref.kind) {
     case 'platform':
-    case 'wall': {
-      const box: Platform | undefined =
-        ref.kind === 'platform' ? layout.platforms[ref.index] : walls(layout)[ref.index];
+    case 'wall':
+    case 'no-spawn': {
+      const box: Platform | Prop | undefined = plainBox(layout, ref);
       if (!box) return;
       box.x = clamp(snap(left), 0, W - box.width);
       box.y = clamp(snap(top), 0, GROUND_Y - box.height);
@@ -843,15 +892,13 @@ export function resizeTo(
     followExit(layout);
     return;
   }
-  const box: Platform | Prop | undefined =
-    ref.kind === 'platform'
-      ? layout.platforms[ref.index]
-      : ref.kind === 'wall'
-        ? walls(layout)[ref.index]
-        : ref.kind === 'prop'
-          ? layout.props[ref.index]
-          : undefined;
+  const box: Platform | Prop | undefined = plainBox(layout, ref);
   if (!box) return;
+  if (ref.kind === 'no-spawn' && edge === 'bottom') {
+    // A zone's bottom: whole tiles below its top, down to the ground.
+    box.height = clamp(Math.round((y - box.y) / TILE) * TILE, TILE, GROUND_Y - box.y);
+    return;
+  }
   const rail: boolean = ref.kind === 'prop';
   if (edge === 'left' || edge === 'right') {
     resizeSide(
@@ -862,7 +909,7 @@ export function resizeTo(
       rail ? GAME_CONSTANTS.RAIL_MIN_WIDTH_PX : TILE,
       rail ? GAME_CONSTANTS.RAIL_MAX_WIDTH_PX : W,
     );
-  } else if (edge === 'top' && ref.kind === 'wall') {
+  } else if (edge === 'top' && (ref.kind === 'wall' || ref.kind === 'no-spawn')) {
     resizeTop(box, y);
   }
   followExit(layout);
@@ -879,6 +926,9 @@ export function removeItem(layout: LevelLayout, ref: EditorRef): void {
       break;
     case 'wall':
       walls(layout).splice(ref.index, 1);
+      break;
+    case 'no-spawn':
+      noSpawn(layout).splice(ref.index, 1);
       break;
     case 'prop':
       layout.props.splice(ref.index, 1);
@@ -918,6 +968,7 @@ export function clearLayout(layout: LevelLayout): void {
   layout.ropes = [];
   layout.props = [];
   layout.walls = [];
+  layout.noSpawn = [];
   layout.gadgets = [];
   delete layout.boulderPuzzle;
   delete layout.springPuzzle;
@@ -1166,8 +1217,9 @@ export function fieldsOf(layout: LevelLayout, ref: EditorRef): EditorField[] {
       const p: Platform | undefined = layout.platforms[ref.index];
       return p ? [widthField(p, TILE, TILE, W)] : [];
     }
-    case 'wall': {
-      const w: Platform | undefined = walls(layout)[ref.index];
+    case 'wall':
+    case 'no-spawn': {
+      const w: Platform | Prop | undefined = plainBox(layout, ref);
       return w ? [widthField(w, TILE, TILE, W), heightField(w)] : [];
     }
     case 'ladder': {
@@ -1253,14 +1305,7 @@ export function setField(
     const r: Rope | undefined = layout.ropes[ref.index];
     if (r) r.bottomY = r.topY + v;
   } else {
-    const box: Platform | Prop | undefined =
-      ref.kind === 'platform'
-        ? layout.platforms[ref.index]
-        : ref.kind === 'wall'
-          ? walls(layout)[ref.index]
-          : ref.kind === 'prop'
-            ? layout.props[ref.index]
-            : undefined;
+    const box: Platform | Prop | undefined = plainBox(layout, ref);
     if (box && key === 'width') box.width = v;
     if (box && key === 'height') setHeight(box, v);
   }
@@ -1488,7 +1533,27 @@ export function parseLayout(text: string): LevelLayout | { error: string } {
       gadgets: readList(v['gadgets'], 'gadgets', readGadget),
     };
     checkWires(layout.gadgets ?? []);
+    if (v['noSpawn'] !== undefined) layout.noSpawn = readList(v['noSpawn'], 'noSpawn', readBox);
     if (typeof notes === 'string' && notes.length > 0) layout.notes = notes;
+    const hint: unknown = v['hint'];
+    if (hint !== undefined && typeof hint !== 'string') throw new Error('hint: text');
+    if (typeof hint === 'string' && hint.length > 0) layout.hint = hint;
+    const clue: unknown = v['clueScene'];
+    if (clue !== undefined) {
+      if (
+        !isObject(clue) ||
+        !isNum(clue['spawnX']) ||
+        !isNum(clue['spawnY']) ||
+        typeof clue['gadgetId'] !== 'string'
+      ) {
+        throw new Error('clueScene: needs spawnX, spawnY, gadgetId');
+      }
+      layout.clueScene = {
+        spawnX: clue['spawnX'],
+        spawnY: clue['spawnY'],
+        gadgetId: clue['gadgetId'],
+      };
+    }
     if (v['exitHidden'] === true) layout.exitHidden = true;
     const boulder: unknown = v['boulderPuzzle'];
     if (boulder !== undefined) {

@@ -213,6 +213,13 @@ export const GAME_CONSTANTS = {
   PLATE_KICK_COOLDOWN_TICKS: 240, // A zombie kicks at most one corpse this often (one per pass over the plate)
   SAFE_SPOT_HEADROOM_PX: 160, // Players up to this far above the safe spot (jumping on it) still count as resting there
 
+  // ─── Clue scene (a designed floor's scripted zombie that shows the puzzle) ─
+  // Floor 1: a zombie rises on a ledge, walks off it onto the button (the door opens), stands
+  // there, then turns into a normal zombie. Host-run; the zombie syncs like any other.
+  CLUE_SCENE_START_DELAY_TICKS: 150, // The scene starts this long after the floor begins (the floor title has faded)
+  CLUE_SCENE_HOLD_TICKS: 200, // The zombie stands on the button this long (4 s at TICK_RATE 50)
+  CLUE_SCENE_ARRIVE_PX: 4, // The zombie's middle within this of the button's middle counts as standing on it
+
   // ─── Gadgets (designed floors: dev level editor) ─
   // Standalone pieces. Sources (button, scale, lever) give a signal; a wire carries it to targets
   // (spring, slingshot, door, the exit). The boulder and the cracked wall stand on their own.
@@ -240,6 +247,7 @@ export const GAME_CONSTANTS = {
   GADGET_BUTTON_KG: 60, // A new floor button needs this many kg (a player presses it, so does a boulder or a few corpses)
   GADGET_BUTTON_WIDTH_PX: 48, // A floor button, set into its surface's top: this wide
   GADGET_BUTTON_STACK_PX: 40, // Things piled up to this far above a button still press on it
+  GADGET_BUTTON_CAP_PX: 10, // A floor button's red cap stands this far proud of its surface until something presses it
   GADGET_SCALE_KG: 500, // A new scale gives its signal at this many kg
   GADGET_SCALE_WIDTH_PX: 96, // A scale's pan, set into its surface's top: this wide
   GADGET_SCALE_STACK_PX: 80, // Things piled up to this far above a scale's pan still weigh on it
@@ -700,6 +708,7 @@ export const GAME_CONSTANTS = {
   DEV_EDITOR_PLATFORM_TILES: 5, // A new platform is this many tiles wide
   DEV_EDITOR_WALL_TILES: 2, // A new wall is this many tiles wide...
   DEV_EDITOR_WALL_HEIGHT_TILES: 4, // ...and this many tall, standing on the surface under the click
+  DEV_EDITOR_NO_SPAWN_TILES: 4, // A new no-spawn zone (editor only: no zombie rises with its body in it) is this many tiles square, centered on the click
   DEV_EDITOR_EDGE_GRAB_PX: 8, // Pressing this close to a box's side (or a ladder's end) resizes it instead of moving it
   DEV_EDITOR_SURFACE_SNAP_PX: 16, // A ladder end, prop, cleat or plate lands on a surface this close above the pointer
   DEV_EDITOR_LADDER_MIN_PX: 32, // Shortest ladder

@@ -91,6 +91,7 @@ import { CorpseCarrySystem } from './corpse-carry-system';
 import { LoosePropSystem } from './loose-prop-system';
 import { ExplodingBarrelSystem } from './exploding-barrel-system';
 import { GadgetSystem } from './gadget-system';
+import { ClueSceneSystem } from './clue-scene-system';
 import { exitLocked, leavesThroughDoor } from './gadgets';
 import { CarryPose } from './corpse-carry';
 import { CorpseDrape } from './corpse-drape';
@@ -196,6 +197,7 @@ export class GameEngine implements IGameEngine {
   plate: PlateState | null = null;
   gadgets: Gadget[] = [];
   gadgetStates: GadgetState[] = [];
+  noSpawnZones: Platform[] = [];
 
   backgroundStars: BackgroundStar[] = [];
 
@@ -307,6 +309,8 @@ export class GameEngine implements IGameEngine {
   private readonly loosePropSystem: LoosePropSystem;
   private readonly explodingBarrelSystem: ExplodingBarrelSystem;
   readonly gadgetSystem: GadgetSystem;
+  /** A designed floor's scripted clue zombie (floor 1: shows the button opens the door). */
+  readonly clueSceneSystem: ClueSceneSystem;
   private readonly renderSystem: RenderSystem;
   readonly devTools: DevToolsSystem;
   readonly levelEditor: LevelEditorSystem;
@@ -345,6 +349,7 @@ export class GameEngine implements IGameEngine {
     );
     // A barrel blast also throws boulders, breaks crack bands and knocks down cages.
     this.explodingBarrelSystem.onBlast = (center: Point): void => this.gadgetSystem.blast(center);
+    this.clueSceneSystem = new ClueSceneSystem(this, this.zombieSystem);
     this.renderSystem = new RenderSystem(this);
     this.devTools = new DevToolsSystem(this);
     this.levelEditor = new LevelEditorSystem(this);
@@ -412,6 +417,8 @@ export class GameEngine implements IGameEngine {
     this.mapRenderer.setLevel(this.level.platforms, this.level.ropes, this.fixedProps(), this.level.walls ?? [], this.boulderPuzzle, true);
     this.loosePropSystem.reset(this.level);
     this.gadgetSystem.reset(this.level);
+    this.clueSceneSystem.reset(this.level);
+    this.noSpawnZones = (this.level.noSpawn ?? []).map((z: Platform): Platform => ({ ...z }));
     this.repositionExitPlatform();
   }
 
@@ -868,6 +875,7 @@ export class GameEngine implements IGameEngine {
       this.cagePuzzleSystem.update();
       this.platePuzzleSystem.update();
       this.gadgetSystem.update();
+      this.clueSceneSystem.update();
       this.explodingBarrelSystem.update();
       this.projectileSystem.updateDragonProjectiles();
       this.projectileSystem.updateSpitterProjectiles();
@@ -880,6 +888,7 @@ export class GameEngine implements IGameEngine {
       this.cagePuzzleSystem.tickClient();
       this.platePuzzleSystem.tickClient();
       this.gadgetSystem.tickClient();
+      this.clueSceneSystem.tickClient();
       this.projectileSystem.tickClientProjectileVisuals();
       this.projectileSystem.updatePoisonEffect();
       if (this.floorTransitionTimer > 0) this.floorTransitionTimer--;

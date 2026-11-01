@@ -98,6 +98,57 @@ test.describe('dev level editor', { tag: '@solo' }, (): void => {
     );
   });
 
+  test('a no-spawn zone: drawn with its tool, resized, and no zombie rises in it', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    test.setTimeout(60_000);
+    const p: GamePlayer = await solo('warrior');
+    await quiet(p);
+    const bar: Locator = await openEditor(p);
+    await p.page.getByTestId('level-editor-button-clear').click();
+    await tool(p.page, 'no-spawn');
+    await clickMap(p.page, 640, 560);
+    const placed: E2eSnapshot = await p.probe.waitFor(
+      'the zone is in the floor at once',
+      (s: E2eSnapshot): boolean => s.level.noSpawn.length === 1,
+      { timeoutMs: 5_000 },
+    );
+    await expect(bar.getByTestId('level-editor-text-selection')).toHaveText('No-spawn zone');
+    const zone: Box = placed.level.noSpawn[0];
+    expect(zone.y + zone.height, 'it reaches down to the ground').toBe(WORLD.groundY);
+
+    // Drag its right side out to 1000: the zone covers most of the ground.
+    await tool(p.page, 'select');
+    await dragMap(
+      p.page,
+      { x: zone.x + zone.width - 2, y: zone.y + zone.height / 2 },
+      { x: 1000, y: zone.y + zone.height / 2 },
+    );
+    const wide: E2eSnapshot = await p.probe.waitFor(
+      'the zone grew to the right',
+      (s: E2eSnapshot): boolean => s.level.noSpawn[0].x + s.level.noSpawn[0].width >= 990,
+      { timeoutMs: 5_000 },
+    );
+    const area: Box = wide.level.noSpawn[0];
+
+    await p.probe.spawnRolledZombies(30);
+    const s: E2eSnapshot = await p.probe.waitFor(
+      'the zombies rose',
+      (st: E2eSnapshot): boolean => st.zombies.length >= 30,
+      { timeoutMs: 5_000 },
+    );
+    for (const z of s.zombies.filter((zz: E2eSnapshot['zombies'][number]): boolean => zz.spawnTimer > 0)) {
+      const overlaps: boolean =
+        z.x < area.x + area.width &&
+        z.x + z.width > area.x &&
+        z.y < area.y + area.height &&
+        z.y + z.height > area.y;
+      expect(overlaps, `zombie at ${Math.round(z.x)} rose inside the zone`).toBe(false);
+    }
+  });
+
   test('a wall is solid: walking into it stops the player', async ({
     solo,
   }: {

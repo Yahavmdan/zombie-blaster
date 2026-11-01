@@ -271,6 +271,8 @@ export interface E2eLevelView {
   safeSpot: { x: number; y: number; width: number } | null;
   /** A designed layout's solid walls (dev level editor); generated floors have none. */
   walls: Array<{ x: number; y: number; width: number; height: number }>;
+  /** A designed layout's no-spawn zones (drawn only in the editor): regular spawns keep zombies out. */
+  noSpawn: Array<{ x: number; y: number; width: number; height: number }>;
 }
 
 /** Where one collision object's art was actually drawn, measured from rendered pixels. */
@@ -450,6 +452,8 @@ export interface E2eSnapshot {
   gadgets: E2eGadgetView[];
   /** A wire runs to the exit and its door isn't fully open yet. */
   exitLocked: boolean;
+  /** A designed floor's clue scene (floor 1: a zombie shows the button). Guests always read 'done'. */
+  clueScene: { phase: 'waiting' | 'walking' | 'holding' | 'done'; zombieId: string | null };
   drops: E2eDropView[];
   /** Hostile shots in flight: spitter acid and dragon fireballs. */
   zombieProjectiles: { spitter: number; dragon: number };
@@ -531,6 +535,10 @@ export interface E2eEngineControls {
   spawnZombieAt(x: number, type?: string): void;
   /** Solo/host setup only: every zombie leaves the floor at once (no corpses, no loot); spawning goes on. */
   clearZombies(): void;
+  /** Solo/host setup only: regular zombie spawns stop (true) or go on (false), like the dev tools' pause. */
+  pauseZombieSpawns(paused: boolean): void;
+  /** Solo/host setup only: the floor's clue scene ends now (its zombie, if risen, hunts as usual). */
+  skipClueScene(): void;
 }
 
 export interface ZbE2eApi {

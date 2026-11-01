@@ -192,7 +192,7 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   has them (floor 1 may have none, later floors always have one). A designed layout (dev level
   editor, `e2e/specs/solo/level-editor.spec.ts`) adds solid `state().level.walls` and gadgets:
   `state().gadgets` (id, kind, box, on, kg, hits, broken, openTicks, launches, a boulder's `body`,
-  a source's `targets`) and `state().exitLocked`. Load a designed floor with
+  a source's `targets`), `state().exitLocked` and `state().clueScene` (phase, zombieId; `probe.skipClueScene()` ends floor 1's clue zombie script so it never presses the button in a test), `state().level.noSpawn` (no-spawn zones) and `probe.pauseZombieSpawns(true)` (no regular spawns: a quiet floor that stays quiet). Load a designed floor with
   `probe.loadLayout(json)` (online: on every page); builders in `e2e/support/gadget-layouts.ts`;
   specs `e2e/specs/solo/gadgets.spec.ts`, `e2e/specs/online/gadgets-coop.spec.ts`. Props (`state().level.props`) are
   solid: you stand on them; walking into one up to 26 px tall steps you onto it, a stack (or
