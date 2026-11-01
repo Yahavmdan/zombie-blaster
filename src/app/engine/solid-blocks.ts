@@ -6,8 +6,9 @@ const ON_TOP_TOLERANCE_PX: number = 2;
 
 /**
  * Pushes a box (player or zombie) out of the sides of solid props after a horizontal move.
- * Standing on top (feet at or above the prop's top) is not blocked. Returns the corrected x and
- * whether the move was blocked.
+ * Standing on top (feet at or above the prop's top) is not blocked. A prop the box already
+ * overlapped before the move (it jumped up through a platform into it) lets it pass: props block
+ * only from their sides. Returns the corrected x and whether the move was blocked.
  */
 export function pushOutOfSolids(
   x: number,
@@ -24,6 +25,7 @@ export function pushOutOfSolids(
     if (!s.solid) continue;
     if (bottom <= s.y + ON_TOP_TOLERANCE_PX || y >= s.y + s.height) continue;
     if (nx + width <= s.x || nx >= s.x + s.width) continue;
+    if (s.propId !== undefined && prevX + width > s.x && prevX < s.x + s.width) continue;
     // Push back toward the side it came from; a solid touching a screen edge (the puzzle wall)
     // only has an on-screen side, so anything that ends up inside it (a dash) goes there.
     const fromLeft: boolean =

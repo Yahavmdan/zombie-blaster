@@ -591,6 +591,68 @@ describe('GadgetSystem on a real engine', () => {
     expect(engine.leavesThroughDoor(p)).toBe(false);
   });
 
+  it('a shut exit door is no wall: players walk through it, but only an open one lets them out', () => {
+    load([
+      {
+        id: 'g1',
+        kind: 'lever',
+        startsOn: false,
+        x: 300,
+        y: GROUND_Y - 32,
+        width: 16,
+        height: 32,
+        targets: ['g2'],
+      },
+      {
+        id: 'g2',
+        kind: 'door',
+        latch: false,
+        exit: true,
+        x: 600,
+        y: GROUND_Y - 128,
+        width: 32,
+        height: 128,
+      },
+    ]);
+    tick(5);
+    expect(state('g2').openTicks).toBe(0);
+    expect(engine.platforms.some((q: Platform): boolean => q.gadgetId === 'g2')).toBe(false);
+    const physics: PhysicsSystem = new PhysicsSystem(engine);
+    const p: CharacterState = engine.player!;
+    p.x = 540;
+    engine.keys = { ...engine.keys, right: true };
+    let leftThrough: boolean = false;
+    for (let t: number = 0; t < 120 && p.x < 680; t++) {
+      physics.updatePlayer();
+      leftThrough = leftThrough || engine.leavesThroughDoor(p);
+    }
+    expect(p.x, 'walked through the shut door').toBeGreaterThanOrEqual(680);
+    expect(leftThrough, 'a shut door lets nobody out').toBe(false);
+  });
+
+  it('jumping up through a platform passes through the props standing on it', () => {
+    load([]);
+    const ledge: Platform = { x: 300, y: GROUND_Y - 110, width: 200, height: 16 };
+    const crate: Platform = { x: 380, y: ledge.y - 32, width: 48, height: 32, solid: true, propId: 'p1' };
+    engine.platforms = [...engine.platforms, ledge, crate];
+    const physics: PhysicsSystem = new PhysicsSystem(engine);
+    const p: CharacterState = engine.player!;
+    p.x = 390;
+    p.y = GROUND_Y - PH;
+    p.isGrounded = false;
+    p.velocityY = GAME_CONSTANTS.PLAYER_JUMP_FORCE;
+    engine.keys = { ...engine.keys, right: true };
+    let top: number = p.y;
+    for (let t: number = 0; t < 120; t++) {
+      physics.updatePlayer();
+      top = Math.min(top, p.y);
+      if (p.isGrounded) break;
+    }
+    expect(top + PH, "rose past the crate's underside").toBeLessThan(ledge.y);
+    expect(p.isGrounded).toBe(true);
+    expect(p.y + PH, 'landed up on the ledge or the crate').toBeLessThanOrEqual(ledge.y);
+  });
+
   it('a hidden hanging exit is out of reach', () => {
     engine.useCustomLevel({ ...room([]), exitHidden: true });
     expect(engine.exitPlatform.y + engine.exitPlatform.height).toBeLessThan(0);

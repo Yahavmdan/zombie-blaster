@@ -167,14 +167,14 @@ export class PhysicsSystem {
     }
   }
 
-  /** Walking into a low prop steps up onto it; taller solids stop the player at their sides. */
   /**
    * Jumping (or being thrown) up into a solid's underside stops there: a wall standing over a hole
-   * is a ceiling, nobody passes up through it.
+   * is a ceiling, nobody passes up through it. Props are no ceiling: jumping up through a platform
+   * passes through what stands on it.
    */
   private bumpHead(p: CharacterState, prevY: number): void {
     for (const s of this.e.platforms) {
-      if (!s.solid) continue;
+      if (!s.solid || s.propId !== undefined) continue;
       const underside: number = s.y + s.height;
       if (prevY < underside || p.y >= underside) continue;
       if (p.x + GAME_CONSTANTS.PLAYER_WIDTH <= s.x || p.x >= s.x + s.width) continue;
