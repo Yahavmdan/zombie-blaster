@@ -171,8 +171,8 @@ export interface SlingshotGadget extends GadgetBox {
 
 /**
  * A solid door: slides up open while its input is on (and stays open once open when `latch`); a
- * door with no wire stands open. An `exit` door is not solid (players and zombies walk through it,
- * shut or open) and finishes the floor for whoever stands in it while it is fully open.
+ * door with no wire stands open. A shut door (the exit's too) is a wall to players and zombies. An
+ * `exit` door finishes the floor for whoever walks into it while it is fully open.
  */
 export interface DoorGadget extends GadgetBox {
   kind: 'door';
