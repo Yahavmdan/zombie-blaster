@@ -126,7 +126,7 @@ test.describe('floor 1: weigh down the button to open the door', { tag: '@solo' 
     );
   });
 
-  test('the shut exit door is no wall: the player walks through it and stays on floor 1', async ({
+  test('the shut exit door is a wall: the player is stopped at it and stays on floor 1', async ({
     solo,
   }: {
     solo: SoloFactory;
@@ -135,16 +135,12 @@ test.describe('floor 1: weigh down the button to open the door', { tag: '@solo' 
     await p.probe.teleport(DOOR.x - WORLD.playerWidth - 20, DOOR.floorY - WORLD.playerHeight);
     await p.wait(300);
     await p.hold(KEYS.right);
-    await p.probe.waitFor(
-      'the player walks through the shut door',
-      (st: E2eSnapshot): boolean =>
-        st.player!.x + WORLD.playerWidth / 2 > DOOR.x + DOOR.width &&
-        gadget(st, DOOR.id).openTicks === 0,
-      { timeoutMs: 5_000 },
-    );
+    await p.wait(1_500);
+    const st: E2eSnapshot = await p.probe.state();
     await p.release(KEYS.right);
-    await p.wait(500);
-    expect((await p.probe.state()).floor, 'a shut door lets nobody out').toBe(1);
+    expect(gadget(st, DOOR.id).openTicks, 'the door stayed shut').toBe(0);
+    expect(st.player!.x + WORLD.playerWidth, 'stopped at the shut door').toBeLessThanOrEqual(DOOR.x + 1);
+    expect(st.floor, 'a shut door lets nobody out').toBe(1);
   });
 
   test('a box left on the button holds the door open: walk in from the ledge to reach floor 2', async ({

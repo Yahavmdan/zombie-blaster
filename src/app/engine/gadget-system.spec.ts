@@ -591,7 +591,7 @@ describe('GadgetSystem on a real engine', () => {
     expect(engine.leavesThroughDoor(p)).toBe(false);
   });
 
-  it('a shut exit door is no wall: players walk through it, but only an open one lets them out', () => {
+  it('a shut exit door is a wall: the player is stopped at it and nobody leaves', () => {
     load([
       {
         id: 'g1',
@@ -616,7 +616,7 @@ describe('GadgetSystem on a real engine', () => {
     ]);
     tick(5);
     expect(state('g2').openTicks).toBe(0);
-    expect(engine.platforms.some((q: Platform): boolean => q.gadgetId === 'g2')).toBe(false);
+    expect(engine.platforms.some((q: Platform): boolean => q.gadgetId === 'g2')).toBe(true);
     const physics: PhysicsSystem = new PhysicsSystem(engine);
     const p: CharacterState = engine.player!;
     p.x = 540;
@@ -626,7 +626,7 @@ describe('GadgetSystem on a real engine', () => {
       physics.updatePlayer();
       leftThrough = leftThrough || engine.leavesThroughDoor(p);
     }
-    expect(p.x, 'walked through the shut door').toBeGreaterThanOrEqual(680);
+    expect(p.x + GAME_CONSTANTS.PLAYER_WIDTH, 'stopped at the shut door').toBeLessThanOrEqual(600);
     expect(leftThrough, 'a shut door lets nobody out').toBe(false);
   });
 
