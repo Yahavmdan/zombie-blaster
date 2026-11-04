@@ -34,6 +34,8 @@ test.describe('floor 1 clue scene in co-op', { tag: '@online' }, (): void => {
     );
     const host: GamePlayer = session.host;
     const guest: GamePlayer = session.guests[0];
+    await host.probe.setDesignedFloors(true);
+    await guest.probe.setDesignedFloors(true);
     await host.probe.setGodMode(true);
     await guest.probe.setGodMode(true);
     await host.probe.teleport(900, WORLD.groundY - WORLD.playerHeight);

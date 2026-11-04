@@ -11,7 +11,12 @@ ships, tick its box here and rewrite its line to match what was built.
 
 ## Physics and props
 
-- [x] **Boulder on a chute** (floor 2): climb the corpse pile to the boulder's ledge, break the
+- [x] **Two buttons, two doors** (floor 2, designed in the level editor): a tall door shuts off the
+      right end of the map with the exit door behind it. The high ledge's button opens the tall door,
+      the right ledge's button the exit door, and both need 60 kg at once, so bodies or props must
+      hold them. No ladders: climb the pile of the dead beside the right ledge.
+- [x] **Boulder on a chute** (generated floor 2, replaced in play by the designed floor; the
+      standalone boulder gadget remains): climb the corpse pile to the boulder's ledge, break the
       gate holding it, and the boulder rolls down the chute, smashes the side wall, and you leave
       through the opening.
 - [x] **Spring + scale** (floor 3; was "seesaw", then a corpse-charged spring): the exit hangs at

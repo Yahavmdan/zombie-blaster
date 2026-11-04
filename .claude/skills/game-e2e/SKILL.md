@@ -185,6 +185,12 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   held Space hops again on every landing. W/up never jumps: it grabs a ladder (from the
   floor too) and climbs. A test that holds jump past landing gets extra hops. On ropes: left/right
   turns, jump alone does nothing, direction + jump lets go, climbing past the top dismounts.
+- **Floors 1 and 2 are designed** (`DESIGNED_LEVELS`; floor 1: button far left, exit door on the right
+  ledge; floor 2: two buttons, a tall door, an exit door; no hanging exit, no safe spot). The `solo` and
+  `room` fixtures call `probe.setDesignedFloors(false)` on every page, so specs play generated floors
+  everywhere; `solo/floor-1.spec.ts`, `solo/floor-2.spec.ts`, `online/floor-2-coop.spec.ts` and
+  `online/clue-scene-coop.spec.ts` turn it back on to test the real floors. `corpseViews` isGrounded reads
+  true while a dropped body is still falling, and a state read with 50 corpses is slow: don't steer by polling.
 - **Levels are generated per floor** (`level-generator.ts`, seed from the host): never hard-code
   platform/rope coordinates in tests. Read them from `state().level` (`levelPlatforms(s)`,
   `levelRopes(s)`, `goToFloorWhere(player, 'a rope', pred)`), or pin a layout with
@@ -225,7 +231,7 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   so a tall enough pile is climbed by walking into it and jumping. `exitPile` (probe-computed from
   corpse footholds over the exit span): bodies, topY, reachY, reachable.
   `probe.dropCorpses(x, n)` drops n corpses from above x for setup; they pile by normal physics.
-- **Floor 2 is the boulder puzzle**: the exit platform is the boulder's ledge (mid-screen, same
+- **Generated floor 2 is the boulder puzzle** (the fixtures' floor 2; real play has the designed one): the exit platform is the boulder's ledge (mid-screen, same
   height rules, climbed by the corpse pile: `exitPile` works as usual), but standing on it does not
   finish the floor. A small solid gate on its downhill edge holds the boulder; 3 hits (attack while
   beside the gate or the boulder resting against it, facing it, feet on the ledge) break it, the

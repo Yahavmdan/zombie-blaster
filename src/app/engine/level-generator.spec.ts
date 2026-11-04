@@ -36,6 +36,27 @@ describe('designed floors', () => {
     }
   });
 
+  it('floor 2 is the designed one for every seed: a tall door, the exit door and a button for each', (): void => {
+    for (const seed of [1, 42, 999_999]) {
+      const level: LevelLayout = levelFor(seed, 2);
+      expect(level.exitHidden).toBe(true);
+      expect(level.boulderPuzzle).toBeUndefined();
+      expect(level.ropes).toEqual([]);
+      expect(level.noSpawn).toHaveLength(5);
+      expect(level.gadgets?.map((g: Gadget): string => g.kind)).toEqual([
+        'door',
+        'door',
+        'button',
+        'button',
+      ]);
+      expect(level).toEqual(levelFor(7, 2));
+    }
+  });
+
+  it('e2e setup: designed false plays the generated floor', (): void => {
+    expect(levelFor(42, 2, false)).toEqual(generateLevel(42, 2));
+  });
+
   it('every client plays a copy: changing one floor never changes the next', (): void => {
     const level: LevelLayout = levelFor(1, 1);
     level.platforms.length = 0;
@@ -43,7 +64,7 @@ describe('designed floors', () => {
   });
 
   it('other floors are still generated from the seed', (): void => {
-    expect(levelFor(42, 2)).toEqual(generateLevel(42, 2));
+    expect(levelFor(42, 3)).toEqual(generateLevel(42, 3));
     expect(levelFor(42, 6)).toEqual(generateLevel(42, 6));
   });
 });
