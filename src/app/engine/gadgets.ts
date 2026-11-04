@@ -256,6 +256,19 @@ export function swingDir(player: Pick<CharacterState, 'facing'>): number {
 
 // ─── Cracked wall ────────────────────────────────────────
 
+/** How a gadget is painted: its own look, else its kind's first. */
+export function lookOf(g: Gadget): string {
+  return g.look ?? GAME_CONSTANTS.GADGET_LOOKS[g.kind][0];
+}
+
+/** The look of the cracked wall whose band starts at (x, y): a replayed break cuts it into chunks. */
+export function crackLookAt(gadgets: Gadget[], x: number, y: number): string {
+  const wall: Gadget | undefined = gadgets.find(
+    (g: Gadget): boolean => g.kind === 'crack-wall' && g.x === x && g.crackTop === y,
+  );
+  return wall ? lookOf(wall) : GAME_CONSTANTS.GADGET_LOOKS['crack-wall'][0];
+}
+
 export function crackBand(g: CrackWallGadget): Box {
   return { x: g.x, y: g.crackTop, width: g.width, height: g.crackBottom - g.crackTop };
 }

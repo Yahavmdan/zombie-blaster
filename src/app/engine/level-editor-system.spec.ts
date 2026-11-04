@@ -128,9 +128,10 @@ describe('LevelEditorSystem on a real engine', () => {
     editor.pointerDown(600, 600);
     editor.pointerUp();
     editor.setTool('platform');
-    editor.inspect(608, 610, 300, 200);
-    expect(editor.inspector()).toMatchObject({ label: 'Slingshot g1', clientX: 300, clientY: 200 });
+    editor.inspect(608, 610);
+    expect(editor.inspector()?.label).toBe('Slingshot g1');
     expect(editor.inspector()?.fields.map((f: EditorField): string => f.key)).toEqual([
+      'look',
       'power',
       'angle',
       'width',
@@ -138,19 +139,19 @@ describe('LevelEditorSystem on a real engine', () => {
     editor.setField('angle', 150);
     expect(engine.gadgets[0]).toMatchObject({ angle: 150 });
     // A click on the map (or on nothing) closes it.
-    editor.inspect(1000, 100, 0, 0);
+    editor.inspect(1000, 100);
     expect(editor.inspector()).toBeNull();
   });
 
   it('the popup opens on the selection without a middle click (phones), and not on nothing', () => {
     editor.clear();
-    editor.inspectSelected(40, 50);
+    editor.inspectSelected();
     expect(editor.inspector()).toBeNull();
     editor.setTool('spring');
     editor.pointerDown(900, 600);
     editor.pointerUp();
-    editor.inspectSelected(40, 50);
-    expect(editor.inspector()).toMatchObject({ label: 'Spring g1', clientX: 40, clientY: 50 });
+    editor.inspectSelected();
+    expect(editor.inspector()).toMatchObject({ label: 'Spring g1' });
   });
 
   it('undo goes back a step at a time and redo forward again; a drag is one step', () => {

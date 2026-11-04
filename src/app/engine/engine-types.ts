@@ -118,6 +118,8 @@ interface GadgetBox {
   y: number;
   width: number;
   height: number;
+  /** How it is painted, from `GADGET_LOOKS` of its kind; left out: the first. Art only. */
+  look?: string;
 }
 
 /** A loose boulder, at rest here when the floor starts: push it, launch it, let it roll. */

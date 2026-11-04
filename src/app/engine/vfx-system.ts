@@ -6,6 +6,7 @@ import {
 } from '@shared/index';
 import { DropType, ZombieType } from '@shared/game-entities';
 import { ChunkSource, Particle, ParticleChunk, ParticleShape, FadeMode } from './particle-types';
+import { WALL_LOOKS } from './gadget-looks';
 import { BOULDER_ART_CELLS, crackedWallStones } from './puzzle-art';
 import { SKILL_ANIMATIONS, SkillAnimation } from './skill-animations';
 import { AcidPuddle, BarrelBlastFx, DamageNumber, DropNotification, IGameEngine, PlayerTint } from './engine-types';
@@ -1108,10 +1109,14 @@ export class VfxSystem {
    * band's own art) blow out away from the hit (`dir`) and fall, with grit and dust. Derived from
    * the band's box only, so a replay draws the same pieces.
    */
-  spawnCrackBreak(band: { x: number; y: number; width: number; height: number }, dir: number): void {
+  spawnCrackBreak(
+    band: { x: number; y: number; width: number; height: number },
+    dir: number,
+    look: string,
+  ): void {
     const cols: number = Math.ceil(band.width / ART_PX);
     const rows: number = Math.ceil(band.height / ART_PX);
-    const source: ChunkSource = { kind: 'crack', cols, rows };
+    const source: ChunkSource = { kind: 'crack', cols, rows, look };
     const piece: number = 8;
     for (let sy: number = 0; sy < rows; sy += piece) {
       for (let sx: number = 0; sx < cols; sx += piece) {
@@ -1130,7 +1135,8 @@ export class VfxSystem {
         );
       }
     }
-    const grit: string[] = [PIXEL['stoneHi'], PIXEL['stone'], PIXEL['stoneMid'], PIXEL['stoneDark']];
+    const shades: string[] = WALL_LOOKS[look] ?? WALL_LOOKS['stone'];
+    const grit: string[] = [shades[5], shades[4], shades[3], shades[2]];
     const faceX: number = dir === 1 ? band.x + band.width : band.x;
     for (let i: number = 0; i < 24; i++) {
       const life: number = 40 + Math.floor(Math.random() * 30);
