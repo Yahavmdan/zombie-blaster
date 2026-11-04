@@ -480,6 +480,12 @@ export const GAME_CONSTANTS = {
   PROP_LAND_KEEP_SPEED: 0.7, // Share of its sideways speed a landing prop keeps (barrels roll, others slide)
   PROP_ROLL_FRICTION: 0.97, // Sideways speed a rolling barrel keeps per tick
   PROP_SLIDE_FRICTION: 0.8, // Sideways speed a sliding box or rail keeps per tick
+  // Landing on another prop grips: a thrown barrel or box beds down on top instead of skidding off.
+  PROP_STACK_BOUNCE: 0.12, // Fall speed a prop landing on another prop keeps as a small hop
+  PROP_STACK_LAND_KEEP_SPEED: 0.15, // Share of its sideways speed a prop landing on another prop keeps
+  PROP_STACK_FRICTION: 0.6, // Sideways speed kept per tick on top of another prop (barrels don't roll there)
+  PROP_STACK_CATCH_PX: 15, // Coming to rest this far past the safe top, a prop shuffles back on; further out it tips off
+  PROP_STACK_SEAT_PX: 6, // A caught prop ends with its middle this far inside the edge below
   PROP_SETTLE_SPIN: 0.12, // A prop at rest on its side turns back upright this fast (radians/tick)
   PROP_TIP_ACCEL: 0.012, // A prop whose middle hangs over an edge tips off it, turning faster by this much per tick
   PROP_TIP_SLIDE: 0.6, // ...and slides off this far per tick (px) while it tips

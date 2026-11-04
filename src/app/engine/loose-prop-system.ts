@@ -17,11 +17,13 @@ import {
 import {
   bottomOf,
   centerX,
+  gripSpan,
   isResting,
   limitTilt,
   restOn,
   settleUpright,
   Span,
+  stackedSpeed,
   startTip,
   supportSpan,
   tickTip,
@@ -50,7 +52,8 @@ function syncedFuseTicks(ticks: unknown): number {
 /**
  * Loose props (barrels, boxes, rails players pick up). The host (or solo) moves them: a thrown or
  * blasted prop flies spinning (a long rail only tilts), falls, bounces and lands on the ground, a platform, another prop or
- * a corpse; there a barrel rolls on, a box or rail slides and turns back upright. One whose middle
+ * a corpse; there a barrel rolls on, a box or rail slides and turns back upright; on top of another
+ * prop it grips and stops, a near miss steered back on (`stackedSpeed`). One whose middle
  * hangs over an edge tips off it (`prop-tumble.ts`); a lying one falls when what held it up is
  * gone. Every client turns the resting ones (upright, still) into solid platforms each tick
  * (`Platform.propId`), so they are stood on and stepped over like any prop, wherever they lie.
@@ -242,7 +245,8 @@ export class LoosePropSystem {
   private onGround(prop: LooseProp): void {
     const round: boolean = this.isRound(prop);
     const y: number = bottomOf(prop, round);
-    const span: Span | null = supportSpan(prop, this.surfaces(prop), y, round);
+    const surfaces: TumbleSurface[] = this.surfaces(prop);
+    const span: Span | null = supportSpan(prop, surfaces, y, round);
     if (!span) {
       prop.isGrounded = false;
       return;
@@ -252,7 +256,7 @@ export class LoosePropSystem {
       this.tips.set(prop.id, startTip(prop, span, side, y));
       return;
     }
-    if (prop.velocityX !== 0) this.slide(prop, round);
+    if (prop.velocityX !== 0) this.slide(prop, round, gripSpan(prop, surfaces, y, round) !== null);
     if (prop.angle !== 0 && !(round && prop.velocityX !== 0)) settleUpright(prop, round);
     if (isResting(prop)) {
       // Whole pixels, so the art lies crisp and exactly on its box.
@@ -261,14 +265,17 @@ export class LoosePropSystem {
     }
   }
 
-  /** Sideways along what it lies on: a barrel rolls far (turning as it goes), others slide a little. */
-  private slide(prop: LooseProp, round: boolean): void {
+  /**
+   * Sideways along what it lies on: a barrel rolls far (turning as it goes), others slide a little,
+   * and on top of another prop (`gripped`) anything soon stops.
+   */
+  private slide(prop: LooseProp, round: boolean, gripped: boolean): void {
     const prevX: number = prop.x;
     this.moveSideways(prop);
     if (round) prop.angle += (prop.x - prevX) / (prop.width / 2);
-    prop.velocityX *= round
-      ? GAME_CONSTANTS.PROP_ROLL_FRICTION
-      : GAME_CONSTANTS.PROP_SLIDE_FRICTION;
+    if (gripped) prop.velocityX *= GAME_CONSTANTS.PROP_STACK_FRICTION;
+    else if (round) prop.velocityX *= GAME_CONSTANTS.PROP_ROLL_FRICTION;
+    else prop.velocityX *= GAME_CONSTANTS.PROP_SLIDE_FRICTION;
     if (Math.abs(prop.velocityX) < 0.1) prop.velocityX = 0;
   }
 
@@ -320,15 +327,18 @@ export class LoosePropSystem {
     const landing: number | null = this.landingY(prop, round, prevBottom);
     if (landing === null) return;
     restOn(prop, landing, round);
+    const grip: Span | null = gripSpan(prop, this.surfaces(prop), landing, round);
+    prop.velocityX = grip
+      ? stackedSpeed(prop, grip)
+      : prop.velocityX * GAME_CONSTANTS.PROP_LAND_KEEP_SPEED;
     if (prop.velocityY > GAME_CONSTANTS.PROP_BOUNCE_MIN_SPEED) {
-      // A hard landing bounces it back up, turning slower.
-      prop.velocityY = -prop.velocityY * GAME_CONSTANTS.PROP_BOUNCE;
-      prop.velocityX *= GAME_CONSTANTS.PROP_LAND_KEEP_SPEED;
+      // A hard landing bounces it back up, turning slower (on another prop it barely hops).
+      const bounce: number = grip ? GAME_CONSTANTS.PROP_STACK_BOUNCE : GAME_CONSTANTS.PROP_BOUNCE;
+      prop.velocityY = -prop.velocityY * bounce;
       prop.spin /= 2;
       return;
     }
     prop.velocityY = 0;
-    prop.velocityX *= GAME_CONSTANTS.PROP_LAND_KEEP_SPEED;
     if (Math.abs(prop.velocityX) < 0.1) prop.velocityX = 0;
     prop.spin = 0;
     prop.isGrounded = true;
@@ -360,13 +370,14 @@ export class LoosePropSystem {
         width: p.width,
         y: p.y,
         tolerance: GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE,
+        grip: p.propId !== undefined,
       }),
     );
     const corpses: TumbleSurface[] = this.e.zombieCorpses
       .filter((c: ZombieCorpse): boolean => c.isGrounded && c.carrierId === null)
       .map((c: ZombieCorpse): TumbleSurface => {
         const s: CorpseSurface = corpseSurface(c);
-        return { ...s, tolerance: GAME_CONSTANTS.ZOMBIE_CORPSE_SNAP_TOLERANCE };
+        return { ...s, tolerance: GAME_CONSTANTS.ZOMBIE_CORPSE_SNAP_TOLERANCE, grip: false };
       });
     return [...platforms, ...corpses];
   }
