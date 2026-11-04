@@ -1,5 +1,5 @@
 import { GAME_CONSTANTS } from '@shared/index';
-import { GadgetState } from '@shared/game-entities';
+import { GadgetBody, GadgetState } from '@shared/game-entities';
 import { Box, Point } from './boulder-puzzle';
 import { CANVAS_BONE, fillOutlinedText, pixelFont } from './canvas-text';
 import {
@@ -31,7 +31,7 @@ import {
   wires,
 } from './gadgets';
 import { Random, seededRandom } from './level-generator';
-import { ART_PX, PIXEL, pxBar, pxLine, pxRect, pxRivet } from './pixel-art';
+import { ART_PX, PIXEL, pxBar, pxDisc, pxLine, pxRect, pxRivet } from './pixel-art';
 import {
   WALL_INK,
   WALL_MORTAR,
@@ -437,6 +437,43 @@ function strutFoot(platforms: Platform[], x: number, from: number): number {
  * A slope: a riveted steel deck stepped on the art grid whose top row is the walkable line, on
  * thin struts down to the box's foot (scenery: one-way like a platform, you walk under it).
  */
+/** Where a wheel's spoke tip sits per quarter turn (px from its hub). */
+const BIN_SPOKE: readonly (readonly [number, number])[] = [
+  [4, 0],
+  [0, 4],
+  [-4, 0],
+  [0, -4],
+];
+
+/** A rolling bin filling `box`: steel lid (its flat top is walkable), ribbed teal body, two wheels turned by `angle`. */
+export function drawBin(ctx: CanvasRenderingContext2D, box: Box, angle: number): void {
+  const x: number = Math.round(box.x);
+  const y: number = Math.round(box.y);
+  const w: number = box.width;
+  const h: number = box.height;
+  const wheelR: number = 7;
+  const wheelY: number = y + h - wheelR;
+  pxRect(ctx, x + 6, wheelY - 4, w - 12, 4, PIXEL['steelDark']);
+  pxBar(ctx, x + 2, y + 8, w - 4, h - 16, PIXEL['tealHi'], PIXEL['teal'], PIXEL['tealDark']);
+  for (let rib: number = x + 10; rib < x + w - 6; rib += 10) {
+    pxRect(ctx, rib, y + 14, ART_PX, h - 26, PIXEL['tealDark']);
+  }
+  pxRect(ctx, x + 12, y + 24, 8, ART_PX, PIXEL['rust']);
+  pxRect(ctx, x + 30, y + 18, 6, ART_PX, PIXEL['rustDark']);
+  pxBar(ctx, x, y, w, 10, PIXEL['steelLight'], PIXEL['steelHi'], PIXEL['steelDark']);
+  pxRect(ctx, x + w / 2 - 6, y + 4, 12, ART_PX, PIXEL['steelDark']);
+  const quarter: number = Math.PI / 2;
+  const turn: number = ((Math.round(angle / quarter) % 4) + 4) % 4;
+  const [sx, sy]: readonly [number, number] = BIN_SPOKE[turn];
+  for (const cx of [x + 10, x + w - 10]) {
+    pxDisc(ctx, cx, wheelY, wheelR, K);
+    pxDisc(ctx, cx, wheelY, wheelR - 2, PIXEL['steel']);
+    pxRect(ctx, cx - 1 + sx, wheelY - 1 + sy, ART_PX, ART_PX, PIXEL['steelLight']);
+    pxRect(ctx, cx - 1 - sx, wheelY - 1 - sy, ART_PX, ART_PX, PIXEL['steelDark']);
+    pxRect(ctx, cx - 1, wheelY - 1, ART_PX, ART_PX, PIXEL['ink']);
+  }
+}
+
 export function drawGadgetSlope(
   ctx: CanvasRenderingContext2D,
   g: SlopeGadget,
@@ -562,11 +599,15 @@ export function drawGadgets(
         drawGadgetCage(ctx, g, state);
         break;
       case 'boulder':
+      case 'bin':
         break;
     }
   }
-  for (const s of states) {
-    if (s.body) drawBoulder(ctx, boulderBox(s.body), s.body.angle);
+  for (const g of gadgets) {
+    const body: GadgetBody | null | undefined = stateOf(states, g.id)?.body;
+    if (!body) continue;
+    if (g.kind === 'boulder') drawBoulder(ctx, boulderBox(body), body.angle);
+    else if (g.kind === 'bin') drawBin(ctx, boulderBox(body), body.angle);
   }
 }
 

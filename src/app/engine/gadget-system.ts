@@ -4,6 +4,7 @@ import { Box, Point } from './boulder-puzzle';
 import { CombatSystem } from './combat-system';
 import { DropSystem } from './drop-system';
 import {
+  BinGadget,
   BoulderGadget,
   CageGadget,
   CrackWallGadget,
@@ -16,6 +17,9 @@ import {
 import {
   WeighedBoulder,
   WeighedWorld,
+  BIN_FEEL,
+  binPushDir,
+  binSpeedScale,
   boulderSpeedScale,
   boulderBox,
   boulderResting,
@@ -32,6 +36,7 @@ import {
   freshLaunch,
   inputOn,
   isLauncher,
+  isRoller,
   isWired,
   launchVelocity,
   launcherLoaded,
@@ -39,6 +44,9 @@ import {
   newGadgetStates,
   onLauncher,
   playerOnLauncher,
+  pushedSpeed,
+  rollFeel,
+  rollerSpeedScale,
   stateOf,
   stepBoulder,
   swingDir,
@@ -105,6 +113,7 @@ export class GadgetSystem {
       const cooldown: number = this.cooldowns.get(g.id) ?? 0;
       if (cooldown > 0) this.cooldowns.set(g.id, cooldown - 1);
       if (g.kind === 'boulder' && state.body) this.roll(g, state.body, players);
+      else if (g.kind === 'bin' && state.body) this.rollBin(g, state.body, players);
       else if (g.kind === 'crack-wall') this.chip(g, state, players);
       else if (g.kind === 'lever') this.flip(g, state, players);
       else if (g.kind === 'cage') this.hangOrFall(g, state, players);
@@ -141,13 +150,14 @@ export class GadgetSystem {
     for (const g of this.e.gadgets) {
       const state: GadgetState | undefined = stateOf(this.e.gadgetStates, g.id);
       if (!state) continue;
-      if (g.kind === 'boulder' && state.body && !boulderResting(state.body)) {
+      if (isRoller(g) && state.body && !boulderResting(state.body)) {
         stepBoulder(
           state.body,
           this.others(g.id),
           slopesOf(this.e.gadgets),
           this.drops.getEffectiveGravity(),
           (): boolean => false,
+          rollFeel(g),
         );
       } else if (g.kind === 'cage' && state.body && !state.landed) {
         fallCage(
@@ -212,12 +222,12 @@ export class GadgetSystem {
         this.breakBand(g, state, Math.sign(g.x + g.width / 2 - center.x) || 1);
       } else if (g.kind === 'cage' && !state.dropped && distanceToBox(center, g) <= radius) {
         this.dropCage(g, state);
-      } else if (g.kind === 'boulder' && state.body) {
+      } else if (isRoller(g) && state.body) {
         const body: GadgetBody = state.body;
         const middle: Point = { x: body.x + S / 2, y: body.y + S / 2 };
         if (Math.hypot(middle.x - center.x, middle.y - center.y) > radius) continue;
         const dir: number = Math.sign(middle.x - center.x) || 1;
-        const scale: number = boulderSpeedScale(g.kg);
+        const scale: number = rollerSpeedScale(g);
         body.velocityX = dir * GAME_CONSTANTS.GADGET_BOULDER_BLAST_SPEED_X * scale;
         body.velocityY = GAME_CONSTANTS.GADGET_BOULDER_BLAST_SPEED_Y * scale;
         body.isGrounded = false;
@@ -226,7 +236,7 @@ export class GadgetSystem {
     this.placeSolids();
   }
 
-  /** Every gadget's solids where its state says: resting boulders, crack wall pieces, doors, launcher bases. */
+  /** Every gadget's solids where its state says: resting boulders, bins on their wheels, crack wall pieces, doors, launcher bases. */
   placeSolids(): void {
     const solids: Platform[] = [];
     for (const g of this.e.gadgets) {
@@ -237,6 +247,8 @@ export class GadgetSystem {
       };
       if (g.kind === 'boulder' && state.body && boulderResting(state.body))
         add(boulderBox(state.body));
+      else if (g.kind === 'bin' && state.body?.isGrounded)
+        solids.push({ ...boulderBox(state.body), solid: true, puzzlePart: 'gadget', gadgetId: g.id, pushable: true });
       else if (g.kind === 'crack-wall') crackWallPieces(g, state.broken).forEach(add);
       else if (g.kind === 'door') add(doorSolid(g, state));
       else if (isLauncher(g)) add(g);
@@ -309,7 +321,7 @@ export class GadgetSystem {
       players,
       boulders: this.e.gadgets.flatMap((g: Gadget): WeighedBoulder[] => {
         const body: GadgetBody | null | undefined = stateOf(this.e.gadgetStates, g.id)?.body;
-        return g.kind === 'boulder' && body ? [{ body, kg: g.kg }] : [];
+        return isRoller(g) && body ? [{ body, kg: g.kg }] : [];
       }),
     };
   }
@@ -356,6 +368,43 @@ export class GadgetSystem {
       (solid: Platform, speed: number): boolean => this.boulderBreaks(solid, speed, dir),
     );
     this.crush(g.id, boulderVictims(body, this.e.zombies, this.crushedBy(g.id)), dir);
+  }
+
+  /** A bin: players walking into it roll it, a swing shoves it, and it rolls on by itself. */
+  private rollBin(g: BinGadget, body: GadgetBody, players: CharacterState[]): void {
+    const scale: number = binSpeedScale(g.kg);
+    if (body.isGrounded) {
+      const swinger: CharacterState | null = this.swingers(
+        g.id,
+        boulderBox(body),
+        GAME_CONSTANTS.GADGET_BOULDER_HIT_REACH_PX,
+        players,
+      );
+      if (swinger) body.velocityX += swingDir(swinger) * GAME_CONSTANTS.GADGET_BIN_SWING_SPEED * scale;
+      const push: number = binPushDir(g.id, body, players);
+      if (push !== 0) body.velocityX = pushedSpeed(body.velocityX, push, scale);
+    }
+    const dir: number = Math.sign(body.velocityX);
+    stepBoulder(
+      body,
+      this.others(g.id),
+      slopesOf(this.e.gadgets),
+      this.drops.getEffectiveGravity(),
+      (solid: Platform, speed: number): boolean => {
+        this.knockBin(solid, speed, dir);
+        return false;
+      },
+      BIN_FEEL,
+    );
+  }
+
+  /** What rolled into a bin hands it part of its speed (the bin it hit rolls off that way). */
+  private knockBin(solid: Platform, speed: number, dir: number): void {
+    if (!solid.pushable || !solid.gadgetId) return;
+    const body: GadgetBody | null | undefined = stateOf(this.e.gadgetStates, solid.gadgetId)?.body;
+    if (!body) return;
+    body.velocityX =
+      dir * Math.min(GAME_CONSTANTS.GADGET_BOULDER_MAX_SPEED, speed * GAME_CONSTANTS.GADGET_BIN_KNOCK_SHARE);
   }
 
   /** A hanging cage drops at a swing (unwired; wires drop it in `update`); a dropped one falls and lands. */
@@ -433,6 +482,7 @@ export class GadgetSystem {
 
   /** A boulder ran into a crack band fast enough: it breaks out and the boulder goes on through. */
   private boulderBreaks(solid: Platform, speed: number, dir: number): boolean {
+    this.knockBin(solid, speed, dir);
     if (speed < GAME_CONSTANTS.GADGET_BOULDER_BREAK_SPEED || !solid.gadgetId) return false;
     const g: Gadget | undefined = this.e.gadgets.find(
       (x: Gadget): boolean => x.id === solid.gadgetId,

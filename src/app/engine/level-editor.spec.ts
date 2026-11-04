@@ -152,6 +152,10 @@ describe('level editor: placing', () => {
     expect(boulder).toMatchObject({ kind: 'boulder', id: 'g1' });
     expect(boulder.y + boulder.height).toBe(430);
     expect(boulder.width).toBe(GAME_CONSTANTS.BOULDER_SIZE_PX);
+    const copy: LevelLayout = structuredClone(layout);
+    const bin: Gadget = gadgetAt(copy, placeAt(copy, 'bin', 900, 380));
+    expect(bin).toMatchObject({ kind: 'bin', kg: GAME_CONSTANTS.GADGET_BIN_KG });
+    expect(bin.width).toBe(GAME_CONSTANTS.BOULDER_SIZE_PX);
     const button: Gadget = gadgetAt(layout, placeAt(layout, 'button', 300, 600));
     expect(button).toMatchObject({
       id: 'g2',

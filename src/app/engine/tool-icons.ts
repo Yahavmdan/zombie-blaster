@@ -3,7 +3,7 @@ import { GadgetState } from '@shared/game-entities';
 import { Box } from './boulder-puzzle';
 import { Gadget } from './engine-types';
 import { drawGadgets } from './gadget-art';
-import { newGadgetState } from './gadgets';
+import { isRoller, newGadgetState } from './gadgets';
 import { EditorTool } from './level-editor';
 import {
   PROP_ART,
@@ -50,7 +50,7 @@ function gadgetScene(
   state?: Partial<GadgetState>,
 ): HTMLCanvasElement {
   const s: GadgetState = { ...newGadgetState(g.id, null), ...state };
-  if (g.kind === 'boulder')
+  if (isRoller(g))
     s.body = { x: g.x, y: g.y, velocityX: 0, velocityY: 0, isGrounded: true, angle: 0 };
   // The scene's foot is its floor (a slope's struts stand on it).
   return scene(w, h, (ctx: CanvasRenderingContext2D): void =>
@@ -193,6 +193,16 @@ function toolScene(tool: EditorTool, then: () => void): HTMLCanvasElement {
         id: 'g1',
         kind: 'boulder',
         kg: 600,
+        x: 0,
+        y: 0,
+        width: 48,
+        height: 48,
+      });
+    case 'bin':
+      return gadgetScene(48, 48, {
+        id: 'g1',
+        kind: 'bin',
+        kg: 60,
         x: 0,
         y: 0,
         width: 48,

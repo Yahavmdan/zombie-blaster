@@ -4,6 +4,7 @@ import { GamePlayer, KEYS } from '../../support/game-player';
 import { E2eGadgetView, E2eSnapshot, E2eVfxLogEntry } from '../../support/probe';
 import { WORLD } from '../../support/invariants';
 import {
+  binAt,
   cageAt,
   crackWallAt,
   doorAt,
@@ -107,6 +108,48 @@ test.describe('designed floor gadgets in co-op', { tag: '@online' }, (): void =>
     expect(replayed(await guest.probe.vfxLog(), 'gadget-launch'), 'the guest saw the launch').toBe(
       true,
     );
+  });
+
+  test("a guest pushes a rolling bin: the host rolls it, both see it move", async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }): Promise<void> => {
+    test.setTimeout(90_000);
+    const session: RoomSession = await room(
+      [
+        { name: 'Host', classId: 'warrior' },
+        { name: 'Guest', classId: 'warrior' },
+      ],
+      'bin',
+    );
+    const host: GamePlayer = session.host;
+    const guest: GamePlayer = session.guests[0];
+    await host.probe.setGodMode(true);
+    await guest.probe.setGodMode(true);
+    await host.probe.clearZombies();
+    const layout: string = gadgetRoom(1, [binAt('g1', 600)]);
+    await host.probe.loadLayout(layout);
+    await guest.probe.loadLayout(layout);
+    await guest.probe.waitFor(
+      'the guest follows the host gadgets',
+      (s: E2eSnapshot): boolean => s.gadgets.length === 1,
+      { timeoutMs: 10_000 },
+    );
+    await guest.probe.teleport(500, WORLD.groundY - WORLD.playerHeight);
+    await guest.wait(400);
+    await guest.hold(KEYS.right);
+    await host.probe.waitFor(
+      "the host rolls the bin from the guest's push",
+      (s: E2eSnapshot): boolean => (gadget(s, 'g1').body?.x ?? 0) > 700,
+      { timeoutMs: 8_000 },
+    );
+    await guest.probe.waitFor(
+      'the guest sees it rolled',
+      (s: E2eSnapshot): boolean => (gadget(s, 'g1').body?.x ?? 0) > 700,
+      { timeoutMs: 5_000 },
+    );
+    await guest.release(KEYS.right);
   });
 
   test('a guest swings a cage down: the host drops it, the guest sees it land and its zombies out', async ({

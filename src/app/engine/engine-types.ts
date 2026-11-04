@@ -104,6 +104,8 @@ export interface Platform {
   propId?: string;
   /** The gadget this `gadget` solid belongs to. */
   gadgetId?: string;
+  /** A rolling bin: walking into it pushes it (`PhysicsSystem` reports it, the host rolls it). */
+  pushable?: boolean;
 }
 
 /**
@@ -124,6 +126,13 @@ interface GadgetBox {
 export interface BoulderGadget extends GadgetBox {
   kind: 'boulder';
   /** Its weight: what it presses buttons and scales with; heavier ones roll slower off a swing or blast. */
+  kg: number;
+}
+
+/** A bin on wheels: walk into it and it rolls ahead, let go and it rolls on. Always a solid step while on its wheels. */
+export interface BinGadget extends GadgetBox {
+  kind: 'bin';
+  /** Its weight: what it presses buttons and scales with; heavier ones roll slower off a push, swing or blast. */
   kg: number;
 }
 
@@ -205,6 +214,7 @@ export interface CageGadget extends GadgetBox {
 
 export type Gadget =
   | BoulderGadget
+  | BinGadget
   | CrackWallGadget
   | ButtonGadget
   | ScaleGadget
@@ -216,6 +226,7 @@ export type Gadget =
   | CageGadget;
 
 export type GadgetKind = Gadget['kind'];
+export type RollerGadget = BoulderGadget | BinGadget;
 export type SourceGadget = ButtonGadget | ScaleGadget | LeverGadget;
 export type LauncherGadget = SpringGadget | SlingshotGadget;
 

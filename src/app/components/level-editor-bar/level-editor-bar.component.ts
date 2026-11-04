@@ -134,6 +134,11 @@ const TOOL_GROUPS: ToolGroup[] = [
         hint: 'Click: a boulder on the surface below. Swing at it to roll it; fast it crushes zombies and breaks crack bands. It weighs 600 kg',
       },
       {
+        tool: 'bin',
+        label: 'Rolling bin',
+        hint: 'Click: a bin on wheels on the surface below. Walk into it to push it; it rolls on after you let go. A solid step that weighs 60 kg',
+      },
+      {
         tool: 'crack-wall',
         label: 'Cracked wall',
         hint: 'Click: a stone wall with a crack band. Drag the band lines to set where it breaks: swings there, a barrel blast or a fast boulder',

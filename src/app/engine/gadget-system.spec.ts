@@ -13,7 +13,7 @@ import { PhysicsSystem } from './physics-system';
 import { GameEngine } from './game-engine';
 import { EXIT_TARGET, Gadget, Platform } from './engine-types';
 import { LevelLayout } from './level-generator';
-import { stateOf } from './gadgets';
+import { binPushDir, binSpeedScale, stateOf } from './gadgets';
 
 const GROUND_Y: number = GAME_CONSTANTS.GROUND_Y;
 const S: number = GAME_CONSTANTS.BOULDER_SIZE_PX;
@@ -205,6 +205,115 @@ describe('GadgetSystem on a real engine', () => {
     tick(60);
     expect(zombie.hp).toBeLessThanOrEqual(0);
     expect(zombie.isDead).toBe(true);
+  });
+
+  const bin: (id: string, x: number, kg?: number) => Gadget = (
+    id: string,
+    x: number,
+    kg: number = GAME_CONSTANTS.GADGET_BIN_KG,
+  ): Gadget => ({ id, kind: 'bin', kg, x, y: GROUND_Y - S, width: S, height: S });
+
+  it('a player walking into a bin rolls it ahead, and it rolls on after they let go', () => {
+    load([bin('g1', 400)]);
+    const physics: PhysicsSystem = new PhysicsSystem(engine);
+    const player: CharacterState = engine.player!;
+    player.x = 400 - GAME_CONSTANTS.PLAYER_WIDTH - 2;
+    player.y = GROUND_Y - PH;
+    player.isGrounded = true;
+    engine.keys.right = true;
+    for (let i: number = 0; i < 60; i++) {
+      physics.updatePlayer();
+      engine.gadgetSystem.update();
+    }
+    const body: GadgetBody = state('g1').body!;
+    expect(player.pushingGadgetId).toBe('g1');
+    expect(body.x, 'it rolled ahead').toBeGreaterThan(450);
+    expect(body.velocityX).toBeCloseTo(GAME_CONSTANTS.GADGET_BIN_PUSH_SPEED, 0);
+    expect(player.x + GAME_CONSTANTS.PLAYER_WIDTH, 'never walks into it').toBeLessThanOrEqual(body.x + 1);
+    engine.keys.right = false;
+    for (let i: number = 0; i < 3; i++) physics.updatePlayer();
+    expect(player.pushingGadgetId).toBeNull();
+    const letGo: number = body.x;
+    tick(200);
+    expect(body.x - letGo, 'it rolled on').toBeGreaterThan(30);
+    expect(body.velocityX).toBe(0);
+  });
+
+  it('a bin is solid while it rolls, and walking on top of it pushes nothing', () => {
+    load([bin('g1', 400)]);
+    state('g1').body!.velocityX = 2;
+    tick(1);
+    expect(
+      engine.platforms.some(
+        (p: Platform): boolean => p.gadgetId === 'g1' && p.solid === true && p.pushable === true,
+      ),
+    ).toBe(true);
+    const on: Pick<CharacterState, 'x' | 'y' | 'isDead' | 'isDown' | 'pushingGadgetId'> = {
+      x: 380,
+      y: GROUND_Y - S - PH,
+      isDead: false,
+      isDown: false,
+      pushingGadgetId: 'g1',
+    };
+    expect(binPushDir('g1', state('g1').body!, [on]), 'on top').toBe(0);
+  });
+
+  it('checks a push: a far player, a dead one or two pushing against each other move nothing', () => {
+    load([bin('g1', 400)]);
+    const body: GadgetBody = state('g1').body!;
+    const beside: (x: number, overrides?: Partial<CharacterState>) => CharacterState = (
+      x: number,
+      overrides: Partial<CharacterState> = {},
+    ): CharacterState => makePlayer({ x, y: GROUND_Y - PH, pushingGadgetId: 'g1', ...overrides });
+    const w: number = GAME_CONSTANTS.PLAYER_WIDTH;
+    expect(binPushDir('g1', body, [beside(400 - w)])).toBe(1);
+    expect(binPushDir('g1', body, [beside(400 + S)])).toBe(-1);
+    expect(binPushDir('g1', body, [beside(100)]), 'too far').toBe(0);
+    expect(binPushDir('g1', body, [beside(400 - w, { isDead: true })]), 'dead').toBe(0);
+    expect(binPushDir('g1', body, [beside(400 - w), beside(400 + S)]), 'both sides').toBe(0);
+    expect(binPushDir('g2', body, [beside(400 - w)]), 'another bin').toBe(0);
+  });
+
+  it('a heavier bin rolls slower, weighs its kg, and stops dead against a wall', () => {
+    expect(binSpeedScale(GAME_CONSTANTS.GADGET_BIN_KG * 2)).toBeCloseTo(0.5);
+    load([
+      bin('g1', 500, 80),
+      { id: 'g2', kind: 'button', x: 500, y: GROUND_Y, width: 48, height: 6, kg: 80, targets: [] },
+      bin('g3', GAME_CONSTANTS.CANVAS_WIDTH - S - 2),
+    ]);
+    tick(1);
+    expect(state('g2').kg).toBe(80);
+    expect(state('g2').on).toBe(true);
+    const atWall: GadgetBody = state('g3').body!;
+    atWall.velocityX = GAME_CONSTANTS.GADGET_BIN_PUSH_SPEED;
+    tick(2);
+    expect(atWall.x).toBe(GAME_CONSTANTS.CANVAS_WIDTH - S);
+    expect(atWall.velocityX).toBe(0);
+  });
+
+  it('a swing or a blast moves a bin; a boulder or bin running into one hands it speed', () => {
+    load([bin('g1', 300), bin('g2', 700)]);
+    engine.player!.x = 300 - GAME_CONSTANTS.PLAYER_WIDTH - 4;
+    engine.player!.isAttacking = true;
+    tick(1);
+    engine.player!.isAttacking = false;
+    expect(state('g1').body!.velocityX).toBeGreaterThan(GAME_CONSTANTS.GADGET_BIN_PUSH_SPEED);
+    tick(120);
+    expect(state('g2').body!.x, 'the first bin hit the second').toBe(700);
+
+    load([
+      { id: 'g1', kind: 'boulder', kg: 600, x: 300, y: GROUND_Y - S, width: S, height: S },
+      bin('g2', 400),
+    ]);
+    state('g1').body!.velocityX = 8;
+    tick(30);
+    expect(state('g2').body!.x, 'the boulder knocked it on').toBeGreaterThan(420);
+
+    load([bin('g1', 500)]);
+    engine.gadgetSystem.blast({ x: 480, y: GROUND_Y - 10 });
+    expect(state('g1').body!.isGrounded).toBe(false);
+    expect(state('g1').body!.velocityX).toBeGreaterThan(0);
+    expect(engine.platforms.some((p: Platform): boolean => p.gadgetId === 'g1'), 'flying').toBe(false);
   });
 
   it('a heavier boulder rolls slower off the same swing and weighs its own kg', () => {

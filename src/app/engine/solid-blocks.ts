@@ -3,6 +3,8 @@ import { Platform } from './engine-types';
 
 /** How far below a solid's top an entity's feet may be and still count as standing on it. */
 const ON_TOP_TOLERANCE_PX: number = 2;
+/** How far from a solid's side a blocked box still counts as flush against it. */
+const FLUSH_TOLERANCE_PX: number = 1;
 
 /**
  * Pushes a box (player or zombie) out of the sides of solid props after a horizontal move.
@@ -44,6 +46,27 @@ function overlapsSides(x: number, y: number, width: number, height: number, s: P
   const bottom: number = y + height;
   if (bottom <= s.y + ON_TOP_TOLERANCE_PX || y >= s.y + s.height) return false;
   return x + width > s.x && x < s.x + s.width;
+}
+
+/**
+ * The pushable solid (a rolling bin's gadget id) a box stands flush against on its `dir` side
+ * (-1, 1), level with it, or null.
+ */
+export function pushableBeside(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  dir: number,
+  platforms: Platform[],
+): string | null {
+  for (const s of platforms) {
+    if (!s.pushable || !s.gadgetId) continue;
+    if (y + height <= s.y + ON_TOP_TOLERANCE_PX || y >= s.y + s.height) continue;
+    const gap: number = dir > 0 ? s.x - (x + width) : dir < 0 ? x - (s.x + s.width) : Infinity;
+    if (Math.abs(gap) <= FLUSH_TOLERANCE_PX) return s.gadgetId;
+  }
+  return null;
 }
 
 /**

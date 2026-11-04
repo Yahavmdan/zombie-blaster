@@ -269,6 +269,7 @@ the dots show in the game and light up). Gadgets live in `gadgets.ts` / `gadget-
 `gadget-art.ts`; what each does:
 - **Boulder** (600 kg): a swing rolls it; moving fast it crushes zombies (bosses take a share) and
   breaks crack bands; it weighs on buttons/scales; launchers and blasts throw it. Still, it is solid.
+- **Rolling bin** (60 kg, boulder-sized box, wheels turn with `body.angle`): walk into it and it rolls ahead slower than you walk, let go and it rolls on (`GADGET_BIN_*`). Solid whenever on its wheels, moving or not, so it is a step you can push under a ledge; flying it has no collision. The player's own physics reports the push (`CharacterState.pushingGadgetId`, from a `pushable` solid, `pushableBeside`), the host checks it (`binPushDir`) and rolls it with `stepBoulder` and `BIN_FEEL`. A swing shoves it, blasts and launchers throw it, a boulder or bin running into it hands it speed. It doesn't crush or break anything.
 - **Cracked wall**: stone, solid; only its crack band (y range set in the editor) breaks: 5 swings
   level with the band, a barrel blast in reach, or a fast boulder. The rest stands (a hole).
 - **Button / scale**: on while their kg rest on them (corpses, props, zombies, players with what they
