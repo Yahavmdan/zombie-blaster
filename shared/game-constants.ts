@@ -247,7 +247,20 @@ export const GAME_CONSTANTS = {
   GADGET_BUTTON_KG: 60, // A new floor button needs this many kg (a player presses it, so does a boulder or a few corpses)
   GADGET_BUTTON_WIDTH_PX: 48, // A floor button, set into its surface's top: this wide
   GADGET_BUTTON_STACK_PX: 40, // Things piled up to this far above a button still press on it
-  GADGET_BUTTON_CAP_PX: 10, // A floor button's red cap stands this far proud of its surface until something presses it
+  GADGET_BUTTON_CAP_PX: 10, // A floor button's cap stands this far proud of its surface until something presses it
+  // What each gadget can look like (art only, picked in the editor's popup; the first is the default, an export leaves it out)
+  GADGET_LOOKS: {
+    boulder: ['granite', 'mossy', 'iron', 'magma'],
+    'crack-wall': ['stone', 'brick', 'concrete', 'mossy'],
+    button: ['red', 'green', 'blue', 'hazard'],
+    scale: ['steel', 'brass', 'wood', 'rust'],
+    lever: ['steel', 'brass', 'wood', 'bone'],
+    spring: ['hazard', 'blue', 'rust', 'toxic'],
+    slingshot: ['wood', 'steel', 'bone', 'red'],
+    door: ['shutter', 'planks', 'portcullis', 'hazard'],
+    slope: ['steel', 'wood', 'hazard', 'grate'],
+    cage: ['tarp', 'shroud', 'crate', 'vault'],
+  },
   GADGET_SCALE_KG: 500, // A new scale gives its signal at this many kg
   GADGET_SCALE_WIDTH_PX: 96, // A scale's pan, set into its surface's top: this wide
   GADGET_SCALE_STACK_PX: 80, // Things piled up to this far above a scale's pan still weigh on it
@@ -713,6 +726,10 @@ export const GAME_CONSTANTS = {
   DEV_EDITOR_SURFACE_SNAP_PX: 16, // A ladder end, prop, cleat or plate lands on a surface this close above the pointer
   DEV_EDITOR_LADDER_MIN_PX: 32, // Shortest ladder
   DEV_EDITOR_HISTORY_STEPS: 30, // Ctrl+Z goes back this many steps (and Ctrl+Shift+Z forward again)
+  DEV_EDITOR_POPUP_W_PX: 280, // Room the adjust popup needs (page px), to open beside a thing and not on it...
+  DEV_EDITOR_POPUP_H_PX: 460, // ...at most this tall (a cage's list of fields)...
+  DEV_EDITOR_POPUP_GAP_PX: 24, // ...this far from the thing's box
+  DEV_EDITOR_SCALE_ART_PX: 112, // A scale's post, dial and readout rise this far above its pan: the popup stays off them too
 
 } as const;
 

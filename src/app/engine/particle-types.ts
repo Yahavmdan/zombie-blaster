@@ -12,12 +12,12 @@ export enum ParticleShape {
 
 /**
  * Whose art a chunk is cut from: the boulder, the cracked wall of this size and side, or a
- * designed floor's crack band of this size (`crackBandArt`).
+ * designed floor's crack band of this size and look (`crackBandArt`).
  */
 export type ChunkSource =
   | { kind: 'boulder' }
   | { kind: 'wall'; cols: number; rows: number; faceRight: boolean }
-  | { kind: 'crack'; cols: number; rows: number };
+  | { kind: 'crack'; cols: number; rows: number; look: string };
 
 /** The part of the source art a chunk shows, in art cells (drawn at ART_PX per cell). */
 export interface ParticleChunk {
