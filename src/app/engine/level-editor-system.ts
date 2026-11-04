@@ -20,6 +20,7 @@ import {
   itemAt,
   itemBox,
   allRefs,
+  itemArtBox,
   moveTo,
   parseLayout,
   placeAt,
@@ -82,11 +83,10 @@ export interface EditorGadgetView {
   wires: EditorWireView[] | null;
 }
 
-/** The middle-click popup: the thing clicked, where (page px), and what can be adjusted on it. */
+/** The middle-click popup: the thing clicked, where it is (page px, to open beside it), and what can be adjusted on it. */
 export interface EditorInspector {
   label: string;
-  clientX: number;
-  clientY: number;
+  box: Box;
   fields: EditorField[];
 }
 
@@ -149,8 +149,8 @@ export class LevelEditorSystem {
   private lastTag: string | null = null;
   /** Presses on the map so far (each press is its own step). */
   private presses: number = 0;
-  /** Where the middle-click popup opened (page px), while it is open on the selection. */
-  private inspectAt: { clientX: number; clientY: number } | null = null;
+  /** What the middle-click popup opened beside (page px), while it is open on the selection. */
+  private inspectAt: Box | null = null;
 
   constructor(private readonly e: GameEngine) {}
 
@@ -259,24 +259,30 @@ export class LevelEditorSystem {
   }
 
   /**
-   * Middle click on the map: selects the thing under (x, y) and opens its popup at the click
-   * (page px) to adjust it; on empty map it closes the popup.
+   * Middle click on the map: selects the thing under (x, y) and opens its popup beside it to adjust
+   * it; on empty map it closes the popup.
    */
-  inspect(x: number, y: number, clientX: number, clientY: number): void {
+  inspect(x: number, y: number): void {
     const layout: LevelLayout | null = this.current();
     if (!layout) return;
     this.drag = null;
     this.selected = itemAt(layout, x, y);
-    this.inspectAt = this.selected ? { clientX, clientY } : null;
+    this.inspectAt = this.selected ? this.pageBoxOf(layout, this.selected) : null;
     this.notify();
   }
 
-  /** Opens the popup on what is selected, at (clientX, clientY) page px: a phone has no middle button. */
-  inspectSelected(clientX: number, clientY: number): void {
+  /** Opens the popup on what is selected: a phone has no middle button. */
+  inspectSelected(): void {
     if (!this.layout || !this.selected || !itemBox(this.layout, this.selected)) return;
     this.drag = null;
-    this.inspectAt = { clientX, clientY };
+    this.inspectAt = this.pageBoxOf(this.layout, this.selected);
     this.notify();
+  }
+
+  /** Where a thing's art is on the page. */
+  private pageBoxOf(layout: LevelLayout, ref: EditorRef): Box | null {
+    const box: Box | null = itemArtBox(layout, ref);
+    return box ? this.e.pageBox(box) : null;
   }
 
   closeInspector(): void {
@@ -289,7 +295,7 @@ export class LevelEditorSystem {
     const layout: LevelLayout | null = this.layout;
     const ref: EditorRef | null = this.selected;
     if (!layout || !ref || !this.inspectAt || !itemBox(layout, ref)) return null;
-    return { label: refLabel(layout, ref), ...this.inspectAt, fields: fieldsOf(layout, ref) };
+    return { label: refLabel(layout, ref), box: this.inspectAt, fields: fieldsOf(layout, ref) };
   }
 
   /** Adjusts one of the selection's fields (size, strength, weight...) and plays it at once. */

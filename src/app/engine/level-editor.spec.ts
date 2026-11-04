@@ -7,17 +7,21 @@ import { GADGET_KINDS } from './gadgets';
 import { LevelLayout, generateLevel } from './level-generator';
 import {
   EditorRef,
+  PageSize,
   clearLayout,
   edgeAt,
   editableLayout,
   exitBox,
   exportLayout,
   followExit,
+  gadgetOf,
+  itemArtBox,
   itemAt,
   itemBox,
   moveTo,
   parseLayout,
   placeAt,
+  popupBeside,
   removeItem,
   resizeTo,
   EditorField,
@@ -245,14 +249,31 @@ describe('level editor: gadgets', () => {
     const layout: LevelLayout = room();
     const keys: (ref: EditorRef | null) => string[] = (ref: EditorRef | null): string[] =>
       fieldsOf(layout, ref!).map((f: EditorField): string => f.key);
-    expect(keys(placeAt(layout, 'scale', 300, 600))).toEqual(['kg', 'width']);
-    expect(keys(placeAt(layout, 'slingshot', 600, 600))).toEqual(['power', 'angle', 'width']);
-    expect(keys(placeAt(layout, 'spring', 800, 600))).toEqual(['power', 'width']);
-    expect(keys(placeAt(layout, 'boulder', 1000, 600))).toEqual(['kg']);
-    expect(keys(placeAt(layout, 'lever', 1100, 600))).toEqual(['startsOn']);
-    expect(keys(placeAt(layout, 'door', 200, 600))).toEqual(['width', 'height', 'latch', 'exit']);
-    expect(keys(placeAt(layout, 'slope', 300, 600))).toEqual(['width', 'height', 'risesRight']);
+    expect(keys(placeAt(layout, 'scale', 300, 600))).toEqual(['look', 'kg', 'width']);
+    expect(keys(placeAt(layout, 'slingshot', 600, 600))).toEqual([
+      'look',
+      'power',
+      'angle',
+      'width',
+    ]);
+    expect(keys(placeAt(layout, 'spring', 800, 600))).toEqual(['look', 'power', 'width']);
+    expect(keys(placeAt(layout, 'boulder', 1000, 600))).toEqual(['look', 'kg']);
+    expect(keys(placeAt(layout, 'lever', 1100, 600))).toEqual(['look', 'startsOn']);
+    expect(keys(placeAt(layout, 'door', 200, 600))).toEqual([
+      'look',
+      'width',
+      'height',
+      'latch',
+      'exit',
+    ]);
+    expect(keys(placeAt(layout, 'slope', 300, 600))).toEqual([
+      'look',
+      'width',
+      'height',
+      'risesRight',
+    ]);
     expect(keys(placeAt(layout, 'cage', 500, 200))).toEqual([
+      'look',
       'content',
       'zombies',
       'smashes',
@@ -260,6 +281,7 @@ describe('level editor: gadgets', () => {
       'height',
     ]);
     expect(keys(placeAt(layout, 'crack-wall', 400, 600))).toEqual([
+      'look',
       'width',
       'height',
       'bandBottom',
@@ -574,5 +596,84 @@ describe('level editor: no-spawn zones', () => {
     placeAt(layout, 'no-spawn', 400, 400);
     clearLayout(layout);
     expect(layout.noSpawn).toEqual([]);
+  });
+
+  describe('looks', () => {
+    const door = (layout: LevelLayout): EditorRef => {
+      placeAt(layout, 'door', 400, 500);
+      return { kind: 'gadget', index: (layout.gadgets ?? []).length - 1 };
+    };
+
+    it('every gadget kind has at least 3 looks, each with its art data, and a look field', () => {
+      for (const kind of GADGET_KINDS) {
+        expect(GAME_CONSTANTS.GADGET_LOOKS[kind].length, kind).toBeGreaterThanOrEqual(3);
+      }
+    });
+
+    it('a look is picked by index, goes in the export and comes back; the default stays out', () => {
+      const layout: LevelLayout = editableLayout(generateLevel(1, 6), 300);
+      const ref: EditorRef = door(layout);
+      const field: EditorField | undefined = fieldsOf(layout, ref).find(
+        (f: EditorField): boolean => f.key === 'look',
+      );
+      expect(field).toMatchObject({ kind: 'look', gadget: 'door', value: 0 });
+      setField(layout, ref, 'look', 2);
+      expect(gadgetOf(layout, ref)?.look).toBe('portcullis');
+      const back: LevelLayout = parseLayout(exportLayout(layout)) as LevelLayout;
+      expect(gadgetOf(back, ref)?.look).toBe('portcullis');
+      setField(layout, ref, 'look', 0);
+      expect(exportLayout(layout)).not.toContain('"look"');
+    });
+
+    it('an unknown look is refused and names the field', () => {
+      const layout: LevelLayout = editableLayout(generateLevel(1, 6), 300);
+      door(layout);
+      const text: string = exportLayout(layout).replace('"kind": "door"', '"kind": "door", "look": "pink"');
+      expect(parseLayout(text)).toMatchObject({ error: expect.stringContaining('.look') });
+    });
+  });
+
+  describe('popupBeside', () => {
+    const view: PageSize = { width: 1280, height: 720 };
+    const W: number = GAME_CONSTANTS.DEV_EDITOR_POPUP_W_PX;
+    const H: number = GAME_CONSTANTS.DEV_EDITOR_POPUP_H_PX;
+    const clear = (box: Box, at: { left: number; top: number }): boolean =>
+      at.left >= box.x + box.width ||
+      at.left + W <= box.x ||
+      at.top >= box.y + box.height ||
+      at.top + H <= box.y;
+
+    it('opens right of a thing, left of it at the window edge, and never on it', () => {
+      const mid: Box = { x: 300, y: 300, width: 48, height: 64 };
+      expect(popupBeside(mid, view).left).toBeGreaterThanOrEqual(348);
+      const edge: Box = { x: 1200, y: 300, width: 48, height: 64 };
+      expect(popupBeside(edge, view).left + W).toBeLessThanOrEqual(1200);
+      for (const box of [mid, edge]) expect(clear(box, popupBeside(box, view))).toBe(true);
+    });
+
+    it('a thing as wide as the window gets the popup above or below it', () => {
+      const wide: Box = { x: 0, y: 640, width: 1280, height: 40 };
+      const at: { left: number; top: number } = popupBeside(wide, view);
+      expect(clear(wide, at)).toBe(true);
+      expect(at.top + H).toBeLessThanOrEqual(640);
+    });
+
+    it('stays in the window, and covers the least it can when nothing fits', () => {
+      const huge: Box = { x: 0, y: 100, width: 1280, height: 500 };
+      const at: { left: number; top: number } = popupBeside(huge, view);
+      expect(at.left).toBeGreaterThanOrEqual(0);
+      expect(at.top + H).toBeLessThanOrEqual(720);
+      expect(at.top === 0 || at.top + H === 720).toBe(true);
+    });
+  });
+
+  it('the popup keeps off a scale\'s post and dial too, not only its pan', () => {
+    const layout: LevelLayout = editableLayout(generateLevel(1, 6), 300);
+    placeAt(layout, 'scale', 400, GAME_CONSTANTS.GROUND_Y);
+    const ref: EditorRef = { kind: 'gadget', index: (layout.gadgets ?? []).length - 1 };
+    const art: Box | null = itemArtBox(layout, ref);
+    const g: Gadget | null = gadgetOf(layout, ref);
+    expect(art?.y).toBeLessThan((g?.y ?? 0) - 96);
+    expect((art?.x ?? 0) + (art?.width ?? 0)).toBeGreaterThan((g?.x ?? 0) + (g?.width ?? 0));
   });
 });

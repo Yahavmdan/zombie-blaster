@@ -161,6 +161,26 @@
   image-rendering: pixelated;
 }
 
+/* A gadget's looks: pictures of it, one per look. */
+.le-looks {
+  display: flex;
+  gap: 4px;
+}
+
+.le-look {
+  width: 54px;
+  height: 54px;
+  padding: 1px;
+  display: grid;
+  place-items: center;
+}
+
+.le-look__icon {
+  width: 48px;
+  height: 48px;
+  image-rendering: pixelated;
+}
+
 /* Phone layout: a rail of big buttons down the left edge, the map beside it (width --le-rail-w,
    set by the game page), and the tool window sliding out over the map. */
 .le-rail {

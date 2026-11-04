@@ -259,7 +259,21 @@ export const GAME_CONSTANTS = {
   GADGET_BUTTON_KG: 60, // A new floor button needs this many kg (a player presses it, so does a boulder or a few corpses)
   GADGET_BUTTON_WIDTH_PX: 48, // A floor button, set into its surface's top: this wide
   GADGET_BUTTON_STACK_PX: 40, // Things piled up to this far above a button still press on it
-  GADGET_BUTTON_CAP_PX: 10, // A floor button's red cap stands this far proud of its surface until something presses it
+  GADGET_BUTTON_CAP_PX: 10, // A floor button's cap stands this far proud of its surface until something presses it
+  // What each gadget can look like (art only, picked in the editor's popup; the first is the default, an export leaves it out)
+  GADGET_LOOKS: {
+    boulder: ['granite', 'mossy', 'iron', 'magma'],
+    bin: ['teal', 'toxic', 'blue', 'rust'],
+    'crack-wall': ['stone', 'brick', 'concrete', 'mossy'],
+    button: ['red', 'green', 'blue', 'hazard'],
+    scale: ['steel', 'brass', 'wood', 'rust'],
+    lever: ['steel', 'brass', 'wood', 'bone'],
+    spring: ['hazard', 'blue', 'rust', 'toxic'],
+    slingshot: ['wood', 'steel', 'bone', 'red'],
+    door: ['shutter', 'planks', 'portcullis', 'hazard'],
+    slope: ['steel', 'wood', 'hazard', 'grate'],
+    cage: ['tarp', 'shroud', 'crate', 'vault'],
+  },
   GADGET_SCALE_KG: 500, // A new scale gives its signal at this many kg
   GADGET_SCALE_WIDTH_PX: 96, // A scale's pan, set into its surface's top: this wide
   GADGET_SCALE_STACK_PX: 80, // Things piled up to this far above a scale's pan still weigh on it
@@ -479,6 +493,12 @@ export const GAME_CONSTANTS = {
   PROP_LAND_KEEP_SPEED: 0.7, // Share of its sideways speed a landing prop keeps (barrels roll, others slide)
   PROP_ROLL_FRICTION: 0.97, // Sideways speed a rolling barrel keeps per tick
   PROP_SLIDE_FRICTION: 0.8, // Sideways speed a sliding box or rail keeps per tick
+  // Landing on another prop grips: a thrown barrel or box beds down on top instead of skidding off.
+  PROP_STACK_BOUNCE: 0.12, // Fall speed a prop landing on another prop keeps as a small hop
+  PROP_STACK_LAND_KEEP_SPEED: 0.15, // Share of its sideways speed a prop landing on another prop keeps
+  PROP_STACK_FRICTION: 0.6, // Sideways speed kept per tick on top of another prop (barrels don't roll there)
+  PROP_STACK_CATCH_PX: 15, // Coming to rest this far past the safe top, a prop shuffles back on; further out it tips off
+  PROP_STACK_SEAT_PX: 6, // A caught prop ends with its middle this far inside the edge below
   PROP_SETTLE_SPIN: 0.12, // A prop at rest on its side turns back upright this fast (radians/tick)
   PROP_TIP_ACCEL: 0.012, // A prop whose middle hangs over an edge tips off it, turning faster by this much per tick
   PROP_TIP_SLIDE: 0.6, // ...and slides off this far per tick (px) while it tips
@@ -725,6 +745,10 @@ export const GAME_CONSTANTS = {
   DEV_EDITOR_SURFACE_SNAP_PX: 16, // A ladder end, prop, cleat or plate lands on a surface this close above the pointer
   DEV_EDITOR_LADDER_MIN_PX: 32, // Shortest ladder
   DEV_EDITOR_HISTORY_STEPS: 30, // Ctrl+Z goes back this many steps (and Ctrl+Shift+Z forward again)
+  DEV_EDITOR_POPUP_W_PX: 280, // Room the adjust popup needs (page px), to open beside a thing and not on it...
+  DEV_EDITOR_POPUP_H_PX: 460, // ...at most this tall (a cage's list of fields)...
+  DEV_EDITOR_POPUP_GAP_PX: 24, // ...this far from the thing's box
+  DEV_EDITOR_SCALE_ART_PX: 112, // A scale's post, dial and readout rise this far above its pan: the popup stays off them too
 
 } as const;
 

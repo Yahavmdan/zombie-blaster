@@ -51,6 +51,21 @@ export const PIXEL: Readonly<Record<string, string>> = {
   tarpHi: '#857553',
   tarp: '#62563d',
   tarpDark: '#433a2a',
+  /** A darker cloth, for cages that want to look worse. */
+  shroudHi: '#7a3a36',
+  shroud: '#54262a',
+  shroudDark: '#38181c',
+  /** Painted blue (the mp bar's tones). */
+  blueHi: '#5f9bef',
+  blue: '#3a74c9',
+  blueDark: '#214580',
+  /** Fired brick. */
+  brickHi: '#b5654a',
+  brick: '#8f4433',
+  brickDark: '#5c2a20',
+  /** Moss on old stone. */
+  mossHi: '#8fa84a',
+  moss: '#5f7a30',
 };
 
 /** A filled rectangle on whole screen pixels. */

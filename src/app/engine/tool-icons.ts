@@ -25,6 +25,8 @@ const K: string = PIXEL['ink'];
 const TILE: number = GAME_CONSTANTS.LEVEL_TILE_PX;
 /** Room left around the picture inside the button canvas. */
 const PAD_PX: number = 2;
+/** A door or cracked wall is pictured this tall as one of its looks. */
+const LOOK_ICON_TALL_PX: number = 64;
 
 /** A thing's art drawn at its natural size on a canvas of `w` x `h`. */
 function scene(
@@ -165,8 +167,13 @@ function propScene(art: PropArt, then: () => void): HTMLCanvasElement {
 }
 
 /** The thing a tool makes (or does), drawn at its natural size; `then` redraws once an image loaded. */
-function toolScene(tool: EditorTool, then: () => void): HTMLCanvasElement {
+function toolScene(tool: EditorTool, then: () => void, look?: string): HTMLCanvasElement {
   const ground: number = 40;
+  const dressed: (w: number, h: number, g: Gadget, state?: Partial<GadgetState>) => HTMLCanvasElement =
+    (w: number, h: number, g: Gadget, state?: Partial<GadgetState>): HTMLCanvasElement =>
+      gadgetScene(w, h, { ...g, look }, state);
+  // Tall things show a stretch of themselves as a look: their tool picture would shrink it away.
+  const tall: number = look ? LOOK_ICON_TALL_PX : 128;
   switch (tool) {
     case 'select':
       return cursorScene();
@@ -189,7 +196,7 @@ function toolScene(tool: EditorTool, then: () => void): HTMLCanvasElement {
     case 'rail':
       return propScene(RAIL_ART.middle, then);
     case 'boulder':
-      return gadgetScene(48, 48, {
+      return dressed(48, 48, {
         id: 'g1',
         kind: 'boulder',
         kg: 600,
@@ -209,18 +216,18 @@ function toolScene(tool: EditorTool, then: () => void): HTMLCanvasElement {
         height: 48,
       });
     case 'crack-wall':
-      return gadgetScene(
+      return dressed(
         64,
-        128,
+        tall,
         {
           id: 'g1',
           kind: 'crack-wall',
           x: 0,
           y: 0,
           width: 64,
-          height: 128,
-          crackTop: 64,
-          crackBottom: 128,
+          height: tall,
+          crackTop: tall / 2,
+          crackBottom: tall,
         },
         { hits: 2 },
       );
@@ -239,6 +246,7 @@ function toolScene(tool: EditorTool, then: () => void): HTMLCanvasElement {
               height: 6,
               kg: 60,
               targets: [],
+              look,
             },
           ],
           [newGadgetState('g1', null)],
@@ -248,11 +256,11 @@ function toolScene(tool: EditorTool, then: () => void): HTMLCanvasElement {
     case 'scale':
       return scene(112, 112, (ctx: CanvasRenderingContext2D): void => {
         floorStrip(ctx, 100, 112);
-        drawScalePan(ctx, { x: 4, y: 100, width: 96, height: 8 }, false);
-        drawScalePost(ctx, 100, 4, 100, 44, 0.4);
+        drawScalePan(ctx, { x: 4, y: 100, width: 96, height: 8 }, false, look);
+        drawScalePost(ctx, 100, 4, 100, 44, 0.4, look);
       });
     case 'lever':
-      return gadgetScene(32, 32, {
+      return dressed(32, 32, {
         id: 'g1',
         kind: 'lever',
         x: 8,
@@ -263,7 +271,7 @@ function toolScene(tool: EditorTool, then: () => void): HTMLCanvasElement {
         startsOn: false,
       });
     case 'spring':
-      return gadgetScene(64, 32, {
+      return dressed(64, 32, {
         id: 'g1',
         kind: 'spring',
         x: 0,
@@ -273,7 +281,7 @@ function toolScene(tool: EditorTool, then: () => void): HTMLCanvasElement {
         power: 18,
       });
     case 'slingshot':
-      return gadgetScene(64, 24, {
+      return dressed(64, 24, {
         id: 'g1',
         kind: 'slingshot',
         x: 0,
@@ -284,18 +292,18 @@ function toolScene(tool: EditorTool, then: () => void): HTMLCanvasElement {
         angle: 60,
       });
     case 'door':
-      return gadgetScene(32, 128, {
+      return dressed(look ? 48 : 32, tall, {
         id: 'g1',
         kind: 'door',
         x: 0,
         y: 0,
-        width: 32,
-        height: 128,
+        width: look ? 48 : 32,
+        height: tall,
         latch: false,
         exit: false,
       });
     case 'slope':
-      return gadgetScene(128, 72, {
+      return dressed(128, 72, {
         id: 'g1',
         kind: 'slope',
         x: 0,
@@ -305,7 +313,7 @@ function toolScene(tool: EditorTool, then: () => void): HTMLCanvasElement {
         risesRight: true,
       });
     case 'cage':
-      return gadgetScene(64, 96, {
+      return dressed(64, 96, {
         id: 'g1',
         kind: 'cage',
         x: 0,
@@ -342,8 +350,8 @@ function fit(canvas: HTMLCanvasElement, art: HTMLCanvasElement): void {
   ctx.drawImage(art, box.x, box.y, box.width, box.height);
 }
 
-/** Draws the picture of what `tool` places (or does) into a tool button's canvas. */
-export function drawToolIcon(canvas: HTMLCanvasElement, tool: EditorTool): void {
-  const art: HTMLCanvasElement = toolScene(tool, (): void => fit(canvas, art));
+/** Draws the picture of what `tool` places (or does) into a tool button's canvas, in `look` if given. */
+export function drawToolIcon(canvas: HTMLCanvasElement, tool: EditorTool, look?: string): void {
+  const art: HTMLCanvasElement = toolScene(tool, (): void => fit(canvas, art), look);
   fit(canvas, art);
 }

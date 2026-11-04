@@ -21,6 +21,7 @@ import {
   cageBox,
   crackBand,
   doorSolid,
+  lookOf,
   dotsAlong,
   gaugeFraction,
   padOffset,
@@ -32,6 +33,20 @@ import {
 } from './gadgets';
 import { Random, seededRandom } from './level-generator';
 import { ART_PX, PIXEL, pxBar, pxDisc, pxLine, pxRect, pxRivet } from './pixel-art';
+import {
+  BUTTON_LOOKS,
+  ButtonLook,
+  DOOR_LOOKS,
+  BIN_LOOKS,
+  LEVER_LOOKS,
+  LeverLook,
+  Ramp,
+  SLINGSHOT_LOOKS,
+  SLOPE_LOOKS,
+  SlingshotLook,
+  SlopeLook,
+  WALL_LOOKS,
+} from './gadget-looks';
 import {
   WALL_INK,
   WALL_MORTAR,
@@ -54,10 +69,20 @@ import {
 
 const K: string = PIXEL['ink'];
 const CRACK_SEED: number = 0xc4ac;
+/** A brick's size in art cells, its mortar included. */
+const BRICK_COLS: number = 12;
+const BRICK_ROWS: number = 4;
+const CONCRETE_POUR_ROWS: number = 32;
+const CONCRETE_TIE_COLS: number = 14;
+/** Cells painted moss (`wallShades` in `gadget-looks.ts`). */
+const WALL_MOSS: number = 6;
+const WALL_MOSS_HI: number = 7;
+/** The cracked wall's look when none is given. */
+const CRACK_LOOK: string = 'stone';
 const masonry: Map<string, HTMLCanvasElement> = new Map<string, HTMLCanvasElement>();
 const bands: Map<string, HTMLCanvasElement> = new Map<string, HTMLCanvasElement>();
 
-function canvasOf(cols: number, rows: number, cells: number[]): HTMLCanvasElement {
+function canvasOf(cols: number, rows: number, cells: number[], shades: string[]): HTMLCanvasElement {
   const canvas: HTMLCanvasElement = document.createElement('canvas');
   canvas.width = cols;
   canvas.height = rows;
@@ -65,11 +90,15 @@ function canvasOf(cols: number, rows: number, cells: number[]): HTMLCanvasElemen
   if (!ctx) return canvas;
   for (let y: number = 0; y < rows; y++) {
     for (let x: number = 0; x < cols; x++) {
-      ctx.fillStyle = WALL_SHADES[cells[y * cols + x]];
+      ctx.fillStyle = shades[cells[y * cols + x]];
       ctx.fillRect(x, y, 1, 1);
     }
   }
   return canvas;
+}
+
+function wallShadesOf(look: string): string[] {
+  return WALL_LOOKS[look] ?? WALL_SHADES;
 }
 
 function stoneCells(cols: number, rows: number, seed: number): number[] {
@@ -82,18 +111,88 @@ function stoneCells(cols: number, rows: number, seed: number): number[] {
   return cells;
 }
 
+/** Courses of bricks in running bond: a row of mortar under each, every other course shifted. */
+function brickCells(cols: number, rows: number): number[] {
+  const cells: number[] = new Array<number>(cols * rows).fill(3);
+  for (let y: number = 0; y < rows; y++) {
+    const course: number = Math.floor(y / BRICK_ROWS);
+    for (let x: number = 0; x < cols; x++) {
+      const along: number = x + (course % 2) * (BRICK_COLS / 2);
+      const brick: number = Math.floor(along / BRICK_COLS);
+      if (y % BRICK_ROWS === BRICK_ROWS - 1 || along % BRICK_COLS === BRICK_COLS - 1) {
+        cells[y * cols + x] = WALL_MORTAR;
+      } else if (y % BRICK_ROWS === 0) {
+        cells[y * cols + x] = WALL_SHADES.length - 1;
+      } else {
+        cells[y * cols + x] = (brick * 5 + course * 3) % 4 === 0 ? 2 : 3;
+      }
+    }
+  }
+  return cells;
+}
+
+/** Cast concrete: speckled, a form seam every pour and the tie holes the forms left. */
+function concreteCells(cols: number, rows: number, seed: number): number[] {
+  const rand: Random = seededRandom(seed);
+  const cells: number[] = new Array<number>(cols * rows).fill(3);
+  for (let i: number = 0; i < cells.length; i++) {
+    const r: number = rand();
+    if (r < 0.08) cells[i] = 2;
+    else if (r < 0.14) cells[i] = 5;
+  }
+  for (let y: number = CONCRETE_POUR_ROWS; y < rows; y += CONCRETE_POUR_ROWS) {
+    for (let x: number = 0; x < cols; x++) {
+      cells[(y - 1) * cols + x] = WALL_MORTAR;
+      cells[y * cols + x] = WALL_SHADES.length - 1;
+    }
+  }
+  for (let y: number = CONCRETE_POUR_ROWS / 2; y < rows; y += CONCRETE_POUR_ROWS) {
+    for (let x: number = 5; x < cols - 2; x += CONCRETE_TIE_COLS) {
+      cells[y * cols + x] = WALL_MORTAR;
+      cells[y * cols + x + 1] = WALL_MORTAR;
+    }
+  }
+  return cells;
+}
+
+/** Old stone with moss creeping down from the courses: patches, thin strands under them. */
+function mossyCells(cols: number, rows: number, seed: number): number[] {
+  const rand: Random = seededRandom(seed + 7);
+  const cells: number[] = stoneCells(cols, rows, seed);
+  const patches: number = Math.ceil((cols * rows) / 160);
+  for (let p: number = 0; p < patches; p++) {
+    const px: number = Math.floor(rand() * cols);
+    const py: number = Math.floor(rand() * rows);
+    const wide: number = 3 + Math.floor(rand() * 6);
+    for (let x: number = px; x < Math.min(cols, px + wide); x++) {
+      const drop: number = 1 + Math.floor(rand() * 5);
+      for (let y: number = py; y < Math.min(rows, py + drop); y++) {
+        cells[y * cols + x] = y === py ? WALL_MOSS_HI : WALL_MOSS;
+      }
+    }
+  }
+  return cells;
+}
+
+function wallCells(cols: number, rows: number, seed: number, look: string): number[] {
+  if (look === 'brick') return brickCells(cols, rows);
+  if (look === 'concrete') return concreteCells(cols, rows, seed);
+  if (look === 'mossy') return mossyCells(cols, rows, seed);
+  return stoneCells(cols, rows, seed);
+}
+
 /** A dressed stone wall at one canvas pixel per art cell (the cracked wall outside its band). */
-function masonryArt(cols: number, rows: number): HTMLCanvasElement {
-  const key: string = `${cols}x${rows}`;
+function masonryArt(cols: number, rows: number, look: string): HTMLCanvasElement {
+  const key: string = `${look}:${cols}x${rows}`;
   const cached: HTMLCanvasElement | undefined = masonry.get(key);
   if (cached) return cached;
-  const cells: number[] = stoneCells(cols, rows, CRACK_SEED);
+  const cells: number[] = wallCells(cols, rows, CRACK_SEED, look);
   // Ink down both faces: the wall's silhouette.
   for (let y: number = 0; y < rows; y++) {
     cells[y * cols] = WALL_INK;
     cells[y * cols + cols - 1] = WALL_INK;
   }
-  const canvas: HTMLCanvasElement = canvasOf(cols, rows, cells);
+  const canvas: HTMLCanvasElement = canvasOf(cols, rows, cells, wallShadesOf(look));
   masonry.set(key, canvas);
   return canvas;
 }
@@ -102,12 +201,17 @@ function masonryArt(cols: number, rows: number): HTMLCanvasElement {
  * The crack band at one canvas pixel per art cell: the same stones, shattered. `stage` (0..hits)
  * shows the cracks so far: a few hairlines at first, more and wider with every swing.
  */
-export function crackBandArt(cols: number, rows: number, stage: number): HTMLCanvasElement {
-  const key: string = `${cols}x${rows}:${stage}`;
+export function crackBandArt(
+  cols: number,
+  rows: number,
+  stage: number,
+  look: string = CRACK_LOOK,
+): HTMLCanvasElement {
+  const key: string = `${look}:${cols}x${rows}:${stage}`;
   const cached: HTMLCanvasElement | undefined = bands.get(key);
   if (cached) return cached;
   const rand: Random = seededRandom(CRACK_SEED + cols * 31 + rows);
-  const cells: number[] = stoneCells(cols, rows, CRACK_SEED + 1);
+  const cells: number[] = wallCells(cols, rows, CRACK_SEED + 1, look);
   const inside: (x: number, y: number) => boolean = (x: number, y: number): boolean =>
     x >= 1 && y >= 1 && x < cols - 1 && y < rows - 1;
   // Crushed stone: chipped patches, deep where the chips fell out, a fresh light edge below them.
@@ -165,7 +269,7 @@ export function crackBandArt(cols: number, rows: number, stage: number): HTMLCan
     cells[x] = WALL_INK;
     cells[(rows - 1) * cols + x] = WALL_INK;
   }
-  const canvas: HTMLCanvasElement = canvasOf(cols, rows, cells);
+  const canvas: HTMLCanvasElement = canvasOf(cols, rows, cells, wallShadesOf(look));
   bands.set(key, canvas);
   return canvas;
 }
@@ -191,7 +295,8 @@ export function drawCrackWall(
   ctx.beginPath();
   ctx.rect(g.x, g.y, g.width, g.height);
   ctx.clip();
-  const wall: HTMLCanvasElement = masonryArt(cols, Math.ceil(g.height / ART_PX));
+  const look: string = lookOf(g);
+  const wall: HTMLCanvasElement = masonryArt(cols, Math.ceil(g.height / ART_PX), look);
   if (band.y > g.y) blit(ctx, wall, { ...g, height: band.y - g.y }, 0);
   const below: number = band.y + band.height;
   if (below < g.y + g.height) {
@@ -202,6 +307,7 @@ export function drawCrackWall(
       cols,
       Math.ceil(band.height / ART_PX),
       Math.min(state.hits, GAME_CONSTANTS.GADGET_CRACK_HITS - 1),
+      look,
     );
     blit(ctx, art, band, 0);
   } else {
@@ -215,8 +321,9 @@ export function drawCrackWall(
 }
 
 /**
- * A floor button set into its surface: a steel ring flush with the top and a red cap standing
- * proud of it until enough weight presses it in (then it lights up gold).
+ * A floor button set into its surface: a steel ring flush with the top and a cap standing proud of
+ * it until enough weight presses it in (then it lights up): red, a green dome, a blue one with a
+ * slot, or hazard stripes.
  */
 export function drawGadgetButton(
   ctx: CanvasRenderingContext2D,
@@ -230,17 +337,37 @@ export function drawGadgetButton(
   pxRect(ctx, x + 2, y, g.width - 4, 2, PIXEL['steelHi']);
   const capX: number = x + 8;
   const capW: number = g.width - 16;
+  const look: string = lookOf(g);
+  const style: ButtonLook = BUTTON_LOOKS[look] ?? BUTTON_LOOKS['red'];
   if (state.on) {
-    pxRect(ctx, capX, y, capW, 4, PIXEL['goldDark']);
-    pxRect(ctx, capX, y, capW, 2, PIXEL['goldHi']);
+    pxRect(ctx, capX, y, capW, 4, style.lit.dark);
+    pxRect(ctx, capX, y, capW, 2, style.lit.hi);
     pxRect(ctx, capX + 2, y, 4, 2, PIXEL['white']);
     return;
   }
   // The cap stands well proud (inked round) so an unpressed button reads from across the screen.
   const cap: number = GAME_CONSTANTS.GADGET_BUTTON_CAP_PX;
+  const tone: Ramp = style.cap;
+  if (look === 'green') {
+    // A dome: a narrower top on a wide skirt.
+    pxRect(ctx, capX - 2, y - cap + 2, capW + 4, cap, K);
+    pxRect(ctx, capX + 2, y - cap - 2, capW - 4, 6, K);
+    pxBar(ctx, capX, y - cap + 4, capW, cap, tone.hi, tone.mid, tone.dark);
+    pxRect(ctx, capX + 4, y - cap, capW - 8, 4, tone.mid);
+    pxRect(ctx, capX + 4, y - cap, capW - 8, 2, tone.hi);
+    pxRect(ctx, capX + 6, y - cap, 4, 2, PIXEL['white']);
+    return;
+  }
   pxRect(ctx, capX - 2, y - cap - 2, capW + 4, cap + 2, K);
-  pxBar(ctx, capX, y - cap, capW, cap + 4, PIXEL['bloodHi'], PIXEL['blood'], PIXEL['bloodDark']);
+  pxBar(ctx, capX, y - cap, capW, cap + 4, tone.hi, tone.mid, tone.dark);
   pxRect(ctx, capX + 2, y - cap + 2, 4, 2, PIXEL['white']);
+  if (look === 'blue') {
+    pxRect(ctx, capX + capW / 2 - 6, y - cap + 4, 12, 2, K);
+  } else if (look === 'hazard') {
+    for (let sx: number = capX + 2; sx < capX + capW - 4; sx += 8) {
+      pxRect(ctx, sx + 2, y - cap + 4, 4, cap - 4, K);
+    }
+  }
 }
 
 /** A scale: its pan set into the surface, a post at its right end with a dial, and its load in kg. */
@@ -249,10 +376,11 @@ export function drawGadgetScale(
   g: ScaleGadget,
   state: GadgetState,
 ): void {
-  drawScalePan(ctx, g, state.on);
+  const look: string = lookOf(g);
+  drawScalePan(ctx, g, state.on, look);
   const postX: number = g.x + g.width;
   const postTop: number = g.y - 96;
-  drawScalePost(ctx, postX, postTop, g.y, g.y - 56, gaugeFraction(g, state));
+  drawScalePost(ctx, postX, postTop, g.y, g.y - 56, gaugeFraction(g, state), look);
   ctx.save();
   ctx.font = pixelFont(14);
   ctx.textAlign = 'center';
@@ -261,7 +389,7 @@ export function drawGadgetScale(
   ctx.restore();
 }
 
-/** A lever on a riveted base: its handle leans left when off, right (knob lit) when on. */
+/** A lever on a riveted base: its handle leans left when off, right (knob changed) when on. */
 export function drawGadgetLever(
   ctx: CanvasRenderingContext2D,
   g: LeverGadget,
@@ -270,6 +398,7 @@ export function drawGadgetLever(
   const x: number = Math.round(g.x);
   const bottom: number = Math.round(g.y + g.height);
   const baseH: number = 8;
+  const style: LeverLook = LEVER_LOOKS[lookOf(g)] ?? LEVER_LOOKS['steel'];
   const pivot: Point = { x: x + g.width / 2, y: bottom - baseH };
   const lean: number = state.on ? 0.6 : -0.6;
   const length: number = g.height - baseH - 4;
@@ -278,19 +407,18 @@ export function drawGadgetLever(
     y: Math.round(pivot.y - Math.cos(lean) * length),
   };
   pxLine(ctx, pivot.x, pivot.y, tip.x, tip.y, K, 6);
-  pxLine(ctx, pivot.x, pivot.y, tip.x, tip.y, PIXEL['steelHi'], 2);
-  pxRect(ctx, tip.x - 4, tip.y - 4, 8, 8, K);
-  pxRect(ctx, tip.x - 2, tip.y - 2, 4, 4, state.on ? PIXEL['toxicHi'] : PIXEL['blood']);
-  pxBar(
+  pxLine(ctx, pivot.x, pivot.y, tip.x, tip.y, style.handle, 2);
+  const knob: number = style.knob;
+  pxRect(ctx, tip.x - knob, tip.y - knob, 2 * knob, 2 * knob, K);
+  pxRect(
     ctx,
-    x - 4,
-    bottom - baseH,
-    g.width + 8,
-    baseH,
-    PIXEL['steelHi'],
-    PIXEL['steel'],
-    PIXEL['steelDark'],
+    tip.x - knob + 2,
+    tip.y - knob + 2,
+    2 * knob - 4,
+    2 * knob - 4,
+    state.on ? style.knobOn : style.knobOff,
   );
+  pxBar(ctx, x - 4, bottom - baseH, g.width + 8, baseH, style.base.hi, style.base.mid, style.base.dark);
   pxRivet(ctx, x - 2, bottom - baseH + 2);
   pxRivet(ctx, x + g.width, bottom - baseH + 2);
 }
@@ -309,12 +437,13 @@ export function drawGadgetSlingshot(
   const y: number = Math.round(g.y);
   const w: number = g.width;
   const h: number = g.height;
+  const style: SlingshotLook = SLINGSHOT_LOOKS[lookOf(g)] ?? SLINGSHOT_LOOKS['wood'];
   const pouchY: number = Math.round((y + padOffset) / ART_PX) * ART_PX;
-  pxBar(ctx, x, y + 6, w, h - 6, PIXEL['woodHi'], PIXEL['wood'], PIXEL['woodDark']);
+  pxBar(ctx, x, y + 6, w, h - 6, style.cradle.hi, style.cradle.mid, style.cradle.dark);
   // Bands from the cradle's ends up to the pouch.
   pxLine(ctx, x + 4, y + 8, x + 12, pouchY + 2, K, 4);
   pxLine(ctx, x + w - 4, y + 8, x + w - 12, pouchY + 2, K, 4);
-  pxBar(ctx, x + 8, pouchY, w - 16, 6, PIXEL['rustHi'], PIXEL['rust'], PIXEL['rustDark']);
+  pxBar(ctx, x + 8, pouchY, w - 16, 6, style.pouch.hi, style.pouch.mid, style.pouch.dark);
   // An arrow painted on its face, pointing where it throws.
   const a: number = (g.angle * Math.PI) / 180;
   const cx: number = x + w / 2;
@@ -340,12 +469,108 @@ export function drawGadgetSlingshot(
     [barb(-0.6), tip],
   ];
   for (const [from, to] of strokes) pxLine(ctx, from.x, from.y, to.x, to.y, K, 6);
-  for (const [from, to] of strokes) pxLine(ctx, from.x, from.y, to.x, to.y, PIXEL['goldHi'], 2);
+  for (const [from, to] of strokes) pxLine(ctx, from.x, from.y, to.x, to.y, style.arrow, 2);
+}
+
+/** The stretch of a door that blocks the way, `top`..`foot`: what its look hangs there. */
+function drawDoorLeaf(
+  ctx: CanvasRenderingContext2D,
+  look: string,
+  x: number,
+  top: number,
+  w: number,
+  foot: number,
+): void {
+  pxRect(ctx, x, top, w, foot - top, K);
+  if (look === 'planks') drawPlanksLeaf(ctx, x, top, w, foot);
+  else if (look === 'portcullis') drawPortcullisLeaf(ctx, x, top, w, foot);
+  else if (look === 'hazard') drawHazardLeaf(ctx, x, top, w, foot);
+  else drawShutterLeaf(ctx, x, top, w, foot);
+}
+
+/** A slatted steel shutter with a hazard-striped foot. */
+function drawShutterLeaf(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  top: number,
+  w: number,
+  bottom: number,
+): void {
+  for (let sy: number = top; sy < bottom - 2; sy += 8) {
+    pxRect(ctx, x + 2, sy, w - 4, Math.min(6, bottom - 2 - sy), PIXEL['steel']);
+    pxRect(ctx, x + 2, sy, w - 4, 2, PIXEL['steelHi']);
+  }
+  const foot: number = Math.max(top, bottom - 6);
+  for (let fx: number = x + 2; fx < x + w - 2; fx += 4) {
+    const stripe: boolean = Math.floor((fx - x) / 4) % 2 === 0;
+    pxRect(ctx, fx, foot, Math.min(4, x + w - 2 - fx), bottom - 2 - foot, stripe ? PIXEL['gold'] : K);
+  }
+}
+
+/** Upright boards held by iron straps; everything hangs from the foot, so it rises as one. */
+function drawPlanksLeaf(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  top: number,
+  w: number,
+  foot: number,
+): void {
+  for (let bx: number = x + 2; bx < x + w - 2; bx += 8) {
+    const wide: number = Math.min(6, x + w - 2 - bx);
+    pxRect(ctx, bx, top, wide, foot - top - 2, PIXEL['wood']);
+    pxRect(ctx, bx, top, 2, foot - top - 2, PIXEL['woodHi']);
+  }
+  for (let sy: number = foot - 12; sy >= top; sy -= 40) {
+    pxRect(ctx, x + 2, sy, w - 4, 6, K);
+    pxRect(ctx, x + 2, sy + 2, w - 4, 2, PIXEL['steelHi']);
+    pxRivet(ctx, x + 4, sy + 2);
+    pxRivet(ctx, x + w - 6, sy + 2);
+  }
+}
+
+/** A gate of iron bars and cross rails over the dark, spiked at its foot. */
+function drawPortcullisLeaf(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  top: number,
+  w: number,
+  foot: number,
+): void {
+  pxRect(ctx, x + 2, top, w - 4, foot - top - 2, PIXEL['ink2']);
+  for (let sy: number = foot - 16; sy >= top; sy -= 24) {
+    pxRect(ctx, x + 2, sy, w - 4, 6, K);
+    pxRect(ctx, x + 2, sy + 2, w - 4, 2, PIXEL['steel']);
+  }
+  for (let bx: number = x + 4; bx < x + w - 4; bx += 8) {
+    pxRect(ctx, bx, top, 4, foot - top, K);
+    pxRect(ctx, bx, top, 2, foot - top - 2, PIXEL['steelHi']);
+    pxRect(ctx, bx + 2, top, 2, foot - top - 2, PIXEL['steel']);
+    pxRect(ctx, bx, foot - 4, 2, 2, PIXEL['steelLight']);
+  }
+}
+
+/** A blast door painted in hazard chevrons from the foot up. */
+function drawHazardLeaf(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  top: number,
+  w: number,
+  foot: number,
+): void {
+  const middle: number = x + w / 2;
+  for (let sy: number = foot - 4; sy >= top; sy -= ART_PX) {
+    for (let sx: number = x + 2; sx < x + w - 2; sx += ART_PX) {
+      const chevron: number = foot - sy + Math.abs(sx - middle);
+      const color: string = Math.floor(chevron / 12) % 2 === 0 ? PIXEL['gold'] : PIXEL['ink2'];
+      pxRect(ctx, sx, sy, ART_PX, ART_PX, color);
+    }
+  }
 }
 
 /**
- * A door: a riveted steel housing on top (always solid) and a slatted shutter with a hazard-striped
- * foot below it, rising into the housing as it opens. Fills exactly its solid box.
+ * A door: a housing on top (always solid) and below it a leaf that rises into the housing as it
+ * opens: a slatted shutter, boards, a portcullis or a hazard-painted blast door. Fills exactly its
+ * solid box.
  */
 export function drawGadgetDoor(
   ctx: CanvasRenderingContext2D,
@@ -388,26 +613,10 @@ export function drawGadgetDoor(
   pxRect(ctx, x, y + lintel, 4, foot - y - lintel, K);
   pxRect(ctx, x + 2, y + lintel, 2, foot - y - lintel, PIXEL['steelDark']);
   pxRect(ctx, x + g.width - 4, y + lintel, 4, foot - y - lintel, K);
-  if (bottom > y + lintel) {
-    pxRect(ctx, x, y + lintel, g.width, bottom - y - lintel, K);
-    for (let sy: number = y + lintel; sy < bottom - 2; sy += 8) {
-      pxRect(ctx, x + 2, sy, g.width - 4, Math.min(6, bottom - 2 - sy), PIXEL['steel']);
-      pxRect(ctx, x + 2, sy, g.width - 4, 2, PIXEL['steelHi']);
-    }
-    const foot: number = Math.max(y + lintel, bottom - 6);
-    for (let fx: number = x + 2; fx < x + g.width - 2; fx += 4) {
-      const stripe: boolean = Math.floor((fx - x) / 4) % 2 === 0;
-      pxRect(
-        ctx,
-        fx,
-        foot,
-        Math.min(4, x + g.width - 2 - fx),
-        bottom - 2 - foot,
-        stripe ? PIXEL['gold'] : K,
-      );
-    }
-  }
-  pxBar(ctx, x, y, g.width, lintel, PIXEL['steelLight'], PIXEL['steelHi'], PIXEL['steelDark']);
+  const look: string = lookOf(g);
+  if (bottom > y + lintel) drawDoorLeaf(ctx, look, x, y + lintel, g.width, bottom);
+  const housing: Ramp = DOOR_LOOKS[look] ?? DOOR_LOOKS['shutter'];
+  pxBar(ctx, x, y, g.width, lintel, housing.hi, housing.mid, housing.dark);
   pxRivet(ctx, x + 2, y + 2);
   pxRivet(ctx, x + g.width - 4, y + 2);
 }
@@ -445,8 +654,9 @@ const BIN_SPOKE: readonly (readonly [number, number])[] = [
   [0, -4],
 ];
 
-/** A rolling bin filling `box`: steel lid (its flat top is walkable), ribbed teal body, two wheels turned by `angle`. */
-export function drawBin(ctx: CanvasRenderingContext2D, box: Box, angle: number): void {
+/** A rolling bin filling `box`, in `look`: steel lid (its flat top is walkable), ribbed body, two wheels turned by `angle`. */
+export function drawBin(ctx: CanvasRenderingContext2D, box: Box, angle: number, look: string): void {
+  const paint: Ramp = BIN_LOOKS[look] ?? BIN_LOOKS['teal'];
   const x: number = Math.round(box.x);
   const y: number = Math.round(box.y);
   const w: number = box.width;
@@ -454,12 +664,12 @@ export function drawBin(ctx: CanvasRenderingContext2D, box: Box, angle: number):
   const wheelR: number = 7;
   const wheelY: number = y + h - wheelR;
   pxRect(ctx, x + 6, wheelY - 4, w - 12, 4, PIXEL['steelDark']);
-  pxBar(ctx, x + 2, y + 8, w - 4, h - 16, PIXEL['tealHi'], PIXEL['teal'], PIXEL['tealDark']);
+  pxBar(ctx, x + 2, y + 8, w - 4, h - 16, paint.hi, paint.mid, paint.dark);
   for (let rib: number = x + 10; rib < x + w - 6; rib += 10) {
-    pxRect(ctx, rib, y + 14, ART_PX, h - 26, PIXEL['tealDark']);
+    pxRect(ctx, rib, y + 14, ART_PX, h - 26, paint.dark);
   }
-  pxRect(ctx, x + 12, y + 24, 8, ART_PX, PIXEL['rust']);
-  pxRect(ctx, x + 30, y + 18, 6, ART_PX, PIXEL['rustDark']);
+  pxRect(ctx, x + 12, y + 24, 8, ART_PX, PIXEL['rustDark']);
+  pxRect(ctx, x + 30, y + 18, 6, ART_PX, PIXEL['ink']);
   pxBar(ctx, x, y, w, 10, PIXEL['steelLight'], PIXEL['steelHi'], PIXEL['steelDark']);
   pxRect(ctx, x + w / 2 - 6, y + 4, 12, ART_PX, PIXEL['steelDark']);
   const quarter: number = Math.PI / 2;
@@ -480,6 +690,7 @@ export function drawGadgetSlope(
   platforms: Platform[],
 ): void {
   const s: SlopeSurface = slopeSurface(g);
+  const style: SlopeLook = SLOPE_LOOKS[lookOf(g)] ?? SLOPE_LOOKS['steel'];
   // Struts near both ends and every SLOPE_STRUT_SPACING_PX between, each down to what is under it.
   const xs: number[] = [g.x + SLOPE_STRUT_INSET_PX];
   for (
@@ -497,16 +708,17 @@ export function drawGadgetSlope(
     const foot: number = strutFoot(platforms, x, from);
     if (foot <= from) continue;
     pxRect(ctx, x - 2, from, 4, foot - from, K);
-    pxRect(ctx, x - 2, from, 2, foot - from, PIXEL['steelDark']);
+    pxRect(ctx, x - 2, from, 2, foot - from, style.strut);
   }
   for (let x: number = g.x; x < g.x + g.width; x += ART_PX) {
     const top: number | null = slopeY(s, x + ART_PX / 2);
     if (top === null) continue;
     const y: number = Math.round(top / ART_PX) * ART_PX;
     pxRect(ctx, x, y, ART_PX, SLOPE_DECK_PX, K);
-    pxRect(ctx, x, y + ART_PX, ART_PX, SLOPE_DECK_PX - 2 * ART_PX, PIXEL['steel']);
-    pxRect(ctx, x, y, ART_PX, ART_PX, PIXEL['steelLight']);
-    if (Math.round(x - g.x) % 16 === 8) pxRect(ctx, x, y + 6, ART_PX, ART_PX, PIXEL['steelHi']);
+    const along: number = Math.round(x - g.x);
+    pxRect(ctx, x, y + ART_PX, ART_PX, SLOPE_DECK_PX - 2 * ART_PX, style.deck(along));
+    pxRect(ctx, x, y, ART_PX, ART_PX, style.top);
+    if (style.stud && along % 16 === 8) pxRect(ctx, x, y + 6, ART_PX, ART_PX, style.stud);
   }
 }
 
@@ -528,7 +740,7 @@ export function drawGadgetCage(
       { x: cx, y: box.y },
     ]);
   }
-  drawCageArt(ctx, box, !state.landed);
+  drawCageArt(ctx, box, !state.landed, lookOf(g));
 }
 
 /** A wire's dots (scenery), dim steel when off, lit orange while it carries the signal. */
@@ -587,7 +799,7 @@ export function drawGadgets(
         drawGadgetLever(ctx, g, state);
         break;
       case 'spring':
-        drawSpringBlock(ctx, g, padOffset(state));
+        drawSpringBlock(ctx, g, padOffset(state), lookOf(g));
         break;
       case 'slingshot':
         drawGadgetSlingshot(ctx, g, padOffset(state));
@@ -606,8 +818,8 @@ export function drawGadgets(
   for (const g of gadgets) {
     const body: GadgetBody | null | undefined = stateOf(states, g.id)?.body;
     if (!body) continue;
-    if (g.kind === 'boulder') drawBoulder(ctx, boulderBox(body), body.angle);
-    else if (g.kind === 'bin') drawBin(ctx, boulderBox(body), body.angle);
+    if (g.kind === 'boulder') drawBoulder(ctx, boulderBox(body), body.angle, lookOf(g));
+    else if (g.kind === 'bin') drawBin(ctx, boulderBox(body), body.angle, lookOf(g));
   }
 }
 

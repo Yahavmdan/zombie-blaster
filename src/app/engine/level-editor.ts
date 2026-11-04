@@ -14,7 +14,7 @@ import {
   SourceGadget,
   SpringPuzzleLayout,
 } from './engine-types';
-import { GADGET_KINDS, isRoller, isSource, isTargetKind, slopeY, slopesOf } from './gadgets';
+import { GADGET_KINDS, isRoller, isSource, isTargetKind, lookOf, slopeY, slopesOf } from './gadgets';
 import {
   GROUND_PLATFORM,
   LevelLayout,
@@ -83,22 +83,25 @@ export type EditorFieldKey =
   | 'content'
   | 'zombies'
   | 'gold'
-  | 'smashes';
+  | 'smashes'
+  | 'look';
 
 /**
- * One adjustable value: a number in min..max (steps of `step`), a toggle (value 1 or 0), or a
- * choice (value: the index into `options`).
+ * One adjustable value: a number in min..max (steps of `step`), a toggle (value 1 or 0), a choice
+ * (value: the index into `options`), or a look (a choice shown as pictures of `gadget`).
  */
 export interface EditorField {
   key: EditorFieldKey;
   label: string;
-  kind: 'number' | 'toggle' | 'choice';
+  kind: 'number' | 'toggle' | 'choice' | 'look';
   options: string[];
   value: number;
   min: number;
   max: number;
   step: number;
   unit: string;
+  /** A look: whose. */
+  gadget?: GadgetKind;
 }
 
 export const CAGE_CONTENTS: CageContent[] = ['zombies', 'loot', 'empty'];
@@ -256,6 +259,59 @@ function gadgetGrabBox(g: Gadget): Box {
   return isFlush(g)
     ? { x: g.x, y: g.y - FLUSH_GRAB_PX, width: g.width, height: 2 * FLUSH_GRAB_PX }
     : g;
+}
+
+/** A page rectangle's size: the window, for `popupBeside`. */
+export interface PageSize {
+  width: number;
+  height: number;
+}
+
+function overlapArea(a: Box, b: Box): number {
+  const w: number = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const h: number = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+/**
+ * Where the adjust popup opens (page px) so the thing it adjusts stays in sight: right of `box`,
+ * else left of it, below, above; all kept in the window. A thing that leaves no such room gets the
+ * spot that covers least of it.
+ */
+export function popupBeside(box: Box, view: PageSize): { left: number; top: number } {
+  const w: number = GAME_CONSTANTS.DEV_EDITOR_POPUP_W_PX;
+  const h: number = GAME_CONSTANTS.DEV_EDITOR_POPUP_H_PX;
+  const gap: number = GAME_CONSTANTS.DEV_EDITOR_POPUP_GAP_PX;
+  const midLeft: number = box.x + box.width / 2 - w / 2;
+  const midTop: number = box.y + box.height / 2 - h / 2;
+  const spots: { left: number; top: number }[] = [
+    { left: box.x + box.width + gap, top: midTop },
+    { left: box.x - gap - w, top: midTop },
+    { left: midLeft, top: box.y + box.height + gap },
+    { left: midLeft, top: box.y - gap - h },
+  ].map((s: { left: number; top: number }): { left: number; top: number } => ({
+    left: clamp(s.left, 0, view.width - w),
+    top: clamp(s.top, 0, view.height - h),
+  }));
+  let best: { left: number; top: number } = spots[0];
+  let least: number = Infinity;
+  for (const s of spots) {
+    const covered: number = overlapArea(box, { x: s.left, y: s.top, width: w, height: h });
+    if (covered < least) {
+      best = s;
+      least = covered;
+    }
+  }
+  return best;
+}
+
+/** The box a thing's art covers: its `itemBox`, with a scale's post, dial and readout. */
+export function itemArtBox(layout: LevelLayout, ref: EditorRef): Box | null {
+  const box: Box | null = itemBox(layout, ref);
+  const g: Gadget | null = gadgetOf(layout, ref);
+  if (!box || g?.kind !== 'scale') return box;
+  const rise: number = GAME_CONSTANTS.DEV_EDITOR_SCALE_ART_PX;
+  return { x: g.x, y: g.y - rise, width: g.width + rise / 2, height: rise + g.height };
 }
 
 /** The box a ref covers (outline, hit area); null when it is gone. */
@@ -1105,7 +1161,21 @@ function heightField(box: Box): EditorField {
   );
 }
 
+/** How it is painted: one of its kind's looks, picked by their pictures. */
+function lookField(g: Gadget): EditorField {
+  const looks: readonly string[] = GAME_CONSTANTS.GADGET_LOOKS[g.kind];
+  return {
+    ...choiceField('look', 'Look', [...looks], looks.indexOf(lookOf(g))),
+    kind: 'look',
+    gadget: g.kind,
+  };
+}
+
 function gadgetFields(g: Gadget): EditorField[] {
+  return [lookField(g), ...kindFields(g)];
+}
+
+function kindFields(g: Gadget): EditorField[] {
   const slim: number = 2 * GADGET_WIDTH_STEP_PX;
   switch (g.kind) {
     case 'boulder':
@@ -1266,7 +1336,11 @@ function setHeight(box: Box, height: number): void {
 }
 
 function setGadgetField(g: Gadget, key: EditorFieldKey, v: number): void {
-  if (key === 'width') g.width = v;
+  if (key === 'look') {
+    // The first look is the default: an export leaves it out.
+    if (v === 0) delete g.look;
+    else g.look = GAME_CONSTANTS.GADGET_LOOKS[g.kind][v];
+  } else if (key === 'width') g.width = v;
   else if (key === 'kg' && (isRoller(g) || g.kind === 'button' || g.kind === 'scale'))
     g.kg = v;
   else if (key === 'power' && (g.kind === 'spring' || g.kind === 'slingshot')) g.power = v;
@@ -1439,7 +1513,20 @@ function readTargets(v: Json, what: string): string[] {
   return [...new Set(t as string[])];
 }
 
+/** A gadget as exported: its kind's fields, and its look when it has one. */
 function readGadget(v: unknown, what: string): Gadget {
+  const g: Gadget = readKind(v, what);
+  const look: unknown = (v as Json)['look'];
+  if (look === undefined) return g;
+  const looks: readonly string[] = GAME_CONSTANTS.GADGET_LOOKS[g.kind];
+  if (typeof look !== 'string' || !looks.includes(look)) {
+    throw new Error(`${what}.look: ${looks.join(', ')}`);
+  }
+  if (look !== looks[0]) g.look = look;
+  return g;
+}
+
+function readKind(v: unknown, what: string): Gadget {
   const box: Platform = readBox(v, what);
   const o: Json = v as Json;
   const id: unknown = o['id'];

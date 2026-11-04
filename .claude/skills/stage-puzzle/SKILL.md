@@ -300,8 +300,8 @@ the dots show in the game and light up). Gadgets live in `gadgets.ts` / `gadget-
   `DEV_EDITOR_HISTORY_STEPS` (30) changes (`LevelEditorSystem.play(tag)` records each; a drag or a
   slider is one step). Erasing the hanging exit hides it (`exitHidden`, its wires go); the Exit tool
   puts it back; the bar warns when the design has no way out (no exit and no exit door).
-- **Middle click** in the editor opens a popup by the cursor to adjust the thing clicked (sliders
-  and numbers, same list in the bar's selection): scale/button kg, spring/slingshot power and angle
+- **Middle click** in the editor opens a popup beside the thing clicked, never on it (`popupBeside`: right, left, below, above, kept in the window; `itemArtBox` adds a scale's post), to adjust it (sliders
+  and numbers, same list in the bar's selection): its **look** first (pictures, `GADGET_LOOKS` in constants, painted from `gadget-looks.ts`; every gadget kind has 4; art only, kept on the gadget as `look`, left out of the export when it is the default; a new gadget kind needs its looks), scale/button kg, spring/slingshot power and angle
   (the editor draws where a boulder would fly), boulder weight (heavier rolls slower off a swing or
   blast), wall/door/crack wall width and height (the foot stays), crack band height above the foot
   and its size, door latch, lever "starts on", platform/rail width, ladder length. New adjustable

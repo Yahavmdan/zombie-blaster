@@ -92,7 +92,7 @@ import { LoosePropSystem } from './loose-prop-system';
 import { ExplodingBarrelSystem } from './exploding-barrel-system';
 import { GadgetSystem } from './gadget-system';
 import { ClueSceneSystem } from './clue-scene-system';
-import { exitLocked, leavesThroughDoor } from './gadgets';
+import { crackLookAt, exitLocked, leavesThroughDoor } from './gadgets';
 import { CarryPose } from './corpse-carry';
 import { CorpseDrape } from './corpse-drape';
 import { SCALE_MAX_KG, flingIfOnSpring, freshLaunch, newSpringState } from './spring-puzzle';
@@ -1197,6 +1197,19 @@ export class GameEngine implements IGameEngine {
     if (this.attackCooldown > 0) this.attackCooldown--;
   }
 
+  /** A box of the game world where it is on the page (the canvas is stretched to it). */
+  pageBox(box: Box): Box {
+    const page: DOMRect = this.canvas.getBoundingClientRect();
+    const sx: number = page.width / GAME_CONSTANTS.CANVAS_WIDTH;
+    const sy: number = page.height / GAME_CONSTANTS.CANVAS_HEIGHT;
+    return {
+      x: page.left + box.x * sx,
+      y: page.top + box.y * sy,
+      width: box.width * sx,
+      height: box.height * sy,
+    };
+  }
+
   getStateSnapshot(): { player: CharacterState; zombies: ZombieState[]; corpses: ZombieCorpse[]; props: LooseProp[]; floor: number; layoutSeed: number; boulder: BoulderState | null; spring: SpringState | null; cages: CagePuzzleState | null; plate: PlateState | null; gadgets: GadgetState[]; attacks: RemotePlayerAttack[]; revives: string[]; specialDropActivations: SpecialDropType[]; activeSpecialEffects: ActiveSpecialEffect[]; vfxEvents: VfxEvent[]; pullEvents: Array<MagnetPullRequest>; zombieEffects: ZombieEffectRequest[]; spitterProjectiles: SpitterProjectile[]; dragonProjectiles: DragonProjectile[] } | null {
     if (!this.player) return null;
     const attacks: RemotePlayerAttack[] = [...this.pendingRemoteAttacks];
@@ -1554,6 +1567,7 @@ export class GameEngine implements IGameEngine {
             this.vfxSystem.spawnCrackBreak(
               { x: evt.x, y: evt.y, width: evt.endX! - evt.x, height: evt.targetY! - evt.y },
               evt.dir === -1 ? -1 : 1,
+              crackLookAt(this.gadgets, evt.x, evt.y),
             );
           }
           break;

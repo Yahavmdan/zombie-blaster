@@ -39,10 +39,10 @@
       </button>
       <button
         class="px-btn px-btn--sm px-btn--accent le-rail__btn"
-        title="Size, weight, power, wires: what middle click opens on a PC"
+        title="Look, size, weight, power, wires: what middle click opens on a PC"
         data-testid="level-editor-rail-button-adjust"
         [disabled]="!selection()"
-        (click)="adjustSelected($event)"
+        (click)="adjustSelected()"
       >
         Adjust
       </button>
@@ -332,6 +332,30 @@
       >
         {{ f.label }}: {{ f.value === 1 ? 'yes' : 'no' }}
       </button>
+    } @else if (f.kind === 'look') {
+      <div class="le-field">
+        <span class="le-field__label">{{ f.label }}: {{ f.options[f.value] }}</span>
+        <span class="le-looks">
+          @for (option of f.options; track option; let i = $index) {
+            <button
+              class="px-btn px-btn--sm px-btn--ghost le-look"
+              [class.px-btn--good]="f.value === i"
+              [attr.title]="option"
+              [attr.aria-label]="option"
+              [attr.data-testid]="prefix + '-look-' + option"
+              (click)="setField(f.key, i)"
+            >
+              <canvas
+                class="le-look__icon"
+                width="48"
+                height="48"
+                [appToolIcon]="f.gadget"
+                [appToolIconLook]="option"
+              ></canvas>
+            </button>
+          }
+        </span>
+      </div>
     } @else {
       <div class="le-field">
         <span class="le-field__label">{{ f.label }}</span>
@@ -354,7 +378,7 @@
   }
 </ng-template>
 
-<!-- Keyed by the click: a new middle click opens it afresh there, not where it was last dragged. -->
+<!-- Keyed by the thing: another thing opens it afresh beside that one, not where it was last dragged. -->
 @for (ins of inspectors(); track ins.key) {
   <div
     class="le-props px-panel"

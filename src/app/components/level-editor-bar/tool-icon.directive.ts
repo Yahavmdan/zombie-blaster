@@ -8,11 +8,13 @@ import { drawToolIcon } from '../../engine/tool-icons';
 })
 export class ToolIconDirective {
   readonly appToolIcon: InputSignal<EditorTool> = input.required<EditorTool>();
+  /** Draw a gadget in this look, close up, instead of as its tool. */
+  readonly appToolIconLook: InputSignal<string | undefined> = input<string | undefined>();
 
   private readonly canvas: HTMLCanvasElement =
     inject<ElementRef<HTMLCanvasElement>>(ElementRef).nativeElement;
 
   constructor() {
-    effect((): void => drawToolIcon(this.canvas, this.appToolIcon()));
+    effect((): void => drawToolIcon(this.canvas, this.appToolIcon(), this.appToolIconLook()));
   }
 }

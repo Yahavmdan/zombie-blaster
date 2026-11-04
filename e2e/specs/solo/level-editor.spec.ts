@@ -51,6 +51,11 @@ function platformAround(s: E2eSnapshot, x: number, y: number): Box | undefined {
   );
 }
 
+/** The design as its autosaved draft. */
+async function exported(page: Page): Promise<string> {
+  return page.evaluate((): string => localStorage.getItem('zb-level-editor-draft') ?? '{}');
+}
+
 /** A quiet floor to design on: no zombies, god mode. */
 async function quiet(p: GamePlayer): Promise<void> {
   await p.probe.setGodMode(true);
@@ -247,6 +252,62 @@ test.describe('dev level editor', { tag: '@solo' }, (): void => {
     await test
       .info()
       .attach('editor', { path: test.info().outputPath('editor.png'), contentType: 'image/png' });
+  });
+
+  test('a middle click opens beside a thing, not on it, and picks its look from pictures', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await solo('warrior');
+    await quiet(p);
+    const bar: Locator = await openEditor(p);
+    await bar.getByTestId('level-editor-button-clear').click();
+    await tool(p.page, 'button');
+    await clickMap(p.page, 400, 600);
+    await tool(p.page, 'door');
+    await clickMap(p.page, 1200, 600);
+    await tool(p.page, 'select');
+    const gadgets: E2eGadgetView[] = (await p.probe.state()).gadgets;
+    const button: E2eGadgetView = gadgets.find((g: E2eGadgetView): boolean => g.kind === 'button')!;
+    const door: E2eGadgetView = gadgets.find((g: E2eGadgetView): boolean => g.kind === 'door')!;
+
+    const popup: Locator = p.page.getByTestId('level-editor-panel-props');
+    const clearOf = async (g: E2eGadgetView): Promise<void> => {
+      const box: { x: number; y: number; width: number; height: number } | null =
+        await popup.boundingBox();
+      const a: { x: number; y: number } = await pagePoint(p.page, g.box.x, g.box.y);
+      const b: { x: number; y: number } = await pagePoint(
+        p.page,
+        g.box.x + g.box.width,
+        g.box.y + g.box.height,
+      );
+      const apart: boolean =
+        box!.x >= b.x || box!.x + box!.width <= a.x || box!.y >= b.y || box!.y + box!.height <= a.y;
+      expect(apart, `popup ${JSON.stringify(box)} covers ${g.kind}`).toBe(true);
+    };
+
+    await clickMap(p.page, button.box.x + button.box.width / 2, button.box.y, 'middle');
+    await expect(popup).toBeVisible();
+    await clearOf(button);
+    await expect(popup.locator('.le-look canvas')).toHaveCount(4);
+    await popup.getByTestId('level-editor-props-look-green').click();
+    await expect
+      .poll(async (): Promise<string | undefined> => {
+        const list: { kind: string; look?: string }[] = JSON.parse(await exported(p.page)).gadgets;
+        return list.find((g: { kind: string }): boolean => g.kind === 'button')?.look;
+      })
+      .toBe('green');
+
+    // A door at the window's right edge: the popup opens on its left.
+    await clickMap(p.page, door.box.x + door.box.width / 2, door.box.y + door.box.height / 2, 'middle');
+    await expect(popup.getByTestId('level-editor-text-props-title')).toContainText('Door');
+    await clearOf(door);
+    await popup.getByTestId('level-editor-props-look-portcullis').click();
+    await p.page.screenshot({ path: test.info().outputPath('looks.png') });
+    await test
+      .info()
+      .attach('looks', { path: test.info().outputPath('looks.png'), contentType: 'image/png' });
   });
 
   test('a middle click opens a thing to adjust it: scale weight, wall height, slingshot angle', async ({
