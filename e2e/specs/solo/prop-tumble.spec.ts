@@ -6,6 +6,7 @@ import { drawnGeometry, expectArtMatchesCollision } from '../../support/level-ge
 import { layoutWhere } from '../../support/navigation';
 import {
   barrelWithOpenSkyBeside,
+  clearSpot,
   findProp,
   isBarrel,
   LevelProp,
@@ -13,7 +14,10 @@ import {
   overhangSetup,
   pickableOnGround,
   propCenterX,
+  stackPair,
+  StackPair,
   standLeftOf,
+  throwOnto,
 } from '../../support/props';
 
 test.describe('tumbling props', { tag: '@solo' }, (): void => {
@@ -104,6 +108,34 @@ test.describe('tumbling props', { tag: '@solo' }, (): void => {
     expect(rollTurn, 'turning while it rolled').toBeGreaterThan(0.5);
     expect(lying.angle).toBe(0);
   });
+
+  for (const kind of ['barrel', 'box']) {
+    test(`a thrown ${kind} lands on a box and stays on top, upright, standing still`, async ({
+      solo,
+    }: {
+      solo: SoloFactory;
+    }, testInfo: TestInfo): Promise<void> => {
+      test.setTimeout(90_000);
+      const p: GamePlayer = await solo('warrior');
+      await p.probe.setGodMode(true);
+      await p.probe.pauseZombieSpawns(true);
+      const ofKind: (q: LevelProp) => boolean = (q: LevelProp): boolean => q.kind.startsWith(kind);
+      const s0: E2eSnapshot = await layoutWhere(
+        p,
+        `a box, a ${kind} and open ground`,
+        (s: E2eSnapshot): boolean => stackPair(s, ofKind) !== undefined,
+      );
+      const pair: StackPair = stackPair(s0, ofKind)!;
+      const base: LevelProp = await clearSpot(p, pair);
+      const stacked: LevelProp = await throwOnto(p, pair.thrown.id!, base);
+      await p.attachCanvas(testInfo, 'prop stacked by a throw');
+
+      expect(stacked.y + stacked.height, 'it lies on top of the other').toBe(base.y);
+      expect(Math.abs(propCenterX(stacked) - propCenterX(base))).toBeLessThanOrEqual(base.width / 2);
+      expect(stacked.angle).toBe(0);
+      expectArtMatchesCollision(await drawnGeometry(p, 'stacked'), 'stacked');
+    });
+  }
 
   test('a barrel blast throws a box lying beside it tumbling away; it lands upright', async ({
     solo,

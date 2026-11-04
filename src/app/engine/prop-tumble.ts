@@ -16,6 +16,8 @@ export interface TumbleSurface {
   y: number;
   /** How far below the surface the prop's bottom may have been a tick ago and still land on it. */
   tolerance: number;
+  /** Another prop: what lands on it grips instead of skidding on (`stackedSpeed`). */
+  grip: boolean;
 }
 
 /** Tipping off an edge: it turns around `pivot`, the edge it rests on. */
@@ -98,6 +100,42 @@ export function supportSpan(
       : { left: l, right: r };
   }
   return span;
+}
+
+/** The whole tops of the props right under it at `y`, or null when it isn't on a prop. */
+export function gripSpan(
+  p: LooseProp,
+  surfaces: TumbleSurface[],
+  y: number,
+  round: boolean,
+): Span | null {
+  const half: number = turnedHalfWidth(p, round);
+  const cx: number = centerX(p);
+  let span: Span | null = null;
+  for (const s of surfaces) {
+    if (!s.grip || Math.abs(s.y - y) > GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE) continue;
+    if (cx + half <= s.x || cx - half >= s.x + s.width) continue;
+    const right: number = s.x + s.width;
+    span = span
+      ? { left: Math.min(span.left, s.x), right: Math.max(span.right, right) }
+      : { left: s.x, right };
+  }
+  return span;
+}
+
+/**
+ * The sideways speed a prop keeps landing on top of props (`span`): most of it is gone, and one
+ * that would stop a little past the edge is steered to stop just inside it, so it looks like it
+ * bedded down. One that would stop further out keeps going and tips off.
+ */
+export function stackedSpeed(p: LooseProp, span: Span): number {
+  const speed: number = p.velocityX * GAME_CONSTANTS.PROP_STACK_LAND_KEEP_SPEED;
+  const glide: number = 1 - GAME_CONSTANTS.PROP_STACK_FRICTION;
+  const stops: number = centerX(p) + speed / glide;
+  const seat: number = GAME_CONSTANTS.PROP_STACK_SEAT_PX;
+  const seated: number = Math.min(span.right - seat, Math.max(span.left + seat, stops));
+  if (Math.abs(stops - seated) > GAME_CONSTANTS.PROP_STACK_CATCH_PX) return speed;
+  return (seated - centerX(p)) * glide;
 }
 
 /** The side (1 right, -1 left) a prop whose center is off its support tips to, or 0 when it is balanced. */

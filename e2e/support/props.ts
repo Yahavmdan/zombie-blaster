@@ -1,7 +1,7 @@
-import { GamePlayer } from './game-player';
+import { GamePlayer, KEYS } from './game-player';
 import { E2eCorpseView, E2eSnapshot } from './probe';
 import { WORLD } from './invariants';
-import { GROUND, LevelPlatform, levelPlatforms } from './navigation';
+import { GROUND, LevelPlatform, levelPlatforms, openGroundX } from './navigation';
 
 /** A map prop as the probe sees it (pickable ones where they are now). */
 export type LevelProp = E2eSnapshot['level']['props'][number];
@@ -122,6 +122,108 @@ export function overhangSetup(s: E2eSnapshot): Overhang | undefined {
     dropX: ledge.x + ledge.width - onLedge,
     dropY: ledge.y - rail.height - 10,
   };
+}
+
+/** A box or barrel to lie on open ground and another to throw onto it, and where the first goes. */
+export interface StackPair {
+  base: LevelProp;
+  thrown: LevelProp;
+  baseX: number;
+}
+
+/** Open ground this wide leaves room for the walk up, the throw and the base prop. */
+const STACK_SPAN_PX: number = 300;
+
+/**
+ * A box to stack on (a swing beside a barrel would light it), another pickable prop of the accepted
+ * kinds to throw, and open ground with nothing above it; undefined when the layout has none.
+ */
+export function stackPair(
+  s: E2eSnapshot,
+  accept: (q: LevelProp) => boolean = (): boolean => true,
+): StackPair | undefined {
+  const x: number | null = openGroundX(s, STACK_SPAN_PX);
+  if (x === null) return undefined;
+  const loose: LevelProp[] = s.level.props.filter(
+    (q: LevelProp): boolean =>
+      q.kind !== 'rail' &&
+      q.pickable &&
+      q.resting &&
+      q.carrierId === null &&
+      !hasPropOnTop(s, q) &&
+      !spanOverlaps(q, x, x + STACK_SPAN_PX + 60),
+  );
+  const base: LevelProp | undefined = loose.find((q: LevelProp): boolean => !isBarrel(q));
+  const thrown: LevelProp | undefined = loose.find((q: LevelProp): boolean => q !== base && accept(q));
+  if (!base || !thrown) return undefined;
+  return { base, thrown, baseX: x + STACK_SPAN_PX - 60 };
+}
+
+/** Setup: lays the base prop on the pair's open ground and clears the props around it. */
+export async function clearSpot(p: GamePlayer, pair: StackPair): Promise<LevelProp> {
+  const id: string = pair.base.id!;
+  await p.probe.clearPickables(pair.baseX - STACK_SPAN_PX + 60, pair.baseX + 60);
+  await p.probe.dropProp(id, pair.baseX, WORLD.groundY - pair.base.height - 4);
+  const placed: E2eSnapshot = await p.probe.waitFor(
+    'the base prop lies on the open ground',
+    (s: E2eSnapshot): boolean => findProp(s, id)?.resting === true,
+  );
+  return findProp(placed, id)!;
+}
+
+/**
+ * The thrower stands with their middle this far left of the target's: a throw from the ground
+ * comes down about here on a one-prop stack.
+ */
+const THROW_REACH_PX: number = 60;
+
+/** The prop to throw is picked up this far before the throwing spot. */
+const PICK_UP_CLEAR_PX: number = 70;
+
+/**
+ * The player picks the prop up and throws it right, from where the throw comes down on `target`;
+ * returns it once it rests. Only the setup teleports: the pick-up and the throw are real keys, the
+ * carry key both times (a barrel thrown with the attack key is lit).
+ */
+export async function throwOnto(p: GamePlayer, id: string, target: LevelProp): Promise<LevelProp> {
+  const standX: number = propCenterX(target) - THROW_REACH_PX - WORLD.playerWidth / 2;
+  await p.face('right');
+  const before: LevelProp = findProp(await p.probe.state(), id)!;
+  // Picked up clear of the target, so E can't take that one instead.
+  const pickX: number = standX - PICK_UP_CLEAR_PX;
+  await p.probe.dropProp(id, pickX, WORLD.groundY - before.height - 4);
+  await p.probe.waitFor(
+    'the prop to throw lies by the spot',
+    (s: E2eSnapshot): boolean => findProp(s, id)?.resting === true,
+  );
+  await p.probe.teleport(pickX - WORLD.playerWidth - 1, WORLD.groundY - WORLD.playerHeight);
+  const onGround: (s: E2eSnapshot) => boolean = (s: E2eSnapshot): boolean =>
+    s.player!.isGrounded && s.player!.y + WORLD.playerHeight === WORLD.groundY;
+  await p.probe.waitFor('standing by the prop', onGround);
+  await p.wait(200);
+  await p.press(KEYS.carry, 70);
+  await p.probe.waitFor(
+    'the prop is picked up',
+    (s: E2eSnapshot): boolean => findProp(s, id)?.carrierId === s.player!.id,
+  );
+  await p.probe.teleport(standX, WORLD.groundY - WORLD.playerHeight);
+  await p.probe.waitFor('standing at the throwing spot', onGround);
+  await p.wait(200);
+  // Under suite load a press can fall between ticks: press until it leaves the hands.
+  for (let attempt: number = 0; attempt < 3; attempt++) {
+    await p.press(KEYS.carry, 70);
+    await p.wait(150);
+    if (findProp(await p.probe.state(), id)?.carrierId === null) break;
+  }
+  const rested: E2eSnapshot = await p.probe.waitFor(
+    'the thrown prop comes to rest',
+    (s: E2eSnapshot): boolean => {
+      const q: LevelProp | undefined = findProp(s, id);
+      return !!q && q.carrierId === null && q.resting;
+    },
+    { timeoutMs: 10_000 },
+  );
+  return findProp(rested, id)!;
 }
 
 /** Corpses dropped this far right of a barrel's center land beside it, in its blast. */

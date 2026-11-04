@@ -5,10 +5,12 @@ import {
   bottomOf,
   centerX,
   centerY,
+  gripSpan,
   isResting,
   limitTilt,
   settleUpright,
   Span,
+  stackedSpeed,
   startTip,
   supportSpan,
   tickTip,
@@ -19,7 +21,8 @@ import {
   wrapAngle,
 } from './prop-tumble';
 
-const LEDGE: TumbleSurface = { x: 100, width: 200, y: 500, tolerance: 6 };
+const LEDGE: TumbleSurface = { x: 100, width: 200, y: 500, tolerance: 6, grip: false };
+const TOP: TumbleSurface = { x: 100, width: 30, y: 500, tolerance: 6, grip: true };
 
 /** A prop lying upright with its bottom on y, its left side at x. */
 function prop(x: number, y: number, width: number, height: number): LooseProp {
@@ -116,6 +119,49 @@ describe('prop tumbling', (): void => {
   it('tunables live in game constants', (): void => {
     expect(GAME_CONSTANTS.PROP_TIP_RELEASE_ANGLE).toBeGreaterThan(0);
     expect(GAME_CONSTANTS.PROP_ROLL_FRICTION).toBeGreaterThan(GAME_CONSTANTS.PROP_SLIDE_FRICTION);
+  });
+});
+
+describe('stacking props', (): void => {
+  const SEAT: number = GAME_CONSTANTS.PROP_STACK_SEAT_PX;
+  const GLIDE: number = 1 - GAME_CONSTANTS.PROP_STACK_FRICTION;
+  const SPAN: Span = { left: TOP.x, right: TOP.x + TOP.width };
+
+  /** A 28 px box with its middle at cx, moving sideways at speed. */
+  function landing(cx: number, speed: number): LooseProp {
+    return { ...prop(cx - 14, 500, 28, 22), velocityX: speed, isGrounded: false };
+  }
+
+  /** Where a prop leaving at this speed stops under the stack friction. */
+  function stopsAt(cx: number, speed: number): number {
+    return cx + speed / GLIDE;
+  }
+
+  it('only props grip, and a prop grips on the whole top under it', (): void => {
+    expect(gripSpan(landing(115, 0), [LEDGE], 500, false)).toBeNull();
+    expect(gripSpan(landing(115, 0), [TOP], 500, false)).toEqual(SPAN);
+    expect(gripSpan(landing(400, 0), [TOP], 500, false)).toBeNull();
+    expect(gripSpan(landing(115, 0), [{ ...TOP, y: 470 }], 500, false)).toBeNull();
+  });
+
+  it('a prop landing square on another loses most of its speed and stays on', (): void => {
+    const speed: number = stackedSpeed(landing(112, 4), SPAN);
+    expect(speed).toBeCloseTo(4 * GAME_CONSTANTS.PROP_STACK_LAND_KEEP_SPEED);
+    expect(stopsAt(112, speed)).toBeLessThanOrEqual(SPAN.right - SEAT);
+  });
+
+  it('a prop that would stop a little past the edge is steered just inside it, both ways', (): void => {
+    const off: number = GAME_CONSTANTS.PROP_STACK_CATCH_PX - 1;
+    const right: number = SPAN.right - SEAT + off;
+    expect(stopsAt(right, stackedSpeed(landing(right, 0), SPAN))).toBeCloseTo(SPAN.right - SEAT);
+    const left: number = SPAN.left + SEAT - off;
+    expect(stopsAt(left, stackedSpeed(landing(left, 0), SPAN))).toBeCloseTo(SPAN.left + SEAT);
+  });
+
+  it('a prop that would stop too far out is not caught: it keeps going and tips off', (): void => {
+    const far: number = SPAN.right - SEAT + GAME_CONSTANTS.PROP_STACK_CATCH_PX + 1;
+    expect(stackedSpeed(landing(far, 0), SPAN)).toBe(0);
+    expect(stackedSpeed(landing(far, 2), SPAN)).toBeCloseTo(2 * GAME_CONSTANTS.PROP_STACK_LAND_KEEP_SPEED);
   });
 });
 

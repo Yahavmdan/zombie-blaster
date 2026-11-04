@@ -4,7 +4,16 @@ import { RoomSession } from '../../support/room';
 import { GamePlayer } from '../../support/game-player';
 import { E2eSnapshot } from '../../support/probe';
 import { layoutWhere } from '../../support/navigation';
-import { findProp, LevelProp, Overhang, overhangSetup } from '../../support/props';
+import {
+  clearSpot,
+  findProp,
+  LevelProp,
+  Overhang,
+  overhangSetup,
+  stackPair,
+  StackPair,
+  throwOnto,
+} from '../../support/props';
 
 test.describe('tumbling props in co-op', { tag: '@online' }, (): void => {
   test('a rail tipping off a ledge on the host tips on the guest screen too and rests in the same spot', async ({
@@ -69,5 +78,46 @@ test.describe('tumbling props in co-op', { tag: '@online' }, (): void => {
     expect(rested.angle).toBe(0);
     await host.attachCanvas(testInfo, 'host: rail tipped off');
     await guest.attachCanvas(testInfo, 'guest: rail tipped off');
+  });
+
+  test('a prop the host throws onto another lies on top of it on the guest screen too', async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }, testInfo: TestInfo): Promise<void> => {
+    test.setTimeout(120_000);
+    const session: RoomSession = await room(
+      [
+        { name: 'Host', classId: 'warrior' },
+        { name: 'Guest', classId: 'warrior' },
+      ],
+      'stack',
+    );
+    const host: GamePlayer = session.host;
+    const guest: GamePlayer = session.guests[0];
+    await host.probe.setGodMode(true);
+    await guest.probe.setGodMode(true);
+    await host.probe.pauseZombieSpawns(true);
+
+    const s0: E2eSnapshot = await layoutWhere(
+      host,
+      'two loose props and open ground',
+      (s: E2eSnapshot): boolean => stackPair(s) !== undefined,
+    );
+    const pair: StackPair = stackPair(s0)!;
+    const base: LevelProp = await clearSpot(host, pair);
+    const stacked: LevelProp = await throwOnto(host, pair.thrown.id!, base);
+    expect(stacked.y + stacked.height).toBe(base.y);
+
+    await guest.probe.waitFor(
+      'the guest sees it rest on top in the same spot',
+      (s: E2eSnapshot): boolean => {
+        const q: LevelProp | undefined = findProp(s, stacked.id!);
+        return !!q && q.resting && q.x === stacked.x && q.y === stacked.y;
+      },
+      { timeoutMs: 5_000 },
+    );
+    await host.attachCanvas(testInfo, 'host: prop stacked');
+    await guest.attachCanvas(testInfo, 'guest: prop stacked');
   });
 });

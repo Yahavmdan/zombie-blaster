@@ -211,6 +211,8 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   then solid). Wait for `resting`, not `isGrounded` (a landed barrel still rolls). Setup:
   `probe.dropProp(id, x, y)` drops one upright from x, y; `overhangSetup(s)` finds a rail + ledge
   to drop it hanging off. A thrown or blasted rail only tilts (<= `PROP_RAIL_MAX_TILT`, 0.45 rad).
+  A prop landing on another grips (`PROP_STACK_*`): a throw from ~42-84 px (thrower's middle to the
+  target's) ends on top. `stackPair`/`clearSpot`/`throwOnto` set it up. Throw barrels with `KEYS.carry`: the attack key lights them.
   Specs: `solo/prop-tumble.spec.ts`, `online/prop-tumble-sync.spec.ts`. Corpses tumble too:
   `corpseViews[].angle` (tossed, blasted or killed flying: tilts up to `CORPSE_MAX_TILT`, bounces off
   hard landings, slides, flops flat). Sample with `intervalMs: 10` (a toss flies ~25 ticks) and wait
