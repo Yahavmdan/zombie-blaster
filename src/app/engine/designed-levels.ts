@@ -57,11 +57,9 @@ const FLOOR_1: LevelLayout = {
     },
     { id: 'g2', kind: 'button', kg: 10, targets: ['g1'], x: 376, y: 508, width: 48, height: 6 },
   ],
-  // No zombie rises on the button's ledge (a random spawn there would open the door for free).
-  noSpawn: [
-    { x: 304, y: 412, width: 128, height: 128 },
-    { x: 176, y: 412, width: 128, height: 128 },
-  ],
+  // No zombie rises on the button's ledge or the two ledges above it: a random spawn there would
+  // reach the button and open the door for free. The ground under the zone stays open.
+  noSpawn: [{ x: 168, y: 56, width: 448, height: 480 }],
 };
 
 /** Floors made in the level editor: `levelFor` plays a copy of these instead of a generated one. */
