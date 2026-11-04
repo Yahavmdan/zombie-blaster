@@ -55,6 +55,8 @@ export async function startRoom(
 
   await Promise.all(players.map((p: GamePlayer): Promise<void> => p.page.waitForURL(/\/game/)));
   await Promise.all(players.map((p: GamePlayer): Promise<void> => p.probe.waitForReady()));
+  // Specs play the generated floors (every page builds its floor itself).
+  await Promise.all(players.map((p: GamePlayer): Promise<void> => p.probe.setDesignedFloors(false)));
 
   await host.probe.waitFor('host role', (s: E2eSnapshot): boolean => s.role === 'host');
   for (const guest of guests) {

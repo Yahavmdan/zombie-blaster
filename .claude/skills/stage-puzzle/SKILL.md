@@ -289,7 +289,7 @@ the dots show in the game and light up). Gadgets live in `gadgets.ts` / `gadget-
 - Physics added for them: players bump their heads on solids' undersides (`PhysicsSystem.bumpHead`).
 - **No-spawn zone** (Map tool): a box (`layout.noSpawn`) where no regular zombie rises, drawn
   hatched red only in the editor; drag any side to size it. Use it to keep random spawns off a
-  puzzle source (floor 1 covers the button's ledge: a zombie spawning there opened the door for a
+  puzzle source (floor 1 covers the button's ledge and those above it: a zombie spawning there opened the door for a
   player who just waited). `spawn-zones.ts`; scripted (clue) and cage spawns ignore zones.
 - **Clue scene** (`layout.clueScene`, no editor tool: hand-edit the JSON): a scripted zombie rises at
   `spawnX`/`spawnY`, walks onto gadget `gadgetId` ignoring players, holds it 4 s, then hunts. The
@@ -322,7 +322,7 @@ through `GameEngine.useCustomLevel`, for the floor it was made on only.
   (`src/app/engine/designed-levels.ts`, keyed by floor; give it a `hint`: the subtitle under the
   floor title). The engine plays `levelFor(seed, floor)`: a copy of the designed floor, else
   `generateLevel` (which stays purely procedural, so its rule tests still sweep every floor).
-  Floor 1 is designed (button on the low left ledge + exit door, a clue scene: a scripted zombie drops from the middle ledge onto the button and holds it 4 s, `clue-scene-system.ts`; and no-spawn zones over the button ledge). Engine unit tests that need a generated floor set
+  Floor 2 is designed too (a tall door g1 and exit door g2 on the right, buttons g4 and g3 on the two high ledges, 60 kg each, no ladders; the generated boulder floor stays behind `designedFloors = false`, which unit specs and e2e fixtures use). Floor 1 is designed (button on the low left ledge + exit door, a clue scene: a scripted zombie drops from the middle ledge onto the button and holds it 4 s, `clue-scene-system.ts`; and a no-spawn zone over the button ledge and the two ledges above it). Engine unit tests that need a generated floor set
   `engine.floor = GENERATED_FLOOR` (6) and `applyLevel()`; a client engine copies the host's floor. Every client has the same constant,
   so nothing new syncs. Then: `levelViolations` holds generator rules (tiers, exit gaps, puzzle on its
   floor) that a designed floor may break on purpose: check them for that floor, keep the ones that

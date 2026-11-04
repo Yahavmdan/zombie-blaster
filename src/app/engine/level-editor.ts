@@ -204,13 +204,13 @@ function gadgets(layout: LevelLayout): Gadget[] {
   return layout.gadgets;
 }
 
-/** Gadgets whose box is solid where it stands (things rest on their tops). An exit door is walked through. */
+/** Gadgets whose box is solid where it stands (things rest on their tops). */
 function solidGadgets(layout: LevelLayout, skip: number): Platform[] {
   return gadgets(layout).filter(
     (g: Gadget, i: number): boolean =>
       i !== skip &&
       (g.kind === 'crack-wall' ||
-        (g.kind === 'door' && !g.exit) ||
+        g.kind === 'door' ||
         g.kind === 'spring' ||
         g.kind === 'slingshot' ||
         g.kind === 'cage'),

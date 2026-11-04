@@ -271,6 +271,7 @@ describe('LevelEditorSystem on a real engine', () => {
   it('the design is for its floor only: the next floor is generated', () => {
     editor.setTool('wall');
     editor.pointerDown(300, 600);
+    engine.designedFloors = false;
     engine.floor = 2;
     engine.applyLevel();
     expect(engine.level.walls).toBeUndefined();

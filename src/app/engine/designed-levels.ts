@@ -57,12 +57,62 @@ const FLOOR_1: LevelLayout = {
     },
     { id: 'g2', kind: 'button', kg: 10, targets: ['g1'], x: 376, y: 508, width: 48, height: 6 },
   ],
-  // No zombie rises on the button's ledge (a random spawn there would open the door for free).
+  // No zombie rises on the button's ledge or the two ledges above it: a random spawn there would
+  // reach the button and open the door for free. The ground under the zone stays open.
+  noSpawn: [{ x: 168, y: 56, width: 448, height: 480 }],
+};
+
+/**
+ * Floor 2, designed in the level editor: a tall door shuts off the right end of the map, with the
+ * exit door behind it. The high ledge's button opens the tall door, the right ledge's button opens
+ * the exit door, and both need 60 kg at once: a player can only hold one, so the other needs a
+ * body or props. No ladders: climb the pile of the dead beside the right ledge.
+ */
+const FLOOR_2: LevelLayout = {
+  seed: 1481236960,
+  floor: 2,
+  hint: 'Weigh down both buttons to reach the exit door',
+  platforms: [
+    { x: 356, y: 208, width: 160, height: 32 },
+    { x: 604, y: 300, width: 160, height: 32 },
+    { x: 56, y: 464, width: 160, height: 32 },
+    { x: 468, y: 460, width: 160, height: 32 },
+  ],
+  ropes: [],
+  exitX: 768,
+  exitY: 298,
+  exitHidden: true,
+  props: [
+    { kind: 'box2', x: 69, y: 598, width: 28, height: 22 },
+    { kind: 'box2', x: 83, y: 576, width: 28, height: 22 },
+    { kind: 'box1', x: 100, y: 598, width: 28, height: 22 },
+    { kind: 'box1', x: 133, y: 598, width: 28, height: 22 },
+    { kind: 'box1', x: 113, y: 576, width: 28, height: 22 },
+    { kind: 'box3', x: 92, y: 560, width: 26, height: 16 },
+    { kind: 'box3', x: 110, y: 560, width: 26, height: 16 },
+    { kind: 'box3', x: 101, y: 544, width: 26, height: 16 },
+    { kind: 'barrel1', x: 841, y: 598, width: 18, height: 22 },
+    { kind: 'barrel1', x: 484, y: 438, width: 18, height: 22 },
+    { kind: 'barrel3', x: 106, y: 441, width: 18, height: 23 },
+    { kind: 'barrel3', x: 14, y: 597, width: 18, height: 23 },
+  ],
+  walls: [],
+  gadgets: [
+    { id: 'g1', kind: 'door', latch: false, exit: false, x: 1076, y: 12, width: 32, height: 608 },
+    { id: 'g2', kind: 'door', latch: false, exit: true, x: 1164, y: 492, width: 64, height: 128 },
+    { id: 'g3', kind: 'button', kg: 60, targets: ['g2'], x: 660, y: 300, width: 48, height: 6 },
+    { id: 'g4', kind: 'button', kg: 60, targets: ['g1'], x: 408, y: 208, width: 48, height: 6 },
+  ],
+  // No zombie rises on the two button ledges (a random spawn there would press a button for free),
+  // behind the tall door, or over the crates in the left corner.
   noSpawn: [
-    { x: 304, y: 412, width: 128, height: 128 },
-    { x: 176, y: 412, width: 128, height: 128 },
+    { x: 328, y: 112, width: 480, height: 224 },
+    { x: 1056, y: 12, width: 224, height: 608 },
+    { x: 0, y: 492, width: 128, height: 128 },
+    { x: 0, y: 368, width: 128, height: 128 },
+    { x: 0, y: 244, width: 128, height: 128 },
   ],
 };
 
 /** Floors made in the level editor: `levelFor` plays a copy of these instead of a generated one. */
-export const DESIGNED_LEVELS: Readonly<Record<number, LevelLayout>> = { 1: FLOOR_1 };
+export const DESIGNED_LEVELS: Readonly<Record<number, LevelLayout>> = { 1: FLOOR_1, 2: FLOOR_2 };
