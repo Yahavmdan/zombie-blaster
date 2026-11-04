@@ -671,7 +671,7 @@ export class GameCanvasComponent implements OnDestroy {
     if (e.button === 1 && tool === 'build') {
       e.preventDefault();
       const at: { x: number; y: number } = this.worldPoint(e);
-      this.engine?.levelEditor.inspect(at.x, at.y, e.clientX, e.clientY);
+      this.engine?.levelEditor.inspect(at.x, at.y);
       return;
     }
     // The level editor: the right button erases what is under it.

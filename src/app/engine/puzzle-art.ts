@@ -13,6 +13,15 @@ import {
   pxRivet,
 } from './pixel-art';
 import { Random, seededRandom } from './level-generator';
+import {
+  BOULDER_LOOKS,
+  BoulderLook,
+  CAGE_LOOKS,
+  Ramp,
+  SCALE_LOOKS,
+  SPRING_LOOKS,
+  SpringLook,
+} from './gadget-looks';
 
 /**
  * Pixel art for the puzzle parts (boulder, chute, gate, spring, button, scale, cable, chains,
@@ -29,11 +38,63 @@ const K: string = PIXEL['ink'];
 const BOULDER_CELLS: number = 24;
 /** Rotations rendered per turn; the boulder snaps to the nearest (crisp pixels at every angle). */
 const BOULDER_FRAMES: number = 32;
-const boulderFrames: Map<number, HTMLCanvasElement> = new Map<number, HTMLCanvasElement>();
-/** Surface marks per cell (fixed to the stone, so they turn as it rolls): 1 crack, 2 pit, 3 fleck. */
+const boulderFrames: Map<string, HTMLCanvasElement> = new Map<string, HTMLCanvasElement>();
+/** The look of a boulder that has none (floor 2's). */
+const BOULDER_LOOK: string = 'granite';
+const MARK_CRACK: number = 1;
+const MARK_FLECK: number = 3;
+const MARK_MOSS: number = 4;
+const MARK_MOSS_HI: number = 5;
+/** Surface marks per cell (fixed to the stone, so they turn as it rolls): 1 crack, 2 pit, 3 fleck, 4-5 moss. */
 let boulderMarks: number[] | null = null;
+const lookMarks: Map<string, number[]> = new Map<string, number[]>();
 
-function boulderTexture(): number[] {
+/** The surface of a boulder of this look: the same stone, grown over, forged or burning. */
+function boulderTexture(look: string): number[] {
+  const cached: number[] | undefined = lookMarks.get(look);
+  if (cached) return cached;
+  const n: number = BOULDER_CELLS;
+  const marks: number[] = [...baseTexture()];
+  const rand: Random = seededRandom(0xb01e);
+  if (look === 'mossy') {
+    for (let blob: number = 0; blob < 7; blob++) {
+      const bx: number = Math.floor(rand() * n);
+      const by: number = Math.floor(rand() * n);
+      const r: number = 2 + Math.floor(rand() * 3);
+      for (let y: number = Math.max(0, by - r); y < Math.min(n, by + r); y++) {
+        for (let x: number = Math.max(0, bx - r); x < Math.min(n, bx + r); x++) {
+          if (Math.hypot(x - bx, y - by) <= r)
+            marks[y * n + x] = (x + y) % 3 === 0 ? MARK_MOSS_HI : MARK_MOSS;
+        }
+      }
+    }
+  } else if (look === 'iron') {
+    // Forged: a riveted band round the ball, no cracks.
+    for (let i: number = 0; i < marks.length; i++) if (marks[i] === MARK_CRACK) marks[i] = 0;
+    const band: number = Math.floor(n / 2);
+    for (let x: number = 0; x < n; x++) {
+      marks[(band - 2) * n + x] = MARK_CRACK;
+      marks[(band + 1) * n + x] = MARK_CRACK;
+      marks[(band - 1) * n + x] = x % 4 === 0 ? MARK_FLECK : 0;
+      marks[band * n + x] = 0;
+    }
+  } else if (look === 'magma') {
+    // Burning through: more cracks wandering across the crust.
+    for (let c: number = 0; c < 6; c++) {
+      let x: number = Math.floor(rand() * n);
+      let y: number = Math.floor(rand() * n);
+      for (let s: number = 0; s < 12; s++) {
+        x = Math.max(0, Math.min(n - 1, x + Math.round(rand() * 2 - 1)));
+        y = Math.max(0, Math.min(n - 1, y + 1 - Math.floor(rand() * 3)));
+        marks[y * n + x] = MARK_CRACK;
+      }
+    }
+  }
+  lookMarks.set(look, marks);
+  return marks;
+}
+
+function baseTexture(): number[] {
   if (boulderMarks) return boulderMarks;
   const n: number = BOULDER_CELLS;
   const marks: number[] = new Array<number>(n * n).fill(0);
@@ -84,26 +145,21 @@ function boulderTexture(): number[] {
 }
 
 /** One rotation of the boulder: the light stays top-left while the marks turn with the stone. */
-function boulderFrame(frame: number): HTMLCanvasElement {
-  const cached: HTMLCanvasElement | undefined = boulderFrames.get(frame);
+function boulderFrame(frame: number, look: string): HTMLCanvasElement {
+  const key: string = `${look}:${frame}`;
+  const cached: HTMLCanvasElement | undefined = boulderFrames.get(key);
   if (cached) return cached;
   const n: number = BOULDER_CELLS;
   const canvas: HTMLCanvasElement = document.createElement('canvas');
   canvas.width = n;
   canvas.height = n;
   const ctx: CanvasRenderingContext2D = canvas.getContext('2d')!;
-  const marks: number[] = boulderTexture();
+  const marks: number[] = boulderTexture(look);
+  const style: BoulderLook = BOULDER_LOOKS[look] ?? BOULDER_LOOKS[BOULDER_LOOK];
   const angle: number = (frame / BOULDER_FRAMES) * Math.PI * 2;
   const cos: number = Math.cos(-angle);
   const sin: number = Math.sin(-angle);
   const c: number = (n - 1) / 2;
-  const shades: string[] = [
-    PIXEL['stoneDeep'],
-    PIXEL['stoneDark'],
-    PIXEL['stoneMid'],
-    PIXEL['stone'],
-    PIXEL['stoneHi'],
-  ];
   for (let y: number = 0; y < n; y++) {
     for (let x: number = 0; x < n; x++) {
       const dx: number = x - c;
@@ -122,32 +178,45 @@ function boulderFrame(frame: number): HTMLCanvasElement {
       const sx: number = Math.round(c + dx * cos - dy * sin);
       const sy: number = Math.round(c + dx * sin + dy * cos);
       const mark: number = sx >= 0 && sy >= 0 && sx < n && sy < n ? marks[sy * n + sx] : 0;
-      if (mark === 1) shade = 0;
-      else if (mark === 2) shade = Math.max(1, shade - 1);
-      else if (mark === 3) shade = Math.min(4, shade + 1);
-      ctx.fillStyle = shades[shade];
+      if (mark === 2) shade = Math.max(1, shade - 1);
+      else if (mark === MARK_FLECK) shade = Math.min(4, shade + 1);
+      ctx.fillStyle =
+        mark === MARK_CRACK
+          ? style.crack
+          : mark === MARK_FLECK && style.fleck
+            ? style.fleck
+            : mark === MARK_MOSS
+              ? PIXEL['moss']
+              : mark === MARK_MOSS_HI
+                ? PIXEL['mossHi']
+                : style.shades[shade];
       ctx.fillRect(x, y, 1, 1);
     }
   }
-  boulderFrames.set(frame, canvas);
+  boulderFrames.set(key, canvas);
   return canvas;
 }
 
 /** The unturned boulder at one canvas pixel per art cell (what it shatters into). */
 export function boulderArt(): HTMLCanvasElement {
-  return boulderFrame(0);
+  return boulderFrame(0, BOULDER_LOOK);
 }
 
 /** The boulder's art is this many art cells across. */
 export const BOULDER_ART_CELLS: number = BOULDER_CELLS;
 
 /** The boulder in `box`, turned by `angle` (radians), lit from the top-left. */
-export function drawBoulder(ctx: CanvasRenderingContext2D, box: Box, angle: number): void {
+export function drawBoulder(
+  ctx: CanvasRenderingContext2D,
+  box: Box,
+  angle: number,
+  look: string = BOULDER_LOOK,
+): void {
   const turn: number = (((angle / (Math.PI * 2)) % 1) + 1) % 1;
   const frame: number = Math.round(turn * BOULDER_FRAMES) % BOULDER_FRAMES;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(boulderFrame(frame), Math.round(box.x), Math.round(box.y), box.width, box.height);
+  ctx.drawImage(boulderFrame(frame, look), Math.round(box.x), Math.round(box.y), box.width, box.height);
   ctx.restore();
 }
 
@@ -629,7 +698,9 @@ export function drawSpringBlock(
   ctx: CanvasRenderingContext2D,
   block: { x: number; y: number; width: number; height: number },
   plateOffset: number,
+  look: string = 'hazard',
 ): void {
+  const style: SpringLook = SPRING_LOOKS[look] ?? SPRING_LOOKS['hazard'];
   const x: number = Math.round(block.x);
   const w: number = Math.round(block.width);
   const plateY: number = Math.round((block.y + plateOffset) / ART_PX) * ART_PX;
@@ -638,7 +709,7 @@ export function drawSpringBlock(
   const coilBottom: number = bottom - BASE_H;
 
   // Base.
-  pxBar(ctx, x, coilBottom, w, BASE_H, PIXEL['steelHi'], PIXEL['steel'], PIXEL['steelDark']);
+  pxBar(ctx, x, coilBottom, w, BASE_H, style.base.hi, style.base.mid, style.base.dark);
   for (let rx: number = x + 6; rx < x + w - 6; rx += 16) pxRivet(ctx, rx, coilBottom + 2);
 
   // Coils: a row of heavy helical springs between base and plate, each wound back and forth
@@ -649,7 +720,7 @@ export function drawSpringBlock(
     const cx: number = Math.round((x + COIL_INSET / 2 + span * (c + 0.5)) / ART_PX) * ART_PX;
     const left: number = cx - COIL_HALF_WIDTH;
     const right: number = cx + COIL_HALF_WIDTH;
-    pxRect(ctx, cx - 2, coilTop, 4, coilBottom - coilTop, PIXEL['steelDark']);
+    pxRect(ctx, cx - 2, coilTop, 4, coilBottom - coilTop, style.coilDark);
     const turns: number = COIL_LOOPS * 2;
     const step: number = (coilBottom - coilTop) / turns;
     const passes: number[] = [0, 1];
@@ -662,8 +733,8 @@ export function drawSpringBlock(
         const from: number = front ? left : right;
         const to: number = front ? right : left;
         pxLine(ctx, from, y0, to, y1, K, 6);
-        pxLine(ctx, from, y0, to, y1, front ? PIXEL['steelHi'] : PIXEL['steelDark'], 2);
-        if (front) pxLine(ctx, from, y0 - 2, to, y1 - 2, PIXEL['steelLight'], 2);
+        pxLine(ctx, from, y0, to, y1, front ? style.coilHi : style.coilDark, 2);
+        if (front) pxLine(ctx, from, y0 - 2, to, y1 - 2, style.coilShine, 2);
       }
     }
   }
@@ -676,13 +747,13 @@ export function drawSpringBlock(
       const top: boolean = cyp === 0;
       const color: string = stripe
         ? top
-          ? PIXEL['goldHi']
+          ? style.stripe.hi
           : cyp === (PLATE_H - 4) / ART_PX - 1
-            ? PIXEL['goldDark']
-            : PIXEL['gold']
+            ? style.stripe.dark
+            : style.stripe.mid
         : top
-          ? PIXEL['steel']
-          : PIXEL['ink2'];
+          ? style.gapTop
+          : style.gap;
       pxRect(ctx, x + 2 + cxp * ART_PX, plateY + 2 + cyp * ART_PX, ART_PX, ART_PX, color);
     }
   }
@@ -724,7 +795,13 @@ export function drawButton(
 // ─── Scale ───────────────────────────────────────────────
 
 /** The scale's pan set into the ground: a tread plate with a status lip (gold, green when loaded). */
-export function drawScalePan(ctx: CanvasRenderingContext2D, pan: Box, loaded: boolean): void {
+export function drawScalePan(
+  ctx: CanvasRenderingContext2D,
+  pan: Box,
+  loaded: boolean,
+  look: string = 'steel',
+): void {
+  const tone: Ramp = SCALE_LOOKS[look] ?? SCALE_LOOKS['steel'];
   pxBar(
     ctx,
     pan.x,
@@ -732,11 +809,11 @@ export function drawScalePan(ctx: CanvasRenderingContext2D, pan: Box, loaded: bo
     pan.width,
     pan.height,
     loaded ? PIXEL['toxicHi'] : PIXEL['goldHi'],
-    PIXEL['steel'],
-    PIXEL['steelDark'],
+    tone.mid,
+    tone.dark,
   );
   for (let x: number = pan.x + 6; x < pan.x + pan.width - 6; x += 8) {
-    pxRect(ctx, x, pan.y + 4, 2, 2, PIXEL['steelHi']);
+    pxRect(ctx, x, pan.y + 4, 2, 2, tone.hi);
   }
 }
 
@@ -790,11 +867,13 @@ export function drawScalePost(
   groundY: number,
   gaugeY: number,
   fraction: number,
+  look: string = 'steel',
 ): void {
+  const tone: Ramp = SCALE_LOOKS[look] ?? SCALE_LOOKS['steel'];
   const x: number = Math.round(postX) - 4;
   pxRect(ctx, x, postTop, 8, groundY - postTop, K);
-  pxRect(ctx, x + 2, postTop, 2, groundY - postTop, PIXEL['steelHi']);
-  pxRect(ctx, x + 4, postTop, 2, groundY - postTop, PIXEL['steelDark']);
+  pxRect(ctx, x + 2, postTop, 2, groundY - postTop, tone.hi);
+  pxRect(ctx, x + 4, postTop, 2, groundY - postTop, tone.dark);
   for (let y: number = postTop + 6; y < groundY - 4; y += 16) pxRivet(ctx, x + 2, y);
   const size: number = GAUGE_CELLS * ART_PX;
   const gx: number = Math.round(postX) - size / 2;
@@ -919,6 +998,56 @@ export function drawCageRing(ctx: CanvasRenderingContext2D, cx: number, bottomY:
 
 // ─── Cages ───────────────────────────────────────────────
 
+/** A cage boxed in with nailed planks and a cross brace: nobody sees in. */
+function drawCageCrate(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): void {
+  pxRect(ctx, x, y, w, h, K);
+  for (let py: number = y + 8; py < y + h - 2; py += 12) {
+    const plank: number = Math.min(10, y + h - 2 - py);
+    pxRect(ctx, x + 2, py, w - 4, plank, PIXEL['wood']);
+    pxRect(ctx, x + 2, py, w - 4, 2, PIXEL['woodHi']);
+    pxRivet(ctx, x + 6, py + 4);
+    pxRivet(ctx, x + w - 8, py + 4);
+  }
+  const top: number = y + 10;
+  const bottom: number = y + h - 4;
+  pxLine(ctx, x + 6, top, x + w - 6, bottom, K, 6);
+  pxLine(ctx, x + w - 6, top, x + 6, bottom, K, 6);
+  pxLine(ctx, x + 6, top, x + w - 6, bottom, PIXEL['woodHi'], 2);
+  pxLine(ctx, x + w - 6, top, x + 6, bottom, PIXEL['woodDark'], 2);
+}
+
+/** A cage sealed in riveted steel plates with a warning band. */
+function drawCageVault(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): void {
+  pxRect(ctx, x, y, w, h, K);
+  const plate: number = 24;
+  for (let py: number = y + 8; py < y + h - 2; py += plate) {
+    const tall: number = Math.min(plate - 2, y + h - 2 - py);
+    for (let px: number = x + 2; px < x + w - 2; px += plate) {
+      const wide: number = Math.min(plate - 2, x + w - 2 - px);
+      pxRect(ctx, px, py, wide, tall, PIXEL['steel']);
+      pxRect(ctx, px, py, wide, 2, PIXEL['steelHi']);
+      pxRivet(ctx, px + 2, py + 4);
+    }
+  }
+  const band: number = y + Math.round(h / 2 / ART_PX) * ART_PX;
+  for (let bx: number = x + 2; bx < x + w - 2; bx += 8) {
+    pxRect(ctx, bx, band, Math.min(4, x + w - 2 - bx), 4, PIXEL['gold']);
+    pxRect(ctx, bx + 4, band, Math.min(4, Math.max(0, x + w - 6 - bx)), 4, K);
+  }
+}
+
 /**
  * A floor-4 cage filling exactly `box`: an iron frame (its top bar is the walkable top). Covered,
  * an oiled tarp hangs over it, gathered by a rope; bare, its bars and the dark inside show.
@@ -927,14 +1056,20 @@ export function drawCageArt(
   ctx: CanvasRenderingContext2D,
   box: { x: number; y: number; width: number; height: number },
   covered: boolean,
+  look: string = 'tarp',
 ): void {
   const x: number = Math.round(box.x);
   const y: number = Math.round(box.y);
   const w: number = Math.round(box.width);
   const h: number = Math.round(box.height);
-  if (covered) {
+  const cloth: Ramp = CAGE_LOOKS[look] ?? CAGE_LOOKS['tarp'];
+  if (covered && look === 'crate') {
+    drawCageCrate(ctx, x, y, w, h);
+  } else if (covered && look === 'vault') {
+    drawCageVault(ctx, x, y, w, h);
+  } else if (covered) {
     pxRect(ctx, x, y, w, h, K);
-    pxRect(ctx, x + 2, y + 8, w - 4, h - 12, PIXEL['tarp']);
+    pxRect(ctx, x + 2, y + 8, w - 4, h - 12, cloth.mid);
     // Drape: folds fan out from the knot down to the hem, each a shadowed valley beside a lit
     // ridge; the cloth sags between the corners.
     const knotX: number = x + w / 2;
@@ -943,11 +1078,11 @@ export function drawCageArt(
       const t: number = (f + 0.5) / folds;
       const topX: number = knotX + (t - 0.5) * w * 0.35;
       const hemX: number = x + 6 + t * (w - 12);
-      pxLine(ctx, topX, y + 20, hemX, y + h - 8, PIXEL['tarpDark']);
-      pxLine(ctx, topX + 2, y + 22, hemX + 4, y + h - 8, PIXEL['tarpHi']);
+      pxLine(ctx, topX, y + 20, hemX, y + h - 8, cloth.dark);
+      pxLine(ctx, topX + 2, y + 22, hemX + 4, y + h - 8, cloth.hi);
     }
-    pxRect(ctx, x + 2, y + 8, 4, h - 12, PIXEL['tarpDark']);
-    pxRect(ctx, x + w - 6, y + 8, 4, h - 12, PIXEL['tarpDark']);
+    pxRect(ctx, x + 2, y + 8, 4, h - 12, cloth.dark);
+    pxRect(ctx, x + w - 6, y + 8, 4, h - 12, cloth.dark);
     // Rope band and its knot.
     pxRect(ctx, x + 2, y + 14, w - 4, 2, PIXEL['boneDim']);
     pxRect(ctx, x + 2, y + 16, w - 4, 2, PIXEL['woodDark']);
@@ -955,7 +1090,7 @@ export function drawCageArt(
     pxRect(ctx, x + w / 2 - 2, y + 14, 4, 4, PIXEL['boneDim']);
     // Ragged hem.
     for (let hx: number = x + 2; hx < x + w - 2; hx += 8) {
-      pxRect(ctx, hx, y + h - 6, 4, 2, PIXEL['tarpDark']);
+      pxRect(ctx, hx, y + h - 6, 4, 2, cloth.dark);
     }
   } else {
     ctx.fillStyle = 'rgba(14, 13, 11, 0.6)';

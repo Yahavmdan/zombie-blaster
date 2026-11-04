@@ -26,6 +26,7 @@ import {
   slopesOf,
   zombiesIn,
   crackBand,
+  lookOf,
   crackWallPieces,
   distanceToBox,
   doorSolid,
@@ -517,7 +518,7 @@ export class GadgetSystem {
     state.broken = true;
     state.hits = GAME_CONSTANTS.GADGET_CRACK_HITS;
     const band: Box = crackBand(g);
-    this.vfx.spawnCrackBreak(band, dir);
+    this.vfx.spawnCrackBreak(band, dir, lookOf(g));
     this.e.pendingVfxEvents.push({
       type: VfxEventType.CrackBreak,
       playerId: this.e.player?.id ?? '',

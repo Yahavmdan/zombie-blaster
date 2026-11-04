@@ -1744,7 +1744,7 @@ export class RenderSystem {
       src.kind === 'wall'
         ? crackedWallArt(src.cols, src.rows, src.faceRight)
         : src.kind === 'crack'
-          ? crackBandArt(src.cols, src.rows, GAME_CONSTANTS.GADGET_CRACK_HITS - 1)
+          ? crackBandArt(src.cols, src.rows, GAME_CONSTANTS.GADGET_CRACK_HITS - 1, src.look)
           : boulderArt();
     const w: number = chunk.sw * ART_PX;
     const h: number = chunk.sh * ART_PX;

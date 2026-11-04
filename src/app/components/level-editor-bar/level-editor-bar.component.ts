@@ -13,7 +13,13 @@ import {
 } from '@angular/core';
 import { CageContent } from '../../engine/engine-types';
 import { NgTemplateOutlet } from '@angular/common';
-import { CAGE_CONTENTS, EditorField, EditorFieldKey, EditorTool } from '../../engine/level-editor';
+import {
+  CAGE_CONTENTS,
+  EditorField,
+  EditorFieldKey,
+  EditorTool,
+  popupBeside,
+} from '../../engine/level-editor';
 import {
   EditorInspector,
   EditorSelection,
@@ -29,21 +35,15 @@ interface ToolButton {
   hint: string;
 }
 
-/** The middle-click popup where it opens: by the click, kept inside the window. */
+/** The middle-click popup where it opens: beside the thing it adjusts, kept inside the window. */
 interface InspectorView {
-  /** The click that opened it. */
+  /** The thing's place on the page: another thing opens it afresh. */
   key: string;
   label: string;
   fields: EditorField[];
   left: number;
   top: number;
 }
-
-/** Room the popup keeps from the window's right and bottom edges (the bottom: its height plus the quick-slot tray). */
-const INSPECTOR_W_PX: number = 280;
-const INSPECTOR_H_PX: number = 340;
-/** The popup opens this far right of and below the click. */
-const INSPECTOR_OFFSET_PX: number = 12;
 
 interface ToolGroup {
   title: string;
@@ -67,7 +67,7 @@ const TOOL_GROUPS: ToolGroup[] = [
       {
         tool: 'select',
         label: 'Select',
-        hint: 'Click to select, drag to move, drag a side to resize. Middle click adjusts it (size, strength, weight). Right click erases',
+        hint: 'Click to select, drag to move, drag a side to resize. Middle click adjusts it (look, size, strength, weight). Right click erases',
       },
       {
         tool: 'erase',
@@ -248,18 +248,16 @@ export class LevelEditorBarComponent {
     this.version();
     const ins: EditorInspector | null = this.editor().inspector();
     if (!ins) return [];
+    const spot: { left: number; top: number } = popupBeside(ins.box, {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
     const view: InspectorView = {
-      key: `${ins.clientX},${ins.clientY}`,
+      key: `${ins.box.x},${ins.box.y},${ins.box.width},${ins.box.height}`,
       label: ins.label,
       fields: ins.fields,
-      left: Math.max(
-        0,
-        Math.min(ins.clientX + INSPECTOR_OFFSET_PX, window.innerWidth - INSPECTOR_W_PX),
-      ),
-      top: Math.max(
-        0,
-        Math.min(ins.clientY + INSPECTOR_OFFSET_PX, window.innerHeight - INSPECTOR_H_PX),
-      ),
+      left: spot.left,
+      top: spot.top,
     };
     return [view];
   });
@@ -316,11 +314,10 @@ export class LevelEditorBarComponent {
     this.drawerOpen.update((open: boolean): boolean => !open);
   }
 
-  /** The rail's Adjust: the selection's popup opens beside the button. */
-  adjustSelected(event: MouseEvent): void {
-    const button: DOMRect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  /** The rail's Adjust: the selection's popup opens beside it. */
+  adjustSelected(): void {
     this.drawerOpen.set(false);
-    this.editor().inspectSelected(button.right, button.top);
+    this.editor().inspectSelected();
   }
 
   toggleMode(): void {
