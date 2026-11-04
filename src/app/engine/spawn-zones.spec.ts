@@ -71,14 +71,17 @@ describe('no-spawn zones', () => {
 });
 
 describe('floor 1 no-spawn zones', () => {
-  it('no zombie rises on the button ledge; the rest of the floor still spawns', () => {
+  it('no zombie rises on the button ledge or the ledges above; the rest still spawns', () => {
     const floor1: LevelLayout = DESIGNED_LEVELS[1];
     const surfaces: Platform[] = [
       GROUND,
       ...floor1.platforms.filter((p: Platform): boolean => !p.safe),
     ];
     const spans: SpawnSpan[] = spawnSpans(surfaces, floor1.noSpawn ?? [], 40, 50);
-    expect(spans.some((s: SpawnSpan): boolean => s.y === 508)).toBe(false);
+    for (const y of [508, 400, 228]) {
+      expect(spans.some((s: SpawnSpan): boolean => s.y === y)).toBe(false);
+    }
+    expect(spans.some((s: SpawnSpan): boolean => s.y === 452)).toBe(true);
     expect(spans.some((s: SpawnSpan): boolean => s.y === GROUND_Y)).toBe(true);
   });
 });
