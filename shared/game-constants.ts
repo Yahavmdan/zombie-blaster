@@ -128,6 +128,7 @@ export const GAME_CONSTANTS = {
   EXIT_PLATFORM_HEIGHT: 32, // Height of the exit platform: one tile
   EXIT_EDGE_MARGIN_PX: 20, // Gap between the exit and the screen edge it hangs at
   LEVEL_TILE_PX: 32, // Platforms are whole tiles wide and one tile tall: drawn art == collision box
+  WALL_BODY_TILES: [2, 3, 7, 8, 11, 12, 14, 16, 17, 26, 47, 48, 62, 65], // Opaque IndustrialTile ids a plain wall's body (below its top row) mixes, so no two neighbouring tiles match
   LEVEL_TIER_Y: [530, 430, 330], // Platform surfaces by tier: each is one jump (≤ 100 px) above the one below
   LEVEL_EXIT_CLEARANCE_PX: 48, // No platform within this of the exit's span (the ground under it stays open)
   LEVEL_TIER2_EXIT_GAP_PX: 320, // Tier-2 platforms keep this far from the exit (no double jump across)
@@ -239,6 +240,17 @@ export const GAME_CONSTANTS = {
   GADGET_BOULDER_BREAK_SPEED: 4, // Hitting a crack band at least this fast (px/tick) breaks it out
   GADGET_BOULDER_BLAST_SPEED_X: 6, // A barrel blast throws a boulder in reach this fast sideways...
   GADGET_BOULDER_BLAST_SPEED_Y: -5, // ...and up (negative = up)
+  GADGET_BIN_KG: 60, // A new rolling bin's weight (the editor sets each; its box is BOULDER_SIZE_PX square): it weighs on buttons and scales
+  GADGET_BIN_ROLL_FRICTION: 0.975, // Sideways speed a bin keeps per tick on its wheels: let go and it rolls on a while
+  GADGET_BIN_BOUNCE: 0.3, // Rolling into a solid throws it back with this share of its speed...
+  GADGET_BIN_BOUNCE_MIN_SPEED: 3, // ...slower than this (px/tick) it just stops, so a bin pushed against a wall doesn't shake
+  GADGET_BIN_PUSH_SPEED: 2.4, // A player walking into a bin of GADGET_BIN_KG rolls it ahead this fast (px/tick; below walking speed, so it stays in contact)...
+  GADGET_BIN_PUSH_ACCEL: 0.4, // ...getting up to that speed by this much per tick
+  GADGET_BIN_PUSH_REACH_PX: 24, // Host: max gap between a pushing player and the bin (a guest's position arrives a little late)
+  GADGET_BIN_SWING_SPEED: 6, // A swing at a bin of GADGET_BIN_KG shoves it this fast (px/tick)
+  GADGET_BIN_KNOCK_SHARE: 0.8, // A boulder or bin running into a bin hands it this share of its speed
+  GADGET_BIN_SPEED_SCALE_MIN: 0.25, // A heavier bin moves off a push, swing or blast slower (usual kg / its kg), down to this share...
+  GADGET_BIN_SPEED_SCALE_MAX: 1.2, // ...a lighter one faster, up to this many times (still below walking speed)
   GADGET_HIT_COOLDOWN_TICKS: 36, // One hit per swing on a gadget (a held attack swings every 36 ticks)
   GADGET_HIT_REACH_PX: 24, // Max gap between an attacking player's box and a lever or crack band for the swing to hit it
   GADGET_CRACK_HITS: 5, // Swings on a cracked wall's crack band before it breaks out (a blast or a fast boulder does it at once)
@@ -251,6 +263,7 @@ export const GAME_CONSTANTS = {
   // What each gadget can look like (art only, picked in the editor's popup; the first is the default, an export leaves it out)
   GADGET_LOOKS: {
     boulder: ['granite', 'mossy', 'iron', 'magma'],
+    bin: ['teal', 'toxic', 'blue', 'rust'],
     'crack-wall': ['stone', 'brick', 'concrete', 'mossy'],
     button: ['red', 'green', 'blue', 'hazard'],
     scale: ['steel', 'brass', 'wood', 'rust'],

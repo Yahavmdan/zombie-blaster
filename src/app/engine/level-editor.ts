@@ -14,7 +14,7 @@ import {
   SourceGadget,
   SpringPuzzleLayout,
 } from './engine-types';
-import { GADGET_KINDS, isSource, isTargetKind, lookOf, slopeY, slopesOf } from './gadgets';
+import { GADGET_KINDS, isRoller, isSource, isTargetKind, lookOf, slopeY, slopesOf } from './gadgets';
 import {
   GROUND_PLATFORM,
   LevelLayout,
@@ -108,6 +108,7 @@ export const CAGE_CONTENTS: CageContent[] = ['zombies', 'loot', 'empty'];
 
 export const GADGET_LABELS: Record<GadgetKind, string> = {
   boulder: 'Boulder',
+  bin: 'Rolling bin',
   'crack-wall': 'Cracked wall',
   button: 'Button',
   scale: 'Scale',
@@ -388,7 +389,7 @@ export function allRefs(layout: LevelLayout): EditorRef[] {
   const gadgetRefs: (front: boolean) => EditorRef[] = (front: boolean): EditorRef[] =>
     list
       .map((g: Gadget, index: number): { g: Gadget; index: number } => ({ g, index }))
-      .filter((e: { g: Gadget; index: number }): boolean => (e.g.kind === 'boulder') === front)
+      .filter((e: { g: Gadget; index: number }): boolean => isRoller(e.g) === front)
       .reverse()
       .map((e: { g: Gadget; index: number }): EditorRef => ({ kind: 'gadget', index: e.index }));
   return [
@@ -473,7 +474,7 @@ export function refLabel(layout: LevelLayout, ref: EditorRef): string {
 /** Gadgets resized by their sides (and their top for walls and doors). */
 function sizable(g: Gadget): { sides: boolean; top: boolean } {
   return {
-    sides: g.kind !== 'boulder' && g.kind !== 'lever',
+    sides: !isRoller(g) && g.kind !== 'lever',
     top: g.kind === 'crack-wall' || g.kind === 'door' || g.kind === 'slope' || g.kind === 'cage',
   };
 }
@@ -557,6 +558,13 @@ function newGadget(layout: LevelLayout, kind: GadgetKind, x: number, y: number):
         id,
         kind,
         kg: GAME_CONSTANTS.GADGET_BOULDER_KG,
+        ...ontoSlope(layout, standing(BOULDER, BOULDER), y),
+      };
+    case 'bin':
+      return {
+        id,
+        kind,
+        kg: GAME_CONSTANTS.GADGET_BIN_KG,
         ...ontoSlope(layout, standing(BOULDER, BOULDER), y),
       };
     case 'slope': {
@@ -759,10 +767,10 @@ function moveGadget(layout: LevelLayout, index: number, left: number, top: numbe
     return;
   }
   g.y = surfaceBelow(list, cx, top + g.height) - g.height;
-  if (g.kind === 'boulder') g.y = ontoSlope(layout, g, top + g.height).y;
+  if (isRoller(g)) g.y = ontoSlope(layout, g, top + g.height).y;
 }
 
-/** A boulder's box raised onto a slope under its middle when that is higher than where it stands. */
+/** A boulder's or bin's box raised onto a slope under its middle when that is higher than where it stands. */
 function ontoSlope(layout: LevelLayout, box: Box, y: number): Box {
   const cx: number = box.x + box.width / 2;
   let top: number = box.y + box.height;
@@ -1171,6 +1179,7 @@ function kindFields(g: Gadget): EditorField[] {
   const slim: number = 2 * GADGET_WIDTH_STEP_PX;
   switch (g.kind) {
     case 'boulder':
+    case 'bin':
       return [numberField('kg', 'Weight', g.kg, 1, MAX_KG, KG_STEP, 'kg')];
     case 'crack-wall': {
       const foot: number = g.y + g.height;
@@ -1332,7 +1341,7 @@ function setGadgetField(g: Gadget, key: EditorFieldKey, v: number): void {
     if (v === 0) delete g.look;
     else g.look = GAME_CONSTANTS.GADGET_LOOKS[g.kind][v];
   } else if (key === 'width') g.width = v;
-  else if (key === 'kg' && (g.kind === 'boulder' || g.kind === 'button' || g.kind === 'scale'))
+  else if (key === 'kg' && (isRoller(g) || g.kind === 'button' || g.kind === 'scale'))
     g.kg = v;
   else if (key === 'power' && (g.kind === 'spring' || g.kind === 'slingshot')) g.power = v;
   else if (key === 'angle' && g.kind === 'slingshot') g.angle = v;
@@ -1534,6 +1543,8 @@ function readKind(v: unknown, what: string): Gadget {
     case 'boulder':
       // Exports from before boulders had a weight get the usual one.
       return { ...base, kind, kg: isNum(o['kg']) ? o['kg'] : GAME_CONSTANTS.GADGET_BOULDER_KG };
+    case 'bin':
+      return { ...base, kind, kg: readNumber(o, 'kg', what) };
     case 'crack-wall': {
       const crackTop: number = readNumber(o, 'crackTop', what);
       const crackBottom: number = readNumber(o, 'crackBottom', what);

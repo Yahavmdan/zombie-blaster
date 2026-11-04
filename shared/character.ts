@@ -86,6 +86,8 @@ export interface CharacterState {
   skillBar?: Array<string | null>;
   /** Skill-tree respecs done so far (the first one is free). */
   respecCount?: number;
+  /** The rolling bin (gadget id) this player is walking into on the ground now: their request, the host rolls it. */
+  pushingGadgetId?: string | null;
   /** A held attack charging its skill (Power Dash), 0..1; absent when nothing charges. Drawn over the player for everyone. */
   skillCharge?: number;
 }

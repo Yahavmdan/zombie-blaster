@@ -46,6 +46,18 @@ export function boulderAt(id: string, x: number): GadgetJson {
   };
 }
 
+export function binAt(id: string, x: number): GadgetJson {
+  return {
+    id,
+    kind: 'bin',
+    kg: 60,
+    x,
+    y: WORLD.groundY - BOULDER_PX,
+    width: BOULDER_PX,
+    height: BOULDER_PX,
+  };
+}
+
 /** A cracked wall on the ground, 6 tiles tall, its crack band the bottom 2 tiles (a hole to walk through). */
 export function crackWallAt(id: string, x: number): GadgetJson {
   return {

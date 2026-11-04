@@ -26,6 +26,7 @@ const TOXIC: Ramp = ramp('toxic');
 const BLUE: Ramp = ramp('blue');
 const TARP: Ramp = ramp('tarp');
 const SHROUD: Ramp = ramp('shroud');
+const TEAL: Ramp = ramp('teal');
 const BONE: Ramp = { hi: PIXEL['bone'], mid: PIXEL['boneDim'], dark: PIXEL['boneFaint'] };
 const STONE: Ramp = { hi: PIXEL['stoneHi'], mid: PIXEL['stone'], dark: PIXEL['stoneDark'] };
 
@@ -273,6 +274,14 @@ export const SLOPE_LOOKS: Readonly<Record<string, SlopeLook>> = {
     stud: null,
     strut: PIXEL['steelDark'],
   },
+};
+
+/** A rolling bin's painted body. */
+export const BIN_LOOKS: Readonly<Record<string, Ramp>> = {
+  teal: TEAL,
+  toxic: TOXIC,
+  blue: BLUE,
+  rust: RUST,
 };
 
 /** A hung cage's cloth; `crate` and `vault` box it in instead (it hides what is in it either way). */

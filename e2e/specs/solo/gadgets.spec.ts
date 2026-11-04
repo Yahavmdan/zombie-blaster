@@ -4,6 +4,7 @@ import { E2eGadgetView, E2eSnapshot, E2eZombieView } from '../../support/probe';
 import { WORLD } from '../../support/invariants';
 import {
   BOULDER_PX,
+  binAt,
   boulderAt,
   buttonAt,
   crackWallAt,
@@ -70,6 +71,45 @@ test.describe('designed floor gadgets', { tag: '@solo' }, (): void => {
     expect(gadget(after, 'g1').body!.x, 'the boulder rolls on through the hole').toBeGreaterThan(
       780 - BOULDER_PX,
     );
+  });
+
+  test('walking into a rolling bin pushes it, it rolls on, and it is a step to stand on', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await solo('warrior');
+    await designed(p, gadgetRoom(1, [binAt('g1', 500)]));
+    await p.probe.teleport(400, WORLD.groundY - WORLD.playerHeight);
+    await p.wait(300);
+    await p.hold(KEYS.right);
+    const pushed: E2eSnapshot = await p.probe.waitFor(
+      'the bin rolls ahead of the player',
+      (s: E2eSnapshot): boolean => (gadget(s, 'g1').body?.x ?? 0) > 620,
+      { timeoutMs: 6_000 },
+    );
+    await p.release(KEYS.right);
+    const body: { x: number; vx: number } = gadget(pushed, 'g1').body!;
+    expect(body.vx, 'it rolls').toBeGreaterThan(0);
+    expect(pushed.player!.x + WORLD.playerWidth, 'behind it, not through it').toBeLessThanOrEqual(
+      body.x + 4,
+    );
+    const rest: E2eSnapshot = await p.probe.waitFor(
+      'it rolls on and stops',
+      (s: E2eSnapshot): boolean => gadget(s, 'g1').body?.vx === 0,
+      { timeoutMs: 6_000 },
+    );
+    const stopped: number = gadget(rest, 'g1').body!.x;
+    expect(stopped, 'it rolled on after the player let go').toBeGreaterThan(body.x + 10);
+
+    await p.probe.teleport(stopped + 8, WORLD.groundY - BOULDER_PX - WORLD.playerHeight - 20);
+    const onTop: E2eSnapshot = await p.probe.waitFor(
+      'the player stands on the bin',
+      (s: E2eSnapshot): boolean => s.player!.isGrounded && s.player!.y + WORLD.playerHeight === WORLD.groundY - BOULDER_PX,
+      { timeoutMs: 3_000 },
+    );
+    expect(onTop.player!.y + WORLD.playerHeight).toBe(WORLD.groundY - BOULDER_PX);
+    expect(gadget(onTop, 'g1').body!.x, 'standing on it moves nothing').toBe(stopped);
   });
 
   test('a lever wired to a door and the exit: a swing opens both, the player walks through', async ({

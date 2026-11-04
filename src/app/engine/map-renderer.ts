@@ -6,6 +6,7 @@ import { LightningStrike } from './storm';
 import { StormSky } from './storm-sky';
 import { drawCageArt, drawCrackedWall, drawSpringBlock } from './puzzle-art';
 import { turnAroundCenter } from './prop-tumble';
+import { wallBodyTiles } from './wall-tiles';
 
 interface TileBlock {
   tl: number;
@@ -81,6 +82,7 @@ export class MapRenderer {
     const tileIds: Set<number> = new Set<number>();
     this.collectBlockTiles(GROUND_BLOCK, tileIds);
     this.collectBlockTiles(PLATFORM_BLOCK, tileIds);
+    for (const id of GAME_CONSTANTS.WALL_BODY_TILES) tileIds.add(id);
 
     const propArts: PropArt[] = [
       ...Object.values(PROP_ART),
@@ -268,12 +270,13 @@ export class MapRenderer {
   }
 
   /**
-   * A solid block of ground tiles: the platform's top row, then the ground's middle and bottom
-   * rows, cut at the box's edges so the art is exactly its collision box.
+   * A solid block of tiles: the platform's top row, then a seeded mix of panels (`wallBodyTiles`)
+   * so no two neighbours match, cut at the box's edges so the art is exactly its collision box.
    */
   drawWall(ctx: CanvasRenderingContext2D, wall: Platform): void {
     const cols: number = Math.max(1, Math.ceil(wall.width / TILE_SIZE));
     const rows: number = Math.max(1, Math.ceil(wall.height / TILE_SIZE));
+    const body: number[][] = wallBodyTiles(wall, cols, rows, TILE_SIZE, GAME_CONSTANTS.WALL_BODY_TILES);
     ctx.save();
     ctx.beginPath();
     ctx.rect(wall.x, wall.y, wall.width, wall.height);
@@ -285,9 +288,7 @@ export class MapRenderer {
         const tileId: number =
           row === 0
             ? left ? PLATFORM_BLOCK.tl : right ? PLATFORM_BLOCK.tr : PLATFORM_BLOCK.tc
-            : row === rows - 1 && rows > 2
-              ? left ? GROUND_BLOCK.bl : right ? GROUND_BLOCK.br : GROUND_BLOCK.bc
-              : left ? GROUND_BLOCK.ml : right ? GROUND_BLOCK.mr : GROUND_BLOCK.mc;
+            : body[row][col];
         this.drawTile(ctx, tileId, wall.x + col * TILE_SIZE, wall.y + row * TILE_SIZE);
       }
     }

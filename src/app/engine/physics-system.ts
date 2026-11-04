@@ -11,7 +11,7 @@ import {
 import { IGameEngine, Platform, Rope } from './engine-types';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
 import { isCarrying } from './corpse-carry';
-import { pushOutOfSolids, stepUpOnto } from './solid-blocks';
+import { pushOutOfSolids, pushableBeside, stepUpOnto } from './solid-blocks';
 import { slopeTopUnder, slopesOf } from './gadgets';
 
 export class PhysicsSystem {
@@ -207,6 +207,7 @@ export class PhysicsSystem {
   }
 
   private blockSideways(p: CharacterState, prevX: number): void {
+    p.pushingGadgetId = null;
     if (p.isGrounded) {
       const stepY: number | null = stepUpOnto(
         p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, this.e.platforms,
@@ -220,8 +221,14 @@ export class PhysicsSystem {
       p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, prevX, this.e.platforms,
     );
     if (!pushed.blocked) return;
+    const dir: number = Math.sign(p.x - prevX);
     p.x = pushed.x;
     p.velocityX = 0;
+    if (p.isGrounded) {
+      p.pushingGadgetId = pushableBeside(
+        p.x, p.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT, dir, this.e.platforms,
+      );
+    }
   }
 
   private clampPlayerToGround(p: CharacterState): void {

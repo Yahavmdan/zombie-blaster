@@ -17,6 +17,7 @@ import {
   GadgetKind,
   LauncherGadget,
   Platform,
+  RollerGadget,
   ScaleGadget,
   SlopeGadget,
   SourceGadget,
@@ -29,7 +30,8 @@ import { playerLoadKg, zombieWeightKg } from './weight';
  * the client, the renderer, the editor and the tests use the same math.
  *
  * Every gadget stands alone. A boulder rolls when a swing pushes it, a blast throws it or a
- * launcher fires it; moving fast it crushes zombies and breaks crack bands. A cracked wall breaks
+ * launcher fires it; moving fast it crushes zombies and breaks crack bands. A rolling bin rolls
+ * ahead of a player walking into it and on after they let go. A cracked wall breaks
  * only in its crack band: from swings there, a barrel blast or a fast boulder. Sources (a button
  * or scale weighed down, a lever flipped) send their signal down wires to targets: a spring or
  * slingshot fires as the signal comes on, a door slides open while it is on, a wired exit opens
@@ -48,6 +50,7 @@ const REST_TOLERANCE_PX: number = 2;
 
 export const GADGET_KINDS: GadgetKind[] = [
   'boulder',
+  'bin',
   'crack-wall',
   'button',
   'scale',
@@ -61,6 +64,11 @@ export const GADGET_KINDS: GadgetKind[] = [
 
 export function isSource(g: Gadget): g is SourceGadget {
   return g.kind === 'button' || g.kind === 'scale' || g.kind === 'lever';
+}
+
+/** A gadget with a free body that rolls: a boulder or a bin. */
+export function isRoller(g: Gadget): g is RollerGadget {
+  return g.kind === 'boulder' || g.kind === 'bin';
 }
 
 export function isLauncher(g: Gadget): g is LauncherGadget {
@@ -121,7 +129,7 @@ export function newGadgetState(id: string, body: GadgetBody | null): GadgetState
 /** The floor's start: one state per gadget (boulders at rest where placed), plus the exit's door when wired. */
 export function newGadgetStates(gadgets: Gadget[]): GadgetState[] {
   const states: GadgetState[] = gadgets.map((g: Gadget): GadgetState => {
-    const state: GadgetState = newGadgetState(g.id, g.kind === 'boulder' ? boulderBodyAt(g) : null);
+    const state: GadgetState = newGadgetState(g.id, isRoller(g) ? boulderBodyAt(g) : null);
     if (g.kind === 'lever') state.on = g.startsOn;
     return state;
   });
@@ -441,6 +449,78 @@ export function boulderSpeedScale(kg: number): number {
   );
 }
 
+/** How much faster (> 1) or slower a bin of `kg` moves off the same push, swing or blast than one of the usual weight. */
+export function binSpeedScale(kg: number): number {
+  const scale: number = GAME_CONSTANTS.GADGET_BIN_KG / Math.max(1, kg);
+  return Math.min(
+    GAME_CONSTANTS.GADGET_BIN_SPEED_SCALE_MAX,
+    Math.max(GAME_CONSTANTS.GADGET_BIN_SPEED_SCALE_MIN, scale),
+  );
+}
+
+/** A boulder's or bin's speed scale for its weight. */
+export function rollerSpeedScale(g: RollerGadget): number {
+  return g.kind === 'bin' ? binSpeedScale(g.kg) : boulderSpeedScale(g.kg);
+}
+
+/** How something rolls: speed kept per tick, the share thrown back off a solid, and the speed below which it just stops there. */
+export interface RollFeel {
+  friction: number;
+  bounce: number;
+  stopBelow: number;
+}
+
+export const BOULDER_FEEL: RollFeel = {
+  friction: GAME_CONSTANTS.GADGET_BOULDER_ROLL_FRICTION,
+  bounce: GAME_CONSTANTS.GADGET_BOULDER_BOUNCE,
+  stopBelow: 0,
+};
+
+export const BIN_FEEL: RollFeel = {
+  friction: GAME_CONSTANTS.GADGET_BIN_ROLL_FRICTION,
+  bounce: GAME_CONSTANTS.GADGET_BIN_BOUNCE,
+  stopBelow: GAME_CONSTANTS.GADGET_BIN_BOUNCE_MIN_SPEED,
+};
+
+export function rollFeel(g: RollerGadget): RollFeel {
+  return g.kind === 'bin' ? BIN_FEEL : BOULDER_FEEL;
+}
+
+/** What the host reads of a player pushing a bin. */
+export type BinPusher = Pick<CharacterState, 'x' | 'y' | 'isDead' | 'isDown' | 'pushingGadgetId'>;
+
+/**
+ * Which way the players pushing bin `id` roll it: -1, 1, or 0 when nobody does (or they push
+ * against each other). A push counts only from beside it, level with it and within reach: a
+ * player's request is checked here, never trusted.
+ */
+export function binPushDir(id: string, body: GadgetBody, players: BinPusher[]): number {
+  const width: number = GAME_CONSTANTS.PLAYER_WIDTH;
+  const reach: number = GAME_CONSTANTS.GADGET_BIN_PUSH_REACH_PX;
+  let dir: number = 0;
+  for (const p of players) {
+    if (p.pushingGadgetId !== id || p.isDead || p.isDown) continue;
+    if (p.y + GAME_CONSTANTS.PLAYER_HEIGHT <= body.y + REST_TOLERANCE_PX || p.y >= body.y + S) continue;
+    const middle: number = p.x + width / 2;
+    if (middle < body.x + R && body.x - (p.x + width) <= reach) dir++;
+    else if (middle >= body.x + R && p.x - (body.x + S) <= reach) dir--;
+  }
+  return Math.sign(dir);
+}
+
+/** A bin's speed one tick into a push `dir`: up to the push speed, never slowing what already rolls faster that way. */
+export function pushedSpeed(velocityX: number, dir: number, scale: number): number {
+  const along: number = velocityX * dir;
+  const top: number = GAME_CONSTANTS.GADGET_BIN_PUSH_SPEED * scale;
+  if (along >= top) return velocityX;
+  return dir * Math.min(top, Math.max(0, along) + GAME_CONSTANTS.GADGET_BIN_PUSH_ACCEL * scale);
+}
+
+/** Sideways speed after hitting a solid or a screen side. */
+function rebound(velocityX: number, feel: RollFeel): number {
+  return Math.abs(velocityX) <= feel.stopBelow ? 0 : -velocityX * feel.bounce;
+}
+
 export function boulderBox(body: GadgetBody): Box {
   return { x: body.x, y: body.y, width: S, height: S };
 }
@@ -449,7 +529,7 @@ export function boulderSpeed(body: GadgetBody): number {
   return Math.hypot(body.velocityX, body.velocityY);
 }
 
-/** At rest on something: solid (stood on, walked into), weighing on what it lies on. */
+/** At rest on something: a boulder is solid then (stood on, walked into), weighing on what it lies on. */
 export function boulderResting(body: GadgetBody): boolean {
   return body.isGrounded && body.velocityX === 0;
 }
@@ -493,10 +573,10 @@ export function stepBoulder(
   slopes: SlopeSurface[],
   gravity: number,
   breaks: BreaksThrough,
+  feel: RollFeel = BOULDER_FEEL,
 ): BoulderImpact[] {
   const impacts: BoulderImpact[] = [];
   const max: number = GAME_CONSTANTS.GADGET_BOULDER_MAX_SPEED;
-  const bounce: number = GAME_CONSTANTS.GADGET_BOULDER_BOUNCE;
   const slope: SlopeSurface | null = body.isGrounded
     ? slopeHolding(slopes, body.x, S, body.y + S, body.velocityX)
     : null;
@@ -513,7 +593,7 @@ export function stepBoulder(
   body.x += body.velocityX;
   if (body.x < 0 || body.x > W - S) {
     body.x = Math.min(W - S, Math.max(0, body.x));
-    body.velocityX = -body.velocityX * bounce;
+    body.velocityX = rebound(body.velocityX, feel);
   }
   for (const s of platforms) {
     if (!s.solid) continue;
@@ -528,11 +608,11 @@ export function stepBoulder(
       continue;
     }
     body.x = prevX + R <= s.x + s.width / 2 ? s.x - S : s.x + s.width;
-    body.velocityX = -body.velocityX * bounce;
+    body.velocityX = rebound(body.velocityX, feel);
   }
 
   if (body.isGrounded) {
-    body.velocityX *= GAME_CONSTANTS.GADGET_BOULDER_ROLL_FRICTION;
+    body.velocityX *= feel.friction;
     if (Math.abs(body.velocityX) < 0.05) body.velocityX = 0;
     if (slope) followSlope(body, slope);
   } else {
