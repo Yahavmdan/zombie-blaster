@@ -9,7 +9,7 @@ import { BoulderPath, boulderBox, boulderPath, gateBox } from '../engine/boulder
 import { LevelLayout, pickableProps, Prop } from '../engine/level-generator';
 import { parseLayout } from '../engine/level-editor';
 import { Gadget } from '../engine/engine-types';
-import { isSource, stateOf } from '../engine/gadgets';
+import { cageBox as gadgetCageBox, isSource, stateOf } from '../engine/gadgets';
 import { isResting } from '../engine/prop-tumble';
 import { CorpseSurface, corpseSurface } from '../engine/corpse-surface';
 import { CorpseDrape, maxDrop } from '../engine/corpse-drape';
@@ -451,6 +451,9 @@ function buildSnapshot(engine: GameEngine): E2eSnapshot {
         launches: s?.launches ?? 0,
         dropped: s?.dropped ?? false,
         landed: s?.landed ?? false,
+        swingAngle: s?.swingAngle ?? 0,
+        swingSpeed: s?.swingSpeed ?? 0,
+        cage: g.kind === 'cage' && s ? gadgetCageBox(g, s) : null,
         body: s?.body
           ? {
               x: s.body.x,

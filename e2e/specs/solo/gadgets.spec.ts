@@ -254,6 +254,87 @@ test.describe('designed floor slopes, cages and exit doors', { tag: '@solo' }, (
     );
   });
 
+  test('a hit on a cage only swings it', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await solo('warrior');
+    const y: number = WORLD.groundY - 100;
+    await designed(p, gadgetRoom(1, [cageAt('g1', 700, y, 'empty')]));
+    await p.probe.pauseZombieSpawns(true);
+    await p.face('right');
+    await p.probe.teleport(700 - WORLD.playerWidth - 4, WORLD.groundY - WORLD.playerHeight);
+    await p.wait(400);
+    await p.press(KEYS.attack, 120);
+    const hit: E2eSnapshot = await p.probe.waitFor(
+      'the hit set the cage swinging',
+      (s: E2eSnapshot): boolean => gadget(s, 'g1').cage!.x > 710,
+      { timeoutMs: 4_000, intervalMs: 20 },
+    );
+    expect(gadget(hit, 'g1').dropped, 'a hit on the cage only swings it').toBe(false);
+  });
+
+  test('landing on a cage swings it, it carries its rider, and a hit on its cable drops it', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await solo('warrior');
+    const y: number = WORLD.groundY - 100;
+    await designed(p, gadgetRoom(1, [cageAt('g1', 700, y, 'empty')]));
+    await p.probe.pauseZombieSpawns(true);
+    // Dropped from above, left of the cable and facing it: landing kicks it left and it carries the player.
+    await p.face('right');
+    await p.probe.teleport(705, y - 200);
+    const landed: E2eSnapshot = await p.probe.waitFor(
+      'landing on the cage swings it',
+      (s: E2eSnapshot): boolean =>
+        s.player!.isGrounded &&
+        s.player!.y + WORLD.playerHeight < WORLD.groundY - 50 &&
+        Math.abs(gadget(s, 'g1').swingSpeed) > 0.0005,
+      { timeoutMs: 4_000, intervalMs: 20 },
+    );
+    const riding: E2eSnapshot = await p.probe.waitFor(
+      'the rider moved with the cage, feet on it',
+      (s: E2eSnapshot): boolean => Math.abs(s.player!.x - landed.player!.x) > 10,
+      { timeoutMs: 4_000, intervalMs: 20 },
+    );
+    const feet: number = riding.player!.y + WORLD.playerHeight;
+    expect(Math.abs(feet - gadget(riding, 'g1').cage!.y), 'still on it').toBeLessThanOrEqual(8);
+    await p.attachCanvas(test.info(), 'rider on a swinging cage');
+    expect(gadget(riding, 'g1').dropped).toBe(false);
+
+    await p.press(KEYS.attack, 120);
+    await p.probe.waitFor(
+      'a swing at the cable from on the cage cuts it',
+      (s: E2eSnapshot): boolean => gadget(s, 'g1').landed,
+      { timeoutMs: 6_000 },
+    );
+  });
+
+  test('a swinging cage knocks the next one into a swing', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await solo('warrior');
+    const y: number = WORLD.groundY - 100;
+    await designed(p, gadgetRoom(1, [cageAt('g1', 600, y, 'empty'), cageAt('g2', 680, y, 'empty')]));
+    await p.probe.pauseZombieSpawns(true);
+    await p.face('right');
+    await p.probe.teleport(600 - WORLD.playerWidth - 4, WORLD.groundY - WORLD.playerHeight);
+    await p.wait(400);
+    await p.press(KEYS.attack, 120);
+    const knocked: E2eSnapshot = await p.probe.waitFor(
+      'the second cage swings',
+      (s: E2eSnapshot): boolean => gadget(s, 'g2').swingAngle > 0.005,
+      { timeoutMs: 5_000, intervalMs: 20 },
+    );
+    expect(gadget(knocked, 'g1').dropped).toBe(false);
+    expect(gadget(knocked, 'g2').dropped).toBe(false);
+  });
+
   test('a lever drops a cage: it lands as a step and lets its zombies out', async ({
     solo,
   }: {

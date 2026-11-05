@@ -184,7 +184,7 @@ const TOOL_GROUPS: ToolGroup[] = [
       {
         tool: 'cage',
         label: 'Cage',
-        hint: 'Click: a covered cage hanging from the ceiling. A wire (or a swing at it) drops it. Middle click: what it hides, smash or stay',
+        hint: 'Click: a covered cage hanging from the ceiling. Hit it or land on it and it swings; only a hit on its cable (or a wire) drops it. Middle click: what it hides, smash or stay',
       },
     ],
   },

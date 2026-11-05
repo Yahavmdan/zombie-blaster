@@ -300,6 +300,29 @@ export const GAME_CONSTANTS = {
   GADGET_CAGE_SIZE_PX: 64, // A new hanging cage is this big (square)
   GADGET_CAGE_MAX_ZOMBIES: 8, // Most zombies the editor lets a cage hide (a new one hides CAGE_ZOMBIES)
   GADGET_CAGE_MAX_GOLD: 1000, // Most gold the editor lets a loot cage hold (a new one holds CAGE_LOOT_GOLD)
+  GADGET_CAGE_KG: 300, // An iron cage's weight: pushes move it GADGET_CAGE_LIGHT_KG / this as much (raise it for gentler swings)
+  GADGET_CAGE_LIGHT_KG: 100, // The cage pushes below (hit, landing, rider, blast, knock) are what a cage this light would get
+  GADGET_CAGE_SWING_GRAVITY: 0.4, // What pulls a swinging cage back to the middle (px/tick^2): longer cables swing slower
+  GADGET_CAGE_SWING_DRAG: 0.995, // A cage keeps this share of its swing speed every tick
+  GADGET_CAGE_MIN_CABLE_PX: 40, // A cage placed right under the ceiling still swings on a cable this long
+  GADGET_CAGE_MAX_SWING: 0.6, // Widest swing (radians from straight down)
+  GADGET_CAGE_MAX_SWING_SPEED: 7, // Fastest a cage swings (px/tick)
+  GADGET_CAGE_SWING_REST_ANGLE: 0.002, // Below this angle (radians)...
+  GADGET_CAGE_SWING_REST_SPEED: 0.0003, // ...and this speed (radians/tick) it hangs still
+  GADGET_CAGE_HIT_SPEED: 3, // A swing at the cage itself pushes it this fast (px/tick)
+  GADGET_CAGE_LAND_SPEED: 2, // A player landing on a cage pushes it this fast (px/tick)...
+  GADGET_CAGE_LAND_WALK_SHARE: 0.4, // ...plus this share of their sideways speed
+  GADGET_CAGE_RIDER_PUMP: 0.04, // A rider walking on it pushes it this much every tick (px/tick^2)
+  GADGET_CAGE_RIDER_GRACE_TICKS: 20, // Off a cage this long before stepping back on counts as landing again
+  GADGET_CAGE_BLAST_SPEED: 6, // A barrel blast in reach pushes a cage this fast (px/tick)
+  GADGET_CAGE_KNOCK_SHARE: 0.5, // A boulder or bin running into a cage hands it this share of its speed
+  GADGET_CAGE_CLANG_SHARE: 0.8, // Cages that hit swap speeds, keeping this share
+  GADGET_CAGE_CLANG_MIN_SPEED: 0.3, // Cages closing at least this fast (px/tick) throw sparks
+  GADGET_CAGE_WALL_BOUNCE: 0.5, // A cage swinging into a wall comes back with this share of its speed
+  GADGET_CAGE_FALL_DRAG: 0.99, // A falling cage keeps this share of its sideways speed every tick
+  GADGET_CAGE_CABLE_HIT_PX: 8, // How wide a swing sees the cable
+  GADGET_CAGE_HOOK_PX: 20, // The hook where the cable meets the cage's sling stands this far over its top
+  GADGET_CAGE_CUT_STUB_PX: 40, // A cut cable leaves this much hanging from the ceiling
   GADGET_WIRE_DOT_SPACING_PX: 12, // The wire from a source to a target shows as dots this far apart (lit while it carries the signal)
 
   // ─── Zombie Spawning ───────────────────────────
