@@ -11,6 +11,7 @@ ships, tick its box here and rewrite its line to match what was built.
 
 ## Physics and props
 
+- [ ] **Boulder behind the door** (floor 3, designed in the level editor): weight on the middle ledge's button opens a tall door, a boulder rolls down a slope and breaks the cracked wall at the left edge. No way out yet: the designer adds it later.
 - [x] **Two buttons, two doors** (floor 2, designed in the level editor): a tall door shuts off the
       right end of the map with the exit door behind it. The high ledge's button opens the tall door,
       the right ledge's button the exit door, and both need 60 kg at once, so bodies or props must

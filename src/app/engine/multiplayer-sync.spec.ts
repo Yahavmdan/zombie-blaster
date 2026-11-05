@@ -901,6 +901,7 @@ describe('Spring puzzle (floor 3)', (): void => {
   beforeEach((): void => {
     engine = new GameEngine(createMockCanvas());
     engine.player = makePlayer();
+    engine.designedFloors = false;
     engine.setFloor(GAME_CONSTANTS.PUZZLE_SPRING_FLOOR);
   });
 
