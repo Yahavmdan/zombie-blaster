@@ -18,7 +18,9 @@ import {
 import {
   SlopeSurface,
   boulderBox,
+  cablePivot,
   cageBox,
+  cageHook,
   crackBand,
   doorSolid,
   lookOf,
@@ -723,22 +725,42 @@ export function drawGadgetSlope(
 }
 
 /**
- * A cage: hanging on a chain from the ceiling and covered (nobody sees what it hides); falling
- * with its torn chain; landed, open and bare. A smashed one is gone (its debris is an effect).
+ * The join between cable and cage: a sling from the top corners up to a big bright hook, so
+ * nobody misses where the cage hangs from. Drawn above the box: it has no collision.
+ */
+function drawCageSling(ctx: CanvasRenderingContext2D, box: Box, hook: Point): void {
+  const left: number = box.x + 6;
+  const right: number = box.x + box.width - 6;
+  pxLine(ctx, hook.x, hook.y, left, box.y, K);
+  pxLine(ctx, hook.x, hook.y, right, box.y, K);
+  pxLine(ctx, hook.x, hook.y + 2, left + 2, box.y, PIXEL['steelHi']);
+  pxLine(ctx, hook.x, hook.y + 2, right - 2, box.y, PIXEL['steelHi']);
+  pxDisc(ctx, hook.x, hook.y, 10, K);
+  pxDisc(ctx, hook.x, hook.y, 8, PIXEL['rustHi']);
+  pxDisc(ctx, hook.x, hook.y, 4, K);
+}
+
+/**
+ * A cage: hanging on a cable from the ceiling and covered (nobody sees what it hides), swinging
+ * level on the sling at its top; once the cable is cut a stub stays up there and it falls, then
+ * stands open and bare. A smashed one is gone (its debris is an effect).
  */
 export function drawGadgetCage(
   ctx: CanvasRenderingContext2D,
   g: CageGadget,
   state: GadgetState,
 ): void {
+  const pivot: Point = cablePivot(g);
+  const top: Point = { x: pivot.x, y: Math.max(0, pivot.y) };
+  if (state.dropped) {
+    drawChain(ctx, [top, { x: pivot.x, y: top.y + GAME_CONSTANTS.GADGET_CAGE_CUT_STUB_PX }]);
+  }
   if (state.landed && state.broken) return;
   const box: Box = cageBox(g, state);
-  const cx: number = box.x + box.width / 2;
   if (!state.dropped) {
-    drawChain(ctx, [
-      { x: cx, y: 0 },
-      { x: cx, y: box.y },
-    ]);
+    const hook: Point = cageHook(g, state);
+    drawChain(ctx, [top, hook]);
+    drawCageSling(ctx, box, hook);
   }
   drawCageArt(ctx, box, !state.landed, lookOf(g));
 }

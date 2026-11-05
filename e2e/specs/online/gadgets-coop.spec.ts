@@ -152,7 +152,7 @@ test.describe('designed floor gadgets in co-op', { tag: '@online' }, (): void =>
     await guest.release(KEYS.right);
   });
 
-  test('a guest swings a cage down: the host drops it, the guest sees it land and its zombies out', async ({
+  test('a guest swings a cage and cuts its cable: the host decides, both see the swing and the fall', async ({
     room,
   }: {
     room: RoomFactory;
@@ -180,8 +180,28 @@ test.describe('designed floor gadgets in co-op', { tag: '@online' }, (): void =>
     await guest.probe.teleport(600 - WORLD.playerWidth - 4, WORLD.groundY - WORLD.playerHeight);
     await guest.wait(400);
     await guest.press(KEYS.attack, 120);
+    const swung: E2eSnapshot = await host.probe.waitFor(
+      "the guest's hit on the cage swings it on the host",
+      (s: E2eSnapshot): boolean => gadget(s, 'g1').swingAngle > 0.01,
+      { timeoutMs: 4_000, intervalMs: 20 },
+    );
+    expect(gadget(swung, 'g1').dropped, 'a hit on the cage only swings it').toBe(false);
+    await guest.probe.waitFor(
+      'the guest sees the cage swing',
+      (s: E2eSnapshot): boolean => gadget(s, 'g1').cage!.x > 605,
+      { timeoutMs: 4_000, intervalMs: 20 },
+    );
+
+    // Onto the cage, left of its cable, facing it: this swing meets the cable.
+    const at: E2eSnapshot = await guest.probe.state();
+    await guest.probe.teleport(
+      gadget(at, 'g1').cage!.x + 28 - WORLD.playerWidth,
+      gadget(at, 'g1').cage!.y - WORLD.playerHeight - 2,
+    );
+    await guest.wait(900); // Past the hit cooldown of the first swing.
+    await guest.press(KEYS.attack, 120);
     await host.probe.waitFor(
-      "the host drops the cage on the guest's swing",
+      "the host drops the cage on the guest's swing at the cable",
       (s: E2eSnapshot): boolean => gadget(s, 'g1').dropped,
       { timeoutMs: 8_000 },
     );

@@ -121,6 +121,8 @@ export function newGadgetState(id: string, body: GadgetBody | null): GadgetState
     bounceTicks: 0,
     windTicks: 0,
     body,
+    swingAngle: 0,
+    swingSpeed: 0,
     dropped: false,
     landed: false,
   };
@@ -829,20 +831,145 @@ export function slopeTopUnder(
 
 // ─── Cages ───────────────────────────────────────────────
 
-/** Where a cage is now: hanging where placed, or falling / landed (its body). */
+/** How long a cage's cable is: its pendulum, from the ceiling to the middle of its top. */
+export function cableLength(g: CageGadget): number {
+  return Math.max(g.y, GAME_CONSTANTS.GADGET_CAGE_MIN_CABLE_PX);
+}
+
+/** A hanging cage at `angle`: it stays level (art equals collision) and swings around the ceiling. */
+function hangingBox(g: CageGadget, angle: number): Box {
+  const length: number = cableLength(g);
+  return {
+    x: g.x + length * Math.sin(angle),
+    y: g.y + length * (1 - Math.cos(angle)),
+    width: g.width,
+    height: g.height,
+  };
+}
+
+/** Where a cage is now: hanging on its swing, or falling / landed (its body). */
 export function cageBox(g: CageGadget, state: GadgetState): Box {
-  return state.body ? { x: state.body.x, y: state.body.y, width: g.width, height: g.height } : g;
+  return state.body
+    ? { x: state.body.x, y: state.body.y, width: g.width, height: g.height }
+    : hangingBox(g, state.swingAngle);
 }
 
 /** A cage's solid: while it hangs, and where it landed unless it smashed; none while it falls. */
 export function cageSolid(g: CageGadget, state: GadgetState): Box | null {
-  if (!state.dropped) return g;
+  if (!state.dropped) return cageBox(g, state);
   return state.landed && !state.broken ? cageBox(g, state) : null;
 }
 
+/** Where the cable hangs from: over the cage's resting spot. */
+export function cablePivot(g: CageGadget): Point {
+  return { x: g.x + g.width / 2, y: g.y - cableLength(g) };
+}
+
+/** The hook where the cable meets the cage's sling. */
+export function cageHook(g: CageGadget, state: GadgetState): Point {
+  const box: Box = cageBox(g, state);
+  return { x: box.x + box.width / 2, y: box.y - GAME_CONSTANTS.GADGET_CAGE_HOOK_PX };
+}
+
+/** The strip of cable a swing from height `y` (a player's top) reaches: only the cable, never the cage. */
+export function cableBoxAt(g: CageGadget, state: GadgetState, y: number): Box {
+  const pivot: Point = cablePivot(g);
+  const hook: Point = cageHook(g, state);
+  const middle: number = y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+  const along: number = Math.max(0, Math.min(1, (middle - pivot.y) / (hook.y - pivot.y)));
+  const width: number = GAME_CONSTANTS.GADGET_CAGE_CABLE_HIT_PX;
+  return {
+    x: pivot.x + (hook.x - pivot.x) * along - width / 2,
+    y: pivot.y,
+    width,
+    height: cageBox(g, state).y - pivot.y,
+  };
+}
+
+/** A push along the swing (px/tick, positive: right); it never swings faster than the cap. */
+export function pushCage(g: CageGadget, state: GadgetState, speed: number): void {
+  const length: number = cableLength(g);
+  const most: number = GAME_CONSTANTS.GADGET_CAGE_MAX_SWING_SPEED / length;
+  state.swingSpeed = Math.min(most, Math.max(-most, state.swingSpeed + speed / length));
+}
+
 /**
- * One tick of a falling cage (box `width` x `height`): it drops (gravity) onto the highest thing
- * under any part of it. Returns true on the tick it lands.
+ * One tick of a hanging cage's swing: the pendulum pulls it back and drag wears it down. Off the
+ * screen or into something in `blockers` it bounces back instead (a blocker it was already in
+ * doesn't hold it).
+ */
+export function stepCageSwing(g: CageGadget, state: GadgetState, blockers: Box[]): void {
+  const pull: number =
+    (GAME_CONSTANTS.GADGET_CAGE_SWING_GRAVITY / cableLength(g)) * Math.sin(state.swingAngle);
+  const speed: number = (state.swingSpeed - pull) * GAME_CONSTANTS.GADGET_CAGE_SWING_DRAG;
+  const widest: number = GAME_CONSTANTS.GADGET_CAGE_MAX_SWING;
+  const angle: number = Math.min(widest, Math.max(-widest, state.swingAngle + speed));
+  if (
+    Math.abs(angle) < GAME_CONSTANTS.GADGET_CAGE_SWING_REST_ANGLE &&
+    Math.abs(speed) < GAME_CONSTANTS.GADGET_CAGE_SWING_REST_SPEED
+  ) {
+    state.swingAngle = 0;
+    state.swingSpeed = 0;
+    return;
+  }
+  const before: Box = hangingBox(g, state.swingAngle);
+  const after: Box = hangingBox(g, angle);
+  const hits: boolean =
+    after.x < 0 ||
+    after.x + after.width > W ||
+    blockers.some((b: Box): boolean => overlaps(after, b) && !overlaps(before, b));
+  if (hits) {
+    state.swingSpeed = -speed * GAME_CONSTANTS.GADGET_CAGE_WALL_BOUNCE;
+    return;
+  }
+  state.swingAngle = angle;
+  state.swingSpeed = Math.abs(angle) === widest ? 0 : speed;
+}
+
+/**
+ * Two hanging cages that touch while closing swap speeds, so the one it hit swings off. Returns
+ * true when they hit hard enough to show.
+ */
+export function clangCages(a: CageGadget, sa: GadgetState, b: CageGadget, sb: GadgetState): boolean {
+  const boxA: Box = cageBox(a, sa);
+  const boxB: Box = cageBox(b, sb);
+  if (!overlaps(boxA, boxB)) return false;
+  const speedA: number = sa.swingSpeed * cableLength(a);
+  const speedB: number = sb.swingSpeed * cableLength(b);
+  const closing: number = boxA.x <= boxB.x ? speedA - speedB : speedB - speedA;
+  if (closing <= 0) return false;
+  const share: number = GAME_CONSTANTS.GADGET_CAGE_CLANG_SHARE;
+  sa.swingSpeed = (speedB * share) / cableLength(a);
+  sb.swingSpeed = (speedA * share) / cableLength(b);
+  return closing >= GAME_CONSTANTS.GADGET_CAGE_CLANG_MIN_SPEED;
+}
+
+/** A body (box x..x+width, bottom at `bottom`) resting on top of `box`. */
+export function ridesOn(box: Box, x: number, width: number, bottom: number): boolean {
+  return (
+    x + width > box.x &&
+    x < box.x + box.width &&
+    Math.abs(bottom - box.y) <= GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE
+  );
+}
+
+/** A cut cage's body: where it is now, flying on with the speed of its swing. */
+export function cageReleaseBody(g: CageGadget, state: GadgetState): GadgetBody {
+  const box: Box = cageBox(g, state);
+  const speed: number = state.swingSpeed * cableLength(g);
+  return {
+    x: box.x,
+    y: box.y,
+    velocityX: speed * Math.cos(state.swingAngle),
+    velocityY: speed * Math.sin(state.swingAngle),
+    isGrounded: false,
+    angle: 0,
+  };
+}
+
+/**
+ * One tick of a falling cage (box `width` x `height`): it flies on sideways (a wall stops that)
+ * and drops (gravity) onto the highest thing under any part of it. Returns true on the tick it lands.
  */
 export function fallCage(
   body: GadgetBody,
@@ -851,6 +978,12 @@ export function fallCage(
   platforms: Platform[],
   gravity: number,
 ): boolean {
+  body.velocityX *= GAME_CONSTANTS.GADGET_CAGE_FALL_DRAG;
+  const x: number = Math.min(W - width, Math.max(0, body.x + body.velocityX));
+  const beside: Box = { x, y: body.y, width, height };
+  if (platforms.some((p: Platform): boolean => p.solid === true && !p.propId && overlaps(beside, p)))
+    body.velocityX = 0;
+  else body.x = x;
   body.velocityY = Math.min(body.velocityY + gravity, GAME_CONSTANTS.TERMINAL_VELOCITY);
   const prevBottom: number = body.y + height;
   body.y += body.velocityY;
@@ -863,6 +996,7 @@ export function fallCage(
   }
   if (top === null) return false;
   body.y = top - height;
+  body.velocityX = 0;
   body.velocityY = 0;
   body.isGrounded = true;
   return true;

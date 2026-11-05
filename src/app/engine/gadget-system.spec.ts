@@ -640,33 +640,305 @@ describe('GadgetSystem on a real engine', () => {
     expect(events(VfxEventType.CageLand).length).toBe(1);
   });
 
-  it('an unwired cage drops at a swing; a smashing one leaves no step and spills its loot', () => {
-    load([
-      {
-        id: 'g1',
-        kind: 'cage',
-        content: 'loot',
-        zombies: 1,
-        gold: 250,
-        smashes: true,
-        x: 300,
-        y: GROUND_Y - 120,
-        width: 64,
-        height: 64,
-      },
-    ]);
-    const p: CharacterState = engine.player!;
-    p.x = 300 - GAME_CONSTANTS.PLAYER_WIDTH - 4;
-    p.y = GROUND_Y - 120 + 8;
-    p.isAttacking = true;
+  const PW: number = GAME_CONSTANTS.PLAYER_WIDTH;
+  const CAGE_Y: number = GROUND_Y - 120;
+
+  const cage: (id: string, x: number, smashes?: boolean) => Gadget = (
+    id: string,
+    x: number,
+    smashes: boolean = false,
+  ): Gadget => ({
+    id,
+    kind: 'cage',
+    content: 'loot',
+    zombies: 1,
+    gold: 250,
+    smashes,
+    x,
+    y: CAGE_Y,
+    width: 64,
+    height: 64,
+  });
+
+  /** One swing (hit cooldown over): the player attacks for one tick. */
+  function swing(): void {
+    engine.player!.isAttacking = true;
     tick(1);
-    p.isAttacking = false;
+    engine.player!.isAttacking = false;
+  }
+
+  function solidOf(id: string): Platform {
+    const solid: Platform | undefined = engine.platforms.find(
+      (p: Platform): boolean => p.gadgetId === id,
+    );
+    expect(solid).toBeDefined();
+    return solid!;
+  }
+
+  /** The player beside the cage at x, level with it and facing it. */
+  function besideCage(x: number): void {
+    const p: CharacterState = engine.player!;
+    p.x = x - PW - 4;
+    p.y = CAGE_Y + 8;
+    p.facing = Direction.Right;
+  }
+
+  /** The player on top of the cage, just left of its cable and facing it. */
+  function onCage(x: number): void {
+    const p: CharacterState = engine.player!;
+    p.x = x + 32 - PW - 4;
+    p.y = CAGE_Y - PH;
+    p.isGrounded = true;
+    p.facing = Direction.Right;
+  }
+
+  it('a swing at the cage only sets it swinging: it stays up and its solid moves along', () => {
+    load([cage('g1', 300)]);
+    besideCage(300);
+    swing();
+    tick(20);
+    expect(state('g1').dropped).toBe(false);
+    expect(state('g1').swingAngle).toBeGreaterThan(0);
+    expect(solidOf('g1').x).toBeGreaterThan(300);
+    expect(solidOf('g1').y).toBeGreaterThan(CAGE_Y);
+  });
+
+  it('a swing wears off: the cage comes back to hang still where it was placed', () => {
+    load([cage('g1', 300)]);
+    besideCage(300);
+    swing();
+    engine.player!.x = 900;
+    tick(5000);
+    expect(state('g1')).toMatchObject({ swingAngle: 0, swingSpeed: 0, dropped: false });
+    expect(solidOf('g1')).toMatchObject({ x: 300, y: CAGE_Y });
+  });
+
+  it('a hit on the cable cuts it; a smashing cage leaves no step and spills its loot', () => {
+    load([cage('g1', 300, true)]);
+    onCage(300);
+    swing();
     expect(state('g1').dropped).toBe(true);
     tick(60);
     expect(state('g1')).toMatchObject({ landed: true, broken: true });
     expect(engine.platforms.some((q: Platform): boolean => q.gadgetId === 'g1')).toBe(false);
     expect(engine.worldDrops.some((d: WorldDrop): boolean => d.value === 250)).toBe(true);
     expect(events(VfxEventType.CageSmash).length).toBe(1);
+  });
+
+  it('a swing from beside the cage never reaches its cable', () => {
+    load([cage('g1', 300)]);
+    const p: CharacterState = engine.player!;
+    p.x = 300 - PW - 4;
+    p.y = CAGE_Y - PH + 4;
+    p.facing = Direction.Right;
+    swing();
+    expect(state('g1').dropped).toBe(false);
+  });
+
+  it('a wired cage takes both: its wire drops it, and so does a hit on its cable', () => {
+    const lever: Gadget = {
+      id: 'g9',
+      kind: 'lever',
+      startsOn: false,
+      x: 100,
+      y: GROUND_Y - 32,
+      width: 16,
+      height: 32,
+      targets: ['g1'],
+    };
+    load([cage('g1', 300), lever]);
+    onCage(300);
+    swing();
+    expect(state('g1').dropped, 'cable').toBe(true);
+    load([cage('g1', 300), lever]);
+    engine.player!.x = 900;
+    state('g9').on = true;
+    tick(1);
+    expect(state('g1').dropped, 'wire').toBe(true);
+  });
+
+  it('a cut cage flies on with its swing and lands off to that side', () => {
+    load([cage('g1', 300)]);
+    besideCage(300);
+    swing();
+    // Away from the cage while the hit cooldown runs, so nothing but the swing moves it.
+    engine.player!.x = 900;
+    tick(GAME_CONSTANTS.GADGET_HIT_COOLDOWN_TICKS);
+    const hanging: GadgetState = state('g1');
+    expect(hanging.swingSpeed).toBeGreaterThan(0);
+    onCage(solidOf('g1').x);
+    engine.player!.y = solidOf('g1').y - PH;
+    swing();
+    expect(hanging.dropped).toBe(true);
+    expect(hanging.body!.velocityX).toBeGreaterThan(0);
+    expect(hanging.swingAngle).toBe(0);
+    const cut: number = hanging.body!.x;
+    tick(120);
+    expect(hanging.landed).toBe(true);
+    expect(hanging.body!.x).toBeGreaterThan(cut);
+    expect(hanging.body!.y + 64).toBe(GROUND_Y);
+  });
+
+  it('landing on a cage swings it the way the player was heading, once, and carries them along', () => {
+    load([cage('g1', 300)]);
+    const p: CharacterState = engine.player!;
+    p.x = 330;
+    p.y = 100;
+    p.isGrounded = false;
+    p.velocityX = -2;
+    tick(1);
+    expect(state('g1').swingSpeed, 'in the air: nothing').toBe(0);
+    p.y = CAGE_Y - PH;
+    p.isGrounded = true;
+    tick(1);
+    const kick: number = state('g1').swingSpeed;
+    expect(kick).toBeLessThan(0);
+    p.velocityX = 0;
+    const x: number = p.x;
+    tick(20);
+    expect(Math.abs(state('g1').swingSpeed), 'no second kick').toBeLessThanOrEqual(
+      Math.abs(kick) + 0.001,
+    );
+    expect(p.x, 'rode it left').toBeLessThan(x);
+    expect(p.y + PH).toBeCloseTo(solidOf('g1').y, 5);
+  });
+
+  it('dropping straight down on a cage swings it toward the side it landed on', () => {
+    load([cage('g1', 300)]);
+    const p: CharacterState = engine.player!;
+    p.x = 340;
+    p.y = CAGE_Y - PH;
+    p.isGrounded = true;
+    tick(1);
+    expect(state('g1').swingSpeed).toBeGreaterThan(0);
+  });
+
+  it('a rider walking on the cage pumps it, up to the widest swing and top speed', () => {
+    load([cage('g1', 300)]);
+    const p: CharacterState = engine.player!;
+    p.x = 320;
+    p.y = CAGE_Y - PH;
+    p.isGrounded = true;
+    tick(1);
+    const still: number = state('g1').swingSpeed;
+    p.velocityX = 3;
+    tick(1);
+    expect(state('g1').swingSpeed).toBeGreaterThan(still - 0.001);
+    for (let i: number = 0; i < 2000; i++) {
+      p.velocityX = state('g1').swingSpeed >= 0 ? 3 : -3;
+      p.x = solidOf('g1').x + 20;
+      p.y = solidOf('g1').y - PH;
+      tick(1);
+      expect(Math.abs(state('g1').swingAngle)).toBeLessThanOrEqual(GAME_CONSTANTS.GADGET_CAGE_MAX_SWING);
+    }
+    expect(state('g1').dropped).toBe(false);
+  });
+
+  it('a corpse and a zombie lying on a swinging cage go along with it', () => {
+    load([cage('g1', 300)]);
+    const zombie: ZombieState = makeZombie(310);
+    zombie.y = CAGE_Y - zombie.instanceHeight;
+    engine.zombies = [zombie];
+    besideCage(300);
+    swing();
+    tick(20);
+    expect(zombie.x).toBeGreaterThan(310);
+    expect(zombie.y + zombie.instanceHeight).toBeCloseTo(solidOf('g1').y, 5);
+  });
+
+  it('a swinging cage that hits another sets it swinging; neither falls', () => {
+    load([cage('g1', 300), cage('g2', 380)]);
+    besideCage(300);
+    swing();
+    engine.pendingVfxEvents = [];
+    tick(60);
+    expect(state('g2').swingAngle, 'the one it hit swings').toBeGreaterThan(0);
+    expect(state('g1').dropped).toBe(false);
+    expect(state('g2').dropped).toBe(false);
+    expect(events(VfxEventType.HitParticles).length, 'sparks every screen sees').toBeGreaterThan(0);
+  });
+
+  it('a chain of cages passes the swing down the line', () => {
+    load([cage('g1', 300), cage('g2', 380), cage('g3', 460)]);
+    besideCage(300);
+    swing();
+    tick(120);
+    expect(Math.abs(state('g3').swingAngle) + Math.abs(state('g3').swingSpeed)).toBeGreaterThan(0);
+  });
+
+  it('a boulder running into a cage and a barrel blast only swing it', () => {
+    load([
+      cage('g1', 300),
+      { id: 'g2', kind: 'boulder', kg: 600, x: 200, y: CAGE_Y, width: S, height: S },
+    ]);
+    const boulder: GadgetBody = state('g2').body!;
+    boulder.x = 300 - S - 2;
+    boulder.y = CAGE_Y + 4;
+    boulder.velocityX = GAME_CONSTANTS.GADGET_BOULDER_MAX_SPEED;
+    boulder.velocityY = 0;
+    boulder.isGrounded = false;
+    engine.player!.x = 900;
+    tick(3);
+    expect(state('g1').dropped).toBe(false);
+    expect(state('g1').swingSpeed).toBeGreaterThan(0);
+    load([cage('g1', 300)]);
+    engine.gadgetSystem.blast({ x: 300, y: CAGE_Y + 32 });
+    expect(state('g1').dropped).toBe(false);
+    expect(state('g1').swingSpeed).toBeGreaterThan(0);
+  });
+
+  it('a cage swinging into a wall bounces back and never passes it', () => {
+    load([
+      cage('g1', 300),
+      {
+        id: 'g2',
+        kind: 'door',
+        latch: false,
+        exit: false,
+        x: 380,
+        y: CAGE_Y - 40,
+        width: 32,
+        height: 160,
+      },
+      {
+        id: 'g3',
+        kind: 'lever',
+        startsOn: false,
+        x: 900,
+        y: GROUND_Y - 32,
+        width: 16,
+        height: 32,
+        targets: ['g2'],
+      },
+    ]);
+    besideCage(300);
+    swing();
+    engine.player!.x = 900;
+    for (let i: number = 0; i < 100; i++) {
+      tick(1);
+      expect(solidOf('g1').x + 64).toBeLessThanOrEqual(380.001);
+    }
+  });
+
+  it('a client swings on between snapshots, rides along, and clamps a bad snapshot', () => {
+    load([cage('g1', 300)]);
+    engine.isMultiplayerClient = true;
+    const p: CharacterState = engine.player!;
+    p.x = 320;
+    p.y = CAGE_Y - PH;
+    p.isGrounded = true;
+    const host: GadgetState = { ...state('g1'), swingAngle: 0.1, swingSpeed: 0.01 };
+    engine.applyRemoteGadgets([host]);
+    expect(solidOf('g1').x).toBeGreaterThan(300);
+    expect(p.x, 'the snapshot carried the rider').toBeGreaterThan(320);
+    const x: number = solidOf('g1').x;
+    engine.gadgetSystem.tickClient();
+    expect(solidOf('g1').x).toBeGreaterThan(x);
+    expect(p.y + PH).toBeCloseTo(solidOf('g1').y, 5);
+    engine.applyRemoteGadgets([{ ...host, swingAngle: 99, swingSpeed: Number.NaN }]);
+    expect(state('g1').swingAngle).toBe(GAME_CONSTANTS.GADGET_CAGE_MAX_SWING);
+    expect(Number.isFinite(state('g1').swingSpeed)).toBe(true);
+    expect(state('g1').dropped).toBe(false);
   });
 
   it('an unwired exit door stands open: standing in it leaves the floor; a plain door does not', () => {

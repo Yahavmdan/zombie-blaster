@@ -401,6 +401,10 @@ export interface GadgetState {
   windTicks: number;
   /** A boulder's body, or a cage's once it dropped (null otherwise). */
   body: GadgetBody | null;
+  /** A hanging cage: radians from straight down (positive: swung right). */
+  swingAngle: number;
+  /** A hanging cage: radians per tick. */
+  swingSpeed: number;
   /** A cage: let go of its chain (for good this floor). */
   dropped: boolean;
   /** A cage: came down on something (for good this floor); `broken` when it smashed there. */

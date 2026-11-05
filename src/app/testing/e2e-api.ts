@@ -409,6 +409,11 @@ export interface E2eGadgetView {
   /** A cage let go of its chain; landed (`broken`: smashed there). */
   dropped: boolean;
   landed: boolean;
+  /** A hanging cage's swing: radians from straight down, radians per tick. */
+  swingAngle: number;
+  swingSpeed: number;
+  /** A cage's box now (it swings, falls, lands); null for other kinds. */
+  cage: { x: number; y: number; width: number; height: number } | null;
   /** A boulder's (or a dropped cage's) body now (box top-left, speed). */
   body: { x: number; y: number; vx: number; vy: number; grounded: boolean } | null;
   /** A source's wires (target ids, `exit` for the exit). */

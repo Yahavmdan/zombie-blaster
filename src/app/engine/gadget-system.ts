@@ -24,9 +24,16 @@ import {
   boulderBox,
   boulderResting,
   boulderVictims,
+  cableBoxAt,
   cageBox,
+  cageHook,
+  cageReleaseBody,
   cageSolid,
+  clangCages,
   fallCage,
+  pushCage,
+  ridesOn,
+  stepCageSwing,
   slopesOf,
   zombiesIn,
   crackBand,
@@ -86,6 +93,8 @@ export class GadgetSystem {
   private readonly cooldowns: Map<string, number> = new Map<string, number>();
   /** Host: zombies each boulder crushed since it last lay still (each is crushed once a run). */
   private readonly crushed: Map<string, Set<string>> = new Map<string, Set<string>>();
+  /** Host: `cage:player` riding now, with ticks of grace left (a fresh one has just landed). */
+  private readonly riders: Map<string, number> = new Map<string, number>();
 
   constructor(
     private readonly e: IGameEngine,
@@ -102,6 +111,7 @@ export class GadgetSystem {
     this.e.gadgetStates = newGadgetStates(this.e.gadgets);
     this.cooldowns.clear();
     this.crushed.clear();
+    this.riders.clear();
     this.placeSolids();
   }
 
@@ -119,6 +129,8 @@ export class GadgetSystem {
       else if (g.kind === 'lever') this.flip(g, state, players);
       else if (g.kind === 'cage') this.hangOrFall(g, state, players);
     }
+    this.clangHangingCages();
+    this.tickRiderGrace();
     const world: WeighedWorld = this.world(players);
     for (const g of this.e.gadgets) {
       const state: GadgetState | undefined = stateOf(this.e.gadgetStates, g.id);
@@ -160,6 +172,8 @@ export class GadgetSystem {
           (): boolean => false,
           rollFeel(g),
         );
+      } else if (g.kind === 'cage' && !state.dropped) {
+        this.swingCage(g, state, false);
       } else if (g.kind === 'cage' && state.body && !state.landed) {
         fallCage(
           state.body,
@@ -199,8 +213,10 @@ export class GadgetSystem {
         typeof incoming.id === 'string' ? stateOf(this.e.gadgetStates, incoming.id) : undefined;
       if (!state) continue;
       const before: number = state.launches;
-      this.applyState(state, incoming);
       const g: Gadget | undefined = this.e.gadgets.find((x: Gadget): boolean => x.id === state.id);
+      const hung: Box | null = g?.kind === 'cage' && !state.dropped ? cageBox(g, state) : null;
+      this.applyState(state, incoming);
+      if (g?.kind === 'cage' && hung && !state.dropped) this.carry(hung, cageBox(g, state), false);
       const player: CharacterState | null = this.e.player;
       if (g && isLauncher(g) && player && state.launches > before && freshLaunch(state)) {
         if (playerOnLauncher(player, g)) this.throwPlayer(player, g);
@@ -221,8 +237,11 @@ export class GadgetSystem {
         distanceToBox(center, crackBand(g)) <= radius
       ) {
         this.breakBand(g, state, Math.sign(g.x + g.width / 2 - center.x) || 1);
-      } else if (g.kind === 'cage' && !state.dropped && distanceToBox(center, g) <= radius) {
-        this.dropCage(g, state);
+      } else if (g.kind === 'cage' && !state.dropped) {
+        const box: Box = cageBox(g, state);
+        if (distanceToBox(center, box) > radius) continue;
+        const dir: number = Math.sign(box.x + box.width / 2 - center.x) || 1;
+        pushCage(g, state, dir * GAME_CONSTANTS.GADGET_CAGE_BLAST_SPEED);
       } else if (isRoller(g) && state.body) {
         const body: GadgetBody = state.body;
         const middle: Point = { x: body.x + S / 2, y: body.y + S / 2 };
@@ -290,6 +309,9 @@ export class GadgetSystem {
       num(r.windTicks) ?? state.windTicks,
       GAME_CONSTANTS.GADGET_LAUNCH_WIND_TICKS,
     );
+    const widest: number = GAME_CONSTANTS.GADGET_CAGE_MAX_SWING;
+    state.swingAngle = Math.min(widest, Math.max(-widest, num(r.swingAngle) ?? state.swingAngle));
+    state.swingSpeed = Math.min(widest, Math.max(-widest, num(r.swingSpeed) ?? state.swingSpeed));
     const body: unknown = r.body;
     if (!state.body || typeof body !== 'object' || body === null) return;
     const b: Partial<GadgetBody> = body as Partial<GadgetBody>;
@@ -339,9 +361,19 @@ export class GadgetSystem {
     reach: number,
     players: CharacterState[],
   ): CharacterState | null {
+    return this.swingerAt(id, (): Box => box, reach, players);
+  }
+
+  /** `swingers`, for a target that depends on who swings (`boxFor`: what that player's swing meets). */
+  private swingerAt(
+    id: string,
+    boxFor: (p: CharacterState) => Box,
+    reach: number,
+    players: CharacterState[],
+  ): CharacterState | null {
     if ((this.cooldowns.get(id) ?? 0) > 0) return null;
     const swinger: CharacterState | undefined = players.find((p: CharacterState): boolean =>
-      swingHits(p, box, reach),
+      swingHits(p, boxFor(p), reach),
     );
     if (!swinger) return null;
     this.cooldowns.set(id, GAME_CONSTANTS.GADGET_HIT_COOLDOWN_TICKS);
@@ -399,8 +431,14 @@ export class GadgetSystem {
     );
   }
 
-  /** What rolled into a bin hands it part of its speed (the bin it hit rolls off that way). */
+  /** What rolled into a bin or a hanging cage hands it part of its speed (off it goes that way). */
   private knockBin(solid: Platform, speed: number, dir: number): void {
+    const g: Gadget | undefined = this.e.gadgets.find((x: Gadget): boolean => x.id === solid.gadgetId);
+    const hit: GadgetState | undefined = stateOf(this.e.gadgetStates, solid.gadgetId ?? '');
+    if (g?.kind === 'cage' && hit && !hit.dropped) {
+      pushCage(g, hit, (dir || 1) * speed * GAME_CONSTANTS.GADGET_CAGE_KNOCK_SHARE);
+      return;
+    }
     if (!solid.pushable || !solid.gadgetId) return;
     const body: GadgetBody | null | undefined = stateOf(this.e.gadgetStates, solid.gadgetId)?.body;
     if (!body) return;
@@ -408,12 +446,13 @@ export class GadgetSystem {
       dir * Math.min(GAME_CONSTANTS.GADGET_BOULDER_MAX_SPEED, speed * GAME_CONSTANTS.GADGET_BIN_KNOCK_SHARE);
   }
 
-  /** A hanging cage drops at a swing (unwired; wires drop it in `update`); a dropped one falls and lands. */
+  /** A hanging cage swings; a hit on its cable (or its wire, in `update`) drops it, and then it falls and lands. */
   private hangOrFall(g: CageGadget, state: GadgetState, players: CharacterState[]): void {
     if (!state.dropped) {
-      if (isWired(this.e.gadgets, g.id)) return;
-      if (this.swingers(g.id, g, GAME_CONSTANTS.GADGET_HIT_REACH_PX, players))
-        this.dropCage(g, state);
+      this.hitHanging(g, state, players);
+      if (state.dropped) return;
+      this.feelRiders(g, state, players);
+      this.swingCage(g, state, true);
       return;
     }
     const body: GadgetBody | null = state.body;
@@ -429,12 +468,140 @@ export class GadgetSystem {
     if (landed) this.landCage(g, state);
   }
 
-  /** The cage lets go of its chain: from now on it falls (no collision until it lands). */
+  /** A swing at the cable cuts it; a swing at the cage only sets it swinging. */
+  private hitHanging(g: CageGadget, state: GadgetState, players: CharacterState[]): void {
+    const reach: number = GAME_CONSTANTS.GADGET_HIT_REACH_PX;
+    const cutter: CharacterState | null = this.swingerAt(
+      g.id,
+      (p: CharacterState): Box => cableBoxAt(g, state, p.y),
+      reach,
+      players,
+    );
+    if (cutter) {
+      this.dropCage(g, state);
+      return;
+    }
+    const box: Box = cageBox(g, state);
+    const swinger: CharacterState | null = this.swingers(g.id, box, reach, players);
+    if (!swinger) return;
+    const dir: number = swingDir(swinger);
+    pushCage(g, state, dir * GAME_CONSTANTS.GADGET_CAGE_HIT_SPEED);
+    this.dust(dir === 1 ? box.x : box.x + box.width, swinger.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2, SPARK_COLOR);
+  }
+
+  /** Landing on a cage kicks it (where the player was heading, else off-center), walking on it pumps it. */
+  private feelRiders(g: CageGadget, state: GadgetState, players: CharacterState[]): void {
+    const box: Box = cageBox(g, state);
+    const width: number = GAME_CONSTANTS.PLAYER_WIDTH;
+    for (const p of players) {
+      const feet: number = p.y + GAME_CONSTANTS.PLAYER_HEIGHT;
+      if (p.isDead || !p.isGrounded || !ridesOn(box, p.x, width, feet)) continue;
+      const key: string = `${g.id}:${p.id}`;
+      const walk: number = Math.sign(p.velocityX);
+      if (!this.riders.has(key)) {
+        const dir: number = walk || Math.sign(p.x + width / 2 - (box.x + box.width / 2)) || swingDir(p);
+        const speed: number =
+          GAME_CONSTANTS.GADGET_CAGE_LAND_SPEED +
+          Math.abs(p.velocityX) * GAME_CONSTANTS.GADGET_CAGE_LAND_WALK_SHARE;
+        pushCage(g, state, dir * speed);
+      } else {
+        pushCage(g, state, walk * GAME_CONSTANTS.GADGET_CAGE_RIDER_PUMP);
+      }
+      // One more than the tick down this same update takes off.
+      this.riders.set(key, GAME_CONSTANTS.GADGET_CAGE_RIDER_GRACE_TICKS + 1);
+    }
+  }
+
+  private tickRiderGrace(): void {
+    for (const [key, ticks] of this.riders) {
+      if (ticks <= 1) this.riders.delete(key);
+      else this.riders.set(key, ticks - 1);
+    }
+  }
+
+  /** One tick of a swing; what rests on the cage goes with it (the host moves the world too). */
+  private swingCage(g: CageGadget, state: GadgetState, host: boolean): void {
+    if (state.swingAngle === 0 && state.swingSpeed === 0) return;
+    const before: Box = cageBox(g, state);
+    stepCageSwing(g, state, this.swingBlockers(g.id));
+    this.carry(before, cageBox(g, state), host);
+    this.placeSolids();
+  }
+
+  /** What stops a swing: solid scenery and gadgets. Hanging cages clang instead, props get out of the way. */
+  private swingBlockers(id: string): Platform[] {
+    return this.e.platforms.filter((p: Platform): boolean => {
+      if (!p.solid || p.propId !== undefined || p.gadgetId === id) return false;
+      const other: Gadget | undefined = this.e.gadgets.find((x: Gadget): boolean => x.id === p.gadgetId);
+      return other?.kind !== 'cage' || stateOf(this.e.gadgetStates, other.id)?.dropped === true;
+    });
+  }
+
+  /** Moves what rests on a cage along with it: your own player, and on the host the world too. */
+  private carry(before: Box, after: Box, host: boolean): void {
+    const dx: number = after.x - before.x;
+    const dy: number = after.y - before.y;
+    if (dx === 0 && dy === 0) return;
+    const rides: (x: number, width: number, bottom: number, grounded: boolean) => boolean = (
+      x: number,
+      width: number,
+      bottom: number,
+      grounded: boolean,
+    ): boolean => grounded && ridesOn(before, x, width, bottom);
+    const player: CharacterState | null = this.e.player;
+    if (
+      player &&
+      rides(player.x, GAME_CONSTANTS.PLAYER_WIDTH, player.y + GAME_CONSTANTS.PLAYER_HEIGHT, player.isGrounded)
+    ) {
+      player.x += dx;
+      player.y += dy;
+    }
+    if (!host) return;
+    for (const z of this.e.zombies) {
+      if (!rides(z.x, z.instanceWidth, z.y + z.instanceHeight, z.isGrounded)) continue;
+      z.x += dx;
+      z.y += dy;
+    }
+    for (const c of this.e.zombieCorpses) {
+      if (c.carrierId !== null || !rides(c.x, c.width, c.y + c.height, c.isGrounded)) continue;
+      c.x += dx;
+      c.y += dy;
+    }
+    for (const p of this.e.looseProps) {
+      if (p.carrierId !== null || !rides(p.x, p.width, p.y + p.height, p.isGrounded)) continue;
+      p.x += dx;
+      p.y += dy;
+    }
+  }
+
+  /** Hanging cages that swing into each other: the one hit swings off. */
+  private clangHangingCages(): void {
+    const cages: CageGadget[] = this.e.gadgets.filter(
+      (g: Gadget): g is CageGadget =>
+        g.kind === 'cage' && stateOf(this.e.gadgetStates, g.id)?.dropped === false,
+    );
+    for (let i: number = 0; i < cages.length; i++) {
+      for (let j: number = i + 1; j < cages.length; j++) {
+        const a: GadgetState | undefined = stateOf(this.e.gadgetStates, cages[i].id);
+        const b: GadgetState | undefined = stateOf(this.e.gadgetStates, cages[j].id);
+        if (!a || !b || !clangCages(cages[i], a, cages[j], b)) continue;
+        const boxA: Box = cageBox(cages[i], a);
+        const boxB: Box = cageBox(cages[j], b);
+        const x: number = (boxA.x + boxA.width / 2 + boxB.x + boxB.width / 2) / 2;
+        this.dust(x, (boxA.y + boxB.y + boxB.height) / 2, SPARK_COLOR);
+      }
+    }
+  }
+
+  /** The cage lets go of its cable: from now on it falls (no collision until it lands), with its swing. */
   private dropCage(g: CageGadget, state: GadgetState): void {
     if (state.dropped) return;
+    const hook: Point = cageHook(g, state);
+    state.body = cageReleaseBody(g, state);
     state.dropped = true;
-    state.body = { x: g.x, y: g.y, velocityX: 0, velocityY: 0, isGrounded: false, angle: 0 };
-    this.dust(g.x + g.width / 2, g.y, SPARK_COLOR);
+    state.swingAngle = 0;
+    state.swingSpeed = 0;
+    this.dust(hook.x, hook.y, SPARK_COLOR);
     this.placeSolids();
   }
 
@@ -489,11 +656,6 @@ export class GadgetSystem {
       (x: Gadget): boolean => x.id === solid.gadgetId,
     );
     const state: GadgetState | undefined = stateOf(this.e.gadgetStates, solid.gadgetId);
-    // A hanging cage it hits hard comes down (and the boulder bounces off it).
-    if (g?.kind === 'cage' && state && !state.dropped) {
-      this.dropCage(g, state);
-      return false;
-    }
     if (!g || g.kind !== 'crack-wall' || !state || state.broken) return false;
     const band: Box = crackBand(g);
     if (solid.y !== band.y || solid.height !== band.height) return false;
