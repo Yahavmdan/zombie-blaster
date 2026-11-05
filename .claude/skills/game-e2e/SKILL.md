@@ -145,6 +145,7 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   `dragOnCanvas`/`liveZombies` in `support/dev-tools.ts`; the tool buttons close the dialog, so don't
   click close after them. Specs: `solo/dev-tools.spec.ts`, `online/dev-tools-coop.spec.ts`,
   `solo/draggable-dialogs.spec.ts`.
+- **Level editor shortcut and helpers**: `DEV_EDITOR_SHORTCUT_KEY` (F2) opens and closes the editor from play (dev tools only, solo; not in a text box, under settings or the end screens). The window's Helpers tab (`level-editor-tab-helpers`, ids `level-editor-helper-*`) is projected from the game page and calls the same dev methods as the dialog: left mouse Build / Drag / Attack / spawn a type, spawns, freeze, kill all, god mode, heal, to exit, pause, pile at exit. Helpers keep the editor open; the Build tab or picking a tool gives the left mouse back to building; closing the editor always leaves it on attack. By finger (`/mobile-editor`) drag and spawn work too. The window covers page x 8-328, y 120 down at 1280x720: canvas drags in tests must start right of it. Specs: `solo/level-editor.spec.ts`, `solo/mobile-editor.spec.ts`, `online/dev-tools-coop.spec.ts`.
 - The game's window `mouseup` must not `preventDefault` the left button: it swallowed the release a
   number input's spinner waits for (one click on the dev floor arrow kept counting forever).
 - Player: 90 ticks (1.8 s) invincible after a hit; move speed 3 (faster than most zombies).

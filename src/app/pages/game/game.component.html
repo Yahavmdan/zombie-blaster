@@ -354,7 +354,7 @@
                 data-testid="game-dev-button-level-editor"
                 (click)="devOpenLevelEditor()"
               >
-                Open level editor
+                Open level editor ({{ levelEditorKey }})
               </button>
             </div>
           </section>
@@ -386,9 +386,135 @@
         [editor]="editor"
         [compact]="mobileEditor()"
         [mode]="mobileMode()"
+        [building]="devMouseTool() === 'build'"
         (modeChanged)="setMobileMode($event)"
+        (buildRequested)="devMouseTool.set('build')"
         (closed)="devCloseLevelEditor()"
-      />
+      >
+        <section class="dev-section">
+          <h3 class="dev-section__title px-label">Left mouse</h3>
+          <div class="dev-section__row dev-section__row--wrap">
+            <button
+              class="px-btn px-btn--sm px-btn--ghost"
+              [class.px-btn--good]="devMouseTool() === 'build'"
+              title="Place and move what the Build tab picks"
+              data-testid="level-editor-helper-mouse-build"
+              (click)="devSetMouseTool('build')"
+            >
+              Build
+            </button>
+            <button
+              class="px-btn px-btn--sm px-btn--ghost"
+              [class.px-btn--good]="devMouseTool() === 'drag'"
+              title="Drag the player, zombies, corpses or props"
+              data-testid="level-editor-helper-mouse-drag"
+              (click)="devSetMouseTool('drag')"
+            >
+              Drag
+            </button>
+            @if (!mobileEditor()) {
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                [class.px-btn--good]="devMouseTool() === 'attack'"
+                title="The left mouse plays the game"
+                data-testid="level-editor-helper-mouse-attack"
+                (click)="devSetMouseTool('attack')"
+              >
+                Attack
+              </button>
+            }
+          </div>
+          <div class="dev-section__row dev-section__row--wrap">
+            @for (z of devZombieTypes; track z.type) {
+              <button
+                class="px-btn px-btn--sm px-btn--ghost"
+                [class.px-btn--good]="devMouseTool() === 'spawn' && devSpawnType() === z.type"
+                title="Click the map to spawn one"
+                [attr.data-testid]="'level-editor-helper-spawn-' + z.type"
+                (click)="devSpawnWith(z.type)"
+              >
+                {{ z.name }}
+              </button>
+            }
+          </div>
+        </section>
+
+        <section class="dev-section">
+          <h3 class="dev-section__title px-label">Zombies</h3>
+          <div class="dev-section__row dev-section__row--wrap">
+            <button
+              class="px-btn px-btn--sm px-btn--ghost"
+              [class.px-btn--good]="!zombieSpawnsPaused()"
+              title="Regular and Eater spawns"
+              data-testid="level-editor-helper-zombie-spawns"
+              (click)="devToggleZombieSpawns()"
+            >
+              {{ zombieSpawnsPaused() ? 'Spawns off' : 'Spawns on' }}
+            </button>
+            <button
+              class="px-btn px-btn--sm px-btn--ghost"
+              [class.px-btn--good]="devZombiesFrozen()"
+              title="Zombies stand still and never attack"
+              data-testid="level-editor-helper-freeze-zombies"
+              (click)="devToggleFreezeZombies()"
+            >
+              {{ devZombiesFrozen() ? 'Frozen' : 'Freeze' }}
+            </button>
+            <button
+              class="px-btn px-btn--sm px-btn--primary"
+              title="Every zombie dies where it stands"
+              data-testid="level-editor-helper-kill-all"
+              (click)="devKillAllZombies()"
+            >
+              Kill all zombies
+            </button>
+          </div>
+        </section>
+
+        <section class="dev-section">
+          <h3 class="dev-section__title px-label">Player and world</h3>
+          <div class="dev-section__row dev-section__row--wrap">
+            <button
+              class="px-btn px-btn--sm px-btn--ghost"
+              [class.px-btn--good]="godMode()"
+              data-testid="level-editor-helper-god-mode"
+              (click)="devToggleGodMode()"
+            >
+              {{ godMode() ? 'God mode on' : 'God mode off' }}
+            </button>
+            <button
+              class="px-btn px-btn--sm px-btn--good"
+              data-testid="level-editor-helper-heal"
+              (click)="devHeal()"
+            >
+              Full heal
+            </button>
+            <button
+              class="px-btn px-btn--sm px-btn--ghost"
+              data-testid="level-editor-helper-teleport-exit"
+              (click)="devTeleportToExit()"
+            >
+              To exit
+            </button>
+            <button
+              class="px-btn px-btn--sm px-btn--ghost"
+              [class.px-btn--good]="devPaused()"
+              data-testid="level-editor-helper-pause"
+              (click)="devTogglePause()"
+            >
+              {{ devPaused() ? 'Paused' : 'Pause' }}
+            </button>
+            <button
+              class="px-btn px-btn--sm px-btn--ghost"
+              title="Corpses fall under the exit"
+              data-testid="level-editor-helper-pile-exit"
+              (click)="devPileAtExit()"
+            >
+              Pile corpses at exit
+            </button>
+          </div>
+        </section>
+      </app-level-editor-bar>
     }
 
     @if (mobileEditor() && mobileMode() === 'play') {

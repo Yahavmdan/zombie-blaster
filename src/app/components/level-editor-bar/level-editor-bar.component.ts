@@ -55,6 +55,9 @@ type EditorPanel = 'none' | 'export' | 'import' | 'notes';
 /** Phone layout: build on the map, or walk the puzzle with the touch controls. */
 export type EditorMode = 'build' | 'play';
 
+/** The window shows the building tools, or the helpers for trying the puzzle out. */
+type EditorTab = 'build' | 'helpers';
+
 /** The design autosaved in this browser, so a reload (or a dev server rebuild) doesn't lose it. */
 const DRAFT_KEY: string = 'zb-level-editor-draft';
 
@@ -192,6 +195,7 @@ const RAIL_TOOLS: EditorTool[] = ['select', 'erase', 'link'];
 /**
  * The dev level editor's floating tool bar: pick what the left mouse places, change the
  * selection, and export / import the design as JSON. It opens the editor while it is shown.
+ * Its Helpers tab shows the projected content (the game page's dev tools for trying the puzzle).
  */
 @Component({
   selector: 'app-level-editor-bar',
@@ -211,6 +215,11 @@ export class LevelEditorBarComponent {
   /** Phone layout: building or playing (the touch controls show). */
   readonly mode: InputSignal<EditorMode> = input<EditorMode>('build');
   readonly modeChanged: OutputEmitterRef<EditorMode> = output<EditorMode>();
+  /** The left mouse builds (a helper may have it dragging or spawning). */
+  readonly building: InputSignal<boolean> = input<boolean>(true);
+  /** The left mouse should build again: a tool was picked, or the Build tab came up. */
+  readonly buildRequested: OutputEmitterRef<void> = output<void>();
+  readonly tab: WritableSignal<EditorTab> = signal<EditorTab>('build');
   /** Phone layout: the tool window is out. */
   readonly drawerOpen: WritableSignal<boolean> = signal<boolean>(false);
   readonly canFullscreen: boolean = typeof document !== 'undefined' && document.fullscreenEnabled;
@@ -311,12 +320,18 @@ export class LevelEditorBarComponent {
 
   pickTool(tool: EditorTool): void {
     this.editor().setTool(tool);
+    this.buildRequested.emit();
     // Phone: the window covers the map, so picking a tool puts it away.
     this.drawerOpen.set(false);
   }
 
   toggleDrawer(): void {
     this.drawerOpen.update((open: boolean): boolean => !open);
+  }
+
+  showTab(tab: EditorTab): void {
+    this.tab.set(tab);
+    if (tab === 'build') this.buildRequested.emit();
   }
 
   /** The rail's Adjust: the selection's popup opens beside it. */

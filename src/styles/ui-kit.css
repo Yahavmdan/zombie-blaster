@@ -73,6 +73,11 @@
   filter: grayscale(0.8) brightness(0.7);
   cursor: not-allowed;
 }
+/* Ghost first: a ghost toggle that is on adds a colour below, and the colour must win. */
+.px-btn--ghost {
+  --btn-bg: var(--panel-2);
+  --btn-fg: var(--bone-dim);
+}
 .px-btn--primary {
   --btn-bg: var(--blood);
 }
@@ -81,10 +86,6 @@
 }
 .px-btn--good {
   --btn-bg: #5d8a2a;
-}
-.px-btn--ghost {
-  --btn-bg: var(--panel-2);
-  --btn-fg: var(--bone-dim);
 }
 .px-btn--sm {
   padding: 4px 10px;

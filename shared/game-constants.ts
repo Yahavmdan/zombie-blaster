@@ -772,6 +772,7 @@ export const GAME_CONSTANTS = {
   DEV_EDITOR_POPUP_H_PX: 460, // ...at most this tall (a cage's list of fields)...
   DEV_EDITOR_POPUP_GAP_PX: 24, // ...this far from the thing's box
   DEV_EDITOR_SCALE_ART_PX: 112, // A scale's post, dial and readout rise this far above its pan: the popup stays off them too
+  DEV_EDITOR_SHORTCUT_KEY: 'F2', // This key opens and closes the level editor (dev tools only, solo)
 
 } as const;
 
