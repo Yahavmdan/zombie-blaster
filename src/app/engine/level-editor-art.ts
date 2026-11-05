@@ -13,6 +13,7 @@ function kindColor(kind: EditorRef['kind']): string {
     case 'ladder':
       return PIXEL['steelLight'];
     case 'prop':
+    case 'zombie-pile':
       return PIXEL['rustHi'];
     case 'gadget':
       return PIXEL['tealHi'];

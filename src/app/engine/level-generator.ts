@@ -14,6 +14,7 @@ import {
 } from './engine-types';
 import { chuteSpan } from './boulder-puzzle';
 import { DESIGNED_LEVELS } from './designed-levels';
+import type { ZombiePile } from './zombie-pile';
 
 /**
  * Procedural floor layouts. Every floor gets a new arrangement of platforms and ropes from a
@@ -50,6 +51,8 @@ export interface LevelLayout {
   walls?: Platform[];
   /** A designed layout: boxes where no zombie rises (its body never overlaps one). Drawn only in the level editor. */
   noSpawn?: Platform[];
+  /** A designed layout: piles of dead zombies, real corpses laid when the floor starts. */
+  zombiePiles?: ZombiePile[];
   /** A designed layout: no hanging exit (the way out is an exit door). */
   exitHidden?: boolean;
   /** A designed layout: standalone gadgets (boulders, cracked walls, buttons, scales, levers, launchers, doors) and their wires. */

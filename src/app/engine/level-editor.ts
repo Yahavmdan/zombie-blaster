@@ -29,6 +29,7 @@ import {
   propArtWidth,
   seededRandom,
 } from './level-generator';
+import { ZombiePile, newZombiePile } from './zombie-pile';
 
 /**
  * The dev level editor's rules, free of engine state: what each tool places, where the pointer
@@ -48,6 +49,7 @@ export type EditorTool =
   | 'no-spawn'
   | 'safe-spot'
   | 'exit'
+  | 'zombie-pile'
   | GadgetKind
   | PropKind;
 
@@ -58,7 +60,16 @@ export type EditorTool =
  */
 export type EditorRef =
   | {
-      kind: 'platform' | 'ladder' | 'wall' | 'no-spawn' | 'prop' | 'gadget' | 'cage' | 'cleat';
+      kind:
+        | 'platform'
+        | 'ladder'
+        | 'wall'
+        | 'no-spawn'
+        | 'prop'
+        | 'zombie-pile'
+        | 'gadget'
+        | 'cage'
+        | 'cleat';
       index: number;
     }
   | { kind: 'exit' | 'boulder-wall' | 'spring' | 'scale' | 'plate' };
@@ -82,6 +93,7 @@ export type EditorFieldKey =
   | 'risesRight'
   | 'content'
   | 'zombies'
+  | 'bodies'
   | 'gold'
   | 'smashes'
   | 'look';
@@ -181,6 +193,10 @@ function walls(layout: LevelLayout): Platform[] {
 function noSpawn(layout: LevelLayout): Platform[] {
   if (!layout.noSpawn) layout.noSpawn = [];
   return layout.noSpawn;
+}
+
+function zombiePile(layout: LevelLayout, index: number): ZombiePile | undefined {
+  return layout.zombiePiles?.[index];
 }
 
 /** The box of a plain boxed ref (platform, wall, no-spawn zone, prop), or undefined. */
@@ -325,6 +341,8 @@ export function itemBox(layout: LevelLayout, ref: EditorRef): Box | null {
       return noSpawn(layout)[ref.index] ?? null;
     case 'prop':
       return layout.props[ref.index] ?? null;
+    case 'zombie-pile':
+      return zombiePile(layout, ref.index) ?? null;
     case 'gadget': {
       const g: Gadget | undefined = gadgets(layout)[ref.index];
       return g ? gadgetGrabBox(g) : null;
@@ -378,10 +396,10 @@ export function itemBox(layout: LevelLayout, ref: EditorRef): Box | null {
 export function allRefs(layout: LevelLayout): EditorRef[] {
   const cages: number = layout.cagePuzzle?.cages.length ?? 0;
   const indexed: (
-    kind: 'platform' | 'ladder' | 'wall' | 'no-spawn' | 'prop' | 'cage' | 'cleat',
+    kind: 'platform' | 'ladder' | 'wall' | 'no-spawn' | 'prop' | 'zombie-pile' | 'cage' | 'cleat',
     n: number,
   ) => EditorRef[] = (
-    kind: 'platform' | 'ladder' | 'wall' | 'no-spawn' | 'prop' | 'cage' | 'cleat',
+    kind: 'platform' | 'ladder' | 'wall' | 'no-spawn' | 'prop' | 'zombie-pile' | 'cage' | 'cleat',
     n: number,
   ): EditorRef[] =>
     Array.from({ length: n }, (_: unknown, i: number): EditorRef => ({ kind, index: n - 1 - i }));
@@ -400,6 +418,7 @@ export function allRefs(layout: LevelLayout): EditorRef[] {
     ...(layout.springPuzzle ? [{ kind: 'scale' } as EditorRef] : []),
     ...gadgetRefs(false),
     ...indexed('prop', layout.props.length),
+    ...indexed('zombie-pile', layout.zombiePiles?.length ?? 0),
     ...indexed('ladder', layout.ropes.length),
     // A removed hanging exit is gone from the map (the Exit tool puts it back).
     ...(layout.exitHidden ? [] : [{ kind: 'exit' } as EditorRef]),
@@ -450,6 +469,8 @@ export function refLabel(layout: LevelLayout, ref: EditorRef): string {
       return 'No-spawn zone';
     case 'prop':
       return `Prop: ${layout.props[ref.index]?.kind ?? '?'}`;
+    case 'zombie-pile':
+      return 'Zombie pile';
     case 'gadget': {
       const g: Gadget | undefined = gadgets(layout)[ref.index];
       return g ? gadgetLabel(g) : 'Gadget';
@@ -672,6 +693,13 @@ export function placeAt(
     layout.props.push({ kind: tool, x: px, y: top - height, width, height });
     return { kind: 'prop', index: layout.props.length - 1 };
   }
+  if (tool === 'zombie-pile') {
+    const width: number = GAME_CONSTANTS.ZOMBIE_PILE_WIDTH_PX;
+    const left: number = clamp(Math.round(x - width / 2), 0, W - width);
+    const piles: ZombiePile[] = (layout.zombiePiles ??= []);
+    piles.push(newZombiePile(left, surfaceBelow(surfaces(layout, true), left + width / 2, y)));
+    return { kind: 'zombie-pile', index: piles.length - 1 };
+  }
   if (isGadgetKind(tool)) {
     gadgets(layout).push(newGadget(layout, tool, x, y));
     return { kind: 'gadget', index: gadgets(layout).length - 1 };
@@ -815,6 +843,15 @@ export function moveTo(layout: LevelLayout, ref: EditorRef, left: number, top: n
       p.y =
         surfaceBelow(surfaces(layout, true, ref.index), p.x + p.width / 2, top + p.height) -
         p.height;
+      break;
+    }
+    case 'zombie-pile': {
+      const pile: ZombiePile | undefined = zombiePile(layout, ref.index);
+      if (!pile) return;
+      pile.x = clamp(Math.round(left), 0, W - pile.width);
+      pile.y =
+        surfaceBelow(surfaces(layout, true), pile.x + pile.width / 2, top + pile.height) -
+        pile.height;
       break;
     }
     case 'exit':
@@ -997,6 +1034,9 @@ export function removeItem(layout: LevelLayout, ref: EditorRef): void {
     case 'prop':
       layout.props.splice(ref.index, 1);
       break;
+    case 'zombie-pile':
+      layout.zombiePiles?.splice(ref.index, 1);
+      break;
     case 'gadget': {
       const [gone]: Gadget[] = gadgets(layout).splice(ref.index, 1);
       if (gone) unwireAll(layout, gone.id);
@@ -1034,6 +1074,7 @@ export function clearLayout(layout: LevelLayout): void {
   layout.walls = [];
   layout.noSpawn = [];
   layout.gadgets = [];
+  delete layout.zombiePiles;
   delete layout.boulderPuzzle;
   delete layout.springPuzzle;
   delete layout.cagePuzzle;
@@ -1323,6 +1364,28 @@ export function fieldsOf(layout: LevelLayout, ref: EditorRef): EditorField[] {
         ? [widthField(p, 1, GAME_CONSTANTS.RAIL_MIN_WIDTH_PX, GAME_CONSTANTS.RAIL_MAX_WIDTH_PX)]
         : [];
     }
+    case 'zombie-pile': {
+      const pile: ZombiePile | undefined = zombiePile(layout, ref.index);
+      return pile
+        ? [
+            numberField(
+              'bodies',
+              'Bodies',
+              pile.bodies,
+              GAME_CONSTANTS.ZOMBIE_PILE_MIN_BODIES,
+              GAME_CONSTANTS.ZOMBIE_PILE_MAX_BODIES,
+              1,
+              '',
+            ),
+            widthField(
+              pile,
+              TILE,
+              GAME_CONSTANTS.ZOMBIE_PILE_MIN_WIDTH_PX,
+              GAME_CONSTANTS.ZOMBIE_PILE_MAX_WIDTH_PX,
+            ),
+          ]
+        : [];
+    }
     default:
       return [];
   }
@@ -1387,6 +1450,10 @@ export function setField(
   else if (ref.kind === 'ladder') {
     const r: Rope | undefined = layout.ropes[ref.index];
     if (r) r.bottomY = r.topY + v;
+  } else if (ref.kind === 'zombie-pile') {
+    const pile: ZombiePile | undefined = zombiePile(layout, ref.index);
+    if (pile && key === 'bodies') pile.bodies = v;
+    if (pile && key === 'width') pile.width = v;
   } else {
     const box: Platform | Prop | undefined = plainBox(layout, ref);
     if (box && key === 'width') box.width = v;
@@ -1476,6 +1543,25 @@ function readProp(v: unknown, what: string): Prop {
   const kind: unknown = (v as Json)['kind'];
   if (!(PROP_KINDS as unknown[]).includes(kind)) throw new Error(`${what}: unknown kind`);
   return { kind: kind as PropKind, x: box.x, y: box.y, width: box.width, height: box.height };
+}
+
+function readZombiePile(v: unknown, what: string): ZombiePile {
+  const box: Platform = readBox(v, what);
+  const bodies: unknown = (v as Json)['bodies'];
+  if (
+    !isNum(bodies) ||
+    bodies < GAME_CONSTANTS.ZOMBIE_PILE_MIN_BODIES ||
+    bodies > GAME_CONSTANTS.ZOMBIE_PILE_MAX_BODIES
+  ) {
+    throw new Error(`${what}.bodies: out of range`);
+  }
+  return {
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+    bodies: Math.floor(bodies),
+  };
 }
 
 function readSide(v: unknown, what: string): 1 | -1 {
@@ -1632,6 +1718,9 @@ export function parseLayout(text: string): LevelLayout | { error: string } {
     };
     checkWires(layout.gadgets ?? []);
     if (v['noSpawn'] !== undefined) layout.noSpawn = readList(v['noSpawn'], 'noSpawn', readBox);
+    if (v['zombiePiles'] !== undefined) {
+      layout.zombiePiles = readList(v['zombiePiles'], 'zombiePiles', readZombiePile);
+    }
     if (typeof notes === 'string' && notes.length > 0) layout.notes = notes;
     const hint: unknown = v['hint'];
     if (hint !== undefined && typeof hint !== 'string') throw new Error('hint: text');

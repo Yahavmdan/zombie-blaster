@@ -65,6 +65,23 @@ function floorStrip(ctx: CanvasRenderingContext2D, y: number, w: number): void {
   pxBar(ctx, 0, y, w, 12, PIXEL['steelHi'], PIXEL['steel'], PIXEL['steelDark']);
 }
 
+/** Bodies lying in a heap, each a torso with a head at one end. */
+function zombiePileScene(): HTMLCanvasElement {
+  const bodies: [number, number, boolean][] = [
+    [2, 26, false],
+    [24, 26, true],
+    [12, 18, true],
+    [32, 18, false],
+    [20, 10, false],
+  ];
+  return scene(56, 34, (ctx: CanvasRenderingContext2D): void => {
+    for (const [x, y, headRight] of bodies) {
+      pxBar(ctx, x, y, 20, 8, PIXEL['rustHi'], PIXEL['rust'], K);
+      pxBar(ctx, headRight ? x + 14 : x, y - 2, 8, 8, PIXEL['toxicHi'], PIXEL['toxic'], K);
+    }
+  });
+}
+
 function cursorScene(): HTMLCanvasElement {
   return scene(24, 32, (ctx: CanvasRenderingContext2D): void => {
     for (let row: number = 0; row < 12; row++) {
@@ -325,6 +342,8 @@ function toolScene(tool: EditorTool, then: () => void, look?: string): HTMLCanva
         gold: 0,
         smashes: false,
       });
+    case 'zombie-pile':
+      return zombiePileScene();
     default:
       return propScene(PROP_ART[tool as SinglePropKind], then);
   }

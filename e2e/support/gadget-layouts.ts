@@ -115,3 +115,26 @@ export function cageAt(
 export function exitDoorAt(id: string, x: number): GadgetJson {
   return { ...doorAt(id, x), exit: true };
 }
+
+/** A zombie pile's box as the level editor exports it (ZOMBIE_PILE_* in shared/game-constants.ts). */
+const PILE_WIDTH_PX: number = 128;
+const PILE_HEIGHT_PX: number = 64;
+
+/** A room with a zombie pile lying on a 60 kg button (g1) wired to a door (g2). */
+export function zombiePileRoom(pileX: number, bodies: number): string {
+  const button: GadgetJson = buttonAt('g1', pileX, ['g2']);
+  button.x = pileX + (PILE_WIDTH_PX - button.width) / 2;
+  const room: Record<string, unknown> = JSON.parse(gadgetRoom(1, [button, doorAt('g2', 700)]));
+  return JSON.stringify({
+    ...room,
+    zombiePiles: [
+      {
+        x: pileX,
+        y: WORLD.groundY - PILE_HEIGHT_PX,
+        width: PILE_WIDTH_PX,
+        height: PILE_HEIGHT_PX,
+        bodies,
+      },
+    ],
+  });
+}

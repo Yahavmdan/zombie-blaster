@@ -93,6 +93,7 @@ import { ExplodingBarrelSystem } from './exploding-barrel-system';
 import { GadgetSystem } from './gadget-system';
 import { ClueSceneSystem } from './clue-scene-system';
 import { crackLookAt, exitLocked, leavesThroughDoor } from './gadgets';
+import { PILE_CORPSE_ID_PREFIX, isPileCorpse, pileSpots } from './zombie-pile';
 import { CarryPose } from './corpse-carry';
 import { CorpseDrape } from './corpse-drape';
 import { SCALE_MAX_KG, flingIfOnSpring, freshLaunch, newSpringState } from './spring-puzzle';
@@ -422,6 +423,29 @@ export class GameEngine implements IGameEngine {
     this.clueSceneSystem.reset(this.level);
     this.noSpawnZones = (this.level.noSpawn ?? []).map((z: Platform): Platform => ({ ...z }));
     this.repositionExitPlatform();
+    this.layZombiePiles();
+  }
+
+  /** The layout's piles, laid anew whenever the floor is built. Host/solo: corpses sync as usual. */
+  private layZombiePiles(): void {
+    if (this.isMultiplayerClient) return;
+    for (const corpse of this.zombieCorpses) {
+      if (isPileCorpse(corpse.id)) this.zombieSpriteAnimator.removeInstance(corpse.id);
+    }
+    this.zombieCorpses = this.zombieCorpses.filter((c: ZombieCorpse): boolean => !isPileCorpse(c.id));
+    const bodyHeight: number = this.walkerCorpseSize().height;
+    for (const pile of this.level.zombiePiles ?? []) {
+      for (const spot of pileSpots(pile, bodyHeight)) {
+        const body: ZombieCorpse = this.addWalkerCorpse(
+          spot.centerX,
+          (): number => spot.top,
+          PILE_CORPSE_ID_PREFIX,
+        );
+        // Long dead: they lie flat from the start, no dying animation.
+        body.frozen = true;
+        this.zombieSpriteAnimator.setFinalFrame(body.id, body.spriteKey, ZombieAnimState.Dead);
+      }
+    }
   }
 
   isExitLocked(): boolean {
@@ -674,14 +698,24 @@ export class GameEngine implements IGameEngine {
     }
   }
 
-  /** One walker-sized corpse centered on x, falling from `topOf(height)`. */
-  private addWalkerCorpse(centerX: number, topOf: (height: number) => number): void {
+  private walkerCorpseSize(): { width: number; height: number } {
     const def: ZombieDefinition = ZOMBIE_TYPES[ZombieType.Walker];
-    const width: number = Math.round((def.widthMin + def.widthMax) / 2);
-    const height: number = Math.round((def.heightMin + def.heightMax) / 2);
+    return {
+      width: Math.round((def.widthMin + def.widthMax) / 2),
+      height: Math.round((def.heightMin + def.heightMax) / 2),
+    };
+  }
+
+  /** One walker-sized corpse centered on x, falling from `topOf(height)`. */
+  private addWalkerCorpse(
+    centerX: number,
+    topOf: (height: number) => number,
+    idPrefix: string = 'dropped-corpse',
+  ): ZombieCorpse {
+    const { width, height }: { width: number; height: number } = this.walkerCorpseSize();
     const linger: number = GAME_CONSTANTS.ZOMBIE_CORPSE_LINGER_TICKS;
-    const id: string = `dropped-corpse-${crypto.randomUUID()}`;
-    this.zombieCorpses.push({
+    const id: string = `${idPrefix}-${crypto.randomUUID()}`;
+    const corpse: ZombieCorpse = {
       id,
       type: ZombieType.Walker,
       x: centerX - width / 2,
@@ -701,8 +735,10 @@ export class GameEngine implements IGameEngine {
       carrierId: null,
       angle: 0,
       spin: 0,
-    });
+    };
+    this.zombieCorpses.push(corpse);
     this.zombieSpriteAnimator.setState(id, ZombieAnimState.Dead);
+    return corpse;
   }
 
   /** Dev tools: corpses fall under the exit (the way up on a regular floor). */
