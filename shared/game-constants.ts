@@ -466,6 +466,14 @@ export const GAME_CONSTANTS = {
 
   // ─── Zombie Corpse ─────────────────────────────
   ZOMBIE_CORPSE_LINGER_TICKS: 999_999, // How long a corpse stays on screen before fading (very large = nearly forever)
+  ZOMBIE_PILE_BODIES: 10, // A designed floor's new zombie pile lays this many corpses when the floor starts
+  ZOMBIE_PILE_MIN_BODIES: 1, // ...the editor's range
+  ZOMBIE_PILE_MAX_BODIES: 30,
+  ZOMBIE_PILE_WIDTH_PX: 128, // A new pile's bottom row spreads this wide
+  ZOMBIE_PILE_MIN_WIDTH_PX: 32, // ...the editor's range
+  ZOMBIE_PILE_MAX_WIDTH_PX: 320,
+  ZOMBIE_PILE_HEIGHT_PX: 64, // The box the editor grabs a pile by (no collision: the bodies are the pile)
+  ZOMBIE_PILE_BODY_SPACING_PX: 28, // Bodies in a row start this far apart
   // Quick-climb values for manual testing (a few bodies reach the exit/ledge, walk up the pile):
   // ZOMBIE_CORPSE_PLATFORM_HEIGHT: 50, ZOMBIE_CORPSE_SNAP_TOLERANCE: 50, ZOMBIE_CORPSE_PLATFORM_WIDTH_RATIO: 1
   ZOMBIE_CORPSE_PLATFORM_HEIGHT: 5, // Height of the invisible platform a corpse becomes (lower = denser piles)

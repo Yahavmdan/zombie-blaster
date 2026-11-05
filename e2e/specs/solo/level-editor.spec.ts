@@ -201,6 +201,34 @@ test.describe('dev level editor', { tag: '@solo' }, (): void => {
     );
   });
 
+  test('a zombie pile: the tool lays real bodies, a right click takes them away', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await solo('warrior');
+    await quiet(p);
+    const bar: Locator = await openEditor(p);
+    await p.page.getByTestId('level-editor-button-clear').click();
+
+    await tool(p.page, 'zombie-pile');
+    await clickMap(p.page, 800, 300);
+    await p.probe.waitFor(
+      'the bodies lie there at once',
+      (s: E2eSnapshot): boolean => s.corpseViews.length === 10,
+      { timeoutMs: 5_000 },
+    );
+    await expect(bar.getByTestId('level-editor-text-selection')).toHaveText('Zombie pile');
+
+    await tool(p.page, 'select');
+    await clickMap(p.page, 800, WORLD.groundY - 20, 'right');
+    await p.probe.waitFor(
+      'the right click took the bodies too',
+      (s: E2eSnapshot): boolean => s.corpseViews.length === 0,
+      { timeoutMs: 5_000 },
+    );
+  });
+
   test('a no-spawn zone: drawn with its tool, resized, and no zombie rises in it', async ({
     solo,
   }: {

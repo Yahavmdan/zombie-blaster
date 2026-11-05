@@ -126,6 +126,11 @@ const TOOL_GROUPS: ToolGroup[] = [
       { tool: 'locker1', label: 'Locker 1', hint: PROP_HINT },
       { tool: 'locker2', label: 'Locker 2', hint: PROP_HINT },
       { tool: 'rail', label: 'Rail', hint: PROP_HINT },
+      {
+        tool: 'zombie-pile',
+        label: 'Zombie pile',
+        hint: 'Click: a pile of dead zombies on the surface below, real bodies to carry, climb and weigh. Middle click: how many',
+      },
     ],
   },
   {

@@ -1397,6 +1397,9 @@ export class ZombieSystem {
 
       if (!corpse.frozen) {
         this.e.zombieSpriteAnimator.tick(corpse.id, corpse.spriteKey);
+      } else {
+        // Sheets load late: a corpse frozen before that still ends on its lying frame.
+        this.e.zombieSpriteAnimator.setFinalFrame(corpse.id, corpse.spriteKey, ZombieAnimState.Dead);
       }
     }
   }
@@ -1467,7 +1470,7 @@ export class ZombieSystem {
       const slideDir: number = corpse.x + corpse.width / 2 > landedOn.x + landedOn.width / 2 ? 1 : -1;
       corpse.x += slideDir * Math.random() * GAME_CONSTANTS.ZOMBIE_CORPSE_SLIDE_OFFSET;
     }
-    this.e.zombieSpriteAnimator.setState(corpse.id, ZombieAnimState.Dead);
+    if (!corpse.frozen) this.e.zombieSpriteAnimator.setState(corpse.id, ZombieAnimState.Dead);
   }
 
   /** On screen and never inside the standing puzzle wall, where nobody could reach it. */
