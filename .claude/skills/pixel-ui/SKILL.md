@@ -158,6 +158,7 @@ same art rules, in `src/app/engine/puzzle-art.ts` with the helpers in `pixel-art
 
 ## Pitfalls already hit
 
+- A toggle is `px-btn--ghost` plus `px-btn--good` (or `--primary`) while on: `--ghost` must stay first in `ui-kit.css`, or every "on" state silently renders off while class-based tests still pass.
 - `innerText` applies `text-transform`: e2e reading labels sees what the user sees (the menu spec expects `New game`).
 - An `<option>` can't contain an `<img>`: drop the icon from option text.
 - Keycaps at the 12px minimum don't fit a label: settings shows icons on keys, the name in `title`.

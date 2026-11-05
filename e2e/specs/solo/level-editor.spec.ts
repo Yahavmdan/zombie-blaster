@@ -1,9 +1,9 @@
 import { Locator, Page } from '@playwright/test';
 import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer, KEYS } from '../../support/game-player';
-import { E2eGadgetView, E2eSnapshot } from '../../support/probe';
+import { E2eGadgetView, E2eSnapshot, E2eZombieView } from '../../support/probe';
 import { WORLD } from '../../support/invariants';
-import { openDevTools, pagePoint } from '../../support/dev-tools';
+import { dragOnCanvas, liveZombies, openDevTools, pagePoint } from '../../support/dev-tools';
 
 type Box = { x: number; y: number; width: number; height: number };
 
@@ -63,6 +63,104 @@ async function quiet(p: GamePlayer): Promise<void> {
 }
 
 test.describe('dev level editor', { tag: '@solo' }, (): void => {
+  test('F2 opens and closes the editor from play, but not while typing in it', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await solo('warrior');
+    const bar: Locator = p.page.getByTestId('level-editor-panel-window');
+
+    await p.page.keyboard.press('F2');
+    await expect(bar).toBeVisible();
+    await expect(p.page.getByTestId('game-dev-button-close-dialog')).toBeHidden();
+
+    // A key typed in the notes box is the box's.
+    await p.page.getByTestId('level-editor-button-notes').click();
+    await p.page.getByTestId('level-editor-textarea-notes').press('F2');
+    await expect(bar).toBeVisible();
+    await p.page.getByTestId('level-editor-button-notes').click();
+
+    await p.page.keyboard.press('F2');
+    await expect(bar).toBeHidden();
+
+    // From under the dev dialog too: the dialog goes.
+    await openDevTools(p.page);
+    await p.page.keyboard.press('F2');
+    await expect(bar).toBeVisible();
+    await expect(p.page.getByTestId('game-dev-button-close-dialog')).toBeHidden();
+  });
+
+  test('helpers: kill all, spawns off, spawn and drag with the editor open; tools build again', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await solo('warrior');
+    await p.probe.setGodMode(true);
+    await p.probe.clearZombies();
+    const bar: Locator = await openEditor(p);
+    const helper: (id: string) => Locator = (id: string): Locator =>
+      p.page.getByTestId(`level-editor-helper-${id}`);
+
+    await p.page.getByTestId('level-editor-tab-helpers').click();
+    await expect(p.page.getByTestId('level-editor-tool-select')).toBeHidden();
+
+    await helper('zombie-spawns').click();
+    await expect(helper('zombie-spawns')).toHaveText('Spawns off');
+    await p.probe.spawnZombieAt(600);
+    await p.probe.waitFor('a zombie stands', (s: E2eSnapshot): boolean => liveZombies(s) > 0);
+    await helper('kill-all').click();
+    await p.probe.waitFor('all dead', (s: E2eSnapshot): boolean => liveZombies(s) === 0);
+
+    // Spawn tool: a click on the map brings a walker, the editor stays open and places nothing.
+    const before: string = await exported(p.page);
+    await helper('spawn-walker').click();
+    await clickMap(p.page, 500, WORLD.groundY - 40);
+    await p.probe.waitFor('the walker rose', (s: E2eSnapshot): boolean => liveZombies(s) === 1);
+    await expect(bar).toBeVisible();
+
+    // Frozen it stays under the cursor; the drag tool carries it off.
+    await helper('freeze-zombies').click();
+    await helper('mouse-drag').click();
+    const out: E2eSnapshot = await p.probe.waitFor(
+      'the walker is out of the ground',
+      (s: E2eSnapshot): boolean => liveZombies(s) === 1 && s.zombies[0].spawnTimer <= 0,
+    );
+    const zombie: E2eZombieView = out.zombies[0];
+    const grab: { x: number; y: number } = {
+      x: zombie.x + zombie.width / 2,
+      y: zombie.y + zombie.height / 2,
+    };
+    await dragOnCanvas(p.page, grab, { x: 800, y: 200 }, true);
+    await p.probe.waitFor('the walker moved', (s: E2eSnapshot): boolean => s.zombies[0].x > 700);
+
+    // Drag on empty map brings the player, with nothing placed.
+    await dragOnCanvas(p.page, { x: 600, y: 100 }, { x: 620, y: 120 }, true);
+    await p.probe.waitFor(
+      'the player came to the cursor',
+      (s: E2eSnapshot): boolean => s.player !== null && Math.abs(s.player.x - 620) < 60,
+    );
+    expect(await exported(p.page), 'the helpers change no design').toBe(before);
+
+    // The Build tab gives the mouse back to the editor: the picked tool places again.
+    const platforms: number = (await p.probe.state()).level.platforms.length;
+    await p.page.getByTestId('level-editor-tab-build').click();
+    await tool(p.page, 'platform');
+    await clickMap(p.page, 640, 260);
+    await p.probe.waitFor(
+      'a platform was placed',
+      (s: E2eSnapshot): boolean => s.level.platforms.length > platforms,
+    );
+
+    // Close: the left mouse attacks again, whatever a helper left it on.
+    await p.page.getByTestId('level-editor-tab-helpers').click();
+    await helper('mouse-drag').click();
+    await p.page.getByTestId('level-editor-button-close').click();
+    await openDevTools(p.page);
+    await expect(p.page.getByTestId('game-dev-button-mouse-attack')).toHaveClass(/px-btn--good/);
+  });
+
   test('place a platform, drag it, erase it with a right click', async ({
     solo,
   }: {

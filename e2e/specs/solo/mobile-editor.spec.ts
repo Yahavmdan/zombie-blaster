@@ -2,7 +2,7 @@ import { CDPSession, Locator, Page } from '@playwright/test';
 import { test, expect, PhoneFactory } from '../../support/fixtures';
 import { GamePlayer } from '../../support/game-player';
 import { E2eSnapshot } from '../../support/probe';
-import { pagePoint } from '../../support/dev-tools';
+import { liveZombies, pagePoint } from '../../support/dev-tools';
 
 type Box = { x: number; y: number; width: number; height: number };
 type Point = { x: number; y: number };
@@ -86,6 +86,45 @@ async function clearFloor(p: GamePlayer, finger: Finger): Promise<void> {
 }
 
 test.describe('mobile level editor', { tag: '@solo' }, (): void => {
+  test('helpers by finger: drag moves the player, spawn places a zombie, a tool builds again', async ({
+    phone,
+  }: {
+    phone: PhoneFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await phone();
+    const finger: Finger = await Finger.on(p.page);
+    await p.probe.pauseZombieSpawns(true);
+    await clearFloor(p, finger);
+    const selectTool: Locator = p.page.getByTestId('level-editor-rail-tool-select');
+
+    const pickHelper: (id: string) => Promise<void> = async (id: string): Promise<void> => {
+      await finger.tap(await centerOf(p.page.getByTestId('level-editor-rail-button-tools')));
+      await finger.tap(await centerOf(p.page.getByTestId('level-editor-tab-helpers')));
+      await finger.tap(await centerOf(p.page.getByTestId(`level-editor-helper-${id}`)));
+      await expect(p.page.getByTestId('level-editor-panel-window')).toBeHidden();
+    };
+
+    await pickHelper('mouse-drag');
+    await expect(selectTool).not.toHaveClass(/px-btn--good/);
+    const start: E2eSnapshot = await p.probe.state();
+    const startX: number = start.player!.x;
+    const target: number = startX > 640 ? 300 : 900;
+    await finger.down(await pagePoint(p.page, startX + 16, start.player!.y + 24));
+    await finger.move(await pagePoint(p.page, target, 200));
+    await p.probe.waitFor(
+      'the player follows the finger',
+      (s: E2eSnapshot): boolean => s.player !== null && Math.abs(s.player.x - target) < 60,
+    );
+    await finger.up();
+
+    await pickHelper('spawn-walker');
+    await finger.tap(await pagePoint(p.page, 500, 300));
+    await p.probe.waitFor('a zombie rose', (s: E2eSnapshot): boolean => liveZombies(s) === 1);
+
+    await finger.tap(await centerOf(selectTool));
+    await expect(selectTool).toHaveClass(/px-btn--good/);
+  });
+
   test('a phone opening the site lands in the editor: god mode, no HUD, the map beside the rail', async ({
     phone,
   }: {

@@ -3,7 +3,7 @@
     @if (mode() === 'build') {
       <button
         class="px-btn px-btn--ghost le-rail__btn"
-        [class.px-btn--good]="drawerOpen()"
+        [class.px-btn--good]="drawerOpen() && tab() === 'build'"
         aria-label="Tools"
         data-testid="level-editor-rail-button-tools"
         (click)="toggleDrawer()"
@@ -13,7 +13,7 @@
       @for (t of railTools; track t) {
         <button
           class="px-btn px-btn--ghost le-rail__btn"
-          [class.px-btn--good]="tool() === t"
+          [class.px-btn--good]="building() && tool() === t"
           [attr.aria-label]="t"
           [attr.data-testid]="'level-editor-rail-tool-' + t"
           (click)="pickTool(t)"
@@ -72,7 +72,7 @@
 
 <div
   class="le-window px-panel"
-  [class.le-window--hidden]="compact() && (!drawerOpen() || mode() === 'play')"
+  [class.le-hidden]="compact() && (!drawerOpen() || mode() === 'play')"
   appDraggableDialog
   data-testid="level-editor-panel-window"
 >
@@ -89,7 +89,35 @@
     </button>
   </div>
 
-  <div class="le-body px-scroll">
+  <div class="le-tabs">
+    <button
+      class="px-btn px-btn--sm px-btn--ghost"
+      [class.px-btn--good]="tab() === 'build'"
+      data-testid="level-editor-tab-build"
+      (click)="showTab('build')"
+    >
+      Build
+    </button>
+    <button
+      class="px-btn px-btn--sm px-btn--ghost"
+      [class.px-btn--good]="tab() === 'helpers'"
+      title="Try the puzzle: drag things, clear zombies, keep the player alive"
+      data-testid="level-editor-tab-helpers"
+      (click)="showTab('helpers')"
+    >
+      Helpers
+    </button>
+  </div>
+
+  <div
+    class="le-body px-scroll"
+    [class.le-hidden]="tab() !== 'helpers'"
+    data-testid="level-editor-panel-helpers"
+  >
+    <ng-content />
+  </div>
+
+  <div class="le-body px-scroll" [class.le-hidden]="tab() !== 'build'">
     @for (group of groups; track group.title) {
       <section class="le-group">
         <h3 class="le-group__title px-label">{{ group.title }}</h3>
