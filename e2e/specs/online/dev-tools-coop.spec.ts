@@ -34,6 +34,20 @@ function zombieById(s: E2eSnapshot, id: string): E2eZombieView | undefined {
 }
 
 test.describe('dev tools in co-op', { tag: '@online' }, (): void => {
+  test('the level editor key does nothing online: the floors come from the host', async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }): Promise<void> => {
+    const session: RoomSession = await twoWarriors(room, 'editor-key');
+    await session.host.page.keyboard.press('F2');
+    await session.guests[0].page.keyboard.press('F2');
+    await openDevTools(session.host.page);
+    await expect(session.host.page.getByTestId('game-dev-button-level-editor')).toBeDisabled();
+    await expect(session.host.page.getByTestId('level-editor-panel-window')).toHaveCount(0);
+    await expect(session.guests[0].page.getByTestId('level-editor-panel-window')).toHaveCount(0);
+  });
+
   test("the host's kill all clears the guest's screen too; the guest can't run world tools", async ({
     room,
   }: {

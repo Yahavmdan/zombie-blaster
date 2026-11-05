@@ -38,7 +38,7 @@ const DROP_PROMPT_ACTIONS: Set<string> = new Set<string>(['confirmDrop', 'declin
 const MOUSE_BACK_BUTTON: number = 3;
 
 /** Typing in a dialog's text field must not toggle dialogs. */
-function isTextField(target: EventTarget | null): boolean {
+export function isTextField(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
 }
 
@@ -129,7 +129,7 @@ export class GameCanvasComponent implements OnDestroy {
   private readonly boundTouchMove: (e: TouchEvent) => void = (e: TouchEvent): void => this.onTouchMove(e);
   private readonly boundTouchEnd: (e: TouchEvent) => void = (e: TouchEvent): void => this.onTouchEnd(e);
   /** The finger building on the map (a second finger is ignored), or null. */
-  private buildTouchId: number | null = null;
+  private toolTouchId: number | null = null;
   private readonly heldQuickSlotActions: Map<string, GameAction> = new Map<string, GameAction>();
 
   constructor() {
@@ -740,37 +740,45 @@ export class GameCanvasComponent implements OnDestroy {
     this.engine?.levelEditor.pointerMove(at.x, at.y);
   }
 
-  /** The level editor by finger: press, drag and let go like the left mouse button. */
+  /** The dev mouse tools by finger (the phone editor): press, drag and let go like the left button. */
   private onTouchStart(e: TouchEvent): void {
     e.preventDefault();
-    if (this.buildTouchId !== null || this.inputDisabled() || this.devMouseTool() !== 'build') return;
+    const tool: DevMouseTool = this.devMouseTool();
+    if (this.toolTouchId !== null || this.inputDisabled() || tool === 'attack') return;
     const touch: Touch = e.changedTouches[0];
-    this.buildTouchId = touch.identifier;
+    if (tool === 'spawn') {
+      this.spawnAtCursor(touch);
+      return;
+    }
+    this.toolTouchId = touch.identifier;
     const at: { x: number; y: number } = this.worldPoint(touch);
-    this.engine?.levelEditor.pointerDown(at.x, at.y);
+    if (tool === 'build') this.engine?.levelEditor.pointerDown(at.x, at.y);
+    else this.engine?.devTools.grabAt(at.x, at.y);
   }
 
   private onTouchMove(e: TouchEvent): void {
     e.preventDefault();
-    const touch: Touch | null = this.buildTouch(e);
+    const touch: Touch | null = this.toolTouch(e);
     if (!touch) return;
     const at: { x: number; y: number } = this.worldPoint(touch);
-    this.engine?.levelEditor.pointerMove(at.x, at.y);
+    if (this.devMouseTool() === 'build') this.engine?.levelEditor.pointerMove(at.x, at.y);
+    else this.engine?.devTools.dragTo(at.x, at.y);
   }
 
   private onTouchEnd(e: TouchEvent): void {
-    if (!this.buildTouch(e)) return;
-    this.buildTouchId = null;
+    if (!this.toolTouch(e)) return;
+    this.toolTouchId = null;
+    this.engine?.devTools.release();
     this.engine?.levelEditor.pointerUp();
   }
 
-  /** The building finger among the touches that changed, or null. */
-  private buildTouch(e: TouchEvent): Touch | null {
+  /** The finger working the tool among the touches that changed, or null. */
+  private toolTouch(e: TouchEvent): Touch | null {
     const touches: Touch[] = Array.from<Touch>(e.changedTouches);
-    return touches.find((t: Touch): boolean => t.identifier === this.buildTouchId) ?? null;
+    return touches.find((t: Touch): boolean => t.identifier === this.toolTouchId) ?? null;
   }
 
-  private spawnAtCursor(e: MouseEvent): void {
+  private spawnAtCursor(e: { clientX: number; clientY: number }): void {
     const at: { x: number; y: number } = this.worldPoint(e);
     this.engine?.devTools.spawnAt(at.x, at.y, this.devSpawnType());
   }

@@ -11,7 +11,7 @@ import { SpitterProjectile, DragonProjectile } from '../../engine/engine-types';
 import { AutoPotionChange } from '../../components/shop/shop.component';
 import { GameStateService } from '../../services/game-state.service';
 import { WebSocketService, ConnectionStatus } from '../../services/websocket.service';
-import { GameCanvasComponent } from '../../components/game-canvas/game-canvas.component';
+import { GameCanvasComponent, isTextField } from '../../components/game-canvas/game-canvas.component';
 import { HudComponent } from '../../components/hud/hud.component';
 import { SettingsComponent } from '../../components/settings/settings.component';
 import { StatAllocationComponent } from '../../components/stat-allocation/stat-allocation.component';
@@ -49,6 +49,7 @@ const ACTIVITY_EVENTS: readonly string[] = ['keydown', 'mousedown', 'mousemove',
   imports: [PixelIconComponent, GameCanvasComponent, HudComponent, SettingsComponent, StatAllocationComponent, SkillTreeComponent, TreeSkillWindowComponent, ShopComponent, InventoryComponent, QuickSlotsComponent, FormsModule, DraggableDialogDirective, LevelEditorBarComponent, TouchControlsComponent],
   host: {
     class: 'game-page',
+    '(window:keydown)': 'onLevelEditorKey($event)',
   },
   templateUrl: './game.component.html',
   styleUrl: './game.component.css',
@@ -762,6 +763,9 @@ export class GameComponent implements OnInit, OnDestroy {
   readonly devDialogOpen: WritableSignal<boolean> = signal<boolean>(false);
   /** Dev tools: the level editor's bar floats over the map (solo). */
   readonly levelEditorOpen: WritableSignal<boolean> = signal<boolean>(false);
+  /** The key that opens and closes the level editor, as the dev tools show it. */
+  readonly levelEditorKey: string = GAME_CONSTANTS.DEV_EDITOR_SHORTCUT_KEY;
+  private readonly levelEditorBar: Signal<LevelEditorBarComponent | undefined> = viewChild(LevelEditorBarComponent);
   /** The engine's level editor while its bar is open. */
   readonly levelEditor: Signal<LevelEditorSystem | null> = computed((): LevelEditorSystem | null => {
     const canvas: GameCanvasComponent | undefined = this.gameCanvas();
@@ -853,11 +857,13 @@ export class GameComponent implements OnInit, OnDestroy {
     this.gameState.showCollisionBoxes.update((v: boolean) => !v);
   }
 
-  /** Picking drag closes the dialog, so the next press on the canvas grabs. */
+  /** Picking a tool puts the dialogs away, so the next press on the canvas uses it. */
   devSetMouseTool(tool: DevMouseTool): void {
     this.devMouseTool.set(tool);
-    if (tool !== 'build') this.levelEditorOpen.set(false);
-    if (tool !== 'attack') this.closeDevDialog();
+    if (tool !== 'build') this.gameCanvas()?.levelEditor()?.pointerGone();
+    if (tool === 'attack') return;
+    this.closeDevDialog();
+    this.levelEditorBar()?.drawerOpen.set(false);
   }
 
   /** Dev tools: the level editor's bar over the map; the left mouse places and drags what it picks (solo). */
@@ -868,8 +874,20 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
   devCloseLevelEditor(): void {
+    if (!this.levelEditorOpen()) return;
     this.levelEditorOpen.set(false);
-    if (this.devMouseTool() === 'build') this.devMouseTool.set('attack');
+    this.devMouseTool.set('attack');
+  }
+
+  /** The shortcut opens the editor from play, no dialog in between, and closes it again. */
+  onLevelEditorKey(e: KeyboardEvent): void {
+    if (e.key !== GAME_CONSTANTS.DEV_EDITOR_SHORTCUT_KEY || e.repeat || isTextField(e.target)) return;
+    // The phone editor is always open; settings and the end screens own the keyboard.
+    if (!this.showDevTools() || this.mobileEditor() || !this.levelEditorAllowed()) return;
+    if (this.settingsOpen() || this.isGameOver() || this.afkState() !== 'none') return;
+    e.preventDefault();
+    if (this.levelEditorOpen()) this.devCloseLevelEditor();
+    else this.devOpenLevelEditor();
   }
 
   /** Phone level editor: Play hands the map to the touch controls, Build back to the finger. */

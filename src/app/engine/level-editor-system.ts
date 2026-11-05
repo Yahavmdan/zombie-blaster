@@ -238,6 +238,11 @@ export class LevelEditorSystem {
     this.notify();
   }
 
+  /** The left mouse does something else now: no ghost or hover mark stays behind on the map. */
+  pointerGone(): void {
+    this.pointer = null;
+  }
+
   /** Right button (or the erase tool): takes away the thing under (x, y). */
   eraseAt(x: number, y: number): void {
     const layout: LevelLayout | null = this.current();
