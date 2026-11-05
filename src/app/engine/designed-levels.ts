@@ -98,7 +98,17 @@ const FLOOR_2: LevelLayout = {
   ],
   walls: [],
   gadgets: [
-    { id: 'g1', kind: 'door', latch: false, exit: false, x: 1076, y: 12, width: 32, height: 608 },
+    {
+      id: 'g1',
+      kind: 'door',
+      latch: false,
+      exit: false,
+      x: 1076,
+      y: 12,
+      width: 32,
+      height: 608,
+      look: 'hazard',
+    },
     { id: 'g2', kind: 'door', latch: false, exit: true, x: 1164, y: 492, width: 64, height: 128 },
     { id: 'g3', kind: 'button', kg: 60, targets: ['g2'], x: 660, y: 300, width: 48, height: 6 },
     { id: 'g4', kind: 'button', kg: 60, targets: ['g1'], x: 408, y: 208, width: 48, height: 6 },
