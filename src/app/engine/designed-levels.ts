@@ -124,5 +124,59 @@ const FLOOR_2: LevelLayout = {
   ],
 };
 
+/**
+ * Floor 3, designed in the level editor: a boulder waits on a slope behind a tall door. Weight on
+ * the button on the middle ledge opens the door, and the boulder rolls down and breaks the cracked
+ * wall at the left edge. No way out yet: the designer will add it later, so the floor can't be finished.
+ */
+const FLOOR_3: LevelLayout = {
+  seed: 1510986940,
+  floor: 3,
+  hint: 'Weigh down the button to let the boulder through',
+  platforms: [{ x: 584, y: 408, width: 160, height: 32 }],
+  ropes: [],
+  exitX: 20,
+  exitY: 100,
+  exitHidden: true,
+  props: [
+    { kind: 'barrel2', x: 724, y: 383, width: 18, height: 25 },
+    { kind: 'barrel2', x: 258, y: 595, width: 18, height: 25 },
+    { kind: 'barrel2', x: 969, y: 595, width: 18, height: 25 },
+  ],
+  walls: [],
+  gadgets: [
+    { id: 'g1', kind: 'slope', risesRight: true, x: 32, y: 364, width: 384, height: 224 },
+    {
+      id: 'g2',
+      kind: 'crack-wall',
+      x: 0,
+      y: 12,
+      width: 32,
+      height: 608,
+      crackTop: 204,
+      crackBottom: 620,
+    },
+    {
+      id: 'g3',
+      kind: 'door',
+      latch: false,
+      exit: false,
+      x: 320,
+      y: 12,
+      width: 32,
+      height: 608,
+      look: 'hazard',
+    },
+    { id: 'g4', kind: 'boulder', kg: 600, x: 360, y: 210, width: 48, height: 48 },
+    { id: 'g5', kind: 'button', kg: 60, targets: ['g3'], x: 640, y: 408, width: 48, height: 6 },
+  ],
+  // No zombie rises behind the tall door or over the slope.
+  noSpawn: [{ x: 0, y: 12, width: 384, height: 608 }],
+};
+
 /** Floors made in the level editor: `levelFor` plays a copy of these instead of a generated one. */
-export const DESIGNED_LEVELS: Readonly<Record<number, LevelLayout>> = { 1: FLOOR_1, 2: FLOOR_2 };
+export const DESIGNED_LEVELS: Readonly<Record<number, LevelLayout>> = {
+  1: FLOOR_1,
+  2: FLOOR_2,
+  3: FLOOR_3,
+};

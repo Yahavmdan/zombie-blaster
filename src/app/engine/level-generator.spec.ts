@@ -53,6 +53,22 @@ describe('designed floors', () => {
     }
   });
 
+  it('floor 3 is the designed one for every seed: a boulder behind a door, a button wired to it', (): void => {
+    for (const seed of [1, 42, 999_999]) {
+      const level: LevelLayout = levelFor(seed, 3);
+      expect(level.exitHidden).toBe(true);
+      expect(level.springPuzzle).toBeUndefined();
+      expect(level.gadgets?.map((g: Gadget): string => g.kind)).toEqual([
+        'slope',
+        'crack-wall',
+        'door',
+        'boulder',
+        'button',
+      ]);
+      expect(level).toEqual(levelFor(7, 3));
+    }
+  });
+
   it('e2e setup: designed false plays the generated floor', (): void => {
     expect(levelFor(42, 2, false)).toEqual(generateLevel(42, 2));
   });
@@ -64,7 +80,7 @@ describe('designed floors', () => {
   });
 
   it('other floors are still generated from the seed', (): void => {
-    expect(levelFor(42, 3)).toEqual(generateLevel(42, 3));
+    expect(levelFor(42, 4)).toEqual(generateLevel(42, 4));
     expect(levelFor(42, 6)).toEqual(generateLevel(42, 6));
   });
 });
