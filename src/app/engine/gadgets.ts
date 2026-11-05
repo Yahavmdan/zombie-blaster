@@ -836,12 +836,12 @@ export function cableLength(g: CageGadget): number {
   return Math.max(g.y, GAME_CONSTANTS.GADGET_CAGE_MIN_CABLE_PX);
 }
 
-/** A hanging cage at `angle`: it stays level (art equals collision) and swings around the ceiling. */
+/** A hanging cage at `angle`: it stays level (art equals collision) on a rigid cable, so it only ever rises off its rest spot. */
 function hangingBox(g: CageGadget, angle: number): Box {
   const length: number = cableLength(g);
   return {
     x: g.x + length * Math.sin(angle),
-    y: g.y + length * (1 - Math.cos(angle)),
+    y: g.y - length * (1 - Math.cos(angle)),
     width: g.width,
     height: g.height,
   };
@@ -886,11 +886,12 @@ export function cableBoxAt(g: CageGadget, state: GadgetState, y: number): Box {
   };
 }
 
-/** A push along the swing (px/tick, positive: right); it never swings faster than the cap. */
+/** A push along the swing (px/tick on a cage of GADGET_CAGE_LIGHT_KG, positive: right); its weight eases it, and it never swings faster than the cap. */
 export function pushCage(g: CageGadget, state: GadgetState, speed: number): void {
   const length: number = cableLength(g);
+  const scale: number = GAME_CONSTANTS.GADGET_CAGE_LIGHT_KG / GAME_CONSTANTS.GADGET_CAGE_KG;
   const most: number = GAME_CONSTANTS.GADGET_CAGE_MAX_SWING_SPEED / length;
-  state.swingSpeed = Math.min(most, Math.max(-most, state.swingSpeed + speed / length));
+  state.swingSpeed = Math.min(most, Math.max(-most, state.swingSpeed + (speed * scale) / length));
 }
 
 /**
@@ -961,7 +962,7 @@ export function cageReleaseBody(g: CageGadget, state: GadgetState): GadgetBody {
     x: box.x,
     y: box.y,
     velocityX: speed * Math.cos(state.swingAngle),
-    velocityY: speed * Math.sin(state.swingAngle),
+    velocityY: -speed * Math.sin(state.swingAngle),
     isGrounded: false,
     angle: 0,
   };

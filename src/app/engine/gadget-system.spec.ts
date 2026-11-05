@@ -700,7 +700,36 @@ describe('GadgetSystem on a real engine', () => {
     expect(state('g1').dropped).toBe(false);
     expect(state('g1').swingAngle).toBeGreaterThan(0);
     expect(solidOf('g1').x).toBeGreaterThan(300);
-    expect(solidOf('g1').y).toBeGreaterThan(CAGE_Y);
+    expect(solidOf('g1').y).toBeLessThan(CAGE_Y);
+  });
+
+  it('the cable is rigid: a swinging cage keeps its distance from the pivot and never sinks', () => {
+    load([cage('g1', 300)]);
+    besideCage(300);
+    swing();
+    engine.player!.x = 900;
+    let widest: number = 0;
+    for (let i: number = 0; i < 300; i++) {
+      tick(1);
+      const box: Platform = solidOf('g1');
+      expect(Math.hypot(box.x - 300, box.y)).toBeCloseTo(CAGE_Y, 6);
+      expect(box.y).toBeLessThanOrEqual(CAGE_Y);
+      widest = Math.max(widest, Math.abs(box.x - 300));
+    }
+    expect(widest).toBeGreaterThan(10);
+  });
+
+  it('a cage is heavy: its weight eases a hit to a gentle swing', () => {
+    load([cage('g1', 300)]);
+    besideCage(300);
+    swing();
+    engine.player!.x = 900;
+    let widest: number = 0;
+    for (let i: number = 0; i < 300; i++) {
+      tick(1);
+      widest = Math.max(widest, Math.abs(solidOf('g1').x - 300));
+    }
+    expect(widest, 'px off its rest spot').toBeLessThan(50);
   });
 
   it('a swing wears off: the cage comes back to hang still where it was placed', () => {

@@ -292,12 +292,12 @@ test.describe('designed floor slopes, cages and exit doors', { tag: '@solo' }, (
       (s: E2eSnapshot): boolean =>
         s.player!.isGrounded &&
         s.player!.y + WORLD.playerHeight < WORLD.groundY - 50 &&
-        Math.abs(gadget(s, 'g1').swingSpeed) > 0.001,
+        Math.abs(gadget(s, 'g1').swingSpeed) > 0.0005,
       { timeoutMs: 4_000, intervalMs: 20 },
     );
     const riding: E2eSnapshot = await p.probe.waitFor(
       'the rider moved with the cage, feet on it',
-      (s: E2eSnapshot): boolean => Math.abs(s.player!.x - landed.player!.x) > 15,
+      (s: E2eSnapshot): boolean => Math.abs(s.player!.x - landed.player!.x) > 10,
       { timeoutMs: 4_000, intervalMs: 20 },
     );
     const feet: number = riding.player!.y + WORLD.playerHeight;
