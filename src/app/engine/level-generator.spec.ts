@@ -53,17 +53,19 @@ describe('designed floors', () => {
     }
   });
 
-  it('floor 3 is the designed one for every seed: a boulder behind a door, a button wired to it', (): void => {
+  it('floor 3 is the designed one for every seed: a boulder behind a door, the exit door behind a cracked wall', (): void => {
     for (const seed of [1, 42, 999_999]) {
       const level: LevelLayout = levelFor(seed, 3);
       expect(level.exitHidden).toBe(true);
       expect(level.springPuzzle).toBeUndefined();
+      expect(level.zombiePiles).toHaveLength(1);
       expect(level.gadgets?.map((g: Gadget): string => g.kind)).toEqual([
+        'button',
+        'boulder',
+        'door',
         'slope',
         'crack-wall',
         'door',
-        'boulder',
-        'button',
       ]);
       expect(level).toEqual(levelFor(7, 3));
     }
