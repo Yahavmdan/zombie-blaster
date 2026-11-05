@@ -125,15 +125,15 @@ const FLOOR_2: LevelLayout = {
 };
 
 /**
- * Floor 3, designed in the level editor: a boulder waits on a slope behind a tall door. Weight on
- * the button on the middle ledge opens the door, and the boulder rolls down and breaks the cracked
- * wall at the left edge. No way out yet: the designer will add it later, so the floor can't be finished.
+ * Floor 3, designed in the level editor: a boulder waits on a slope behind a tall door, and a pile
+ * of bodies lies by the low ledge. Weight on that ledge's button opens the door; the boulder rolls
+ * down and breaks the cracked wall, and the exit door stands behind the hole.
  */
 const FLOOR_3: LevelLayout = {
   seed: 1510986940,
   floor: 3,
   hint: 'Weigh down the button to let the boulder through',
-  platforms: [{ x: 584, y: 408, width: 160, height: 32 }],
+  platforms: [{ x: 728, y: 460, width: 160, height: 32 }],
   ropes: [],
   exitX: 20,
   exitY: 100,
@@ -145,33 +145,35 @@ const FLOOR_3: LevelLayout = {
   ],
   walls: [],
   gadgets: [
-    { id: 'g1', kind: 'slope', risesRight: true, x: 32, y: 364, width: 384, height: 224 },
+    { id: 'g5', kind: 'button', kg: 60, targets: ['g7'], x: 784, y: 460, width: 48, height: 6 },
+    { id: 'g6', kind: 'boulder', kg: 600, x: 388, y: 352.8, width: 48, height: 48 },
     {
-      id: 'g2',
-      kind: 'crack-wall',
-      x: 0,
-      y: 12,
-      width: 32,
-      height: 608,
-      crackTop: 204,
-      crackBottom: 620,
-    },
-    {
-      id: 'g3',
+      id: 'g7',
       kind: 'door',
       latch: false,
       exit: false,
-      x: 320,
+      x: 356,
       y: 12,
       width: 32,
       height: 608,
       look: 'hazard',
     },
-    { id: 'g4', kind: 'boulder', kg: 600, x: 360, y: 210, width: 48, height: 48 },
-    { id: 'g5', kind: 'button', kg: 60, targets: ['g3'], x: 640, y: 408, width: 48, height: 6 },
+    { id: 'g8', kind: 'slope', risesRight: true, x: 116, y: 384, width: 320, height: 224 },
+    {
+      id: 'g9',
+      kind: 'crack-wall',
+      x: 116,
+      y: 12,
+      width: 64,
+      height: 608,
+      crackTop: 460,
+      crackBottom: 620,
+    },
+    { id: 'g10', kind: 'door', latch: true, exit: true, x: 28, y: 492, width: 64, height: 128 },
   ],
   // No zombie rises behind the tall door or over the slope.
   noSpawn: [{ x: 0, y: 12, width: 384, height: 608 }],
+  zombiePiles: [{ x: 589, y: 556, width: 96, height: 64, bodies: 30 }],
 };
 
 /** Floors made in the level editor: `levelFor` plays a copy of these instead of a generated one. */
