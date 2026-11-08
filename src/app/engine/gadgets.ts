@@ -618,7 +618,7 @@ export function stepBoulder(
     if (Math.abs(body.velocityX) < 0.05) body.velocityX = 0;
     if (slope) followSlope(body, slope);
   } else {
-    fly(body, platforms, slopes, gravity, breaks, impacts);
+    fly(body, prevX, platforms, slopes, gravity, breaks, impacts);
   }
   body.angle += (body.x - prevX) / R;
   return impacts;
@@ -638,6 +638,7 @@ function followSlope(body: GadgetBody, slope: SlopeSurface): void {
 
 function fly(
   body: GadgetBody,
+  prevX: number,
   platforms: Platform[],
   slopes: SlopeSurface[],
   gravity: number,
@@ -650,7 +651,15 @@ function fly(
   body.y += body.velocityY;
   const left: number = body.x;
   const right: number = body.x + S;
+  const slopeTop: number | null = slopeCrossed(slopes, prevX + R, prevY + S, body.x + R, body.y + S);
   if (body.velocityY < 0) {
+    // Rising slower than a slope it flies along climbs under it: it lands on the slope.
+    if (slopeTop !== null) {
+      body.y = slopeTop - S;
+      body.velocityY = 0;
+      body.isGrounded = true;
+      return;
+    }
     // Rising into a solid's underside: it stops there.
     for (const s of platforms) {
       if (!s.solid || right <= s.x || left >= s.x + s.width) continue;
@@ -673,14 +682,9 @@ function fly(
     if (!landing || p.y < landing.y) landing = p;
   }
   let top: number | null = landing ? landing.y : null;
-  for (const s of slopes) {
-    const sy: number | null = slopeY(s, cx);
-    if (sy === null || bottom < sy || prevBottom > sy + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE)
-      continue;
-    if (top === null || sy < top) {
-      top = sy;
-      landing = null;
-    }
+  if (slopeTop !== null && (top === null || slopeTop < top)) {
+    top = slopeTop;
+    landing = null;
   }
   if (top === null) return;
   const speed: number = body.velocityY;
@@ -695,6 +699,29 @@ function fly(
   }
   body.velocityY = 0;
   body.isGrounded = true;
+}
+
+/**
+ * The highest slope a flying body's bottom went from above to on or under this tick (center
+ * `prevCx`, `prevBottom` to `cx`, `bottom`), measured against the surface under it each tick: a
+ * steep slope rises faster under a body flying along it than any landing tolerance.
+ */
+function slopeCrossed(
+  slopes: SlopeSurface[],
+  prevCx: number,
+  prevBottom: number,
+  cx: number,
+  bottom: number,
+): number | null {
+  let best: number | null = null;
+  for (const s of slopes) {
+    const sy: number | null = slopeY(s, cx);
+    if (sy === null || bottom < sy) continue;
+    const was: number = s.y0 + (Math.min(s.x1, Math.max(s.x0, prevCx)) - s.x0) * slopeGrade(s);
+    if (prevBottom > was + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE) continue;
+    if (best === null || sy < best) best = sy;
+  }
+  return best;
 }
 
 /** Live zombies a moving boulder overlaps that it hasn't crushed yet. */

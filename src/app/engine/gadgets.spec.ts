@@ -24,6 +24,8 @@ import {
   inputOn,
   launchVelocity,
   loadKg,
+  SlopeSurface,
+  slopeY,
   newGadgetState,
   newGadgetStates,
   stepBoulder,
@@ -148,6 +150,20 @@ describe('gadgets: boulder', () => {
     }
     expect(peak).toBeLessThan(GROUND_Y - S - 150);
     expect(b.isGrounded).toBe(true);
+  });
+
+  it('rolling off one slope onto a steeper one below, it never sinks through it', () => {
+    const upper: SlopeSurface = { x0: 816, y0: 204, x1: 1136, y1: 76 };
+    const lower: SlopeSurface = { x0: 364, y0: 124, x1: 1004, y1: 604 };
+    const slopes: SlopeSurface[] = [upper, lower];
+    const b: GadgetBody = { ...body(1044, 47), isGrounded: false };
+    let deepest: number = 0;
+    for (let t: number = 0; t < 600; t++) {
+      stepBoulder(b, [GROUND_PLATFORM], slopes, G, (): boolean => false);
+      const top: number | null = slopeY(lower, b.x + S / 2);
+      if (top !== null && b.x + S / 2 < upper.x0) deepest = Math.max(deepest, b.y + S - top);
+    }
+    expect(deepest).toBeLessThanOrEqual(1);
   });
 });
 
