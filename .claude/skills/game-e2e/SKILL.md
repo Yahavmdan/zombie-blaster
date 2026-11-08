@@ -186,7 +186,7 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   held Space hops again on every landing. W/up never jumps: it grabs a ladder (from the
   floor too) and climbs. A test that holds jump past landing gets extra hops. On ropes: left/right
   turns, jump alone does nothing, direction + jump lets go, climbing past the top dismounts.
-- **Floors 1, 2 and 3 are designed** (`DESIGNED_LEVELS`; floor 3: `solo/floor-3.spec.ts`; floor 1: button far left, exit door on the right
+- **Floors 1-4 are designed** (`DESIGNED_LEVELS`; floor 4: `solo/floor-4.spec.ts`, the generated cage floor needs `setDesignedFloors(false)`; floor 3: `solo/floor-3.spec.ts`; floor 1: button far left, exit door on the right
   ledge; floor 2: two buttons, a tall door, an exit door; no hanging exit, no safe spot). The `solo` and
   `room` fixtures call `probe.setDesignedFloors(false)` on every page, so specs play generated floors
   everywhere; `solo/floor-1.spec.ts`, `solo/floor-2.spec.ts`, `online/floor-2-coop.spec.ts` and

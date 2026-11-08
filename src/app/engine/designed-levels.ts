@@ -176,9 +176,80 @@ const FLOOR_3: LevelLayout = {
   zombiePiles: [{ x: 589, y: 556, width: 96, height: 64, bodies: 30 }],
 };
 
+/**
+ * Floor 4, designed in the level editor: a boulder sits high on the right slope behind two doors.
+ * The left button opens the near door, the button on the middle ledge latches the far one, and a
+ * spring at the foot throws what lands on it; the cracked wall stands at the right edge. No way out
+ * yet: the designer adds it later.
+ */
+const FLOOR_4: LevelLayout = {
+  seed: 407375565,
+  floor: 4,
+  hint: 'Weigh down the buttons to set the boulder rolling',
+  platforms: [
+    { x: 720, y: 396, width: 128, height: 32 },
+    { x: 56, y: 512, width: 160, height: 32 },
+    { x: 976, y: 400, width: 32, height: 32 },
+  ],
+  ropes: [],
+  exitX: 20,
+  exitY: 274,
+  exitHidden: true,
+  props: [
+    { kind: 'barrel1', x: 68, y: 490, width: 18, height: 22 },
+    { kind: 'barrel1', x: 63, y: 468, width: 18, height: 22 },
+    { kind: 'barrel1', x: 7, y: 598, width: 18, height: 22 },
+  ],
+  walls: [],
+  gadgets: [
+    { id: 'g1', kind: 'slope', risesRight: true, x: 816, y: 44, width: 320, height: 160 },
+    { id: 'g2', kind: 'slope', risesRight: false, x: 240, y: 236, width: 480, height: 160 },
+    {
+      id: 'g3',
+      kind: 'door',
+      latch: false,
+      exit: false,
+      x: 976,
+      y: 12,
+      width: 32,
+      height: 384,
+      look: 'hazard',
+    },
+    { id: 'g7', kind: 'button', kg: 60, targets: ['g3'], x: 116, y: 512, width: 48, height: 6 },
+    {
+      id: 'g8',
+      kind: 'door',
+      latch: true,
+      exit: false,
+      x: 1100,
+      y: 40,
+      width: 32,
+      height: 576,
+      look: 'hazard',
+    },
+    { id: 'g11', kind: 'button', kg: 60, targets: ['g8'], x: 752, y: 396, width: 64, height: 6 },
+    { id: 'g13', kind: 'boulder', kg: 600, x: 1044, y: 30, width: 48, height: 48 },
+    {
+      id: 'g14',
+      kind: 'crack-wall',
+      x: 1216,
+      y: 12,
+      width: 64,
+      height: 608,
+      crackTop: 364,
+      crackBottom: 620,
+      look: 'brick',
+    },
+    { id: 'g15', kind: 'spring', power: 24, x: 1016, y: 588, width: 88, height: 32, look: 'blue' },
+    { id: 'g16', kind: 'slope', risesRight: false, x: 720, y: 420, width: 288, height: 96 },
+  ],
+  noSpawn: [],
+};
+
 /** Floors made in the level editor: `levelFor` plays a copy of these instead of a generated one. */
 export const DESIGNED_LEVELS: Readonly<Record<number, LevelLayout>> = {
   1: FLOOR_1,
   2: FLOOR_2,
   3: FLOOR_3,
+  4: FLOOR_4,
 };

@@ -1163,6 +1163,7 @@ describe('Cage puzzle (floor 4)', (): void => {
   beforeEach((): void => {
     engine = new GameEngine(createMockCanvas());
     engine.player = makePlayer();
+    engine.designedFloors = false;
     engine.setFloor(GAME_CONSTANTS.PUZZLE_CAGE_FLOOR);
   });
 
