@@ -179,8 +179,8 @@ const FLOOR_3: LevelLayout = {
 /**
  * Floor 4, designed in the level editor: a boulder sits high on the right slope behind two doors.
  * The left button opens the near door, the button on the middle ledge latches the far one, and a
- * spring at the foot throws what lands on it; the cracked wall stands at the right edge. No way out
- * yet: the designer adds it later.
+ * spring at the foot throws what lands on it. The exit door stands in the right corner, past the far
+ * door.
  */
 const FLOOR_4: LevelLayout = {
   seed: 407375565,
@@ -203,7 +203,7 @@ const FLOOR_4: LevelLayout = {
   walls: [],
   gadgets: [
     { id: 'g1', kind: 'slope', risesRight: true, x: 816, y: 44, width: 320, height: 160 },
-    { id: 'g2', kind: 'slope', risesRight: false, x: 240, y: 236, width: 480, height: 160 },
+    { id: 'g2', kind: 'slope', risesRight: false, x: 432, y: 300, width: 288, height: 96 },
     {
       id: 'g3',
       kind: 'door',
@@ -221,27 +221,17 @@ const FLOOR_4: LevelLayout = {
       kind: 'door',
       latch: true,
       exit: false,
-      x: 1100,
-      y: 40,
+      x: 1140,
+      y: 12,
       width: 32,
-      height: 576,
+      height: 608,
       look: 'hazard',
     },
-    { id: 'g11', kind: 'button', kg: 60, targets: ['g8'], x: 752, y: 396, width: 64, height: 6 },
+    { id: 'g11', kind: 'button', kg: 60, targets: ['g8'], x: 760, y: 396, width: 48, height: 6 },
     { id: 'g13', kind: 'boulder', kg: 600, x: 1044, y: 30, width: 48, height: 48 },
-    {
-      id: 'g14',
-      kind: 'crack-wall',
-      x: 1216,
-      y: 12,
-      width: 64,
-      height: 608,
-      crackTop: 364,
-      crackBottom: 620,
-      look: 'brick',
-    },
-    { id: 'g15', kind: 'spring', power: 24, x: 1016, y: 588, width: 88, height: 32, look: 'blue' },
+    { id: 'g15', kind: 'spring', power: 24, x: 1016, y: 588, width: 120, height: 32 },
     { id: 'g16', kind: 'slope', risesRight: false, x: 720, y: 420, width: 288, height: 96 },
+    { id: 'g17', kind: 'door', latch: false, exit: true, x: 1196, y: 492, width: 64, height: 128 },
   ],
   noSpawn: [],
 };

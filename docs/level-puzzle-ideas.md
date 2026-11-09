@@ -11,7 +11,7 @@ ships, tick its box here and rewrite its line to match what was built.
 
 ## Physics and props
 
-- [ ] **Boulder behind two doors** (floor 4, designed in the level editor, in progress): a boulder high on the right slope rests against a door; the left ledge's button opens it, the middle ledge's button latches the far door, a spring sits at the foot and the cracked wall at the right edge. No way out yet: the designer adds it.
+- [ ] **Boulder behind two doors** (floor 4, designed in the level editor, in progress): a boulder high on the right slope rests against a door; the left ledge's button opens it, the middle ledge's button latches the far door, a spring sits at the foot and the exit door stands in the right corner past the far door.
 - [x] **Boulder behind the door** (floor 3, designed in the level editor): climb the zombie pile to the low ledge, weigh down its button, the tall door opens, the boulder rolls down the slope and breaks the cracked wall, and the exit door stands behind the hole.
 - [x] **Two buttons, two doors** (floor 2, designed in the level editor): a tall door shuts off the
       right end of the map with the exit door behind it. The high ledge's button opens the tall door,
