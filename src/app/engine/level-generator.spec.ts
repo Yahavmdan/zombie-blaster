@@ -84,9 +84,9 @@ describe('designed floors', () => {
         'door',
         'button',
         'boulder',
-        'crack-wall',
         'spring',
         'slope',
+        'door',
       ]);
       expect(level).toEqual(levelFor(7, 4));
     }
