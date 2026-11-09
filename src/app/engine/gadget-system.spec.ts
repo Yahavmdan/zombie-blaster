@@ -8,7 +8,7 @@ import {
   VfxEventType,
   ZOMBIE_TYPES,
 } from '@shared/index';
-import { GadgetBody, GadgetState, WorldDrop, ZombieState, ZombieType } from '@shared/game-entities';
+import { GadgetBody, GadgetState, LooseProp, WorldDrop, ZombieState, ZombieType } from '@shared/game-entities';
 import { PhysicsSystem } from './physics-system';
 import { GameEngine } from './game-engine';
 import { EXIT_TARGET, Gadget, Platform } from './engine-types';
@@ -388,6 +388,51 @@ describe('GadgetSystem on a real engine', () => {
         gadgetId: 'g2',
       },
     ]);
+  });
+
+  it('a rolling boulder smashes a box and sets off a barrel, slowing down at each', () => {
+    const boxH: number = 21;
+    const barrelH: number = 21;
+    engine.useCustomLevel({
+      ...room([{ id: 'g1', kind: 'boulder', kg: 600, x: 200, y: GROUND_Y - S, width: S, height: S }]),
+      props: [
+        { kind: 'box1', x: 330, y: GROUND_Y - boxH, width: 27, height: boxH },
+        { kind: 'barrel1', x: 420, y: GROUND_Y - barrelH, width: 17, height: barrelH },
+      ],
+    });
+    const [box, barrel]: string[] = engine.looseProps.map((p: LooseProp): string => p.id);
+    const body: GadgetBody = state('g1').body!;
+    body.velocityX = 8;
+    let before: number = 0;
+    let after: number = 0;
+    for (let t: number = 0; t < 60 && engine.looseProps.some((p: LooseProp): boolean => p.id === box); t++) {
+      before = body.velocityX;
+      tick(1);
+      after = body.velocityX;
+    }
+    expect(engine.looseProps.some((p: LooseProp): boolean => p.id === box), 'the box broke').toBe(false);
+    expect(after, 'the box slowed it more than rolling does').toBeLessThan(
+      before * GAME_CONSTANTS.GADGET_BOULDER_ROLL_FRICTION - 0.01,
+    );
+    expect(after, 'it rolls on through').toBeGreaterThan(0);
+    const broke: VfxEvent[] = events(VfxEventType.PropBreak);
+    expect(broke.length).toBe(1);
+    expect(broke[0]).toMatchObject({ animationKey: 'box1', dir: 1 });
+    tick(60);
+    expect(engine.looseProps.some((p: LooseProp): boolean => p.id === barrel), 'the barrel went off').toBe(false);
+    expect(events(VfxEventType.BarrelBlast).length).toBe(1);
+    expect(body.velocityX, 'its own blast does not throw it back').toBeGreaterThanOrEqual(0);
+  });
+
+  it('a slow boulder stops against a prop instead of smashing it', () => {
+    engine.useCustomLevel({
+      ...room([{ id: 'g1', kind: 'boulder', kg: 600, x: 300, y: GROUND_Y - S, width: S, height: S }]),
+      props: [{ kind: 'box1', x: 300 + S + 4, y: GROUND_Y - 21, width: 27, height: 21 }],
+    });
+    state('g1').body!.velocityX = GAME_CONSTANTS.GADGET_BOULDER_SMASH_SPEED - 0.5;
+    tick(30);
+    expect(engine.looseProps.length).toBe(1);
+    expect(events(VfxEventType.PropBreak).length).toBe(0);
   });
 
   it('swings break a crack band only there: above it they do nothing', () => {

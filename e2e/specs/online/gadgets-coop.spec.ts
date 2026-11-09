@@ -5,12 +5,15 @@ import { E2eGadgetView, E2eSnapshot, E2eVfxLogEntry } from '../../support/probe'
 import { WORLD } from '../../support/invariants';
 import {
   binAt,
+  boulderAt,
   cageAt,
   crackWallAt,
   doorAt,
   gadgetRoom,
+  groundBoxAt,
   leverAt,
   springAt,
+  withProps,
 } from '../../support/gadget-layouts';
 
 function gadget(s: E2eSnapshot, id: string): E2eGadgetView {
@@ -108,6 +111,51 @@ test.describe('designed floor gadgets in co-op', { tag: '@online' }, (): void =>
     expect(replayed(await guest.probe.vfxLog(), 'gadget-launch'), 'the guest saw the launch').toBe(
       true,
     );
+  });
+
+  test("a guest's boulder smashes a box: the host breaks it, the guest sees the pieces and the box gone", async ({
+    room,
+  }: {
+    room: RoomFactory;
+  }): Promise<void> => {
+    test.setTimeout(90_000);
+    const session: RoomSession = await room(
+      [
+        { name: 'Host', classId: 'warrior' },
+        { name: 'Guest', classId: 'warrior' },
+      ],
+      'smash',
+    );
+    const host: GamePlayer = session.host;
+    const guest: GamePlayer = session.guests[0];
+    await host.probe.setGodMode(true);
+    await guest.probe.setGodMode(true);
+    await host.probe.clearZombies();
+    const layout: string = withProps(gadgetRoom(1, [boulderAt('g1', 600)]), [groundBoxAt(700)]);
+    await host.probe.loadLayout(layout);
+    await guest.probe.loadLayout(layout);
+    await guest.probe.waitFor(
+      'the guest follows the host gadgets',
+      (s: E2eSnapshot): boolean => s.gadgets.length === 1 && s.level.props.length === 1,
+      { timeoutMs: 10_000 },
+    );
+    await guest.probe.clearVfxLog();
+    await guest.face('right');
+    await guest.probe.teleport(600 - WORLD.playerWidth - 6, WORLD.groundY - WORLD.playerHeight);
+    await guest.wait(300);
+    await guest.hold(KEYS.attack);
+    await host.probe.waitFor(
+      "the host's boulder smashed the box",
+      (s: E2eSnapshot): boolean => s.level.props[0]?.exploded === true,
+      { timeoutMs: 8_000 },
+    );
+    await guest.release(KEYS.attack);
+    await guest.probe.waitFor(
+      'the guest sees the box gone',
+      (s: E2eSnapshot): boolean => s.level.props[0]?.exploded === true,
+      { timeoutMs: 5_000 },
+    );
+    expect(replayed(await guest.probe.vfxLog(), 'prop-break'), 'the guest saw it burst').toBe(true);
   });
 
   test("a guest pushes a rolling bin: the host rolls it, both see it move", async ({

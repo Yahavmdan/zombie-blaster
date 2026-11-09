@@ -81,6 +81,33 @@ export class ExplodingBarrelSystem {
     }
   }
 
+  /**
+   * Host: a boulder rolling `dir` smashed this prop: a barrel goes off at once, anything else
+   * breaks into pieces. Either way it is gone until it comes back on its spawn spot.
+   */
+  smash(id: string, dir: number): void {
+    const prop: LooseProp | undefined = this.e.looseProps.find((p: LooseProp): boolean => p.id === id);
+    const kind: PropKind | undefined = this.props.kindOf(id);
+    if (!prop || kind === undefined) return;
+    if (isExplosive(kind)) {
+      this.blowUp(prop);
+      return;
+    }
+    const box: Box = { x: prop.x, y: prop.y, width: prop.width, height: prop.height };
+    this.props.remove(id);
+    this.vfx.spawnPropBreak(box, dir, kind);
+    this.e.pendingVfxEvents.push({
+      type: VfxEventType.PropBreak,
+      playerId: this.e.player?.id ?? '',
+      x: box.x,
+      y: box.y,
+      endX: box.x + box.width,
+      targetY: box.y + box.height,
+      dir,
+      animationKey: kind,
+    });
+  }
+
   /** A blown-up barrel is back on its spawn spot. */
   private dropIn(b: LooseProp): void {
     const cx: number = b.x + b.width / 2;

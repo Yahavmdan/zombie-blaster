@@ -1,6 +1,6 @@
 import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer, KEYS } from '../../support/game-player';
-import { E2eGadgetView, E2eSnapshot, E2eZombieView } from '../../support/probe';
+import { E2eGadgetView, E2eSnapshot, E2eVfxLogEntry, E2eZombieView } from '../../support/probe';
 import { WORLD } from '../../support/invariants';
 import {
   BOULDER_PX,
@@ -15,6 +15,9 @@ import {
   slopeAt,
   cageAt,
   exitDoorAt,
+  groundBarrelAt,
+  groundBoxAt,
+  withProps,
 } from '../../support/gadget-layouts';
 
 function gadget(s: E2eSnapshot, id: string): E2eGadgetView {
@@ -71,6 +74,38 @@ test.describe('designed floor gadgets', { tag: '@solo' }, (): void => {
     expect(gadget(after, 'g1').body!.x, 'the boulder rolls on through the hole').toBeGreaterThan(
       780 - BOULDER_PX,
     );
+  });
+
+  test('a rolling boulder smashes a box and sets off a barrel, slowing down at each', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await solo('warrior');
+    await designed(
+      p,
+      withProps(gadgetRoom(1, [boulderAt('g1', 600)]), [groundBoxAt(700), groundBarrelAt(800)]),
+    );
+    await p.probe.clearVfxLog();
+    await p.face('right');
+    await p.probe.teleport(600 - WORLD.playerWidth - 6, WORLD.groundY - WORLD.playerHeight);
+    await p.wait(300);
+    await p.hold(KEYS.attack);
+    await p.probe.waitFor(
+      'the swing rolls the boulder away',
+      (s: E2eSnapshot): boolean => (gadget(s, 'g1').body?.vx ?? 0) > 0,
+      { timeoutMs: 5_000 },
+    );
+    await p.release(KEYS.attack);
+    const after: E2eSnapshot = await p.probe.waitFor(
+      'the box broke and the barrel went off',
+      (s: E2eSnapshot): boolean => s.level.props.every((q: E2eSnapshot['level']['props'][number]): boolean => q.exploded),
+      { timeoutMs: 6_000 },
+    );
+    const types: string[] = (await p.probe.vfxLog()).map((e: E2eVfxLogEntry): string => e.type);
+    expect(types, 'the box burst into pieces').toContain('prop-break');
+    expect(types, 'the barrel blew up').toContain('barrel-blast');
+    expect(gadget(after, 'g1').body!.x, 'the boulder rolled on through both').toBeGreaterThan(800 - BOULDER_PX);
   });
 
   test('walking into a rolling bin pushes it, it rolls on, and it is a step to stand on', async ({

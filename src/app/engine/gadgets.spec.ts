@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CharacterState, Direction, GAME_CONSTANTS } from '@shared/index';
+import { CharacterState, Direction, GAME_CONSTANTS, PROP_WEIGHT_KG } from '@shared/index';
 import { GadgetBody, GadgetState } from '@shared/game-entities';
 import { Point } from './boulder-puzzle';
 import {
@@ -26,6 +26,8 @@ import {
   loadKg,
   SlopeSurface,
   slopeY,
+  smashKeep,
+  smashesProp,
   newGadgetState,
   newGadgetStates,
   stepBoulder,
@@ -51,7 +53,7 @@ function run(
 ): BoulderImpact[] {
   const impacts: BoulderImpact[] = [];
   for (let t: number = 0; t < ticks; t++) {
-    impacts.push(...stepBoulder(b, platforms, [], G, (): boolean => breaks));
+    impacts.push(...stepBoulder(b, platforms, [], G, (): number | null => (breaks ? GAME_CONSTANTS.GADGET_BOULDER_CRACK_KEEP_SPEED : null)));
   }
   return impacts;
 }
@@ -135,6 +137,40 @@ describe('gadgets: boulder', () => {
     expect(through.x).toBeGreaterThan(wall.x);
   });
 
+  it('goes through what it breaks with the share of its speed the break leaves it', () => {
+    const box: Platform = { x: 400, y: GROUND_Y - 20, width: 26, height: 20, solid: true, propId: 'p' };
+    const b: GadgetBody = body(400 - S - 2, GROUND_Y - S, 6);
+    stepBoulder(b, [GROUND_PLATFORM, box], [], G, (): number | null => 0.5);
+    expect(b.velocityX).toBeCloseTo(6 * 0.5 * GAME_CONSTANTS.GADGET_BOULDER_ROLL_FRICTION, 5);
+    expect(b.x).toBeGreaterThan(box.x - S);
+  });
+
+  it('landing hard on something it breaks, it falls on through, slowed', () => {
+    const box: Platform = { x: 380, y: GROUND_Y - 20, width: 40, height: 20, solid: true, propId: 'p' };
+    const b: GadgetBody = { ...body(400 - S / 2, box.y - S - 1), velocityY: 6, isGrounded: false };
+    const speeds: number[] = [];
+    stepBoulder(b, [GROUND_PLATFORM, box], [], G, (_s: Platform, speed: number): number | null => {
+      speeds.push(speed);
+      return 0.5;
+    });
+    expect(speeds.length).toBe(1);
+    expect(b.y).toBeGreaterThan(box.y - S);
+    expect(b.velocityY).toBeCloseTo((6 + G) * 0.5, 5);
+  });
+
+  it('smashes props from GADGET_BOULDER_SMASH_SPEED, a heavier prop slowing it more', () => {
+    expect(smashesProp(GAME_CONSTANTS.GADGET_BOULDER_SMASH_SPEED)).toBe(true);
+    expect(smashesProp(GAME_CONSTANTS.GADGET_BOULDER_SMASH_SPEED - 0.1)).toBe(false);
+    const kg: number = GAME_CONSTANTS.GADGET_BOULDER_KG;
+    const box: number = smashKeep(PROP_WEIGHT_KG.box, kg);
+    const barrel: number = smashKeep(PROP_WEIGHT_KG.barrel, kg);
+    expect(box).toBeLessThan(1);
+    expect(barrel).toBeLessThan(box);
+    expect(smashKeep(PROP_WEIGHT_KG.locker, kg)).toBe(GAME_CONSTANTS.GADGET_BOULDER_SMASH_MIN_KEEP);
+    // A heavier boulder loses less.
+    expect(smashKeep(PROP_WEIGHT_KG.box, kg * 2)).toBeGreaterThan(box);
+  });
+
   it('stays on the screen', () => {
     const b: GadgetBody = body(GAME_CONSTANTS.CANVAS_WIDTH - S - 2, GROUND_Y - S, 10);
     run(b, [GROUND_PLATFORM], 50);
@@ -145,7 +181,7 @@ describe('gadgets: boulder', () => {
     const b: GadgetBody = { ...body(200), velocityX: 6, velocityY: -14, isGrounded: false };
     let peak: number = b.y;
     for (let t: number = 0; t < 200; t++) {
-      stepBoulder(b, [GROUND_PLATFORM], [], G, (): boolean => false);
+      stepBoulder(b, [GROUND_PLATFORM], [], G, (): number | null => null);
       peak = Math.min(peak, b.y);
     }
     expect(peak).toBeLessThan(GROUND_Y - S - 150);
@@ -159,7 +195,7 @@ describe('gadgets: boulder', () => {
     const b: GadgetBody = { ...body(1044, 47), isGrounded: false };
     let deepest: number = 0;
     for (let t: number = 0; t < 600; t++) {
-      stepBoulder(b, [GROUND_PLATFORM], slopes, G, (): boolean => false);
+      stepBoulder(b, [GROUND_PLATFORM], slopes, G, (): number | null => null);
       const top: number | null = slopeY(lower, b.x + S / 2);
       if (top !== null && b.x + S / 2 < upper.x0) deepest = Math.max(deepest, b.y + S - top);
     }

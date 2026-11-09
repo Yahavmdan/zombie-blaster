@@ -7,6 +7,7 @@ import {
 import { DropType, ZombieType } from '@shared/game-entities';
 import { ChunkSource, Particle, ParticleChunk, ParticleShape, FadeMode } from './particle-types';
 import { WALL_LOOKS } from './gadget-looks';
+import { PROP_ART, PROP_MATERIAL, PropArt, PropKind } from './level-generator';
 import { BOULDER_ART_CELLS, crackedWallStones } from './puzzle-art';
 import { SKILL_ANIMATIONS, SkillAnimation } from './skill-animations';
 import { AcidPuddle, BarrelBlastFx, DamageNumber, DropNotification, IGameEngine, PlayerTint } from './engine-types';
@@ -957,6 +958,7 @@ export class VfxSystem {
     vy: number,
     spin: number,
     delay: number,
+    cellPx: number = ART_PX,
   ): void {
     const life: number = GAME_CONSTANTS.DEBRIS_LIFE_TICKS + Math.floor(Math.random() * 40);
     this.addParticle({
@@ -967,7 +969,7 @@ export class VfxSystem {
       life,
       maxLife: life,
       color: PIXEL['stone'],
-      size: Math.max(chunk.sw, chunk.sh) * ART_PX,
+      size: Math.max(chunk.sw, chunk.sh) * cellPx,
       shape: ParticleShape.Chunk,
       rotation: 0,
       rotationSpeed: spin,
@@ -1169,6 +1171,77 @@ export class VfxSystem {
       );
     }
     this.triggerScreenShake(GAME_CONSTANTS.WALL_BREAK_SHAKE_FRAMES, GAME_CONSTANTS.WALL_BREAK_SHAKE_INTENSITY);
+  }
+
+  /**
+   * A boulder smashed a prop (box, locker, rail): pieces cut from its own image (a rail, built from
+   * pieces, only splinters) burst out the way the boulder rolled (`dir`) and fall, with splinters
+   * and dust. Derived from the box and the kind only, so a replay draws the same burst.
+   */
+  spawnPropBreak(
+    box: { x: number; y: number; width: number; height: number },
+    dir: number,
+    kind: PropKind,
+  ): void {
+    const steel: boolean = PROP_MATERIAL[kind] === 'locker';
+    if (kind !== 'rail') {
+      const art: PropArt = PROP_ART[kind];
+      const cols: number = GAME_CONSTANTS.PROP_BREAK_PIECES_ACROSS;
+      const rows: number = GAME_CONSTANTS.PROP_BREAK_PIECES_DOWN;
+      const w: number = art.right - art.left + 1;
+      const h: number = art.bottom - art.top + 1;
+      for (let gy: number = 0; gy < rows; gy++) {
+        for (let gx: number = 0; gx < cols; gx++) {
+          const sx: number = art.left + Math.floor((gx * w) / cols);
+          const sy: number = art.top + Math.floor((gy * h) / rows);
+          const sw: number = art.left + Math.floor(((gx + 1) * w) / cols) - sx;
+          const sh: number = art.top + Math.floor(((gy + 1) * h) / rows) - sy;
+          this.addDebrisChunk(
+            { source: { kind: 'prop', prop: kind }, sx, sy, sw, sh },
+            box.x + sx - art.left + sw / 2,
+            box.y + sy - art.top + sh / 2,
+            dir * (1 + Math.random() * GAME_CONSTANTS.PROP_BREAK_SPEED) + (gx - (cols - 1) / 2),
+            -2 - Math.random() * GAME_CONSTANTS.PROP_BREAK_SPEED * 0.6 + (gy - (rows - 1) / 2),
+            (Math.random() - 0.5) * 0.6,
+            0,
+            1,
+          );
+        }
+      }
+    }
+    const splinters: string[] = steel
+      ? [PIXEL['steelLight'], PIXEL['steelHi'], PIXEL['steel'], PIXEL['steelDark']]
+      : [PIXEL['woodHi'], PIXEL['wood'], PIXEL['woodDark'], PIXEL['boneDim']];
+    for (let i: number = 0; i < 18; i++) {
+      const life: number = 35 + Math.floor(Math.random() * 30);
+      this.addParticle({
+        x: box.x + Math.random() * box.width,
+        y: box.y + Math.random() * box.height,
+        vx: dir * Math.random() * GAME_CONSTANTS.PROP_BREAK_SPEED + (Math.random() - 0.5) * 2,
+        vy: -1 - Math.random() * 4,
+        life,
+        maxLife: life,
+        color: splinters[i % splinters.length],
+        size: 2 + Math.random() * 3,
+        shape: ParticleShape.Pixel,
+        rotation: 0,
+        rotationSpeed: 0,
+        fadeMode: FadeMode.Late,
+        scaleOverLife: false,
+        gravityScale: GAME_CONSTANTS.DEBRIS_GRAVITY_SCALE / 2,
+        floorY: GAME_CONSTANTS.GROUND_Y,
+      });
+    }
+    for (let i: number = 0; i < 6; i++) {
+      this.addDust(
+        box.x + Math.random() * box.width,
+        box.y + box.height - 4,
+        dir * Math.random() * 2,
+        -0.3,
+        8 + Math.random() * 8,
+        40 + Math.random() * 20,
+      );
+    }
   }
 
   /** A spring or slingshot fired: a dust puff off its pad and streaks along the throw (`angle` degrees). */

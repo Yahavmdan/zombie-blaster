@@ -543,10 +543,25 @@ export interface BoulderImpact {
 }
 
 /**
- * Whether the boulder breaks through `solid` (a crack band) at `speed`: then it keeps going
- * (slowed) instead of bouncing back.
+ * Whether the boulder breaks through `solid` (a crack band, a prop it smashes) at `speed`: the
+ * share of its speed it goes on with, or null when the solid stops it (it bounces back).
  */
-export type BreaksThrough = (solid: Platform, speed: number) => boolean;
+export type BreaksThrough = (solid: Platform, speed: number) => number | null;
+
+/**
+ * The share of its speed a boulder of `boulderKg` keeps smashing through a prop of `propKg`: a
+ * heavier prop slows it more, a heavier boulder less.
+ */
+export function smashKeep(propKg: number, boulderKg: number): number {
+  const loss: number =
+    propKg * GAME_CONSTANTS.GADGET_BOULDER_SMASH_LOSS_PER_KG * boulderSpeedScale(boulderKg);
+  return Math.max(GAME_CONSTANTS.GADGET_BOULDER_SMASH_MIN_KEEP, 1 - loss);
+}
+
+/** Whether a boulder moving at `speed` smashes a prop it meets (slower, the prop stops it). */
+export function smashesProp(speed: number): boolean {
+  return speed >= GAME_CONSTANTS.GADGET_BOULDER_SMASH_SPEED;
+}
 
 function overlaps(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -605,8 +620,9 @@ export function stepBoulder(
     if (overlaps({ ...box, x: prevX }, s)) continue;
     const speed: number = Math.abs(body.velocityX);
     impacts.push({ solid: s, speed });
-    if (breaks(s, speed)) {
-      body.velocityX *= 0.7;
+    const keep: number | null = breaks(s, speed);
+    if (keep !== null) {
+      body.velocityX *= keep;
       continue;
     }
     body.x = prevX + R <= s.x + s.width / 2 ? s.x - S : s.x + s.width;
@@ -666,7 +682,11 @@ function fly(
       const underside: number = s.y + s.height;
       if (prevY < underside || body.y >= underside) continue;
       impacts.push({ solid: s, speed: -body.velocityY });
-      if (breaks(s, -body.velocityY)) continue;
+      const keep: number | null = breaks(s, -body.velocityY);
+      if (keep !== null) {
+        body.velocityY *= keep;
+        continue;
+      }
       body.y = underside;
       body.velocityY = 0;
     }
@@ -690,7 +710,11 @@ function fly(
   const speed: number = body.velocityY;
   if (landing?.solid) {
     impacts.push({ solid: landing, speed });
-    if (breaks(landing, speed)) return;
+    const keep: number | null = breaks(landing, speed);
+    if (keep !== null) {
+      body.velocityY *= keep;
+      return;
+    }
   }
   body.y = top - S;
   if (speed > GAME_CONSTANTS.GADGET_BOULDER_BOUNCE_MIN_SPEED) {
