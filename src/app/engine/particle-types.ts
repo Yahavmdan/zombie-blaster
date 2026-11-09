@@ -10,14 +10,18 @@ export enum ParticleShape {
   Chunk = 'chunk',
 }
 
+import { SinglePropKind } from './level-generator';
+
 /**
- * Whose art a chunk is cut from: the boulder, the cracked wall of this size and side, or a
- * designed floor's crack band of this size and look (`crackBandArt`).
+ * Whose art a chunk is cut from: the boulder, the cracked wall of this size and side, a
+ * designed floor's crack band of this size and look (`crackBandArt`), or a prop's image (cut in
+ * image pixels, not art cells: props are drawn 1:1).
  */
 export type ChunkSource =
   | { kind: 'boulder' }
   | { kind: 'wall'; cols: number; rows: number; faceRight: boolean }
-  | { kind: 'crack'; cols: number; rows: number; look: string };
+  | { kind: 'crack'; cols: number; rows: number; look: string }
+  | { kind: 'prop'; prop: SinglePropKind };
 
 /** The part of the source art a chunk shows, in art cells (drawn at ART_PX per cell). */
 export interface ParticleChunk {

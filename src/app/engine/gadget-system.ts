@@ -1,5 +1,5 @@
 import { CharacterState, GAME_CONSTANTS, VfxEventType, ZombieType } from '@shared/index';
-import { GadgetBody, GadgetState } from '@shared/game-entities';
+import { GadgetBody, GadgetState, LooseProp } from '@shared/game-entities';
 import { Box, Point } from './boulder-puzzle';
 import { CombatSystem } from './combat-system';
 import { DropSystem } from './drop-system';
@@ -35,6 +35,8 @@ import {
   ridesOn,
   stepCageSwing,
   slopesOf,
+  smashKeep,
+  smashesProp,
   zombiesIn,
   crackBand,
   lookOf,
@@ -95,6 +97,12 @@ export class GadgetSystem {
   private readonly crushed: Map<string, Set<string>> = new Map<string, Set<string>>();
   /** Host: `cage:player` riding now, with ticks of grace left (a fresh one has just landed). */
   private readonly riders: Map<string, number> = new Map<string, number>();
+  /** Host: props the rolling boulder smashed this tick (by id), and the way it rolled. */
+  private readonly smashes: Map<string, number> = new Map<string, number>();
+  /** Host: the boulder whose smash set off a barrel: its own blast doesn't throw it back. */
+  private smashing: string | null = null;
+  /** Host: a boulder smashed a prop (`ExplodingBarrelSystem.smash`: boxes break, barrels go off). */
+  onSmashProp: ((id: string, dir: number) => void) | null = null;
 
   constructor(
     private readonly e: IGameEngine,
@@ -169,7 +177,9 @@ export class GadgetSystem {
           this.others(g.id),
           slopesOf(this.e.gadgets),
           this.drops.getEffectiveGravity(),
-          (): boolean => false,
+          // Predicts a smash (the host's sync takes the prop away); never breaks anything itself.
+          (solid: Platform, speed: number): number | null =>
+            g.kind === 'boulder' ? this.propSmash(solid, speed, g.kg) : null,
           rollFeel(g),
         );
       } else if (g.kind === 'cage' && !state.dropped) {
@@ -242,7 +252,7 @@ export class GadgetSystem {
         if (distanceToBox(center, box) > radius) continue;
         const dir: number = Math.sign(box.x + box.width / 2 - center.x) || 1;
         pushCage(g, state, dir * GAME_CONSTANTS.GADGET_CAGE_BLAST_SPEED);
-      } else if (isRoller(g) && state.body) {
+      } else if (isRoller(g) && state.body && g.id !== this.smashing) {
         const body: GadgetBody = state.body;
         const middle: Point = { x: body.x + S / 2, y: body.y + S / 2 };
         if (Math.hypot(middle.x - center.x, middle.y - center.y) > radius) continue;
@@ -398,9 +408,32 @@ export class GadgetSystem {
       this.others(g.id),
       slopesOf(this.e.gadgets),
       this.drops.getEffectiveGravity(),
-      (solid: Platform, speed: number): boolean => this.boulderBreaks(solid, speed, dir),
+      (solid: Platform, speed: number): number | null =>
+        this.boulderBreaks(solid, speed, dir, g.kg),
     );
     this.crush(g.id, boulderVictims(body, this.e.zombies, this.crushedBy(g.id)), dir);
+    this.smashProps(g.id);
+  }
+
+  /** After the boulder's step: what it smashed breaks or goes off (a blast it set off spares it). */
+  private smashProps(id: string): void {
+    if (this.smashes.size === 0) return;
+    this.smashing = id;
+    for (const [propId, dir] of this.smashes) this.onSmashProp?.(propId, dir);
+    this.smashing = null;
+    this.smashes.clear();
+  }
+
+  /**
+   * A resting prop a boulder of `boulderKg` meets at `speed`: fast enough it smashes through,
+   * keeping the share of its speed returned (the prop's weight slows it); else null (it stops it).
+   */
+  private propSmash(solid: Platform, speed: number, boulderKg: number): number | null {
+    if (solid.propId === undefined || !smashesProp(speed)) return null;
+    const prop: LooseProp | undefined = this.e.looseProps.find(
+      (p: LooseProp): boolean => p.id === solid.propId,
+    );
+    return prop ? smashKeep(prop.weightKg, boulderKg) : null;
   }
 
   /** A bin: players walking into it roll it, a swing shoves it, and it rolls on by itself. */
@@ -423,9 +456,9 @@ export class GadgetSystem {
       this.others(g.id),
       slopesOf(this.e.gadgets),
       this.drops.getEffectiveGravity(),
-      (solid: Platform, speed: number): boolean => {
+      (solid: Platform, speed: number): number | null => {
         this.knockBin(solid, speed, dir);
-        return false;
+        return null;
       },
       BIN_FEEL,
     );
@@ -648,19 +681,28 @@ export class GadgetSystem {
     return crushed;
   }
 
-  /** A boulder ran into a crack band fast enough: it breaks out and the boulder goes on through. */
-  private boulderBreaks(solid: Platform, speed: number, dir: number): boolean {
+  /**
+   * A boulder ran into a crack band fast enough: it breaks out and the boulder goes on through.
+   * A prop it smashes (`propSmash`) is noted and broken after the step. Returns the share of its
+   * speed it keeps going on with, or null when the solid stops it.
+   */
+  private boulderBreaks(solid: Platform, speed: number, dir: number, boulderKg: number): number | null {
+    const smash: number | null = this.propSmash(solid, speed, boulderKg);
+    if (smash !== null && solid.propId !== undefined) {
+      this.smashes.set(solid.propId, dir);
+      return smash;
+    }
     this.knockBin(solid, speed, dir);
-    if (speed < GAME_CONSTANTS.GADGET_BOULDER_BREAK_SPEED || !solid.gadgetId) return false;
+    if (speed < GAME_CONSTANTS.GADGET_BOULDER_BREAK_SPEED || !solid.gadgetId) return null;
     const g: Gadget | undefined = this.e.gadgets.find(
       (x: Gadget): boolean => x.id === solid.gadgetId,
     );
     const state: GadgetState | undefined = stateOf(this.e.gadgetStates, solid.gadgetId);
-    if (!g || g.kind !== 'crack-wall' || !state || state.broken) return false;
+    if (!g || g.kind !== 'crack-wall' || !state || state.broken) return null;
     const band: Box = crackBand(g);
-    if (solid.y !== band.y || solid.height !== band.height) return false;
+    if (solid.y !== band.y || solid.height !== band.height) return null;
     this.breakBand(g, state, dir);
-    return true;
+    return GAME_CONSTANTS.GADGET_BOULDER_CRACK_KEEP_SPEED;
   }
 
   /** Zombies under a moving boulder or a falling cage: crushed (once each), knocked `dir`. */

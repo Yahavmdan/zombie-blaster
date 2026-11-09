@@ -1,7 +1,7 @@
 import { GAME_CONSTANTS } from '@shared/index';
 import { LooseProp } from '@shared/game-entities';
 import { BoulderPuzzleLayout, Platform, Rope } from './engine-types';
-import { Prop, PROP_ART, PropArt, propArtWidth, RAIL_ART } from './level-generator';
+import { Prop, PROP_ART, PropArt, propArtWidth, RAIL_ART, SinglePropKind } from './level-generator';
 import { LightningStrike } from './storm';
 import { StormSky } from './storm-sky';
 import { drawCageArt, drawCrackedWall, drawSpringBlock } from './puzzle-art';
@@ -360,6 +360,12 @@ export class MapRenderer {
       this.drawPropPiece(ctx, RAIL_ART.middle, x, prop.y, Math.min(middleWidth, rightCapX - x));
     }
     this.drawPropPiece(ctx, RAIL_ART.right, rightCapX, prop.y);
+  }
+
+  /** A one-image prop's image (smash debris is cut from it), once loaded. */
+  propImage(kind: SinglePropKind): HTMLImageElement | undefined {
+    const img: HTMLImageElement | undefined = this.propImages.get(PROP_ART[kind].src);
+    return img?.complete ? img : undefined;
   }
 
   /** One prop image with its visible art's top-left at x, y; only its first `width` art columns when given. */

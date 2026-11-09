@@ -312,6 +312,11 @@ export enum VfxEventType {
    * x..`endX`, y..`targetY`, away from the hit (`dir` -1 or 1).
    */
   CrackBreak = 'crack-break',
+  /**
+   * A boulder smashed a box, locker or rail (designed floors): its pieces fly from the box x..`endX`,
+   * y..`targetY` the way the boulder rolled (`dir` -1 or 1); `animationKey` is the prop kind.
+   */
+  PropBreak = 'prop-break',
   /** A spring or slingshot fired (designed floors): dust off its pad at (x, y), streaks at `value` degrees. */
   GadgetLaunch = 'gadget-launch',
   /** A player took a hit: every screen tints that player's sprite red for a moment. */

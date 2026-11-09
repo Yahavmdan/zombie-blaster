@@ -105,6 +105,8 @@ import {
   isPickable,
   LevelLayout,
   Prop,
+  PROP_KINDS,
+  PropKind,
 } from './level-generator';
 import { RenderSystem } from './render-system';
 import { DevToolsSystem } from './dev-tools-system';
@@ -352,6 +354,9 @@ export class GameEngine implements IGameEngine {
     );
     // A barrel blast also throws boulders, breaks crack bands and knocks down cages.
     this.explodingBarrelSystem.onBlast = (center: Point): void => this.gadgetSystem.blast(center);
+    // A fast boulder smashes the props it rolls into: boxes break, barrels go off.
+    this.gadgetSystem.onSmashProp = (id: string, dir: number): void =>
+      this.explodingBarrelSystem.smash(id, dir);
     this.clueSceneSystem = new ClueSceneSystem(this, this.zombieSystem);
     this.renderSystem = new RenderSystem(this);
     this.devTools = new DevToolsSystem(this);
@@ -1604,6 +1609,19 @@ export class GameEngine implements IGameEngine {
               { x: evt.x, y: evt.y, width: evt.endX! - evt.x, height: evt.targetY! - evt.y },
               evt.dir === -1 ? -1 : 1,
               crackLookAt(this.gadgets, evt.x, evt.y),
+            );
+          }
+          break;
+        case VfxEventType.PropBreak:
+          if (
+            Number.isFinite(evt.endX) &&
+            Number.isFinite(evt.targetY) &&
+            PROP_KINDS.includes(evt.animationKey as PropKind)
+          ) {
+            this.vfxSystem.spawnPropBreak(
+              { x: evt.x, y: evt.y, width: evt.endX! - evt.x, height: evt.targetY! - evt.y },
+              evt.dir === -1 ? -1 : 1,
+              evt.animationKey as PropKind,
             );
           }
           break;

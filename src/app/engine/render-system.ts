@@ -1740,14 +1740,19 @@ export class RenderSystem {
     alpha: number,
   ): void {
     const src: ChunkSource = chunk.source;
-    const art: HTMLCanvasElement =
+    const art: CanvasImageSource | undefined =
       src.kind === 'wall'
         ? crackedWallArt(src.cols, src.rows, src.faceRight)
         : src.kind === 'crack'
           ? crackBandArt(src.cols, src.rows, GAME_CONSTANTS.GADGET_CRACK_HITS - 1, src.look)
-          : boulderArt();
-    const w: number = chunk.sw * ART_PX;
-    const h: number = chunk.sh * ART_PX;
+          : src.kind === 'prop'
+            ? this.e.mapRenderer.propImage(src.prop)
+            : boulderArt();
+    if (!art) return;
+    // Prop images are drawn 1:1; the other art is cut in art cells.
+    const cell: number = src.kind === 'prop' ? 1 : ART_PX;
+    const w: number = chunk.sw * cell;
+    const h: number = chunk.sh * cell;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.imageSmoothingEnabled = false;

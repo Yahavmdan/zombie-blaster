@@ -138,3 +138,27 @@ export function zombiePileRoom(pileX: number, bodies: number): string {
     ],
   });
 }
+
+/** A map prop as the level editor exports it: its box is its image's visible art (`PROP_ART`). */
+export interface PropJson {
+  kind: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A box lying on the ground at `x` (box1: 28 x 22 visible pixels). */
+export function groundBoxAt(x: number): PropJson {
+  return { kind: 'box1', x, y: WORLD.groundY - 22, width: 28, height: 22 };
+}
+
+/** A barrel standing on the ground at `x` (barrel1: 18 x 22 visible pixels). */
+export function groundBarrelAt(x: number): PropJson {
+  return { kind: 'barrel1', x, y: WORLD.groundY - 22, width: 18, height: 22 };
+}
+
+/** `gadgetRoom`'s layout with these props in it. */
+export function withProps(layout: string, props: PropJson[]): string {
+  return JSON.stringify({ ...(JSON.parse(layout) as Record<string, unknown>), props });
+}

@@ -237,7 +237,11 @@ export const GAME_CONSTANTS = {
   GADGET_BOULDER_CRUSH_SPEED: 3, // Moving at least this fast (px/tick) it crushes the zombies it meets...
   GADGET_BOULDER_CRUSH_DAMAGE_PERCENT: 100, // ...taking this share of their max HP (they die)...
   GADGET_BOULDER_BOSS_CRUSH_PERCENT: 25, // ...a boss only this share
-  GADGET_BOULDER_BREAK_SPEED: 4, // Hitting a crack band at least this fast (px/tick) breaks it out
+  GADGET_BOULDER_BREAK_SPEED: 4, // Hitting a crack band at least this fast (px/tick) breaks it out...
+  GADGET_BOULDER_CRACK_KEEP_SPEED: 0.7, // ...and it rolls on through with this share of its speed
+  GADGET_BOULDER_SMASH_SPEED: 2, // Rolling or landing on a resting loose prop at least this fast (px/tick) smashes it: boxes and rails break, barrels go off (lockers stay put: it bounces off)
+  GADGET_BOULDER_SMASH_LOSS_PER_KG: 0.008, // Share of its speed a boulder of GADGET_BOULDER_KG loses per kg of the prop it smashes (box 20 kg keeps 84%, barrel 45 kg 64%)...
+  GADGET_BOULDER_SMASH_MIN_KEEP: 0.3, // ...never keeping less than this
   GADGET_BOULDER_BLAST_SPEED_X: 6, // A barrel blast throws a boulder in reach this fast sideways...
   GADGET_BOULDER_BLAST_SPEED_Y: -5, // ...and up (negative = up)
   GADGET_BIN_KG: 60, // A new rolling bin's weight (the editor sets each; its box is BOULDER_SIZE_PX square): it weighs on buttons and scales
@@ -534,6 +538,9 @@ export const GAME_CONSTANTS = {
   PROP_TIP_ACCEL: 0.012, // A prop whose middle hangs over an edge tips off it, turning faster by this much per tick
   PROP_TIP_SLIDE: 0.6, // ...and slides off this far per tick (px) while it tips
   PROP_TIP_RELEASE_ANGLE: 1.2, // Tipped this far (radians) it falls off the edge
+  PROP_BREAK_PIECES_ACROSS: 3, // A boulder smashes a box into this many pieces across...
+  PROP_BREAK_PIECES_DOWN: 2, // ...by this many down (cut from its image)
+  PROP_BREAK_SPEED: 4, // Fastest a smashed prop's pieces and splinters fly the boulder's way (px/tick)
   BARREL_FUSE_TICKS: 150, // A barrel hit by an attack burns its fuse this long (3 s), then blows up
   BARREL_HIT_REACH_PX: 24, // Max gap between an attacking player's box and a barrel for the swing to light it
   BARREL_BLAST_RADIUS_PX: 110, // Zombies (and other barrels) whose center is this close to the barrel's center are caught in the blast
