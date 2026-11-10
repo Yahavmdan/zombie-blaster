@@ -5,6 +5,7 @@ import { DropSystem } from './drop-system';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
 import { Box, keepOutOfWall } from './boulder-puzzle';
 import { pushOutOfSolids } from './solid-blocks';
+import { slopeRestY, slopesOf } from './gadgets';
 import {
   isExplosive,
   LevelLayout,
@@ -379,7 +380,19 @@ export class LoosePropSystem {
         const s: CorpseSurface = corpseSurface(c);
         return { ...s, tolerance: GAME_CONSTANTS.ZOMBIE_CORPSE_SNAP_TOLERANCE, grip: false };
       });
-    return [...platforms, ...corpses];
+    return [...platforms, ...corpses, ...this.slopeUnder(prop)];
+  }
+
+  /**
+   * A slope under the prop's middle, as a flat surface at its highest point under the prop (where
+   * the uphill corner rests). It grips, so the prop stays put there instead of sliding down.
+   */
+  private slopeUnder(prop: LooseProp): TumbleSurface[] {
+    const y: number | null = slopeRestY(slopesOf(this.e.gadgets), prop.x, prop.width);
+    if (y === null) return [];
+    return [
+      { x: prop.x, width: prop.width, y, tolerance: GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE, grip: true },
+    ];
   }
 
   private others(prop: LooseProp): Platform[] {

@@ -288,8 +288,15 @@ the dots show in the game and light up). Gadgets live in `gadgets.ts` / `gadget-
   hangs far above the screen) so a door is the way out.
 - **Slope**: a one-way ramp across its box (`risesRight`). Players walk up and down it
   (`PhysicsSystem.standOnSlope`, down + jump drops through), boulders roll down it gathering speed.
-  Zombies walk on them too (`ZombieSystem.standOnSlope`, the same `slopeTopUnder`); corpses, props
-  and drops do not use slopes yet (they fall through). Struts are drawn down to what is under them.
+  Zombies walk on them too (`ZombieSystem.standOnSlope`, the same `slopeTopUnder`). Loose props
+  (boxes, barrels, rails) land on one and stay, resting by their uphill corner (`slopeRestY`, a
+  gripping surface in `LoosePropSystem.surfaces`; the editor sets props on them too). Corpses and
+  drops do not use slopes yet (they fall through). Struts are drawn down to what is under them.
+- **Nothing sinks into a solid gadget** (spring, slingshot, crate): a boulder or bin falling past a
+  solid's top edge with its middle beside it is pushed off that edge (`slideOffEdges` in
+  `stepBoulder`), so it lands on top or beside, never inside.
+- New buttons and scales need 1 kg (`GADGET_BUTTON_KG`, `GADGET_SCALE_KG`): anything on them
+  presses them; set more per gadget in the editor.
 - **Cage**: hangs on a rigid cable from the ceiling (never stretches: it only rises off its rest spot), solid, heavy (`GADGET_CAGE_KG` eases every push), a pendulum that stays level (art equals collision; `GadgetState.swingAngle`/`swingSpeed`, host simulates, clients extrapolate in `tickClient`). A swing at the cage, a player landing on it, a boulder, a bin or a blast only swing it; a rider walking on it pumps it and rides along (`carry`: the host moves corpses, props and zombies too, each client its own player); hanging cages that touch swap speeds (`clangCages`); walls bounce it. Only a swing at the cable (`cableBoxAt`: reach it from a ledge or from on top of the cage) or a wire's signal drops it, and it flies on with its swing. The generated floor-4 cages are separate code (cleats) and don't swing.
   Down, it crushes what is under it, lands as a step (or `smashes`),
   and lets out `zombies` zombies, `gold` gold and potions, or nothing (`content`).

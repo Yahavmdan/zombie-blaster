@@ -261,6 +261,48 @@ test.describe('designed floor slopes, cages and exit doors', { tag: '@solo' }, (
     );
   });
 
+  test('a box dropped over a slope rests on it; a boulder falling at a spring\'s edge lands beside it, not in it', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await solo('warrior');
+    await designed(
+      p,
+      withProps(
+        gadgetRoom(1, [
+          slopeAt('g1', 400),
+          springAt('g2', 900),
+          { ...boulderAt('g3', 900 + 64 - 10), y: 200 },
+        ]),
+        [groundBoxAt(100)],
+      ),
+    );
+    const before: E2eSnapshot = await p.probe.state();
+    const box: E2eSnapshot['level']['props'][number] | undefined = before.level.props.find(
+      (q: E2eSnapshot['level']['props'][number]): boolean => q.kind === 'box1',
+    );
+    expect(box?.id, 'the box is a loose prop').toBeTruthy();
+    await p.probe.dropProp(box!.id!, 500, 300);
+    const rested: E2eSnapshot = await p.probe.waitFor(
+      'the box rests on the slope, the boulder on the ground',
+      (s: E2eSnapshot): boolean => {
+        const q: E2eSnapshot['level']['props'][number] | undefined = s.level.props.find(
+          (x: E2eSnapshot['level']['props'][number]): boolean => x.id === box!.id,
+        );
+        const b: E2eGadgetView['body'] = gadget(s, 'g3').body;
+        return q !== undefined && q.isGrounded && b !== null && b.grounded && b.y + BOULDER_PX >= WORLD.groundY - 1;
+      },
+      { timeoutMs: 5_000 },
+    );
+    const q: E2eSnapshot['level']['props'][number] = rested.level.props.find(
+      (x: E2eSnapshot['level']['props'][number]): boolean => x.id === box!.id,
+    )!;
+    expect(q.y + q.height, 'up on the slope, not the ground').toBeLessThan(WORLD.groundY - 20);
+    expect(gadget(rested, 'g3').body!.x, 'beside the spring').toBeGreaterThanOrEqual(900 + 64);
+    expect(gadget(rested, 'g3').body!.y + BOULDER_PX, 'on the ground').toBe(WORLD.groundY);
+  });
+
   test('zombies walk up a slope after a player standing on it', async ({
     solo,
   }: {

@@ -14,7 +14,16 @@ import {
   SourceGadget,
   SpringPuzzleLayout,
 } from './engine-types';
-import { GADGET_KINDS, isRoller, isSource, isTargetKind, lookOf, slopeY, slopesOf } from './gadgets';
+import {
+  GADGET_KINDS,
+  isRoller,
+  isSource,
+  isTargetKind,
+  lookOf,
+  slopeRestY,
+  slopeY,
+  slopesOf,
+} from './gadgets';
 import {
   GROUND_PLATFORM,
   LevelLayout,
@@ -689,7 +698,13 @@ export function placeAt(
   if (isPropKind(tool)) {
     const { width, height }: { width: number; height: number } = propSize(tool);
     const px: number = clamp(Math.round(x - width / 2), 0, W - width);
-    const top: number = surfaceBelow(surfaces(layout, true), px + width / 2, y);
+    const top: number = propOntoSlope(
+      layout,
+      px,
+      width,
+      surfaceBelow(surfaces(layout, true), px + width / 2, y),
+      y,
+    );
     layout.props.push({ kind: tool, x: px, y: top - height, width, height });
     return { kind: 'prop', index: layout.props.length - 1 };
   }
@@ -809,6 +824,15 @@ function ontoSlope(layout: LevelLayout, box: Box, y: number): Box {
   return { ...box, y: top - box.height };
 }
 
+/**
+ * Where a prop from `x` to `x + width` dropped at `y` stands: on a slope under its middle (by its
+ * uphill corner, `slopeRestY`) when that is higher than `bottom`, the surface found below it.
+ */
+function propOntoSlope(layout: LevelLayout, x: number, width: number, bottom: number, y: number): number {
+  const sy: number | null = slopeRestY(slopesOf(gadgets(layout)), x, width);
+  return sy !== null && sy >= y - GAME_CONSTANTS.DEV_EDITOR_SURFACE_SNAP_PX ? Math.min(bottom, sy) : bottom;
+}
+
 /** Moves `ref` so its box's top-left is at (left, top) (snapped, kept on screen, set on its surface where it stands on one). */
 export function moveTo(layout: LevelLayout, ref: EditorRef, left: number, top: number): void {
   switch (ref.kind) {
@@ -841,8 +865,13 @@ export function moveTo(layout: LevelLayout, ref: EditorRef, left: number, top: n
       if (!p) return;
       p.x = clamp(Math.round(left), 0, W - p.width);
       p.y =
-        surfaceBelow(surfaces(layout, true, ref.index), p.x + p.width / 2, top + p.height) -
-        p.height;
+        propOntoSlope(
+          layout,
+          p.x,
+          p.width,
+          surfaceBelow(surfaces(layout, true, ref.index), p.x + p.width / 2, top + p.height),
+          top + p.height,
+        ) - p.height;
       break;
     }
     case 'zombie-pile': {

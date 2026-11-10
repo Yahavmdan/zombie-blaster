@@ -4,7 +4,7 @@ import { Box } from './boulder-puzzle';
 import { exitCageHangBox } from './cage-puzzle';
 import { EXIT_TARGET, Gadget, GadgetKind, Platform, SourceGadget } from './engine-types';
 import { GADGET_KINDS } from './gadgets';
-import { LevelLayout, generateLevel } from './level-generator';
+import { LevelLayout, Prop, generateLevel } from './level-generator';
 import {
   EditorRef,
   PageSize,
@@ -524,6 +524,12 @@ describe('level editor: slopes, cages, exit doors', () => {
       placeAt(layout, 'boulder', slope.x + slope.width / 2, 300),
     );
     expect(boulder.y + boulder.height).toBeLessThan(GROUND_Y - 20);
+    placeAt(layout, 'box1', slope.x + slope.width / 2 + 60, 300);
+    const box: Prop = layout.props[layout.props.length - 1];
+    expect(box.y + box.height, 'a box rests on the slope too').toBeLessThan(GROUND_Y - 20);
+    moveTo(layout, { kind: 'prop', index: layout.props.length - 1 }, box.x - 30, 200);
+    expect(box.y + box.height, 'moved along it, still on it').toBeLessThan(GROUND_Y - 20);
+    removeItem(layout, { kind: 'prop', index: layout.props.length - 1 });
     const door: EditorRef | null = placeAt(layout, 'door', 1000, 600);
     setField(layout, door!, 'exit', 1);
     expect(gadgetAt(layout, door)).toMatchObject({ exit: true });
