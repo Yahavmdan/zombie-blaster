@@ -260,7 +260,7 @@ export const GAME_CONSTANTS = {
   GADGET_CRACK_HITS: 5, // Swings on a cracked wall's crack band before it breaks out (a blast or a fast boulder does it at once)
   GADGET_CRACK_WALL_TILES: 6, // A new cracked wall is DEV_EDITOR_WALL_TILES wide and this many tiles tall...
   GADGET_CRACK_BAND_TILES: 2, // ...its crack band this many tiles high at its foot (a hole to walk through)
-  GADGET_BUTTON_KG: 60, // A new floor button needs this many kg (a player presses it, so does a boulder or a few corpses)
+  GADGET_BUTTON_KG: 1, // A new floor button needs this many kg: anything on it presses it (the editor sets each)
   GADGET_BUTTON_WIDTH_PX: 48, // A floor button, set into its surface's top: this wide
   GADGET_BUTTON_STACK_PX: 40, // Things piled up to this far above a button still press on it
   GADGET_BUTTON_CAP_PX: 10, // A floor button's cap stands this far proud of its surface until something presses it
@@ -278,7 +278,7 @@ export const GAME_CONSTANTS = {
     slope: ['steel', 'wood', 'hazard', 'grate'],
     cage: ['tarp', 'shroud', 'crate', 'vault'],
   },
-  GADGET_SCALE_KG: 500, // A new scale gives its signal at this many kg
+  GADGET_SCALE_KG: 1, // A new scale gives its signal at this many kg: anything on it (the editor sets each)
   GADGET_SCALE_WIDTH_PX: 96, // A scale's pan, set into its surface's top: this wide
   GADGET_SCALE_STACK_PX: 80, // Things piled up to this far above a scale's pan still weigh on it
   GADGET_MAX_KG: 99_999, // Most kg a button or scale needs or reports (clamps editor input and synced state)

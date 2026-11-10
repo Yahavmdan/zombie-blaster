@@ -692,8 +692,9 @@ function fly(
     }
     return;
   }
-  const cx: number = body.x + R;
   const prevBottom: number = prevY + S;
+  slideOffEdges(body, prevBottom, platforms);
+  const cx: number = body.x + R;
   const bottom: number = body.y + S;
   let landing: Platform | null = null;
   for (const p of platforms) {
@@ -723,6 +724,39 @@ function fly(
   }
   body.velocityY = 0;
   body.isGrounded = true;
+}
+
+/**
+ * Coming down past a solid's top edge with its middle beside it (a spring, a crate), the falling
+ * body is pushed off that edge instead of sinking into the solid: it lands on top or beside it.
+ */
+function slideOffEdges(body: GadgetBody, prevBottom: number, platforms: Platform[]): void {
+  for (const s of platforms) {
+    if (!s.solid || prevBottom > s.y + REST_TOLERANCE_PX) continue;
+    const box: Box = boulderBox(body);
+    if (!overlaps(box, s) || body.y + S <= s.y) continue;
+    const cx: number = body.x + R;
+    if (cx >= s.x && cx <= s.x + s.width) continue;
+    body.x = cx < s.x ? s.x - S : s.x + s.width;
+  }
+}
+
+/**
+ * The highest point of a slope under a box from `x` to `x + width` whose middle is over that
+ * slope: a box set down there rests on it by its uphill corner. Null when no slope is under it.
+ */
+export function slopeRestY(slopes: SlopeSurface[], x: number, width: number): number | null {
+  const cx: number = x + width / 2;
+  let best: number | null = null;
+  for (const s of slopes) {
+    if (cx < s.x0 || cx > s.x1) continue;
+    const left: number | null = slopeY(s, Math.max(s.x0, x));
+    const right: number | null = slopeY(s, Math.min(s.x1, x + width));
+    if (left === null || right === null) continue;
+    const top: number = Math.min(left, right);
+    if (best === null || top < best) best = top;
+  }
+  return best;
 }
 
 /**

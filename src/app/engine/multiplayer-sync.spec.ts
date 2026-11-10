@@ -20,8 +20,10 @@ import {
   Platform,
   PlatePuzzleLayout,
   PlayerTint,
+  SlopeGadget,
   SpringPuzzleLayout,
 } from './engine-types';
+import { slopeRestY, slopesOf } from './gadgets';
 import { BoulderPuzzleSystem } from './boulder-puzzle-system';
 import { SpringPuzzleSystem } from './spring-puzzle-system';
 import { CagePuzzleSystem } from './cage-puzzle-system';
@@ -1805,6 +1807,24 @@ describe('Exploding barrels', (): void => {
   beforeEach((): void => {
     engine = new GameEngine(createMockCanvas());
     engine.pendingVfxEvents = [];
+  });
+
+  it('a prop dropped over a slope lands on it and stays there', (): void => {
+    const [id]: string[] = hostWithBarrels(1);
+    const b: LooseProp = propById(engine, id)!;
+    const slope: SlopeGadget = { id: 's1', kind: 'slope', x: 400, y: GROUND - 96, width: 192, height: 96, risesRight: true };
+    engine.gadgets = [slope];
+    engine.looseProps = [b];
+    b.x = 480;
+    b.y = 200;
+    b.isGrounded = false;
+    engine.platforms = engine.platforms.filter((p: Platform): boolean => p.y >= GROUND);
+    for (let t: number = 0; t < 200; t++) props.update();
+    const rest: number = slopeRestY(slopesOf(engine.gadgets), b.x, b.width)!;
+    expect(b.isGrounded).toBe(true);
+    expect(b.y + b.height, 'on the slope, not the ground').toBeCloseTo(rest, 0);
+    expect(b.y + b.height).toBeLessThan(GROUND - 20);
+    expect(engine.platforms.some((p: Platform): boolean => p.propId === id), 'solid where it rests').toBe(true);
   });
 
   it('a hit lights the fuse; 3 s later the barrel blows up and hurts the zombies around it and whoever lit it', (): void => {

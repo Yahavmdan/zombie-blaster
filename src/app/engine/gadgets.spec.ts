@@ -25,6 +25,7 @@ import {
   launchVelocity,
   loadKg,
   SlopeSurface,
+  slopeRestY,
   slopeY,
   smashKeep,
   smashesProp,
@@ -123,6 +124,24 @@ describe('gadgets: boulder', () => {
     expect(b.isGrounded).toBe(true);
     expect(b.y).toBe(GROUND_Y - S);
     expect(b.x).toBeGreaterThan(300);
+  });
+
+  it('falling past a spring with its middle beside it, it lands beside the spring, never inside', () => {
+    const spring: Platform = { x: 200, y: GROUND_Y - 32, width: 64, height: 32, solid: true };
+    const b: GadgetBody = { ...body(spring.x + spring.width - 10, 300), isGrounded: false };
+    run(b, [GROUND_PLATFORM, spring], 120);
+    expect(b.isGrounded).toBe(true);
+    expect(b.y).toBe(GROUND_Y - S);
+    expect(b.x).toBeGreaterThanOrEqual(spring.x + spring.width);
+    const onTop: GadgetBody = { ...body(spring.x + 4, 300), isGrounded: false };
+    run(onTop, [GROUND_PLATFORM, spring], 120);
+    expect(onTop.y + S, 'its middle over the spring: it rests on top').toBe(spring.y);
+  });
+
+  it('slopeRestY: a box rests on a slope by its uphill corner', () => {
+    const slope: SlopeSurface = { x0: 100, y0: 500, x1: 300, y1: 400 };
+    expect(slopeRestY([slope], 180, 40), 'the right corner, 120 px along the slope').toBe(440);
+    expect(slopeRestY([slope], 20, 40), 'its middle past the slope').toBeNull();
   });
 
   it('bounces off a solid it rolls into, breaking through when it breaks it', () => {
