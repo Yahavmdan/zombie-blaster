@@ -157,8 +157,14 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
         const prop: Prop | undefined = engine.level.props.find(
           (q: Prop): boolean => q.x === p.x && q.y === p.y,
         );
+        // A designed layout's wall is a solid too: a tile block drawn to its box.
+        const wall: Platform | undefined = prop
+          ? undefined
+          : (engine.level.walls ?? []).find((q: Platform): boolean => q.x === p.x && q.y === p.y);
         return {
-          object: `prop ${prop?.kind ?? '?'} ${p.x},${p.y} ${p.width}x${p.height}`,
+          object: wall
+            ? `wall ${p.x},${p.y} ${p.width}x${p.height}`
+            : `prop ${prop?.kind ?? '?'} ${p.x},${p.y} ${p.width}x${p.height}`,
           kind: 'prop',
           x: p.x,
           y: p.y,
@@ -166,6 +172,7 @@ export function measureLevelGeometry(engine: GameEngine): E2eGeometryReport {
           height: p.height,
           draw: (ctx: CanvasRenderingContext2D): void => {
             if (prop) renderer.drawProp(ctx, prop);
+            else if (wall) renderer.drawWall(ctx, wall);
           },
         };
       }),

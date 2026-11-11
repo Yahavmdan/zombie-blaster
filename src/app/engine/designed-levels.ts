@@ -177,17 +177,17 @@ const FLOOR_3: LevelLayout = {
 };
 
 /**
- * Floor 4, designed in the level editor: a boulder sits high on the right slope behind two doors.
- * The left button opens the near door, the button on the middle ledge latches the far one, and a
- * spring at the foot throws what lands on it. The exit door stands in the right corner, past the far
- * door.
+ * Floor 4, designed in the level editor: a boulder sits high on the long right slope behind two
+ * doors. The left button opens the near door and the door at the foot of the left slope; the button
+ * on the middle ledge opens the far one. A spring at the foot throws what lands on it, and the exit
+ * door stands in the right corner, behind a cracked wall past the far door.
  */
 const FLOOR_4: LevelLayout = {
   seed: 407375565,
   floor: 4,
   hint: 'Weigh down the buttons to set the boulder rolling',
   platforms: [
-    { x: 720, y: 396, width: 128, height: 32 },
+    { x: 720, y: 396, width: 96, height: 32 },
     { x: 56, y: 512, width: 160, height: 32 },
     { x: 976, y: 400, width: 32, height: 32 },
   ],
@@ -195,15 +195,11 @@ const FLOOR_4: LevelLayout = {
   exitX: 20,
   exitY: 274,
   exitHidden: true,
-  props: [
-    { kind: 'barrel1', x: 68, y: 490, width: 18, height: 22 },
-    { kind: 'barrel1', x: 63, y: 468, width: 18, height: 22 },
-    { kind: 'barrel1', x: 7, y: 598, width: 18, height: 22 },
-  ],
-  walls: [],
+  props: [{ kind: 'box1', x: 36, y: 598, width: 28, height: 22 }],
+  walls: [{ x: 1140, y: 588, width: 32, height: 32 }],
   gadgets: [
-    { id: 'g1', kind: 'slope', risesRight: true, x: 816, y: 44, width: 320, height: 160 },
-    { id: 'g2', kind: 'slope', risesRight: false, x: 432, y: 300, width: 288, height: 96 },
+    { id: 'g1', kind: 'slope', risesRight: true, x: 444, y: 52, width: 704, height: 160 },
+    { id: 'g2', kind: 'slope', risesRight: false, x: 336, y: 204, width: 384, height: 192 },
     {
       id: 'g3',
       kind: 'door',
@@ -215,23 +211,45 @@ const FLOOR_4: LevelLayout = {
       height: 384,
       look: 'hazard',
     },
-    { id: 'g7', kind: 'button', kg: 60, targets: ['g3'], x: 116, y: 512, width: 48, height: 6 },
+    { id: 'g7', kind: 'button', kg: 1, targets: ['g3', 'g19'], x: 116, y: 512, width: 48, height: 6 },
     {
       id: 'g8',
       kind: 'door',
-      latch: true,
+      latch: false,
       exit: false,
       x: 1140,
       y: 12,
       width: 32,
-      height: 608,
+      height: 576,
       look: 'hazard',
     },
-    { id: 'g11', kind: 'button', kg: 60, targets: ['g8'], x: 760, y: 396, width: 48, height: 6 },
+    { id: 'g11', kind: 'button', kg: 1, targets: ['g8'], x: 720, y: 396, width: 48, height: 6 },
     { id: 'g13', kind: 'boulder', kg: 600, x: 1044, y: 30, width: 48, height: 48 },
-    { id: 'g15', kind: 'spring', power: 24, x: 1016, y: 588, width: 120, height: 32 },
-    { id: 'g16', kind: 'slope', risesRight: false, x: 720, y: 420, width: 288, height: 96 },
-    { id: 'g17', kind: 'door', latch: false, exit: true, x: 1196, y: 492, width: 64, height: 128 },
+    { id: 'g15', kind: 'spring', power: 24, x: 1024, y: 588, width: 120, height: 32 },
+    { id: 'g16', kind: 'slope', risesRight: false, x: 720, y: 396, width: 288, height: 128 },
+    { id: 'g17', kind: 'door', latch: false, exit: true, x: 1212, y: 492, width: 64, height: 128 },
+    {
+      id: 'g18',
+      kind: 'crack-wall',
+      crackTop: 460,
+      crackBottom: 620,
+      x: 1172,
+      y: 12,
+      width: 32,
+      height: 608,
+    },
+    {
+      id: 'g19',
+      kind: 'door',
+      latch: false,
+      exit: false,
+      x: 784,
+      y: 12,
+      width: 32,
+      height: 384,
+      look: 'hazard',
+    },
+    { id: 'g20', kind: 'slope', risesRight: true, x: 824, y: 576, width: 192, height: 32 },
   ],
   noSpawn: [],
 };
