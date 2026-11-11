@@ -1,4 +1,4 @@
-import { ActiveBuff, CharacterState, ClassSkillTree, GAME_CONSTANTS, ZOMBIE_TYPES, SkillDefinition, TreeSkill, VfxEvent, getSkillTree, isZombieWindingUp, ownsTreeSkill } from '@shared/index';
+import { ActiveBuff, CharacterState, InputKeys, ClassSkillTree, GAME_CONSTANTS, ZOMBIE_TYPES, SkillDefinition, TreeSkill, VfxEvent, getSkillTree, isZombieWindingUp, ownsTreeSkill } from '@shared/index';
 import { ActiveSpecialEffect, DropType, SpecialDropType, BoulderState, CagePuzzleState, CageState, GadgetState, LooseProp, PlateState, SpringState, WorldDrop, ZombieCorpse, ZombieState, ZombieType } from '@shared/game-entities';
 import { AcidPuddle, BoulderPuzzleLayout, CagePuzzleLayout, Platform, PlatePuzzleLayout, PlayerTint, Rope, SpitterProjectile, SpringPuzzleLayout } from '../engine/engine-types';
 import { EXIT_CAGE, cageBox, cageSolid, cleatBox, isCut } from '../engine/cage-puzzle';
@@ -30,6 +30,9 @@ import {
   E2eSpitGlobView,
   E2eExitPile,
   E2eEngineControls,
+  E2eFloorVerdict,
+  E2eSolverMove,
+  E2eSolverSpot,
   E2eGeometryReport,
   E2eLevelView,
   E2ePlayerView,
@@ -594,6 +597,77 @@ const engineControls: E2eEngineControls = {
   dropCorpses(centerX: number, count: number): void {
     currentEngine?.dropCorpses(centerX, count);
   },
+  async solveFloor(floor: number): Promise<E2eFloorVerdict> {
+    const solver: typeof import('./floor-solver') = await import('./floor-solver');
+    return solver.solveFloor(new GameEngine(document.createElement('canvas')), floor);
+  },
+  async playMove(move: E2eSolverMove): Promise<E2eSolverSpot> {
+    const solver: typeof import('./floor-solver') = await import('./floor-solver');
+    const H: number = GAME_CONSTANTS.PLAYER_HEIGHT;
+    // A move from a pile: lay a body at the feet and hop onto it, again and again, up to its top.
+    const pileTop: number = move.from.y + H - move.pilePx;
+    let piling: boolean = move.pilePx > 0;
+    let start: number = 0;
+    let hop: number = 0;
+    let airborne: boolean = false;
+    return feedKeys((e: GameEngine, t: number): Partial<InputKeys> | null => {
+      const p: CharacterState = e.player!;
+      if (piling) {
+        const feet: number = p.y + H;
+        const still: boolean = p.isGrounded && p.velocityY === 0;
+        if ((feet <= pileTop + 1 && still) || t > PILE_MAX_TICKS) {
+          piling = false;
+          start = t;
+        } else if (hop > 0) {
+          hop--;
+          return { jump: true };
+        } else {
+          if (still) {
+            e.layCorpsesOn({ x: p.x, y: feet, width: GAME_CONSTANTS.PLAYER_WIDTH, height: 0 }, 1);
+            hop = PILE_HOP_TICKS;
+          }
+          return {};
+        }
+      }
+      const mt: number = t - start;
+      if (!p.isGrounded) airborne = true;
+      const resting: boolean =
+        p.isGrounded && !p.isClimbing && Math.abs(p.velocityX) < GAME_CONSTANTS.PLAYER_MIN_VELOCITY;
+      // A launcher throws the player only after its wind-up: rest counts once they flew.
+      const done: boolean = mt > solver.SOLVER_JUMP_HOLD_TICKS + 1 && resting && (move.kind !== 'ride' || airborne);
+      return done || mt > GAME_CONSTANTS.FLOOR_SOLVER_MOVE_MAX_TICKS ? null : solver.moveKeys(move, mt);
+    });
+  },
+  walkTo(x: number): Promise<E2eSolverSpot> {
+    return feedKeys((e: GameEngine, t: number): Partial<InputKeys> | null => {
+      const p: CharacterState = e.player!;
+      const dx: number = x - p.x;
+      const still: boolean = p.isGrounded && p.velocityX === 0;
+      if ((Math.abs(dx) <= WALK_TO_SLOP_PX && still) || t > GAME_CONSTANTS.FLOOR_SOLVER_MOVE_MAX_TICKS) return null;
+      // Let go a step short: the slide after letting go covers the rest.
+      if (Math.abs(dx) <= WALK_TO_SLOP_PX + Math.abs(p.velocityX)) return {};
+      return dx < 0 ? { left: true } : { right: true };
+    });
+  },
+  async swingFacing(dir: number, ticks: number): Promise<void> {
+    await feedKeys((_e: GameEngine, t: number): Partial<InputKeys> | null => {
+      if (t === 0) return dir < 0 ? { left: true } : { right: true };
+      return t <= ticks ? { attack: true } : null;
+    });
+  },
+  layCorpsesOn(x: number, y: number, width: number, count: number): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine || engine.isMultiplayerClient) return;
+    engine.layCorpsesOn({ x, y, width, height: 0 }, count);
+  },
+  clearCorpsesOn(x: number, y: number, width: number): void {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine || engine.isMultiplayerClient) return;
+    engine.zombieCorpses = engine.zombieCorpses.filter((c: ZombieCorpse): boolean => {
+      const cx: number = c.x + c.width / 2;
+      return c.carrierId !== null || cx < x || cx > x + width || c.y + c.height > y + GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE;
+    });
+  },
   clearPickables(from: number, to: number): void {
     const engine: GameEngine | null = currentEngine;
     if (!engine || engine.isMultiplayerClient) return;
@@ -662,6 +736,45 @@ function ensureApi(): void {
   window.__zbE2e = api;
 }
 
+/** A replay's per-tick keys: called before each engine tick; null ends it. */
+type KeyStep = (engine: GameEngine, tick: number) => Partial<InputKeys> | null;
+
+/** Building a pile: ticks the jump is held to hop onto the body just laid. */
+const PILE_HOP_TICKS: number = 4;
+/** Building a pile gives up after this many ticks (the move is tried from wherever it got). */
+const PILE_MAX_TICKS: number = 6_000;
+/** walkTo stops within this of its x. */
+const WALK_TO_SLOP_PX: number = 3;
+
+/** The keys a replay sets this tick (null: no replay running). */
+let keyFeed: (() => void) | null = null;
+
+/**
+ * Plays `step` tick by tick through engine.setKeys (the keyboard's own path), from the next tick
+ * on; resolves where the player stands when it returns null.
+ */
+function feedKeys(step: KeyStep): Promise<E2eSolverSpot> {
+  return new Promise<E2eSolverSpot>((resolve: (spot: E2eSolverSpot) => void, reject: (err: Error) => void): void => {
+    const engine: GameEngine | null = currentEngine;
+    if (!engine?.player) {
+      reject(new Error('no engine or player'));
+      return;
+    }
+    const idle: InputKeys = Object.fromEntries(Object.keys(engine.keys).map((k: string): [string, boolean] => [k, false])) as unknown as InputKeys;
+    let tick: number = 0;
+    keyFeed = (): void => {
+      const keys: Partial<InputKeys> | null = engine.player ? step(engine, tick++) : null;
+      if (keys === null) {
+        keyFeed = null;
+        engine.setKeys({ ...idle });
+        resolve({ x: engine.player?.x ?? 0, y: engine.player?.y ?? 0 });
+        return;
+      }
+      engine.setKeys({ ...idle, ...keys });
+    };
+  });
+}
+
 export function attachEngineProbe(engine: GameEngine): () => void {
   currentEngine = engine;
   vfxLog = [];
@@ -669,6 +782,12 @@ export function attachEngineProbe(engine: GameEngine): () => void {
   const originalReplay: (events: VfxEvent[]) => void = engine.replayRemoteVfxEvents.bind(engine);
   const originalSnapshot: () => EngineSnapshot = engine.getStateSnapshot.bind(engine);
   const originalDiscard: () => void = engine.discardOutboundEvents.bind(engine);
+  const originalUpdate: () => void = engine['update'].bind(engine);
+  // A replay (playMove, walkTo, swingFacing) sets the keys before each tick.
+  engine['update'] = (): void => {
+    keyFeed?.();
+    originalUpdate();
+  };
 
   engine.replayRemoteVfxEvents = (events: VfxEvent[]): void => {
     const myId: string = engine.player?.id ?? '';
@@ -726,6 +845,7 @@ export function attachEngineProbe(engine: GameEngine): () => void {
     engine.replayRemoteVfxEvents = originalReplay;
     engine.getStateSnapshot = originalSnapshot;
     engine.discardOutboundEvents = originalDiscard;
+    engine['update'] = originalUpdate;
     if (currentEngine === engine) {
       currentEngine = null;
     }

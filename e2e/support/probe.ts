@@ -1,13 +1,25 @@
 import { Page } from '@playwright/test';
 import type {
   E2eEngineControls,
+  E2eFloorVerdict,
   E2eGeometryReport,
   E2eSnapshot,
+  E2eSolverAction,
+  E2eSolverMove,
+  E2eSolverSpot,
   E2eVfxEventView,
   E2eVfxLogEntry,
 } from '../../src/app/testing/e2e-api';
 
-export type { E2eSnapshot, E2eVfxEventView, E2eVfxLogEntry };
+export type {
+  E2eSnapshot,
+  E2eVfxEventView,
+  E2eVfxLogEntry,
+  E2eFloorVerdict,
+  E2eSolverAction,
+  E2eSolverMove,
+  E2eSolverSpot,
+};
 export type {
   E2eBoulderPuzzleView,
   E2eCagePuzzleView,
@@ -152,6 +164,54 @@ export class GameProbe {
   /** Solo/host only: the sky strikes on the next tick, through the normal scheduler. */
   async strikeLightningNow(): Promise<void> {
     await this.page.evaluate((): void => window.__zbE2e?.engine?.strikeLightningNow());
+  }
+
+  /**
+   * Solo only, slow: solves designed floor `floor` in the page (floor-solver.ts on a second,
+   * hidden engine), as the unit spec floor-solvability.spec.ts does.
+   */
+  async solveFloor(floor: number): Promise<E2eFloorVerdict> {
+    return this.page.evaluate(
+      (f: number): Promise<E2eFloorVerdict> => window.__zbE2e!.engine!.solveFloor(f),
+      floor,
+    );
+  }
+
+  /** Solo only: plays one solver move with its keys, tick by tick; resolves where the player rests. */
+  async playMove(move: E2eSolverMove): Promise<E2eSolverSpot> {
+    return this.page.evaluate(
+      (m: E2eSolverMove): Promise<E2eSolverSpot> => window.__zbE2e!.engine!.playMove(m),
+      move,
+    );
+  }
+
+  /** Solo only: walks (keys, tick by tick) until the player stands still with its left edge near x. */
+  async walkTo(x: number): Promise<E2eSolverSpot> {
+    return this.page.evaluate((to: number): Promise<E2eSolverSpot> => window.__zbE2e!.engine!.walkTo(to), x);
+  }
+
+  /** Solo only: turns to `dir` and holds attack for `ticks` ticks (1: one swing). */
+  async swingFacing(dir: number, ticks: number): Promise<void> {
+    await this.page.evaluate(
+      (args: [number, number]): Promise<void> => window.__zbE2e!.engine!.swingFacing(args[0], args[1]),
+      [dir, ticks] as [number, number],
+    );
+  }
+
+  /** Setup only (solo/host): `count` corpses laid on the box's top (bodies carried there). */
+  async layCorpsesOn(x: number, y: number, width: number, count: number): Promise<void> {
+    await this.page.evaluate(
+      (a: [number, number, number, number]): void => window.__zbE2e?.engine?.layCorpsesOn(a[0], a[1], a[2], a[3]),
+      [x, y, width, count] as [number, number, number, number],
+    );
+  }
+
+  /** Setup only (solo/host): the corpses lying on x..x+width at y are gone. */
+  async clearCorpsesOn(x: number, y: number, width: number): Promise<void> {
+    await this.page.evaluate(
+      (a: [number, number, number]): void => window.__zbE2e?.engine?.clearCorpsesOn(a[0], a[1], a[2]),
+      [x, y, width] as [number, number, number],
+    );
   }
 
   /** Setup only (solo/host): drops N corpses from above x; they pile up by the normal corpse physics. */

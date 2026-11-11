@@ -501,6 +501,64 @@ export interface E2eControls {
   setAfkTimeoutMs(ms: number): void;
 }
 
+// ─── Floor solver (src/app/testing/floor-solver.ts) ─────────────
+
+/** A grounded spot the player can stand on (their box's top-left). */
+export interface E2eSolverSpot {
+  x: number;
+  y: number;
+}
+
+/** How a jump is steered: all the way, while rising, only after its top, or a short tap. */
+export type E2eSolverSteer = 'all' | 'rise' | 'late' | 'tap';
+
+/** One player move: keys from a spot, landing on another (both with the real physics). */
+export interface E2eSolverMove {
+  kind: 'walk' | 'jump' | 'drop' | 'climb-up' | 'climb-down' | 'rope-jump' | 'ride';
+  /** -1 left, 1 right, 0 none. */
+  dir: number;
+  steer: E2eSolverSteer;
+  /** Done standing on a pile of bodies this high, built on `from` (0: no pile). */
+  pilePx: number;
+  /** `ride`: the unwired launcher stood on. */
+  launcher: string;
+  from: E2eSolverSpot;
+  to: E2eSolverSpot;
+}
+
+/** One thing the player does to the world, after walking `route` to `spot`. */
+export interface E2eSolverAction {
+  kind: 'hold' | 'release' | 'stand' | 'swing' | 'swing-on';
+  gadgetId: string;
+  /** Swings: the way the player faces. */
+  dir: number;
+  spot: E2eSolverSpot;
+  /** Buttons and scales: the top of the gadget the weight goes on or comes off (x, y, width). */
+  area: { x: number; y: number; width: number };
+  /** `hold`: walker bodies left there (its kg in walkers, at least one). */
+  bodies: number;
+  route: E2eSolverMove[];
+}
+
+/** What the floor solver found for one designed floor. */
+export interface E2eFloorVerdict {
+  floor: number;
+  /** The exit can be reached from the floor's start. */
+  solvable: boolean;
+  /** The exit is in reach before any world move: the floor's puzzle can be skipped. */
+  skippable: boolean;
+  /** States reached from the start (world + where the player can go). */
+  states: number;
+  /** One line per soft lock: the world moves that lead into it. */
+  softLocks: string[];
+  /** A shortest way out: world moves, each with the route to its spot. */
+  solution: E2eSolverAction[];
+  /** The route to the exit once the last world move is made. */
+  exitRoute: E2eSolverMove[];
+  /** The spot that route ends on: standing there finishes the floor (null when there is none). */
+  exitSpot: E2eSolverSpot | null;
+}
+
 export interface E2eEngineControls {
   /** Moves the local player (client-owned state, safe in multiplayer). */
   teleport(x: number, y: number): void;
@@ -549,6 +607,25 @@ export interface E2eEngineControls {
   pauseZombieSpawns(paused: boolean): void;
   /** Solo/host setup only: the floor's clue scene ends now (its zombie, if risen, hunts as usual). */
   skipClueScene(): void;
+  /**
+   * Solo only, slow (seconds to a minute; the page freezes meanwhile): solves designed floor
+   * `floor` on a second, hidden engine (floor-solver.ts), as the unit spec does.
+   */
+  solveFloor(floor: number): Promise<E2eFloorVerdict>;
+  /**
+   * Solo only: plays one solver move. Its keys go into the engine tick by tick (the same input
+   * the keyboard sets); resolves where the player comes to rest. A move from a pile builds it
+   * first: a body laid at the feet, a hop onto it, again until it is high enough.
+   */
+  playMove(move: E2eSolverMove): Promise<E2eSolverSpot>;
+  /** Solo only: walks (keys, tick by tick) until the player stands still with its left edge near x. */
+  walkTo(x: number): Promise<E2eSolverSpot>;
+  /** Solo only: turns to `dir` and holds attack `ticks` ticks (1: one swing), then lets go. */
+  swingFacing(dir: number, ticks: number): Promise<void>;
+  /** Solo/host setup only: `count` walker corpses laid on top of this box (a stand-in for bodies carried there). */
+  layCorpsesOn(x: number, y: number, width: number, count: number): void;
+  /** Solo/host setup only: lying corpses whose middle is over x..x+width and above y (resting there) are gone. */
+  clearCorpsesOn(x: number, y: number, width: number): void;
 }
 
 export interface ZbE2eApi {
