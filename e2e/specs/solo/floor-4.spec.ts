@@ -7,6 +7,8 @@ import { drawnGeometry, expectArtMatchesCollision } from '../../support/level-ge
 /** Floor 4 (DESIGNED_LEVELS[4]). */
 const FLOOR: number = 4;
 const NEAR_DOOR: string = 'g3';
+/** The door at the foot of the left slope: the left button opens it with the near door. */
+const SLOPE_DOOR: string = 'g19';
 const FAR_DOOR: string = 'g8';
 const BOULDER: string = 'g13';
 const LEFT_BUTTON: string = 'g7';
@@ -39,9 +41,10 @@ test.describe('floor 4: the boulder behind two doors', { tag: '@solo' }, (): voi
       },
       { timeoutMs: 8_000 },
     );
-    expect(gadget(s, LEFT_BUTTON).targets).toEqual([NEAR_DOOR]);
+    expect(gadget(s, LEFT_BUTTON).targets).toEqual([NEAR_DOOR, SLOPE_DOOR]);
     expect(gadget(s, LEDGE_BUTTON).targets).toEqual([FAR_DOOR]);
     expect(gadget(s, NEAR_DOOR).openTicks).toBe(0);
+    expect(gadget(s, SLOPE_DOOR).openTicks).toBe(0);
     expect(gadget(s, BOULDER).body!.x).toBeGreaterThanOrEqual(NEAR_DOOR_RIGHT - 1);
     const report: E2eGeometryReport = await drawnGeometry(p, 'floor 4');
     await p.attachCanvas(testInfo, 'floor 4');
