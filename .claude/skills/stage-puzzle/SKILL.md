@@ -345,6 +345,29 @@ through `GameEngine.useCustomLevel`, for the floor it was made on only.
   drawn whole tiles clipped to their box), and the Brain may need a route for the new floor.
   Gadget state already syncs (game-sync `gadgets`, VFX `CrackBreak`, `GadgetLaunch`), so a designed
   floor works in co-op as soon as every client has its layout.
+- **Required for every floor JSON: the floor solver.** `src/app/engine/floor-solvability.spec.ts`
+  runs `src/app/testing/floor-solver.ts` on every `DESIGNED_LEVELS` floor (no list to edit) and
+  checks: a new player (level-1 warrior, no points, no skills, no double jump, carries one thing)
+  can finish it; no soft lock (no world move, done before or after the exit is in reach, leaves
+  the exit out of reach for good); the puzzle can't be skipped (exit out of reach at the start;
+  floor 4 is a known skip, `KNOWN_SKIPS`: spring g15 up onto slope g1, then over door g8). Then add
+  the floor to `DESIGNED_FLOORS` in `e2e/specs/solo/floor-playthrough.spec.ts`: it replays the
+  solver's way out in the real game (keys fed tick by tick through `engine.setKeys`; bodies on
+  buttons and body piles laid by the probe) and must reach the next floor. A failure prints the
+  moves (e.g. `leave weight on g5 > keep swinging at g6 facing left`) and the route: report it to
+  the user, don't rework their design to pass.
+  How it works: the real `PhysicsSystem` tries walk, jumps steered 4 ways, drop through, ropes and
+  unwired launchers from every spot (`FLOOR_SOLVER_NODE_PX` grid); where a zombie can rise in reach
+  (spawn spans minus `noSpawn`) it also builds body piles up to `FLOOR_SOLVER_PILE_MAX_PX`, level
+  with each surface above. World moves (leave weight on / take it off a button or scale, stand on
+  it then step off, swing once or keep swinging at a boulder, crack band or lever) run on the
+  engine's own `update()` until the world settles. A simulated move is cached with the box its
+  path swept and reused while nothing in that box changed. A floor with a bin or a cage throws
+  ("teach FloorSolver first"): add its rules (world moves, what the e2e replay does) before such a
+  floor. Not modelled, so never counted on: lighting barrels, carrying props anywhere but onto a
+  button. Pitfalls hit building it: a move that ends the floor leaves the engine on the next floor
+  (the solver keeps its own copy of the floor's gadgets); states where the exit is in reach must be
+  expanded too, or the moves made before leaving are never checked.
 - Probe: `state().level.walls`, `state().gadgets`, `state().exitLocked`, `probe.loadLayout`. E2E:
   `e2e/specs/solo/level-editor.spec.ts` (the editor UI), `e2e/specs/solo/gadgets.spec.ts`,
   `e2e/specs/online/gadgets-coop.spec.ts`; the dev-tools online spec checks the editor is disabled in

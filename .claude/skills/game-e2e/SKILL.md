@@ -201,7 +201,14 @@ Mechanics that matter (verify in shared/game-constants.ts if changed):
   `state().gadgets` (a cage's `cage` box now, `swingAngle`, `swingSpeed`; `probe.loadLayout` of the same json does not reset a running gadget, and the attack and hit cooldown last ~720 ms: fresh test for a still cage, wait before a second swing; id, kind, box, on, kg, hits, broken, openTicks, launches, a boulder's `body`,
   a source's `targets`), `state().exitLocked` and `state().clueScene` (phase, zombieId; `probe.skipClueScene()` ends floor 1's clue zombie script so it never presses the button in a test), `state().level.noSpawn` (no-spawn zones) and `probe.pauseZombieSpawns(true)` (no regular spawns: a quiet floor that stays quiet). Load a designed floor with
   `probe.loadLayout(json)` (online: on every page); builders in `e2e/support/gadget-layouts.ts`;
-  specs `e2e/specs/solo/gadgets.spec.ts`, `e2e/specs/online/gadgets-coop.spec.ts`. Props (`state().level.props`) are
+  specs `e2e/specs/solo/gadgets.spec.ts`, `e2e/specs/online/gadgets-coop.spec.ts`. Floor solver
+  replay (`e2e/specs/solo/floor-playthrough.spec.ts`, one test per `DESIGNED_FLOORS` entry, ~2-4
+  min each): `probe.solveFloor(n)` runs `floor-solver.ts` in the page (lazy chunk, freezes the page
+  10-60 s), `probe.playMove(move)` feeds a move's keys through `engine.setKeys` one per tick (a pile
+  move first lays a body at the feet and hops onto it until high enough), `probe.walkTo(x)`,
+  `probe.swingFacing(dir, ticks)`, `probe.layCorpsesOn(x, y, width, n)` /
+  `probe.clearCorpsesOn(x, y, width)`. Landings drift a few px from the solver's: walk onto each
+  move's start, each action spot and the exit spot before going on. Props (`state().level.props`) are
   solid: you stand on them; walking into one up to 26 px tall steps you onto it, a stack (or
   taller) blocks (the Brain hops when a held direction stalls). Barrels and boxes are `pickable`:
   their entry has the game-state `id`, current x/y, `isGrounded`, `carrierId`. Find a test layout

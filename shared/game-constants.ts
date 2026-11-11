@@ -769,6 +769,21 @@ export const GAME_CONSTANTS = {
   SKILL_MAX_REMOTE_PUSH_FORCE: 14, // Host clamp for a guest's knockback request
   SKILL_STUN_STAR_COLOR: '#ffe08a', // Stars circling a stunned zombie
 
+  // ─── Floor solver (floor-solvability.spec: every designed floor can be finished, no soft lock) ─────────────
+  FLOOR_SOLVER_NODE_PX: 16, // Spots the player can stand on closer than this count as one (and boulders this close: the same world)
+  FLOOR_SOLVER_PILE_MAX_PX: 240, // Highest pile of bodies a basic player builds by hand to climb (floor 2 needs ~200 to its ledge)
+  FLOOR_SOLVER_PILE_STEP_PX: 8, // Pile heights are rounded to this
+  FLOOR_SOLVER_PILE_BELOW_PX: [0, 48, 96], // A pile is tried with its top level with each surface above, and this far below it (a hop, a full jump)
+  FLOOR_SOLVER_PILE_EVERY_NODES: 3, // A pile is tried on every this-many-th spot along a surface (48 px apart)
+  FLOOR_SOLVER_MOVE_MAX_TICKS: 400, // A move (walk, jump, climb) that hasn't come to rest by then leads nowhere
+  FLOOR_SOLVER_SETTLE_TICKS: 900, // After a move the world runs at most this long to settle (rolling boulders, doors)
+  FLOOR_SOLVER_QUIET_TICKS: 30, // ...or until nothing has moved for this long
+  FLOOR_SOLVER_STAND_TICKS: 300, // Standing on a button: what it opens opens, what that lets roll rolls (6 s)
+  FLOOR_SOLVER_SWING_HOLD_TICKS: 400, // Swinging on and on at a crack band or boulder (8 s: well past a band's swings)
+  FLOOR_SOLVER_MAX_STATES: 400, // More world states than this: the search gives up (the floor is too open to check)
+  FLOOR_SOLVER_SWEEP_MARGIN_PX: 8, // A move found once is reused while nothing within this of its path changed (a moved boulder re-runs only the moves near it)
+  FLOOR_SOLVER_REGION_CELL_PX: 32, // Two worlds alike whose reachable spots cover the same cells this big are one state
+
   // ─── Dev tools (dev builds and /dev) ─────────────
   DEV_PILE_CORPSES: 10, // "Pile at exit" drops this many corpses under the exit per press
   DEV_CORPSE_DROP_SPACING_PX: 60, // Dropped corpses start this far apart above the screen, so they land one by one
