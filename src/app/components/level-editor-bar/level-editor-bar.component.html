@@ -39,7 +39,7 @@
       </button>
       <button
         class="px-btn px-btn--sm px-btn--accent le-rail__btn"
-        title="Look, size, weight, power, wires: what middle click opens on a PC"
+        title="Look, size, weight, power, wires: what a click with Select opens on a PC"
         data-testid="level-editor-rail-button-adjust"
         [disabled]="!selection()"
         (click)="adjustSelected()"
@@ -211,7 +211,7 @@
     <p class="le-hint" data-testid="level-editor-text-hint">{{ hint() }}</p>
     @if (!hasWayOut()) {
       <p class="le-warning" data-testid="level-editor-text-no-exit">
-        No way out: add an exit door (middle click a door) or put the exit back
+        No way out: add an exit door (select and click a door) or put the exit back
       </p>
     }
 

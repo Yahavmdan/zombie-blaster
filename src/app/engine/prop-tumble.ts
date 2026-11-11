@@ -16,8 +16,13 @@ export interface TumbleSurface {
   y: number;
   /** How far below the surface the prop's bottom may have been a tick ago and still land on it. */
   tolerance: number;
-  /** Another prop: what lands on it grips instead of skidding on (`stackedSpeed`). */
+  /**
+   * Another prop, or a button or scale: what lands on it grips instead of skidding on
+   * (`stackedSpeed`).
+   */
   grip: boolean;
+  /** How far past its edge a gripping surface still steers a prop back on (default PROP_STACK_CATCH_PX). */
+  catchPx?: number;
 }
 
 /** Tipping off an edge: it turns around `pivot`, the edge it rests on. */
@@ -34,6 +39,11 @@ export interface Tip {
 export interface Span {
   left: number;
   right: number;
+}
+
+/** The gripping tops under a prop, and how far past them it is still steered back on. */
+export interface GripSpan extends Span {
+  catchPx: number;
 }
 
 /** A lying prop is solid and stood on only once it rests: on something, upright, not moving. */
@@ -102,23 +112,31 @@ export function supportSpan(
   return span;
 }
 
-/** The whole tops of the props right under it at `y`, or null when it isn't on a prop. */
+/**
+ * The whole tops of the gripping surfaces (props, buttons, scales) right under it at `y`, or null
+ * when it isn't on one.
+ */
 export function gripSpan(
   p: LooseProp,
   surfaces: TumbleSurface[],
   y: number,
   round: boolean,
-): Span | null {
+): GripSpan | null {
   const half: number = turnedHalfWidth(p, round);
   const cx: number = centerX(p);
-  let span: Span | null = null;
+  let span: GripSpan | null = null;
   for (const s of surfaces) {
     if (!s.grip || Math.abs(s.y - y) > GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE) continue;
     if (cx + half <= s.x || cx - half >= s.x + s.width) continue;
     const right: number = s.x + s.width;
+    const catchPx: number = s.catchPx ?? GAME_CONSTANTS.PROP_STACK_CATCH_PX;
     span = span
-      ? { left: Math.min(span.left, s.x), right: Math.max(span.right, right) }
-      : { left: s.x, right };
+      ? {
+          left: Math.min(span.left, s.x),
+          right: Math.max(span.right, right),
+          catchPx: Math.max(span.catchPx, catchPx),
+        }
+      : { left: s.x, right, catchPx };
   }
   return span;
 }
@@ -128,13 +146,17 @@ export function gripSpan(
  * that would stop a little past the edge is steered to stop just inside it, so it looks like it
  * bedded down. One that would stop further out keeps going and tips off.
  */
-export function stackedSpeed(p: LooseProp, span: Span): number {
+export function stackedSpeed(
+  p: LooseProp,
+  span: Span,
+  catchPx: number = GAME_CONSTANTS.PROP_STACK_CATCH_PX,
+): number {
   const speed: number = p.velocityX * GAME_CONSTANTS.PROP_STACK_LAND_KEEP_SPEED;
   const glide: number = 1 - GAME_CONSTANTS.PROP_STACK_FRICTION;
   const stops: number = centerX(p) + speed / glide;
   const seat: number = GAME_CONSTANTS.PROP_STACK_SEAT_PX;
   const seated: number = Math.min(span.right - seat, Math.max(span.left + seat, stops));
-  if (Math.abs(stops - seated) > GAME_CONSTANTS.PROP_STACK_CATCH_PX) return speed;
+  if (Math.abs(stops - seated) > catchPx) return speed;
   return (seated - centerX(p)) * glide;
 }
 

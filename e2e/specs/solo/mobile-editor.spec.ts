@@ -189,7 +189,7 @@ test.describe('mobile level editor', { tag: '@solo' }, (): void => {
     );
   });
 
-  test('Adjust opens the popup a middle click opens on a PC', async ({
+  test('Adjust opens the popup a select-tool click opens on a PC', async ({
     phone,
   }: {
     phone: PhoneFactory;

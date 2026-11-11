@@ -6,6 +6,7 @@ import {
   centerX,
   centerY,
   gripSpan,
+  GripSpan,
   isResting,
   limitTilt,
   settleUpright,
@@ -139,7 +140,10 @@ describe('stacking props', (): void => {
 
   it('only props grip, and a prop grips on the whole top under it', (): void => {
     expect(gripSpan(landing(115, 0), [LEDGE], 500, false)).toBeNull();
-    expect(gripSpan(landing(115, 0), [TOP], 500, false)).toEqual(SPAN);
+    expect(gripSpan(landing(115, 0), [TOP], 500, false)).toEqual({
+      ...SPAN,
+      catchPx: GAME_CONSTANTS.PROP_STACK_CATCH_PX,
+    });
     expect(gripSpan(landing(400, 0), [TOP], 500, false)).toBeNull();
     expect(gripSpan(landing(115, 0), [{ ...TOP, y: 470 }], 500, false)).toBeNull();
   });
@@ -156,6 +160,17 @@ describe('stacking props', (): void => {
     expect(stopsAt(right, stackedSpeed(landing(right, 0), SPAN))).toBeCloseTo(SPAN.right - SEAT);
     const left: number = SPAN.left + SEAT - off;
     expect(stopsAt(left, stackedSpeed(landing(left, 0), SPAN))).toBeCloseTo(SPAN.left + SEAT);
+  });
+
+  it('a button or scale catches from further out than a prop top', (): void => {
+    const pan: TumbleSurface = { ...TOP, catchPx: GAME_CONSTANTS.GADGET_WEIGH_CATCH_PX };
+    const grip: GripSpan | null = gripSpan(landing(SPAN.right - 1, 0), [pan], 500, false);
+    expect(grip?.catchPx).toBe(GAME_CONSTANTS.GADGET_WEIGH_CATCH_PX);
+    const right: number = SPAN.right - SEAT + GAME_CONSTANTS.GADGET_WEIGH_CATCH_PX - 1;
+    expect(stopsAt(right, stackedSpeed(landing(right, 0), SPAN, grip!.catchPx))).toBeCloseTo(
+      SPAN.right - SEAT,
+    );
+    expect(stackedSpeed(landing(right, 0), SPAN)).toBe(0);
   });
 
   it('a prop that would stop too far out is not caught: it keeps going and tips off', (): void => {

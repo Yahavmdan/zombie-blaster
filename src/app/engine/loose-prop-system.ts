@@ -1,6 +1,6 @@
 import { GAME_CONSTANTS } from '@shared/index';
 import { LooseProp, ZombieCorpse } from '@shared/game-entities';
-import { IGameEngine, Platform } from './engine-types';
+import { Gadget, IGameEngine, Platform } from './engine-types';
 import { DropSystem } from './drop-system';
 import { corpseSurface, CorpseSurface } from './corpse-surface';
 import { Box, keepOutOfWall } from './boulder-puzzle';
@@ -19,6 +19,7 @@ import {
   bottomOf,
   centerX,
   gripSpan,
+  GripSpan,
   isResting,
   limitTilt,
   restOn,
@@ -54,7 +55,7 @@ function syncedFuseTicks(ticks: unknown): number {
  * Loose props (barrels, boxes, rails players pick up). The host (or solo) moves them: a thrown or
  * blasted prop flies spinning (a long rail only tilts), falls, bounces and lands on the ground, a platform, another prop or
  * a corpse; there a barrel rolls on, a box or rail slides and turns back upright; on top of another
- * prop it grips and stops, a near miss steered back on (`stackedSpeed`). One whose middle
+ * prop (or a button or scale) it grips and stops, a near miss steered back on (`stackedSpeed`). One whose middle
  * hangs over an edge tips off it (`prop-tumble.ts`); a lying one falls when what held it up is
  * gone. Every client turns the resting ones (upright, still) into solid platforms each tick
  * (`Platform.propId`), so they are stood on and stepped over like any prop, wherever they lie.
@@ -328,9 +329,9 @@ export class LoosePropSystem {
     const landing: number | null = this.landingY(prop, round, prevBottom);
     if (landing === null) return;
     restOn(prop, landing, round);
-    const grip: Span | null = gripSpan(prop, this.surfaces(prop), landing, round);
+    const grip: GripSpan | null = gripSpan(prop, this.surfaces(prop), landing, round);
     prop.velocityX = grip
-      ? stackedSpeed(prop, grip)
+      ? stackedSpeed(prop, grip, grip.catchPx)
       : prop.velocityX * GAME_CONSTANTS.PROP_LAND_KEEP_SPEED;
     if (prop.velocityY > GAME_CONSTANTS.PROP_BOUNCE_MIN_SPEED) {
       // A hard landing bounces it back up, turning slower (on another prop it barely hops).
@@ -380,7 +381,26 @@ export class LoosePropSystem {
         const s: CorpseSurface = corpseSurface(c);
         return { ...s, tolerance: GAME_CONSTANTS.ZOMBIE_CORPSE_SNAP_TOLERANCE, grip: false };
       });
-    return [...platforms, ...corpses, ...this.slopeUnder(prop)];
+    return [...platforms, ...corpses, ...this.slopeUnder(prop), ...this.weighPans()];
+  }
+
+  /**
+   * Buttons and scales grip like a prop's top (at their surface, no new collision): a prop thrown
+   * onto one stops on it, and one landing a little past it is steered back on so it weighs.
+   */
+  private weighPans(): TumbleSurface[] {
+    return this.e.gadgets
+      .filter((g: Gadget): boolean => g.kind === 'button' || g.kind === 'scale')
+      .map(
+        (g: Gadget): TumbleSurface => ({
+          x: g.x,
+          width: g.width,
+          y: g.y,
+          tolerance: GAME_CONSTANTS.PLATFORM_SNAP_TOLERANCE,
+          grip: true,
+          catchPx: GAME_CONSTANTS.GADGET_WEIGH_CATCH_PX,
+        }),
+      );
   }
 
   /**

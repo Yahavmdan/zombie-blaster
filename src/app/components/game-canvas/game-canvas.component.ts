@@ -667,15 +667,9 @@ export class GameCanvasComponent implements OnDestroy {
     }
     if (this.inputDisabled()) return;
     const tool: DevMouseTool = this.devMouseTool();
-    // The level editor: the middle button opens what is under it to adjust it.
-    if (e.button === 1 && tool === 'build') {
-      e.preventDefault();
-      const at: { x: number; y: number } = this.worldPoint(e);
-      this.engine?.levelEditor.inspect(at.x, at.y);
-      return;
-    }
-    // The level editor: the right button erases what is under it.
-    if (e.button === 2 && tool === 'build') {
+    // The level editor: the middle (or right) button erases what is under it; a left click with
+    // the select tool opens it to adjust (pointerUp).
+    if ((e.button === 1 || e.button === 2) && tool === 'build') {
       e.preventDefault();
       const at: { x: number; y: number } = this.worldPoint(e);
       this.engine?.levelEditor.eraseAt(at.x, at.y);
@@ -693,7 +687,7 @@ export class GameCanvasComponent implements OnDestroy {
 
   private onMouseUp(e: MouseEvent): void {
     if (this.dragging() && e.button === 0) {
-      this.stopDrag();
+      this.stopDrag(true);
       return;
     }
     const key: string | null = mouseButtonKey(e.button);
@@ -719,12 +713,13 @@ export class GameCanvasComponent implements OnDestroy {
     else this.engine.devTools.grabAt(at.x, at.y);
   }
 
-  private stopDrag(): void {
+  /** `click`: the left button let go (a select-tool click opens the adjust popup). */
+  private stopDrag(click: boolean = false): void {
     if (!this.dragging()) return;
     this.dragging.set(false);
     window.removeEventListener('mousemove', this.boundDragMove);
     this.engine?.devTools.release();
-    this.engine?.levelEditor.pointerUp();
+    this.engine?.levelEditor.pointerUp(click);
   }
 
   private dragTo(e: MouseEvent): void {

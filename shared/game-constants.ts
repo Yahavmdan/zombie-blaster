@@ -263,6 +263,7 @@ export const GAME_CONSTANTS = {
   GADGET_BUTTON_KG: 1, // A new floor button needs this many kg: anything on it presses it (the editor sets each)
   GADGET_BUTTON_WIDTH_PX: 48, // A floor button, set into its surface's top: this wide
   GADGET_BUTTON_STACK_PX: 40, // Things piled up to this far above a button still press on it
+  GADGET_WEIGH_CATCH_PX: 28, // A prop thrown onto a button or scale grips there like on another prop; landing up to this far past one it is steered back on
   GADGET_BUTTON_CAP_PX: 10, // A floor button's cap stands this far proud of its surface until something presses it
   // What each gadget can look like (art only, picked in the editor's popup; the first is the default, an export leaves it out)
   GADGET_LOOKS: {
@@ -779,6 +780,7 @@ export const GAME_CONSTANTS = {
   DEV_EDITOR_WALL_TILES: 2, // A new wall is this many tiles wide...
   DEV_EDITOR_WALL_HEIGHT_TILES: 4, // ...and this many tall, standing on the surface under the click
   DEV_EDITOR_NO_SPAWN_TILES: 4, // A new no-spawn zone (editor only: no zombie rises with its body in it) is this many tiles square, centered on the click
+  DEV_EDITOR_CLICK_SLOP_PX: 4, // A left press with the select tool let go within this many px of where it went down is a click: it opens the adjust popup
   DEV_EDITOR_EDGE_GRAB_PX: 8, // Pressing this close to a box's side (or a ladder's end) resizes it instead of moving it
   DEV_EDITOR_SURFACE_SNAP_PX: 16, // A ladder end, prop, cleat or plate lands on a surface this close above the pointer
   DEV_EDITOR_LADDER_MIN_PX: 32, // Shortest ladder

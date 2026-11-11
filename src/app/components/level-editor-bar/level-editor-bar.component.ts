@@ -35,7 +35,7 @@ interface ToolButton {
   hint: string;
 }
 
-/** The middle-click popup where it opens: beside the thing it adjusts, kept inside the window. */
+/** The adjust popup where it opens: beside the thing it adjusts, kept inside the window. */
 interface InspectorView {
   /** The thing's place on the page: another thing opens it afresh. */
   key: string;
@@ -70,7 +70,7 @@ const TOOL_GROUPS: ToolGroup[] = [
       {
         tool: 'select',
         label: 'Select',
-        hint: 'Click to select, drag to move, drag a side to resize. Middle click adjusts it (look, size, strength, weight). Right click erases',
+        hint: 'A click opens it to adjust (look, size, strength, weight), drag to move, drag a side to resize. Middle or right click erases',
       },
       {
         tool: 'erase',
@@ -129,7 +129,7 @@ const TOOL_GROUPS: ToolGroup[] = [
       {
         tool: 'zombie-pile',
         label: 'Zombie pile',
-        hint: 'Click: a pile of dead zombies on the surface below, real bodies to carry, climb and weigh. Middle click: how many',
+        hint: 'Click: a pile of dead zombies on the surface below, real bodies to carry, climb and weigh. Select + click: how many',
       },
     ],
   },
@@ -179,17 +179,17 @@ const TOOL_GROUPS: ToolGroup[] = [
       {
         tool: 'door',
         label: 'Door',
-        hint: 'Click: a door, open while its wire is on (no wire: always open). Middle click to make it an exit door',
+        hint: 'Click: a door, open while its wire is on (no wire: always open). Select + click to make it an exit door',
       },
       {
         tool: 'slope',
         label: 'Slope',
-        hint: 'Click: a ramp on the surface below. Players walk on it, a boulder rolls down it. Middle click: size and which way it rises',
+        hint: 'Click: a ramp on the surface below. Players walk on it, a boulder rolls down it. Select + click: size and which way it rises',
       },
       {
         tool: 'cage',
         label: 'Cage',
-        hint: 'Click: a covered cage hanging from the ceiling. Hit it or land on it and it swings; only a hit on its cable (or a wire) drops it. Middle click: what it hides, smash or stay',
+        hint: 'Click: a covered cage hanging from the ceiling. Hit it or land on it and it swings; only a hit on its cable (or a wire) drops it. Select + click: what it hides, smash or stay',
       },
     ],
   },
@@ -249,7 +249,7 @@ export class LevelEditorBarComponent {
     this.version();
     return this.editor().selection();
   });
-  /** The middle-click popup (none or one), draggable by its title bar. */
+  /** The adjust popup (none or one), draggable by its title bar. */
   readonly canUndo: Signal<boolean> = computed((): boolean => {
     this.version();
     return this.editor().canUndo();
@@ -287,9 +287,9 @@ export class LevelEditorBarComponent {
         (b: ToolButton): boolean => b.tool === tool,
       );
       if (!button) continue;
-      // A phone has no middle button: the rail's Adjust opens the same popup.
+      // A phone clicks to place or grab: the rail's Adjust opens the popup.
       const hint: string = this.compact()
-        ? button.hint.replace(/[Mm]iddle click/g, 'Adjust')
+        ? button.hint.replace(/Select \+ click|A click opens it to adjust/g, 'Adjust')
         : button.hint;
       return `${button.label}: ${hint}`;
     }
