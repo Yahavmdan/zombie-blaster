@@ -123,12 +123,13 @@ describe('LevelEditorSystem on a real engine', () => {
     expect(engine.isExitLocked()).toBe(false);
   });
 
-  it('a middle click opens the thing under it to adjust; a change plays at once', () => {
+  it('a select-tool click opens the thing under it to adjust; a change plays at once', () => {
     editor.setTool('slingshot');
     editor.pointerDown(600, 600);
     editor.pointerUp();
-    editor.setTool('platform');
-    editor.inspect(608, 610);
+    editor.setTool('select');
+    editor.pointerDown(608, 610);
+    editor.pointerUp(true);
     expect(editor.inspector()?.label).toBe('Slingshot g1');
     expect(editor.inspector()?.fields.map((f: EditorField): string => f.key)).toEqual([
       'look',
@@ -138,12 +139,22 @@ describe('LevelEditorSystem on a real engine', () => {
     ]);
     editor.setField('angle', 150);
     expect(engine.gadgets[0]).toMatchObject({ angle: 150 });
-    // A click on the map (or on nothing) closes it.
-    editor.inspect(1000, 100);
+    // A click on nothing closes it.
+    editor.pointerDown(1000, 100);
+    editor.pointerUp(true);
+    expect(editor.inspector()).toBeNull();
+    // A drag moves it and does not open the popup.
+    editor.pointerDown(608, 610);
+    editor.pointerMove(708, 610);
+    editor.pointerUp(true);
+    expect(editor.inspector()).toBeNull();
+    // A finger's tap (no click flag) only selects.
+    editor.pointerDown(708, 610);
+    editor.pointerUp();
     expect(editor.inspector()).toBeNull();
   });
 
-  it('the popup opens on the selection without a middle click (phones), and not on nothing', () => {
+  it('the popup opens on the selection without a click (phones), and not on nothing', () => {
     editor.clear();
     editor.inspectSelected();
     expect(editor.inspector()).toBeNull();

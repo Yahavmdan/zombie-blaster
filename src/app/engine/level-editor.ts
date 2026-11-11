@@ -86,7 +86,7 @@ export type EditorRef =
 /** The side of a box (or end of a ladder, or edge of a crack band) being dragged to resize it. */
 export type EditorEdge = 'left' | 'right' | 'top' | 'bottom' | 'crack-top' | 'crack-bottom';
 
-/** Something a thing can be adjusted by (middle click, or the bar's selection). */
+/** Something a thing can be adjusted by (a click with the select tool, or the bar's selection). */
 export type EditorFieldKey =
   | 'width'
   | 'height'

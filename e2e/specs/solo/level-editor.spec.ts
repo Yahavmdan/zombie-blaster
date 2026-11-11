@@ -21,7 +21,7 @@ async function tool(page: Page, id: string): Promise<void> {
   await page.getByTestId(`level-editor-tool-${id}`).click();
 }
 
-/** Clicks the map at a world point (`button` right erases). */
+/** Clicks the map at a world point (`button` middle or right erases). */
 async function clickMap(
   page: Page,
   x: number,
@@ -161,7 +161,7 @@ test.describe('dev level editor', { tag: '@solo' }, (): void => {
     await expect(p.page.getByTestId('game-dev-button-mouse-attack')).toHaveClass(/px-btn--good/);
   });
 
-  test('place a platform, drag it, erase it with a right click', async ({
+  test('place a platform, drag it, erase it with a middle click, then a right click', async ({
     solo,
   }: {
     solo: SoloFactory;
@@ -191,7 +191,21 @@ test.describe('dev level editor', { tag: '@solo' }, (): void => {
       { timeoutMs: 5_000 },
     );
 
-    await clickMap(p.page, 960, 220, 'right');
+    await clickMap(p.page, 960, 220, 'middle');
+    await p.probe.waitFor(
+      'middle click erased it',
+      (s: E2eSnapshot): boolean => s.level.platforms.length === 0,
+      { timeoutMs: 5_000 },
+    );
+
+    await tool(p.page, 'platform');
+    await clickMap(p.page, 800, 300);
+    await p.probe.waitFor(
+      'a new platform',
+      (s: E2eSnapshot): boolean => platformAround(s, 800, 300) !== undefined,
+      { timeoutMs: 5_000 },
+    );
+    await clickMap(p.page, 800, 300, 'right');
     await p.probe.waitFor(
       'right click erased it',
       (s: E2eSnapshot): boolean => s.level.platforms.length === 0,
@@ -380,7 +394,7 @@ test.describe('dev level editor', { tag: '@solo' }, (): void => {
       .attach('editor', { path: test.info().outputPath('editor.png'), contentType: 'image/png' });
   });
 
-  test('a middle click opens beside a thing, not on it, and picks its look from pictures', async ({
+  test('a left click with select opens beside a thing, not on it, and picks its look from pictures', async ({
     solo,
   }: {
     solo: SoloFactory;
@@ -413,7 +427,7 @@ test.describe('dev level editor', { tag: '@solo' }, (): void => {
       expect(apart, `popup ${JSON.stringify(box)} covers ${g.kind}`).toBe(true);
     };
 
-    await clickMap(p.page, button.box.x + button.box.width / 2, button.box.y, 'middle');
+    await clickMap(p.page, button.box.x + button.box.width / 2, button.box.y);
     await expect(popup).toBeVisible();
     await clearOf(button);
     await expect(popup.locator('.le-look canvas')).toHaveCount(4);
@@ -426,7 +440,7 @@ test.describe('dev level editor', { tag: '@solo' }, (): void => {
       .toBe('green');
 
     // A door at the window's right edge: the popup opens on its left.
-    await clickMap(p.page, door.box.x + door.box.width / 2, door.box.y + door.box.height / 2, 'middle');
+    await clickMap(p.page, door.box.x + door.box.width / 2, door.box.y + door.box.height / 2);
     await expect(popup.getByTestId('level-editor-text-props-title')).toContainText('Door');
     await clearOf(door);
     await popup.getByTestId('level-editor-props-look-portcullis').click();
@@ -436,7 +450,7 @@ test.describe('dev level editor', { tag: '@solo' }, (): void => {
       .attach('looks', { path: test.info().outputPath('looks.png'), contentType: 'image/png' });
   });
 
-  test('a middle click opens a thing to adjust it: scale weight, wall height, slingshot angle', async ({
+  test('a left click with select opens a thing to adjust it: scale weight, wall height, slingshot angle', async ({
     solo,
   }: {
     solo: SoloFactory;
@@ -454,7 +468,7 @@ test.describe('dev level editor', { tag: '@solo' }, (): void => {
     await tool(p.page, 'select');
 
     const popup: Locator = p.page.getByTestId('level-editor-panel-props');
-    await clickMap(p.page, 424, 618, 'middle');
+    await clickMap(p.page, 424, 618);
     await expect(popup).toBeVisible();
     await expect(popup.getByTestId('level-editor-text-props-title')).toHaveText('Scale g1');
     await popup.getByTestId('level-editor-props-input-kg').fill('300');
@@ -467,7 +481,7 @@ test.describe('dev level editor', { tag: '@solo' }, (): void => {
       )
       .toContain('"kg": 300');
 
-    await clickMap(p.page, 916, 560, 'middle');
+    await clickMap(p.page, 916, 560);
     await expect(popup.getByTestId('level-editor-text-props-title')).toHaveText('Wall');
     await popup.getByTestId('level-editor-props-input-height').fill('256');
     await popup.getByTestId('level-editor-props-input-height').press('Enter');
@@ -478,7 +492,7 @@ test.describe('dev level editor', { tag: '@solo' }, (): void => {
     );
     expect(tall.level.walls[0].y + 256).toBe(WORLD.groundY);
 
-    await clickMap(p.page, 680, 610, 'middle');
+    await clickMap(p.page, 680, 610);
     await expect(popup.getByTestId('level-editor-text-props-title')).toHaveText('Slingshot g2');
     await popup.getByTestId('level-editor-props-range-angle').fill('150');
     await expect

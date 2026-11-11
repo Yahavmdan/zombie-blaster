@@ -2,6 +2,7 @@ import { test, expect, SoloFactory } from '../../support/fixtures';
 import { GamePlayer, KEYS } from '../../support/game-player';
 import { E2eGadgetView, E2eSnapshot, E2eVfxLogEntry, E2eZombieView } from '../../support/probe';
 import { WORLD } from '../../support/invariants';
+import { LevelProp, propCenterX, throwOnto } from '../../support/props';
 import {
   BOULDER_PX,
   binAt,
@@ -179,6 +180,32 @@ test.describe('designed floor gadgets', { tag: '@solo' }, (): void => {
       { timeoutMs: 5_000 },
     );
     await p.release(KEYS.right);
+  });
+
+  test('a box thrown just past a button grips it like a prop top and is steered back on: it presses it', async ({
+    solo,
+  }: {
+    solo: SoloFactory;
+  }): Promise<void> => {
+    const p: GamePlayer = await solo('warrior');
+    await designed(p, withProps(gadgetRoom(1, [buttonAt('g1', 600, [], 1)]), [groundBoxAt(150)]));
+    const s0: E2eSnapshot = await p.probe.state();
+    const box: LevelProp | undefined = s0.level.props.find(
+      (q: LevelProp): boolean => q.kind === 'box1',
+    );
+    expect(box?.id, 'the box is a loose prop').toBeTruthy();
+    const button: E2eGadgetView = gadget(s0, 'g1');
+    // Aimed so it lands with its middle a little past the button's right edge (still over it).
+    const aimX: number = button.box.x + button.box.width + 8;
+    const landed: LevelProp = await throwOnto(p, box!.id!, { ...box!, x: aimX - box!.width / 2 });
+    const middle: number = propCenterX(landed);
+    expect(middle, 'steered back onto the button').toBeLessThanOrEqual(
+      button.box.x + button.box.width,
+    );
+    expect(middle).toBeGreaterThanOrEqual(button.box.x);
+    await p.probe.waitFor('the box presses the button', (s: E2eSnapshot): boolean => gadget(s, 'g1').on, {
+      timeoutMs: 5_000,
+    });
   });
 
   test('a closed door blocks; a button holds it open while the player stands on it', async ({

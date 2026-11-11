@@ -149,8 +149,12 @@ export class LevelEditorSystem {
   private lastTag: string | null = null;
   /** Presses on the map so far (each press is its own step). */
   private presses: number = 0;
-  /** What the middle-click popup opened beside (page px), while it is open on the selection. */
+  /** What the adjust popup opened beside (page px), while it is open on the selection. */
   private inspectAt: Box | null = null;
+  /** Where the select tool's press went down, while it holds something. */
+  private pressAt: { x: number; y: number } | null = null;
+  /** The press has moved past `DEV_EDITOR_CLICK_SLOP_PX`: a drag, not a click. */
+  private pressMoved: boolean = false;
 
   constructor(private readonly e: GameEngine) {}
 
@@ -217,6 +221,8 @@ export class LevelEditorSystem {
             tag,
           }
         : null;
+    this.pressAt = this.drag && this.tool === 'select' ? { x, y } : null;
+    this.pressMoved = false;
     if (this.tool === 'select') this.notify();
     else this.play(tag);
   }
@@ -227,14 +233,28 @@ export class LevelEditorSystem {
     const layout: LevelLayout | null = this.layout;
     const drag: EditorDrag | null = this.drag;
     if (!layout || !drag) return;
+    const pressAt: { x: number; y: number } | null = this.pressAt;
+    if (
+      pressAt &&
+      Math.hypot(x - pressAt.x, y - pressAt.y) > GAME_CONSTANTS.DEV_EDITOR_CLICK_SLOP_PX
+    )
+      this.pressMoved = true;
     if (drag.edge) resizeTo(layout, drag.ref, drag.edge, x, y);
     else moveTo(layout, drag.ref, x - drag.dx, y - drag.dy);
     this.play(drag.tag);
   }
 
-  pointerUp(): void {
+  /**
+   * Press let go. `openOnClick` (the mouse's left button): a select-tool press that never moved is a
+   * click, and it opens the adjust popup on what it picked. A finger keeps the rail's Adjust.
+   */
+  pointerUp(openOnClick: boolean = false): void {
+    const clicked: boolean = openOnClick && this.pressAt !== null && !this.pressMoved;
+    this.pressAt = null;
     if (!this.drag) return;
     this.drag = null;
+    if (clicked && this.layout && this.selected)
+      this.inspectAt = this.pageBoxOf(this.layout, this.selected);
     this.notify();
   }
 
@@ -243,7 +263,7 @@ export class LevelEditorSystem {
     this.pointer = null;
   }
 
-  /** Right button (or the erase tool): takes away the thing under (x, y). */
+  /** Middle or right button (or the erase tool): takes away the thing under (x, y). */
   eraseAt(x: number, y: number): void {
     const layout: LevelLayout | null = this.current();
     const ref: EditorRef | null = layout ? itemAt(layout, x, y) : null;
@@ -263,20 +283,7 @@ export class LevelEditorSystem {
     this.play();
   }
 
-  /**
-   * Middle click on the map: selects the thing under (x, y) and opens its popup beside it to adjust
-   * it; on empty map it closes the popup.
-   */
-  inspect(x: number, y: number): void {
-    const layout: LevelLayout | null = this.current();
-    if (!layout) return;
-    this.drag = null;
-    this.selected = itemAt(layout, x, y);
-    this.inspectAt = this.selected ? this.pageBoxOf(layout, this.selected) : null;
-    this.notify();
-  }
-
-  /** Opens the popup on what is selected: a phone has no middle button. */
+  /** Opens the popup on what is selected: the phone rail's Adjust. */
   inspectSelected(): void {
     if (!this.layout || !this.selected || !itemBox(this.layout, this.selected)) return;
     this.drag = null;
@@ -295,7 +302,7 @@ export class LevelEditorSystem {
     this.notify();
   }
 
-  /** The middle-click popup, or null when it is closed. */
+  /** The adjust popup, or null when it is closed. */
   inspector(): EditorInspector | null {
     const layout: LevelLayout | null = this.layout;
     const ref: EditorRef | null = this.selected;

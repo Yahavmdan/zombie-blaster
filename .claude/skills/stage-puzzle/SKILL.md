@@ -275,7 +275,7 @@ the dots show in the game and light up). Gadgets live in `gadgets.ts` / `gadget-
   stops it; lockers aren't loose props, so it bounces off them. `BreaksThrough` returns the speed share kept
   (null = stopped); `ExplodingBarrelSystem.smash` does the breaking, via `GadgetSystem.onSmashProp`.
 - **Rolling bin** (60 kg, boulder-sized box, wheels turn with `body.angle`): walk into it and it rolls ahead slower than you walk, let go and it rolls on (`GADGET_BIN_*`). Solid whenever on its wheels, moving or not, so it is a step you can push under a ledge; flying it has no collision. The player's own physics reports the push (`CharacterState.pushingGadgetId`, from a `pushable` solid, `pushableBeside`), the host checks it (`binPushDir`) and rolls it with `stepBoulder` and `BIN_FEEL`. A swing shoves it, blasts and launchers throw it, a boulder or bin running into it hands it speed. It doesn't crush or break anything.
-- **Zombie pile** (a Props tool, `layout.zombiePiles`, `zombie-pile.ts`): real walker corpses laid when the floor is built (`GameEngine.layZombiePiles`, host/solo, re-laid on every editor change; ids `pile-corpse-*`), so they settle by corpse physics, weigh on buttons, can be carried and climbed, and sync as corpses. The box is only the editor grab: no collision. Middle click sets its bodies and width.
+- **Zombie pile** (a Props tool, `layout.zombiePiles`, `zombie-pile.ts`): real walker corpses laid when the floor is built (`GameEngine.layZombiePiles`, host/solo, re-laid on every editor change; ids `pile-corpse-*`), so they settle by corpse physics, weigh on buttons, can be carried and climbed, and sync as corpses. The box is only the editor grab: no collision. A select-tool click opens its bodies and width.
 - **Cracked wall**: stone, solid; only its crack band (y range set in the editor) breaks: 5 swings
   level with the band, a barrel blast in reach, or a fast boulder. The rest stands (a hole).
 - **Button / scale**: on while their kg rest on them (corpses, props, zombies, players with what they
@@ -313,7 +313,7 @@ the dots show in the game and light up). Gadgets live in `gadgets.ts` / `gadget-
   `DEV_EDITOR_HISTORY_STEPS` (30) changes (`LevelEditorSystem.play(tag)` records each; a drag or a
   slider is one step). Erasing the hanging exit hides it (`exitHidden`, its wires go); the Exit tool
   puts it back; the bar warns when the design has no way out (no exit and no exit door).
-- **Middle click** in the editor opens a popup beside the thing clicked, never on it (`popupBeside`: right, left, below, above, kept in the window; `itemArtBox` adds a scale's post), to adjust it (sliders
+- **Left click with the select tool** (a click, not a drag) in the editor opens a popup beside the thing clicked, never on it (`popupBeside`: right, left, below, above, kept in the window; `itemArtBox` adds a scale's post), to adjust it (sliders
   and numbers, same list in the bar's selection): its **look** first (pictures, `GADGET_LOOKS` in constants, painted from `gadget-looks.ts`; every gadget kind has 4; art only, kept on the gadget as `look`, left out of the export when it is the default; a new gadget kind needs its looks), scale/button kg, spring/slingshot power and angle
   (the editor draws where a boulder would fly), boulder weight (heavier rolls slower off a swing or
   blast), wall/door/crack wall width and height (the foot stays), crack band height above the foot
